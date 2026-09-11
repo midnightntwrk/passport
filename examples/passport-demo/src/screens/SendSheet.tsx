@@ -176,7 +176,10 @@ import './home.css'
  * rather than off a comment: a shielded ADDRESS takes a withdrawal only, a
  * PASSPORT takes the account route, in either asset.
  *
- * It is still two transactions, and it is still said so before the confirm.
+ * How many transactions it really is is said before the confirm, whichever it
+ * is: two on the build every Passport was deployed with, and one where the
+ * sender's own account carries `transfer_shielded_to_account` — see
+ * {@link SendSheetProps.nameLegSteps}.
  *
  * The shielded assets exist only when the host supplies both
  * {@link SendSheetProps.readShieldedHoldings} and
@@ -372,19 +375,27 @@ export interface SendSheetProps {
    * happening, and a spinner that said "Step 2 of 2" through it would be
    * describing a step that has already failed.
    */
-  nameLeg?: 'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning' | null
+  nameLeg?:
+    | 'withdrawing'
+    | 'settling'
+    | 'depositing'
+    | 'changing'
+    | 'returning'
+    | 'transferring'
+    | null
   /**
    * How many steps the running payment has: two, or three when the account's
    * coin is bigger than the payment and the change has to come back — see
    * `planShieldedSend` in `lib/sendLegs.ts` for why a shielded payment takes
    * the whole coin out.
    *
-   * OPTIONAL, because this sheet can answer it for itself out of the picker's
-   * own figures, and does. What the host knows that the sheet does not is what
-   * leg one REALLY withdrew, which is read from the account again as it builds;
-   * where the host says so, its answer wins.
+   * OR ONE, which is not a count at all (2026/09/10). A Passport whose account
+   * carries `transfer_shielded_to_account` pays another Passport in a single
+   * transaction, and this sheet numbers nothing on that path — it says what is
+   * happening instead. Only the host can know it: it is a fact about the
+   * sender's deployed contract, read from the chain.
    */
-  nameLegSteps?: 2 | 3
+  nameLegSteps?: 1 | 2 | 3
   /**
    * Which attempt at the running leg this is, 1-based, or `null`.
    *
@@ -1101,10 +1112,12 @@ export default function SendSheet(props: SendSheetProps) {
   /**
    * The second line, for a name, and the reason there is one.
    *
-   * Paying a name is two transactions, and the person watching has to be told
-   * that before the first one finishes — otherwise the sheet looks done and
-   * then carries on for another minute. It says which of the two is running
-   * and never claims the money has arrived until the second has.
+   * Paying a name is two transactions on the older build, and the person
+   * watching has to be told that before the first one finishes — otherwise the
+   * sheet looks done and then carries on for another minute. It says which of
+   * the two is running and never claims the money has arrived until the second
+   * has. On the one-transaction path there is nothing to number and the line
+   * says what is happening instead; the words themselves are `sendStepLine`'s.
    */
   /* "(retry 2 of 3)", or nothing at all on a first attempt. A count that
      appeared on every step would make an ordinary send look like a struggle. */
@@ -1122,7 +1135,7 @@ export default function SendSheet(props: SendSheetProps) {
      already knows what the account holds of the chosen colour, which is the
      whole of the input; the host may still say so itself once leg one has read
      the figure again, and that answer wins. */
-  const nameLegSteps: 2 | 3 =
+  const nameLegSteps: 1 | 2 | 3 =
     hostNameLegSteps ??
     (mode === 'shielded' && amount !== null && asset.available !== null
       ? (planShieldedSend({ held: asset.available, amount })?.steps ?? 2)
@@ -1773,11 +1786,21 @@ export default function SendSheet(props: SendSheetProps) {
                         it runs after the confirmation rather than in front of
                         it, and this row says two, because two is what somebody
                         about to press Send will actually sit through. */}
-                    <strong>Two steps</strong>
+                    {/* ONE TRANSACTION, SAID AS ONE WORD (2026/09/10). Where
+                        this Passport's account can pay another's directly there
+                        is no step to count, so nothing is counted — "the copy
+                        for the in-between state should simply say Transferring"
+                        (reviewer, 2026/09/08), and the review row and the
+                        progress line say the same word for the same reason. The
+                        two-step wording below is untouched and still describes
+                        exactly what the older build does. */}
+                    <strong>{nameLegSteps === 1 ? 'Transferring' : 'Two steps'}</strong>
                     <small>
-                      {nameLegSteps === 3
-                        ? 'The whole of what your account holds of this comes out, then they are paid. Both are network transactions, so this takes longer than sending to an address. Your change comes back to you on its own afterwards — you do not have to wait for it.'
-                        : 'The amount leaves your account, then it is paid into theirs. Both are network transactions, so this takes longer than sending to an address.'}
+                      {nameLegSteps === 1
+                        ? 'The amount goes straight from your account into theirs, in one network transaction. Your balance keeps the rest.'
+                        : nameLegSteps === 3
+                          ? 'The whole of what your account holds of this comes out, then they are paid. Both are network transactions, so this takes longer than sending to an address. Your change comes back to you on its own afterwards — you do not have to wait for it.'
+                          : 'The amount leaves your account, then it is paid into theirs. Both are network transactions, so this takes longer than sending to an address.'}
                     </small>
                   </dd>
                 </div>

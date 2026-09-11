@@ -219,3 +219,113 @@ describe('pendingBalances — a send in flight', () => {
     expect(notes.get(NIGHT_COLOUR_HEX)?.state).toBe('arriving');
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* A one-transaction transfer in flight                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The one-leg send of 5 out of a 45-unit coin: the recipient gets 5, the
+ * circuit persists 40 in the same transaction, and nobody moves anything
+ * afterwards.
+ *
+ * There is no dip to cover here — the account never holds none of the colour —
+ * so what is being drilled is the other half: that the figure on screen shows
+ * where this account is GOING while the transfer is in flight, and that it
+ * never overstates, never understates, and never falls to a zero the account
+ * was never at.
+ */
+function transfer(over: Partial<PendingSend> = {}): PendingSend {
+  return send({
+    id: 'transfer-1',
+    kind: 'transfer',
+    amount: '5',
+    withdrawAmount: '45',
+    leg: 'pay',
+    ...over,
+  });
+}
+
+describe('pendingBalances — a one-transaction transfer', () => {
+  it('projects held − amount, with the word on it, before the read catches up', () => {
+    /* The transaction is accepted and the ledger still reports the coin it was
+       built against. `45` is true, `40` is where this account is going, and the
+       larger is painted — so the figure only ever falls. */
+    const notes = pendingBalances({
+      account: account({ stablecoin: { colourHex: MUSD, amount: 45n } }),
+      openingBalanceOnTheWay: false,
+      pendingSends: [transfer()],
+    });
+    expect(notes.get(MUSD)).toEqual({ value: '45', state: 'transferring' });
+    expect(PENDING_BALANCE_WORD.transferring).toBe('Transferring');
+  });
+
+  it('settles on held − amount once the ledger has the transfer', () => {
+    const notes = pendingBalances({
+      account: account({ stablecoin: { colourHex: MUSD, amount: 40n } }),
+      openingBalanceOnTheWay: false,
+      pendingSends: [transfer()],
+    });
+    expect(notes.get(MUSD)).toEqual({ value: '40', state: 'transferring' });
+  });
+
+  it('NEVER paints a zero over a transfer that leaves something behind', () => {
+    /* THE DEFECT THIS EXISTS FOR, on the other path: a two-leg run takes the
+       whole coin out and the account really does hold none of the colour for
+       minutes. A one-leg run never does — and the projection must not invent
+       that state for it either, whatever a momentary read says. */
+    for (const held of [45n, 40n, 0n]) {
+      const notes = pendingBalances({
+        account: account({ stablecoin: { colourHex: MUSD, amount: held } }),
+        openingBalanceOnTheWay: false,
+        pendingSends: [transfer()],
+      });
+      expect(notes.get(MUSD)?.value).not.toBe('0');
+    }
+  });
+
+  it('projects nothing before the transfer has been submitted', () => {
+    /* Nothing has been spent, so the ledger's own figure is already the right
+       one and a word on it would be a note about something that is not
+       happening. */
+    const notes = pendingBalances({
+      account: account({ stablecoin: { colourHex: MUSD, amount: 45n } }),
+      openingBalanceOnTheWay: false,
+      pendingSends: [transfer({ withdrawTxHash: undefined })],
+    });
+    expect(notes.has(MUSD)).toBe(false);
+  });
+
+  it('projects nothing once it is done', () => {
+    const notes = pendingBalances({
+      account: account({ stablecoin: { colourHex: MUSD, amount: 40n } }),
+      openingBalanceOnTheWay: false,
+      pendingSends: [transfer({ leg: 'done' })],
+    });
+    expect(notes.has(MUSD)).toBe(false);
+  });
+
+  it('projects nothing when the payment was the whole coin', () => {
+    /* Nothing is left, and `0` is then the settled figure rather than a
+       momentary one — so the strip paints the ledger's own answer with no word
+       on it, which is the truth. */
+    const notes = pendingBalances({
+      account: account({ stablecoin: { colourHex: MUSD, amount: 0n } }),
+      openingBalanceOnTheWay: false,
+      pendingSends: [transfer({ amount: '45', withdrawAmount: '45' })],
+    });
+    expect(notes.has(MUSD)).toBe(false);
+  });
+
+  it("leaves yesterday's two-leg projection exactly as it was", () => {
+    /* The same colour, the same figures, the two-leg kind: the whole coin is
+       out of the account, the ledger reports none of it, and the change is what
+       is painted. Nothing about the one-leg branch may move this. */
+    const notes = pendingBalances({
+      account: account({ stablecoin: { colourHex: MUSD, amount: 0n } }),
+      openingBalanceOnTheWay: false,
+      pendingSends: [send()],
+    });
+    expect(notes.get(MUSD)).toEqual({ value: '90', state: 'transferring' });
+  });
+});

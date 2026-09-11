@@ -1207,3 +1207,151 @@ describe('the per-stage send timings', () => {
     expect(stages.stages().settle).toBeGreaterThanOrEqual(0);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* The one-transaction transfer                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A `transfer` run: one transaction, out of a 45-unit coin, paying 5 away.
+ *
+ * The circuit spends the whole coin and persists the remainder in the same
+ * transaction — which is why `withdrawAmount` is the coin and not the payment,
+ * exactly as it is on the two-leg path, and why nothing has a third leg to run.
+ */
+function transferSend(overrides: Partial<PendingSend> = {}): PendingSend {
+  return nightSend({
+    id: 'send-3',
+    kind: 'transfer',
+    tokenType: 'dd'.repeat(32),
+    colourHex: 'dd'.repeat(32),
+    ownReceivingAddress: 'mn_shield-addr_stagenet1alice',
+    amount: '5',
+    withdrawAmount: '45',
+    leg: 'pay',
+    expectedNote: undefined,
+    ...overrides,
+  });
+}
+
+describe('planOfRecord, for a one-transaction transfer', () => {
+  it('is ONE step whatever it is carrying, and still names the change', () => {
+    /* The change is real — it is what the sender is left holding — but nobody
+       moves it, so there is no leg to count and the plan must not invent one.
+       A `3` here would put "Step 1 of 2" in front of a single transaction. */
+    expect(planOfRecord(transferSend())).toEqual({
+      withdraw: 45n,
+      pay: 5n,
+      change: 40n,
+      steps: 1,
+    });
+  });
+
+  it('is still one step when the payment is the whole coin', () => {
+    expect(planOfRecord(transferSend({ withdrawAmount: '5' }))).toEqual({
+      withdraw: 5n,
+      pay: 5n,
+      change: null,
+      steps: 1,
+    });
+  });
+
+  it('leaves the two-leg reading of the same fields untouched', () => {
+    /* The same numbers under `shielded` are the three-leg plan they always
+       were. The kind is the whole of the difference, and this is what says a
+       one-leg branch did not change what the other path reads. */
+    expect(planOfRecord(shieldedSend({ withdrawAmount: '45', amount: '5' }))).toEqual({
+      withdraw: 45n,
+      pay: 5n,
+      change: 40n,
+      steps: 3,
+    });
+  });
+});
+
+describe('sendStepLine, on the one-transaction path', () => {
+  it('says what is happening and numbers nothing', () => {
+    const line = sendStepLine({ step: 'transferring', steps: 1, recipient: 'alice.night' });
+    expect(line).toBe('Transferring to alice.night.');
+    /* THE WHOLE POINT (Hector, 2026/09/08). Not a step, not a count, and above
+       all not "two steps" — there are not two of anything on this path. */
+    expect(line).not.toMatch(/step/i);
+    expect(line).not.toMatch(/\btwo\b/i);
+    expect(line).not.toMatch(/of 2/);
+  });
+
+  it('shows a retry the way every other step does', () => {
+    expect(
+      sendStepLine({
+        step: 'transferring',
+        steps: 1,
+        recipient: 'alice.night',
+        attemptSuffix: ' (retry 1 of 2)',
+      }),
+    ).toBe('Transferring to alice.night (retry 1 of 2).');
+  });
+
+  it('still counts the two-leg steps exactly as it did', () => {
+    expect(sendStepLine({ step: 'withdrawing', steps: 2, recipient: 'alice.night' })).toContain(
+      'Step 1 of 2',
+    );
+    expect(sendStepLine({ step: 'depositing', steps: 3, recipient: 'alice.night' })).toContain(
+      'Step 2 of 2',
+    );
+  });
+});
+
+describe('pendingSendStepLine, for a transfer that has not been seen land', () => {
+  it('says the confirmation is outstanding, and never that they were not paid', () => {
+    const line = pendingSendStepLine(transferSend());
+    expect(line).toBe('Waiting for the network to confirm your transfer to alice.night.');
+    /* Either that one transaction landed, in which case alice HAS the money, or
+       it did not, in which case nothing moved. "They were not paid" is a claim
+       nobody can make about it, and a card that made it would send somebody
+       chasing a payment that may already have happened. */
+    expect(line).not.toMatch(/not been paid|was not paid|has not finished/i);
+  });
+
+  it('still says nothing has left the account before it is submitted', () => {
+    expect(pendingSendStepLine(transferSend({ leg: 'pay', withdrawTxHash: undefined }))).toBe(
+      'Nothing has left your account yet.',
+    );
+  });
+});
+
+describe('readPendingSends, on a one-transaction record', () => {
+  it('reads a transfer back whole, through a round trip of the writer', () => {
+    const record = transferSend();
+    const [back] = readPendingSends(serialisePendingSends([record]));
+    expect(back?.kind).toBe('transfer');
+    expect(back?.leg).toBe('pay');
+    expect(back?.withdrawAmount).toBe('45');
+    expect(back?.tokenType).toBe('dd'.repeat(32));
+  });
+
+  it('refuses a transfer with no colour, exactly as it refuses a shielded one', () => {
+    /* A record with no colour cannot name what the circuit was called with, so
+       it is not a run anything could report on, let alone carry. */
+    const raw = JSON.stringify([{ ...transferSend(), tokenType: undefined }]);
+    expect(readPendingSends(raw)).toEqual([]);
+  });
+
+  it('refuses a kind nothing in this app writes', () => {
+    expect(readPendingSends(JSON.stringify([{ ...transferSend(), kind: 'sideways' }]))).toEqual(
+      [],
+    );
+  });
+
+  it('carries a submitted transfer on without asking anybody', () => {
+    /* The transaction is already out there. The only thing left is looking
+       again, which needs no signature and no press — and a `Continue` button
+       over it would be a person being asked to authorise a look. */
+    expect(resumesWithoutPrompt(transferSend())).toBe(true);
+    expect(resumesWithoutPrompt(transferSend({ withdrawTxHash: undefined }))).toBe(false);
+  });
+
+  it('never blocks the next send on a transfer, which has no change to return', () => {
+    expect(sendBlockedByChangeReturn([transferSend()])).toBeNull();
+    expect(awaitsChangeReturn(transferSend())).toBe(false);
+  });
+});

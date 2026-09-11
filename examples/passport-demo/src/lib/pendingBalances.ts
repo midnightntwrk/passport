@@ -13,21 +13,29 @@
  *      figures are known from the moment there is an account to deposit into,
  *      and there is no reason to show a zero instead of them.
  *
- *   2. A NAME SEND IN PROGRESS (reviewer, 2026/09/08). A shielded payment takes
- *      the WHOLE coin out of the account and puts the remainder back three
- *      transactions later — see `planShieldedSend` in `lib/sendLegs.ts` for why
- *      a partial withdrawal is not an option. Between the first leg landing and
- *      the third, the account genuinely holds none of that colour, so the strip
- *      showed `mUSD 0` for minutes over a Passport that was mid-transfer and
- *      would end up with most of it back. The observed report was exactly that:
- *      the balance showed 0 until the change came back minutes later.
+ *   2. A NAME SEND IN PROGRESS (reviewer, 2026/09/08). A two-leg shielded
+ *      payment takes the WHOLE coin out of the account and puts the remainder
+ *      back three transactions later — see `planShieldedSend` in
+ *      `lib/sendLegs.ts` for why a partial withdrawal is not an option. Between
+ *      the first leg landing and the third, the account genuinely holds none of
+ *      that colour, so the strip showed `mUSD 0` for minutes over a Passport
+ *      that was mid-transfer and would end up with most of it back. The
+ *      observed report was exactly that: the balance showed 0 until the change
+ *      came back minutes later.
  *
- * Both are the same defect — a figure that is momentarily true and reads as
- * permanent — so both get the same answer: paint the figure the account is
- * ABOUT to hold, and say in one word why it is not the settled one yet.
+ *   3. A ONE-TRANSACTION TRANSFER IN FLIGHT (2026/09/10). The one-leg send has
+ *      no dip at all — the change never leaves the account — but for the half
+ *      minute between submission and the ledger read catching up, the strip
+ *      paints the figure from BEFORE the send with nothing on it saying a
+ *      payment is happening. The same answer covers it: the figure the account
+ *      is about to hold, with the same word on it.
+ *
+ * All three are the same defect — a figure that is momentarily true and reads
+ * as permanent — so all three get the same answer: paint the figure the account
+ * is ABOUT to hold, and say in one word why it is not the settled one yet.
  * `arriving` for a grant on its way in, `transferring` for a send on its way
- * out and back. The word is what keeps this from being a lie: an unmarked
- * figure claims to be the ledger's, and these two are not.
+ * out. The word is what keeps this from being a lie: an unmarked figure claims
+ * to be the ledger's, and these are not.
  *
  * NOTHING HERE IS SPENDABLE. This is a DISPLAY projection and no caller may
  * treat it as a holding: the Send sheet's picker, its "you hold enough" check,
@@ -47,7 +55,7 @@ import { planOfRecord, type PendingSend } from './sendLegs.js';
 export type PendingBalanceState =
   /** The sponsor's opening grant, asked for and not landed. */
   | 'arriving'
-  /** A send that has left the account and has not finished. */
+  /** A send that has been submitted and has not finished. */
   | 'transferring';
 
 /** The one word each state puts under the figure. */
@@ -94,14 +102,26 @@ export interface PendingBalancesInput {
 }
 
 /**
- * WHAT IS STILL OUT OF THE ACCOUNT BECAUSE OF A SEND, BY COLOUR.
+ * WHAT THE ACCOUNT WILL HOLD OF EACH COLOUR ONCE ITS SENDS HAVE FINISHED.
  *
  * The sender's own change, and only that: the part being paid AWAY is gone for
- * good and belongs in nobody's balance, while the remainder is coming back into
- * this account and is the whole reason the figure on screen dips. A two-leg run
+ * good and belongs in nobody's balance, while the remainder is what the account
+ * ends up with and is the whole reason the figure on screen moves. A two-leg run
  * — a NIGHT payment, or a shielded one that happened to be the whole coin —
  * has no change at all, so it contributes nothing here and its balance simply
  * falls by what was sent, which is the truth.
+ *
+ * A ONE-LEG `transfer` RUN IS COUNTED TOO, AND FOR THE OPPOSITE REASON
+ * (2026/09/10). Its change never leaves the account — the circuit persists it
+ * in the same transaction — so nothing is outstanding and there is no dip to
+ * cover. What there IS is a gap: between the transfer being accepted and the
+ * ledger read catching up, the strip still shows the figure from before the
+ * send, with no word on it saying a payment is in flight. `held − amount` is
+ * what that account is about to hold, and painting it under `Transferring` is
+ * the same promise the two-leg projection makes, arrived at from the other
+ * side. The `max` below is what makes it safe either way: the pre-send figure
+ * wins until the read catches up, and the projected one after — so the figure
+ * only ever falls, and it never falls to a zero the account was never at.
  *
  * A run counts from the moment its first leg is ACCEPTED (`withdrawTxHash` is
  * what says so) until it is `done`. A run that has stopped with a reason on it

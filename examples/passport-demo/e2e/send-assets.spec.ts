@@ -510,3 +510,107 @@ test('a balance on its way is a figure with a word on it, never a zero', async (
     if (credentialId) localStorage.removeItem(`midnight.passport.sends.v1:${credentialId}`);
   });
 });
+
+/**
+ * THE ONE-TRANSACTION SEND, AS THE REVIEW STEP DESCRIBES IT.
+ *
+ * A Passport whose account carries `transfer_shielded_to_account` pays another
+ * Passport in a single transaction — the recipient's own `deposit_shielded`
+ * runs inside the same call tree — so nothing about that send is two of
+ * anything, and the sheet must not say it is. Proved on chain in
+ * `docs/demo/one-tx-transfer-drill.md` §3d and §3e.
+ *
+ * THE SENDER HAS TO BE AN UPGRADED ONE, AND THIS FILE MAKES ONE (2026/09/10).
+ * The account every test above uses is a REAL recorded stagenet account and it
+ * is a pre-upgrade one: eleven entry points, no `transfer_shielded_to_account`.
+ * That is not a gap in the recording, it is what that account is — so the
+ * recording is taken as it stands and ONE entry point is added to it here, with
+ * the ledger's own codec, borrowing an existing operation's value. What the
+ * client reads to decide the path is the NAME
+ * (`ContractState.operations()` — see `accountHasOneTxTransfer`), and the name
+ * is the whole of what this changes: the contract's data, and therefore every
+ * balance on screen, is byte-for-byte the recording's.
+ *
+ * IT STOPS AT REVIEW, like everything else in this file. The mocked tier has no
+ * prover and no chain to take a transaction; what only a browser can answer is
+ * that the sheet reads the sender's own build and says the right thing about it
+ * before anybody presses Send.
+ *
+ * LAST IN THE FILE, because the override outlives the test: the support answer
+ * is cached per address for the session and the page has to be reloaded for the
+ * app to ask at all.
+ */
+test('a sender whose account can pay in one transaction is reviewed as one transfer', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const url = await import('node:url');
+  const { ContractState } = await import('@midnightntwrk/ledger-v9');
+
+  const here = path.dirname(url.fileURLToPath(import.meta.url));
+  const recorded = JSON.parse(
+    fs.readFileSync(path.join(here, 'fixtures', 'stagenet-passport-account.json'), 'utf8'),
+  ) as { data: { contract: { state: string } } };
+
+  const state = ContractState.deserialize(
+    Uint8Array.from(Buffer.from(recorded.data.contract.state, 'hex')),
+  );
+  /* Eleven, and the one that is missing is the one this test is about. */
+  expect(state.operations()).not.toContain('transfer_shielded_to_account');
+  const borrowed = state.operation('withdraw_shielded');
+  expect(borrowed).toBeDefined();
+  state.setOperation('transfer_shielded_to_account', borrowed!);
+  const upgraded = JSON.stringify({
+    data: {
+      contract: {
+        ...recorded.data.contract,
+        state: Buffer.from(state.serialize()).toString('hex'),
+      },
+    },
+  });
+
+  /* Registered AFTER the boundary's own route, so it is consulted first, and
+     narrow: only the sender's account, only the contract-state query. Anything
+     else falls through to the recording every other test reads. */
+  await page.route('**/indexer.stagenet.shielded.tools/**', async (route) => {
+    const body = route.request().postData() ?? '';
+    const address = (/"address":"([0-9a-fA-F]+)"/.exec(body)?.[1] ?? '').toLowerCase();
+    if (body.includes('CONTRACT_STATE_QUERY') && address === PASSPORT_ACCOUNT_ADDRESS) {
+      return route.fulfill({ contentType: 'application/json', body: upgraded });
+    }
+    return route.fallback();
+  });
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: /^Send$/ }).first()).toBeVisible({
+    timeout: 90_000,
+  });
+  await expect(page.locator('.mnhome-assets')).toContainText(/mUSD/i, { timeout: 60_000 });
+  await page.getByRole('button', { name: /^Send$/ }).first().click();
+  await expect(page.locator('.mnhome-send')).toBeVisible();
+
+  await picker().selectOption({ index: 1 });
+  await recipient().fill(`${RESOLVABLE_NAME}.night`);
+  await expect(page.locator('.mnhome-send-resolved')).toBeVisible({ timeout: 30_000 });
+  await page.getByPlaceholder('0', { exact: true }).fill('1');
+  await page.getByRole('button', { name: /^Review$/ }).click();
+
+  const review = await page.locator('.mnhome-send-rows').innerText();
+  expect(review).toContain('1 mUSD');
+  expect(review).toContain(`${RESOLVABLE_NAME}.night`);
+  /* ONE WORD, AND NOT A COUNT. "the copy for the in-between state should simply
+     say Transferring" (reviewer, 2026/09/08) — and the row that promises what
+     somebody is about to wait through says the same word for the same reason. */
+  expect(review).toContain('Transferring');
+  expect(review).toContain('in one network transaction');
+  /* THE DEFECT THIS GUARDS. Nothing on this path is two steps, and a row that
+     still said so would be describing the older build's send over the new
+     build's transfer. */
+  expect(review).not.toContain('Two steps');
+  expect(review).not.toContain('Three steps');
+  expect(review).not.toMatch(/\bStep \d/);
+  /* Still no colour, no account address, and no machinery on the step that
+     confirms — the rule every other test in this file holds to. */
+  expect(review).not.toMatch(/\b[0-9a-f]{16,}\b/);
+  expect(review).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
+  expect(review).not.toMatch(/wallet|registry|indexer|resolver|contract|circuit|DUST/i);
+});

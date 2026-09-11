@@ -29,8 +29,26 @@
  * `src/lib/sendLegs.test.ts` rather than through a screen.
  */
 
-/** Which of the two ledgers a pending send moves value on. */
-export type PendingSendKind = 'night' | 'shielded';
+/**
+ * Which ledger a pending send moves value on, and — for `transfer` — how.
+ *
+ * `night` and `shielded` are the TWO-LEG sends: the amount comes out of the
+ * sender's account to the sender's own receiving address, and a second,
+ * permissionless call pays it into the recipient's account.
+ *
+ * `transfer` is the ONE-LEG send, and it is the same shielded value moving by a
+ * different route (2026/09/10). The recompiled account contract carries
+ * `transfer_shielded_to_account`, which hands the amount to the recipient's
+ * contract address and lets the recipient's own `deposit_shielded` run inside
+ * the same call tree — so the whole payment is one transaction, and there is no
+ * moment where the money is at the sender's wallet rather than in either
+ * account. Only a sender whose deployed contract carries that operation can
+ * take it; every other Passport still takes the two-leg path above, unchanged.
+ *
+ * A `transfer` run is shielded value, so it carries a `tokenType` exactly as a
+ * `shielded` one does.
+ */
+export type PendingSendKind = 'night' | 'shielded' | 'transfer';
 
 /**
  * How far a send has got.
@@ -50,8 +68,24 @@ export type PendingSendKind = 'night' | 'shielded';
  * `deposit`, `change`, or `failed` record is value the sender has moved and not
  * yet given to anybody — or, at `change`, not yet put back — and Home offers to
  * carry each of them on.
+ *
+ * `pay` is the ONE-LEG send's only leg, and it belongs to a `transfer` record
+ * and to nothing else. It uses the same {@link PendingSend.withdrawTxHash} the
+ * others do, because that field means one thing on every kind: the transaction
+ * that spends from the sender's account has been accepted. Without it the run
+ * has not spent; with it the run is submitted and waiting to be seen, and it is
+ * carried on by LOOKING rather than by sending anything again — that one
+ * transaction is the whole payment, so a resume that re-sent would pay the
+ * recipient twice.
  */
-export type PendingSendLeg = 'withdraw' | 'settle' | 'deposit' | 'change' | 'done' | 'failed';
+export type PendingSendLeg =
+  | 'withdraw'
+  | 'settle'
+  | 'deposit'
+  | 'change'
+  | 'pay'
+  | 'done'
+  | 'failed';
 
 /** Who is being paid — the words on screen, and the account that receives. */
 export interface PendingSendRecipient {
@@ -104,6 +138,15 @@ export interface PendingSend {
    * waits for is worth this, the recipient is paid {@link amount}, and the
    * difference comes back in leg three. Absent on a NIGHT run and on a record
    * written before the third leg existed, where it is simply the amount.
+   *
+   * ON A `transfer` RUN IT IS THE SAME FIGURE AND A DIFFERENT STORY. The
+   * one-leg circuit also spends the whole coin — it has to, a Compact contract
+   * holds one qualified coin per colour — but it persists the remainder itself,
+   * in the same transaction, rather than paying it out to be put back. So this
+   * is still "what came out of the account's coin", and the difference from
+   * {@link amount} is still the sender's own change; what is different is that
+   * nobody has to move it, and there is no third leg. It is what
+   * `lib/pendingBalances.ts` projects the settled figure from.
    */
   withdrawAmount?: string;
   /** Set the moment the paying leg is accepted. Its presence is what says so. */
@@ -134,6 +177,7 @@ function isLeg(value: unknown): value is PendingSendLeg {
     value === 'settle' ||
     value === 'deposit' ||
     value === 'change' ||
+    value === 'pay' ||
     value === 'done' ||
     value === 'failed'
   );
@@ -199,7 +243,7 @@ export function readPendingSends(raw: string | null | undefined): PendingSend[] 
     if (typeof candidate !== 'object' || candidate === null) continue;
     const row = candidate as Record<string, unknown>;
     if (typeof row.id !== 'string' || !row.id) continue;
-    if (row.kind !== 'night' && row.kind !== 'shielded') continue;
+    if (row.kind !== 'night' && row.kind !== 'shielded' && row.kind !== 'transfer') continue;
     if (!isLeg(row.leg)) continue;
     if (!isAmount(row.amount)) continue;
     if (typeof row.colourHex !== 'string' || !row.colourHex) continue;
@@ -211,8 +255,10 @@ export function readPendingSends(raw: string | null | undefined): PendingSend[] 
     if (typeof row.createdAt !== 'string' || Number.isNaN(Date.parse(row.createdAt))) continue;
     if (typeof row.updatedAt !== 'string' || Number.isNaN(Date.parse(row.updatedAt))) continue;
     /* A shielded run with no colour cannot name the note it is waiting for, so
-       it is not a run anything could carry on. */
-    if (row.kind === 'shielded' && (typeof row.tokenType !== 'string' || !row.tokenType)) continue;
+       it is not a run anything could carry on. A `transfer` run needs the
+       colour for the same reason it needs an amount: it is what the circuit is
+       called with, and what the balance projection is keyed by. */
+    if (row.kind !== 'night' && (typeof row.tokenType !== 'string' || !row.tokenType)) continue;
     const record: PendingSend = {
       id: row.id,
       kind: row.kind,
@@ -307,10 +353,24 @@ export interface ShieldedSendPlan {
   withdraw: bigint;
   /** What leg two pays the recipient. */
   pay: bigint;
-  /** What leg three puts back into the sender's own account, or `null`. */
+  /**
+   * What is left of the coin once the recipient has been paid, or `null`.
+   *
+   * On a two-leg run that is leg three's job — the sender's own change, sitting
+   * in their wallet until it is put back. On a one-leg `transfer` run the
+   * circuit persists it in the account itself and nobody moves it; the figure
+   * is still worth having, because it is the balance the sender is left with
+   * and it is what `lib/pendingBalances.ts` paints while the transfer is in
+   * flight.
+   */
   change: bigint | null;
-  /** How many steps the person watching is told about. */
-  steps: 2 | 3;
+  /**
+   * How many steps the person watching is told about.
+   *
+   * `1` is the one-transaction transfer, which has no step to count at all —
+   * the sheet says "Transferring" rather than numbering anything.
+   */
+  steps: 1 | 2 | 3;
 }
 
 /**
@@ -361,11 +421,19 @@ export function planShieldedSend(input: { held: bigint; amount: bigint }): Shiel
  * A record with no {@link PendingSend.withdrawAmount} is a two-leg run —
  * either a NIGHT one, or a shielded one written before the third leg existed,
  * or one whose payment was the whole coin — and the plan says so.
+ *
+ * A `transfer` record is ONE step whatever it is carrying: the change never
+ * leaves the account, so there is no third leg to count and no second one
+ * either. The change figure is still computed, because it is the balance the
+ * sender is left with and the surfaces paint it.
  */
 export function planOfRecord(record: PendingSend): ShieldedSendPlan {
   const pay = BigInt(record.amount);
   const withdraw = record.withdrawAmount === undefined ? pay : BigInt(record.withdrawAmount);
   const change = withdraw - pay;
+  if (record.kind === 'transfer') {
+    return { withdraw, pay, change: change > 0n ? change : null, steps: 1 };
+  }
   return {
     withdraw,
     pay,
@@ -378,14 +446,31 @@ export function planOfRecord(record: PendingSend): ShieldedSendPlan {
 /* What the sheet says while it runs                                           */
 /* -------------------------------------------------------------------------- */
 
-/** Which of the legs is running, as the sheet is told about it. */
-export type SendStep = 'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning';
+/**
+ * Which of the legs is running, as the sheet is told about it.
+ *
+ * `transferring` is the one-leg send's only state, and there is nothing after
+ * it: the amount goes from the sender's account into the recipient's in one
+ * transaction, so the line says what is happening rather than which of several
+ * things is.
+ */
+export type SendStep =
+  | 'withdrawing'
+  | 'settling'
+  | 'depositing'
+  | 'changing'
+  | 'returning'
+  | 'transferring';
 
 /** What the progress line is built out of. */
 export interface SendStepLineInput {
   step: SendStep;
-  /** How many steps this run has: two, or three when there is change to put back. */
-  steps: 2 | 3;
+  /**
+   * How many steps this run has: two, or three when there is change to put
+   * back — or one, which is the transfer that is a single transaction and is
+   * not counted at all.
+   */
+  steps: 1 | 2 | 3;
   /** Who is being paid, in the sender's own words. */
   recipient: string;
   /** "(retry 1 of 2)", or an empty string on a first attempt. */
@@ -417,6 +502,14 @@ export function sendStepLine(input: SendStepLineInput): string {
      `changing` is no longer numbered at all. */
   const of = 'of 2';
   switch (input.step) {
+    /* ONE TRANSACTION, SO NOTHING IS NUMBERED (2026/09/10). "Step 1 of 1" is a
+       count nobody needs and an invitation to wonder what step two was; the
+       word for the state is the word the balance strip already uses for it —
+       "the copy for the in-between state should simply say Transferring"
+       (reviewer, 2026/09/08). Nothing on this path says "two steps" anywhere,
+       because there are not two of anything. */
+    case 'transferring':
+      return `Transferring to ${input.recipient}${suffix}.`;
     case 'withdrawing':
       return input.steps === 3
         ? `Step 1 ${of} · Taking the coin out${suffix}.`
@@ -450,6 +543,14 @@ export function sendStepLine(input: SendStepLineInput): string {
  */
 export function pendingSendStepLine(record: PendingSend): string {
   if (!record.withdrawTxHash) return 'Nothing has left your account yet.';
+  /* ONE TRANSACTION, SUBMITTED, AND NOT YET SEEN. There is no half-way state
+     to describe and no leg left to run: either that transaction was included,
+     in which case the recipient has the money, or it was not, in which case
+     nothing moved. So the card says what is unknown rather than inventing a
+     step — and never says the recipient was not paid, which may be false. */
+  if (record.kind === 'transfer') {
+    return `Waiting for the network to confirm your transfer to ${record.recipient.label}.`;
+  }
   const steps = planOfRecord(record).steps;
   if (record.leg === 'change') {
     return `${record.recipient.label} has been paid. Your change has not come back to your account yet.`;

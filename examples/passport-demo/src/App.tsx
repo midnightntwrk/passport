@@ -151,6 +151,13 @@ import BackupScreen from './screens/Backup.js';
 import EcosystemScreen from './screens/Ecosystem.js';
 import AliasReclaimModal from './screens/AliasReclaimModal.js';
 import RecoverByNameScreen from './screens/RecoverByName.js';
+/* The one-off account upgrade's SCREEN, statically — it is a stepper and a
+   theme toggle and reaches nothing. The MACHINE behind it is imported inside
+   the handler that runs it (`runUpgrade`), because `identity/accountUpgrade.js`
+   pulls the ledger in with it and no Passport should pay for that on the path
+   to its dashboard. The step type is restated by the screen for the same
+   reason, so this import stays free. */
+import UpgradeScreen, { type UpgradeMachineStep } from './screens/Upgrade.js';
 import {
   adoptLegacyAliasRecords,
   aliasRecordsForCredential,
@@ -180,6 +187,7 @@ import {
   forgetPassportContractRecordsForCredential,
   loadPassportContractRecord,
   loadPassportContractRecords,
+  loadPassportUpgradeProgress,
   passportContractRecordKey,
   savePassportContractRecord,
   subscribePassportContractRecords,
@@ -763,8 +771,14 @@ const PASSPORT_CONTRACT_SCOPE = { appId: APP_ID, accountId: 'passport-contract-v
  * 2026/08/30: 'welcome' joins it in front of 'alias', and ONLY for a Passport
  * this session created. See `WelcomeScreen` for what it says and why it is
  * shown once.
+ *
+ * 2026/09/11: 'upgrade' joins them, and it is the one step nobody schedules.
+ * It is entered by the app noticing — from the account's own on-chain entry
+ * points — that this Passport predates the build that can pay in a single
+ * transaction, and it is left by that no longer being true. See
+ * `UpgradeScreen` and `identity/accountUpgrade.ts`.
  */
-type IdentityStep = 'welcome' | 'alias' | 'recover' | 'backup' | 'ecosystem' | null;
+type IdentityStep = 'welcome' | 'alias' | 'recover' | 'backup' | 'ecosystem' | 'upgrade' | null;
 
 /**
  * An account read off a passkey that the chain has not answered for YET.
@@ -6361,7 +6375,7 @@ export default function PassportDemo() {
    * the NIGHT path leaves it at the receiving address for Home to sweep in.
    */
   const [nameSendLeg, setNameSendLeg] = useState<
-    'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning' | null
+    'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning' | 'transferring' | null
   >(null);
 
   /**
@@ -6372,7 +6386,22 @@ export default function PassportDemo() {
    * takes the whole coin out. The count is held here rather than derived in the
    * sheet because only the orchestrator knows what leg one really withdrew.
    */
-  const [nameSendSteps, setNameSendSteps] = useState<2 | 3>(2);
+  const [nameSendSteps, setNameSendSteps] = useState<1 | 2 | 3>(2);
+
+  /**
+   * WHETHER THIS PASSPORT CAN PAY ANOTHER IN ONE TRANSACTION.
+   *
+   * A fact about the SENDER's deployed contract and about nothing else — see
+   * `senderSupportsOneTransactionSend` — so it is read once, when the account
+   * is known, and held for the session. `false` until it has been read, which
+   * is the right default in both directions: the two-leg path works against
+   * every account there is, and a review sheet that promised one transaction
+   * before anything had been asked would be promising on a guess.
+   *
+   * It reaches the Send sheet BEFORE a send starts, because the review step has
+   * to say what somebody is about to wait through.
+   */
+  const [oneTransactionSend, setOneTransactionSend] = useState(false);
 
   /**
    * Which attempt at the running leg this is, for the sheet's progress line.
@@ -6472,6 +6501,38 @@ export default function PassportDemo() {
     pendingSendsRef.current = records;
     setPendingSends(records);
   }, [pendingSendsCredentialId]);
+
+  /**
+   * Asks the chain which build this Passport's account is, once there is one.
+   *
+   * ONE READ PER ADDRESS PER SESSION — the module caches it, and the answer
+   * cannot change under this app — so the effect is free to re-run whenever the
+   * wallet opens or the account changes. A failure is silently `false`, which
+   * is the two-leg path: it works against every account there is, so a
+   * question that could not be asked costs a slower send and nothing else.
+   */
+  useEffect(() => {
+    if (!localSessionActive || !accountContractAddress) {
+      setOneTransactionSend(false);
+      return;
+    }
+    let live = true;
+    void (async () => {
+      const account = accountContractOf();
+      if (!account) return;
+      const { senderSupportsOneTransactionSend } = await import(
+        './identity/accountCustody.js'
+      );
+      const supported = await senderSupportsOneTransactionSend(
+        account.handle.network,
+        account.address,
+      );
+      if (live) setOneTransactionSend(supported);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [accountContractAddress, accountContractOf, localSessionActive]);
 
   /**
    * Paying a `.night` name — and why it is two transactions rather than one.
@@ -6577,6 +6638,7 @@ export default function PassportDemo() {
         prepareAccountDeposit,
         shieldedCoinFromNote,
         shieldedCoinOfValue,
+        transferShieldedToAccount,
         walletShieldedNotes,
         withdrawNight,
         withdrawShielded,
@@ -6626,11 +6688,17 @@ export default function PassportDemo() {
         }
         const entry = addActivity({
           label: `Sending to ${record.recipient.label}`,
-          /* TWO, WHATEVER THE PLAN IS. A part-coin payment has a third
-             transaction and it returns the sender's own change after the
-             payment is confirmed — see `detachChange` — so two is what somebody
-             reading this row is actually waiting for. */
-          detail: `${amountText}, in two steps.`,
+          /* TWO, WHATEVER THE PLAN IS — on the two-leg path. A part-coin
+             payment has a third transaction and it returns the sender's own
+             change after the payment is confirmed — see `detachChange` — so two
+             is what somebody reading this row is actually waiting for.
+
+             A one-leg transfer is not two of anything, and the row must not say
+             it is: the amount goes straight from one account into the other. */
+          detail:
+            record.kind === 'transfer'
+              ? `${amountText}, in one transfer.`
+              : `${amountText}, in two steps.`,
           status: 'pending',
           source: 'wallet',
         });
@@ -6742,6 +6810,164 @@ export default function PassportDemo() {
          about the run that stopped; carrying them into a new press would spend
          a person's Continue on a single attempt. */
       if (options.resumed) save({ attempts: { withdraw: 0, deposit: 0, change: 0 } });
+
+      /**
+       * ONE TRANSACTION, AND THE RECIPIENT IS CREDITED IN THE SAME BLOCK.
+       *
+       * The whole of a `transfer` run. `transfer_shielded_to_account` hands the
+       * amount to the recipient's contract address and lets the recipient's own
+       * `deposit_shielded` run inside the same call tree, so there is no leg
+       * two to prepare, no wallet to wait on, and no change to put back — the
+       * circuit persists the remainder itself, and §3d of
+       * `docs/demo/one-tx-transfer-drill.md` spent that remainder afterwards,
+       * on chain, twice.
+       *
+       * WHAT IS NOT DONE HERE, AND DELIBERATELY. The recipient is NOT prewarmed
+       * with `prepareAccountDeposit`: `findDeployedContract` re-reads a deployed
+       * contract's verifier keys against our build and refuses a pre-upgrade
+       * account outright, so a prewarm against the very recipients this path
+       * exists to reach would throw before anything was built (drill §4). The
+       * recipient is an argument, and their build is nobody's business.
+       *
+       * THE WAIT AFTER IT IS A WAIT FOR INCLUSION, not for a note. It is the
+       * same bounded watch the two-leg path uses for leg one — the same
+       * deadline, the same shortened one for a submission nobody acknowledged
+       * — because it is the same question: has the chain got this transaction?
+       * There is simply nothing after the answer.
+       */
+      const runTransfer = async (deviceSecret: Uint8Array): Promise<void> => {
+        activityId = begin(false);
+        openLeg();
+        for (let attempt = record.attempts.withdraw; ; attempt += 1) {
+          setNameSendLeg('transferring');
+          setNameSendAttempt(attempt + 1);
+          try {
+            const paid = await transferShieldedToAccount(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                recipientContractAddress: record.recipient.accountAddress,
+                colourHex: record.tokenType ?? record.colourHex,
+                amount,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            withdrawLanded = paid.txIdResolved;
+            withdrawIdentifier = paid.txIdResolved ? null : paid.txId;
+            save({
+              /* SUBMITTED, NOT DONE. The recipient is paid the moment this
+                 transaction is included and not before, so the record sits at
+                 `pay` until the chain says so — and it keeps the hash, which is
+                 what stops a resume from sending a second one. */
+              leg: 'pay',
+              withdrawTxHash: paid.txId,
+              /* WHAT THE ACCOUNT'S COIN WAS WORTH when this was built. The
+                 circuit spends the whole of it and persists the difference, so
+                 this is what the balance projection is sized from — see
+                 `lib/pendingBalances.ts`. */
+              withdrawAmount: paid.heldBefore.toString(),
+              attempts: { ...record.attempts, withdraw: attempt + 1 },
+              lastError: undefined,
+            });
+            updateActivity(activityId, {
+              detail: `${amountText} is on its way to ${record.recipient.label}’s account.`,
+              source: 'chain',
+              txHash: paid.txId,
+            });
+            return;
+          } catch (cause) {
+            const verdict = classifyLegError(cause);
+            save({
+              attempts: { ...record.attempts, withdraw: attempt + 1 },
+              lastError: { message: verdict.message, retryable: verdict.retryable },
+            });
+            if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
+              /* Nothing left the account: the transfer is one transaction, and
+                 a transaction that was refused moved nothing. That is what
+                 makes `sendRefusalText`'s claim a true one here. */
+              console.debug('[send] the transfer was refused', cause);
+              throw failure(cause, sendRefusalText(cause), false);
+            }
+            await pause(retryDelayMs(attempt));
+          }
+        }
+      };
+
+      /**
+       * THE WAIT AFTER THE ONE TRANSACTION — for inclusion, and nothing else.
+       *
+       * Reuses `watchForSettlement` rather than a loop of its own, because the
+       * schedule it holds is the one this needs: one cheap indexer point lookup
+       * per second until the chain has the transaction, and the deadline rule
+       * that shortens the window where nobody could say it was ever sent. What
+       * it normally waits for after the landing edge — a note reaching the
+       * sender's own wallet — does not exist on this path, so the landing IS
+       * the arrival and the probe says so.
+       *
+       * A wait that RUNS OUT does not fail the run. The transaction may
+       * perfectly well be in flight, so the record is left at `pay`, Home
+       * offers to look again, and nothing anywhere claims the recipient was not
+       * paid — which would be a statement nobody can make.
+       */
+      const runTransferSettle = async (): Promise<void> => {
+        setNameSendLeg('transferring');
+        setNameSendAttempt(null);
+        const identifier = withdrawIdentifier;
+        let confirmLanded: (() => Promise<boolean>) | undefined;
+        if (identifier !== null) {
+          const { resolveDeployTxHashOnce } = await import('./identity/passportContract.js');
+          confirmLanded = async () =>
+            (await resolveDeployTxHashOnce(
+              account.handle.network.indexerHttpUrl,
+              identifier,
+            )) !== null;
+        }
+        let landed = withdrawLanded;
+        const outcome = await legClock.time('settle', () =>
+          watchForSettlement<null>({
+            readWallet: async () => (landed ? { arrived: true, note: null } : { arrived: false }),
+            landed: withdrawLanded,
+            confirmLanded,
+            onLanded: () => {
+              landed = true;
+              void refreshLocalBalances();
+            },
+            now: () => Date.now(),
+            sleep: pause,
+            deadlineMs: settleDeadlineFor(identifier, SETTLE_DEADLINE_MS),
+          }),
+        );
+        closeLeg(1, 'transfer');
+        if (!outcome.settled) {
+          const message = `${amountText} was sent to ${record.recipient.label} and the network has not confirmed it yet.`;
+          save({ leg: 'pay', lastError: { message, retryable: true } });
+          throw failure(new Error(message), message, true);
+        }
+        save({ leg: 'done', lastError: undefined });
+        dropPendingSend(record.id);
+        updateActivity(activityId, {
+          status: 'complete',
+          label: `Sent to ${record.recipient.label}`,
+          detail: `${amountText} is now in ${record.recipient.label}’s account.`,
+          source: 'chain',
+          ...(record.withdrawTxHash ? { txHash: record.withdrawTxHash } : {}),
+        });
+        pushToast({
+          tone: 'success',
+          title: `${record.recipient.label} paid`,
+          body: 'The fee sponsor covered every network fee.',
+          ...(record.withdrawTxHash
+            ? {
+                link: explorerTxLink(
+                  record.withdrawTxHash,
+                  account.handle.network.networkId,
+                ),
+              }
+            : {}),
+        });
+        void refreshLocalBalances();
+      };
 
       const runWithdraw = async (deviceSecret: Uint8Array): Promise<void> => {
         activityId = begin(false);
@@ -7220,6 +7446,27 @@ export default function PassportDemo() {
       };
 
       try {
+        /* ONE LEG, AND IT IS THE WHOLE RUN. A `transfer` record has no settle
+           wait for a note, no paying leg, and no change to put back: it submits
+           one transaction and then waits for the chain to carry it. A record
+           that already HAS its hash is one this browser submitted before — a
+           reload ago at least — so it is carried on by LOOKING, never by
+           sending a second one. */
+        if (record.kind === 'transfer') {
+          if (!record.withdrawTxHash) {
+            await withAccountDeviceSecret((deviceSecret) => runTransfer(deviceSecret));
+          } else {
+            activityId = begin(options.resumed ?? false);
+            /* The identifier the record kept, so the resumed wait asks the
+               indexer about the same transaction rather than assuming. A
+               resolved ledger hash answers for itself, and asking about one
+               costs one lookup that comes back immediately. */
+            withdrawLanded = false;
+            withdrawIdentifier = record.withdrawTxHash;
+          }
+          await runTransferSettle();
+          return;
+        }
         if (!record.withdrawTxHash) {
           await withAccountDeviceSecret((deviceSecret) => runWithdraw(deviceSecret));
         } else {
@@ -7306,11 +7553,34 @@ export default function PassportDemo() {
              back in the account, or the first leg never spent. Neither is a
              thing to offer a Continue button over. */
           dropPendingSend(record.id);
-        } else if (record.leg !== 'settle' && record.leg !== 'change') {
+        } else if (
+          record.leg !== 'settle' &&
+          record.leg !== 'change' &&
+          /* A `pay` record is a transfer this browser SUBMITTED and has not
+             seen land. Marking it failed would stop the automatic resume from
+             looking again — and looking again is the only thing left to do,
+             because that one transaction either lands or it does not. */
+          record.leg !== 'pay'
+        ) {
           save({ leg: 'failed' });
         }
 
-        if (activityId) {
+        /* A TRANSFER THAT WAS SUBMITTED AND NOT SEEN LAND SAYS SO, AND NOTHING
+           MORE. Every sentence below was written for the two-leg send, where a
+           landed first leg means the amount is demonstrably at the sender's own
+           Passport and Home can carry the payment on. None of that is true of
+           one transaction: it either lands, and the recipient has the money, or
+           it does not, and nothing moved. "They were not paid" and "your money
+           is waiting at your Passport" are both claims nobody can make here. */
+        const transferInFlight = record.kind === 'transfer' && legLanded;
+        if (activityId && transferInFlight) {
+          updateActivity(activityId, {
+            status: 'pending',
+            label: `Sending to ${record.recipient.label}`,
+            detail: `${message} Passport is still waiting to hear that it went through.`,
+            source: 'local',
+          });
+        } else if (activityId) {
           updateActivity(activityId, {
             /* NEVER A FAILED SEND WHERE THE RECIPIENT WAS PAID (2026/09/07).
                The only way to reach here with `recipientPaid` is a third leg
@@ -7336,7 +7606,16 @@ export default function PassportDemo() {
             source: 'local',
           });
         }
-        if (legLanded) {
+        if (transferInFlight) {
+          pushToast({
+            /* Not an error: nothing refused anything. The transaction was
+               taken and the chain has not been seen to carry it yet. */
+            tone: 'success',
+            title: `Still confirming your transfer to ${record.recipient.label}`,
+            body: 'Passport will keep looking. Nothing has to be sent again.',
+          });
+          void refreshLocalBalances();
+        } else if (legLanded) {
           pushToast({
             tone: recipientPaid ? 'success' : 'error',
             title: recipientPaid
@@ -7781,9 +8060,27 @@ export default function PassportDemo() {
       }
       const plan =
         held === undefined ? null : planShieldedSend({ held, amount: params.amount });
+      /* WHICH BUILD THIS PASSPORT'S ACCOUNT IS, asked here rather than trusted
+         from the render above. The effect that fills `oneTransactionSend` runs
+         when the account appears and its answer is what the review sheet was
+         painted from; this asks the module again at the moment the send is
+         made, which costs nothing — the answer is cached per address for the
+         session — and cannot be a stale render. A `false` either way is the
+         two-leg path, which works against every account there is. */
+      const { senderSupportsOneTransactionSend } = await import(
+        './identity/accountCustody.js'
+      );
+      const oneTransaction = await senderSupportsOneTransactionSend(
+        account.handle.network,
+        account.address,
+      );
       await runNameSend(
         newPendingSend({
-          kind: 'shielded',
+          /* ONE TRANSACTION WHERE THE SENDER'S CONTRACT CARRIES THE CIRCUIT,
+             and the two-leg send otherwise — see
+             `docs/demo/one-tx-transfer-drill.md` §4 for why it is the SENDER's
+             state that decides and not the recipient's. */
+          kind: oneTransaction ? 'transfer' : 'shielded',
           recipient: { label: params.domain, accountAddress: params.accountAddress },
           amount: params.amount,
           tokenType: params.tokenType,
@@ -7897,7 +8194,17 @@ export default function PassportDemo() {
           phase: accountPhase,
           nameLeg: nameSendLeg,
           nameLegAttempt: nameSendAttempt,
-          nameLegSteps: nameSendSteps,
+          /* ONE ANSWER, AND ONLY THE ONE THE SHEET CANNOT WORK OUT FOR ITSELF.
+             It counts the two-leg steps out of the picker's own figures and has
+             done since it was written — see `nameLegSteps` there. What it
+             cannot know is whether THIS Passport's account can pay in a single
+             transaction, because that is a fact about the deployed contract,
+             read from the chain once per session. So that is the only count the
+             host supplies, and every other one on that surface is left exactly
+             where it was. */
+          ...(oneTransactionSend || nameSendSteps === 1
+            ? { nameLegSteps: 1 as const }
+            : {}),
           /* ONE AT A TIME WHILE CHANGE IS COMING BACK. The next transfer would
              have to spend the coin that is still on its way into the account,
              so the sheet holds it and says what it is waiting for. The runner
@@ -8370,6 +8677,234 @@ export default function PassportDemo() {
   };
 
   /* ---------------------------------------------------------------------- */
+  /* The one-off account upgrade                                            */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * WHY THIS EXISTS AT ALL. The account-custody contract gained a circuit on
+   * 2026/09/10 and a deployed Compact contract cannot gain one afterwards, so
+   * every Passport set up before that date sends in two transactions for ever
+   * while every Passport set up after it sends in one. `identity/
+   * accountUpgrade.ts` moves a Passport across — drain, deploy, re-point the
+   * name, refund — and this is the app asking whether it needs to, running it,
+   * and showing where it has got to.
+   *
+   * These three pieces of state are the screen's whole input; everything else
+   * it needs it works out for itself. See `screens/Upgrade.tsx`.
+   */
+  const [upgradeStep, setUpgradeStep] = useState<UpgradeMachineStep | null>(null);
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  /**
+   * One attempt at a time, and this is the flag that holds it.
+   *
+   * `upgradeBusy` cannot: it is state, so a second call landing in the same
+   * tick reads the value from the render that has not happened yet. Two
+   * attempts running at once would drain against each other's reads — the
+   * machine's own header says so, and says the caller holds this lock, the way
+   * `deployPassportContractOnce` holds the deploy's.
+   */
+  const upgradeRunning = useRef(false);
+  /**
+   * The credential-and-network pairs this session has already asked the chain
+   * about. One read each: the answer cannot change under a running app except
+   * by this very flow, which ends by leaving the screen.
+   */
+  const upgradeProbed = useRef<Set<string>>(new Set());
+
+  /**
+   * Moves this Passport onto the account that can pay in one transaction.
+   *
+   * ONE CEREMONY, BOTH SCOPES, exactly as the claim path does it: a single
+   * user-verified assertion yields the `PASSPORT_CONTRACT_SCOPE` root (the old
+   * account's device authority and the new account's commitments) and the
+   * `MIDNAMES_OWNER_SCOPE` seed (who may re-point the name), and the handle is
+   * disposed the moment both are out. Two scopes must never mean two prompts.
+   *
+   * Resumes rather than restarts. Every step that landed is in the contract
+   * store, so this is safe to call again after a failure and after an
+   * interruption — including one that killed the tab mid-proof.
+   */
+  const runUpgrade = useCallback(async (): Promise<void> => {
+    if (upgradeRunning.current) return;
+    const handle = localWalletRef.current;
+    const activeProfile = profileRef.current;
+    const account = accountContractOf();
+    // Nothing to upgrade, or nothing to upgrade it with. The screen is only
+    // ever reached with all three in hand, so this is a guard, not a branch.
+    if (!handle || !activeProfile || !account) return;
+    upgradeRunning.current = true;
+    setUpgradeBusy(true);
+    setUpgradeError(null);
+    try {
+      /* The machine reaches this app HERE and nowhere else. It statically
+         imports the account module and the ledger behind it — 9.84 MB — and
+         a Passport that never upgrades must never fetch a byte of it. */
+      const { AccountUpgradeError, upgradeAccount } = await import(
+        './identity/accountUpgrade.js'
+      );
+      const { deriveWalletSeed } = await import('./lib/localWallet.js');
+      try {
+        const oneShot = await withPasskeyWatchdog(() =>
+          WebAuthnPrfKeyProvider.assertOnce(activeProfile.passkey),
+        );
+        let rootSecret: Uint8Array;
+        let ownerSecret: Uint8Array;
+        try {
+          rootSecret = await deriveWalletSeed(oneShot, PASSPORT_CONTRACT_SCOPE);
+          ownerSecret = await deriveWalletSeed(oneShot, MIDNAMES_OWNER_SCOPE);
+        } finally {
+          // The PRF output is zeroed here and never reaches any cache.
+          oneShot.dispose();
+        }
+        try {
+          await upgradeAccount(
+            handle,
+            { rootSecret, ownerSecret },
+            {
+              oldAddress: account.address,
+              /* The LABEL, not the display form: the machine resolves a name
+                 through Midnames, and `alice.night` is what the screen above
+                 says rather than what the registry is asked. */
+              name: aliasLabel,
+              credentialId: activeProfile.passkey.credentialId,
+              funderUrl: FUNDER_URL,
+            },
+            (phase) => setUpgradeStep(phase.step),
+          );
+        } finally {
+          // Both secrets belong to this call and to nothing else, whatever
+          // happened to the call — the claim path zeroes its two the same way.
+          rootSecret.fill(0);
+          ownerSecret.fill(0);
+        }
+        /* Everything moved. The figures on Home are now a different account's,
+           so they are re-read before the screen comes down. */
+        void refreshLocalBalances();
+        setIdentityStep((current) => (current === 'upgrade' ? null : current));
+      } catch (cause) {
+        /* `AccountUpgradeError.message` is written for the line the screen
+           shows — what the reader was waiting for and what they can do — and
+           its `detail` is the machinery's own account of it, which belongs in
+           a console and nowhere else. Anything else that reaches here is the
+           ceremony or the chunk loader, whose own message is the honest one. */
+        if (cause instanceof AccountUpgradeError) {
+          console.debug(`[upgrade] stopped at ${cause.step} (${cause.code})`, cause.detail);
+        }
+        setUpgradeError(cause instanceof Error ? cause.message : String(cause));
+      }
+    } catch (cause) {
+      // The machine itself could not be fetched. Same line, same two controls.
+      setUpgradeError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      upgradeRunning.current = false;
+      setUpgradeBusy(false);
+    }
+  }, [accountContractOf, aliasLabel, refreshLocalBalances]);
+
+  /**
+   * Asks whether this Passport is one of the ones that has to move — once per
+   * credential and network, and only where the answer could be acted on.
+   *
+   * THREE ANSWERS AND ONLY ONE OF THEM ACTS. `false` is a pre-upgrade account
+   * and raises the screen; `true` is a Passport that is already there; `null`
+   * is the chain not answering, and an upgrade started on a failed read would
+   * drain a perfectly good account for nothing (`accountHasOneTxTransfer` says
+   * exactly this, and it is why that function has three answers).
+   *
+   * AN INTERRUPTED UPGRADE DOES NOT NEED ASKING. A stored progress block means
+   * this browser started one and did not see it finish, and the account the
+   * app is looking at may by then be either of the two. It resumes on sight,
+   * and the machine's first step works out for itself where it got to.
+   *
+   * WHY THE WALLET MUST HAVE SYNCED, AND WHAT THAT ALSO SETTLES. An upgrade
+   * moves everything this Passport holds OUT to its wallet and back in again,
+   * and a wallet that has not walked the chain cannot spend what arrives in
+   * it. So the chain is not asked at all until this session's wallet has
+   * reported itself caught up.
+   *
+   * That is also the one fact the offline walk in `e2e/` cannot manufacture.
+   * Its node and indexer sockets are accepted and answered with silence, so no
+   * facade state is ever published and the sync percent stays null for the
+   * whole run — measured, 2026/09/11. What that tier DOES have is a real
+   * recording of a real pre-upgrade account (`e2e/fixtures/
+   * stagenet-passport-account.json`, eleven entry points), so the read here
+   * answers `false` and an ungated probe puts this screen over Home in every
+   * mocked spec — also measured, on the same day, by removing the gate. The
+   * gate is the honest rule and the exclusion falls out of it: a run with no
+   * chain behind it is a run where nothing could be upgraded anyway.
+   */
+  useEffect(() => {
+    if (!localSessionActive || identityStep !== null) return;
+    /* The PROFILE and the ACCOUNT ADDRESS are read from render state rather
+       than from their refs, and they are in the dependencies below for the
+       same reason: this effect has to run again when they arrive. A wallet
+       becomes active a commit before the profile does, and an effect that
+       only ever looked at the refs read `null` on that commit and was never
+       woken again — measured in the offline walk on 2026/09/11, where it is
+       the difference between asking the chain and silently never asking. */
+    const activeProfile = profile;
+    const account = accountContractOf();
+    if (!activeProfile || !account || !accountContractAddress) return;
+    const credentialId = activeProfile.passkey.credentialId;
+    const network = account.handle.network.networkId;
+    const asked = passportContractRecordKey(credentialId, network);
+    if (upgradeProbed.current.has(asked)) return;
+    if (loadPassportUpgradeProgress(credentialId, network) !== null) {
+      upgradeProbed.current.add(asked);
+      setIdentityStep('upgrade');
+      return;
+    }
+    if (localSyncPercent !== 100) return;
+    /* Marked BEFORE the read rather than after it, so a re-render while the
+       indexer is answering cannot start a second one. A `null` answer
+       therefore stands for the session: the account is read again on the next
+       launch, and until then this Passport sends the way it sent yesterday. */
+    upgradeProbed.current.add(asked);
+    let live = true;
+    void (async () => {
+      const { accountHasOneTxTransfer } = await import('./identity/passportContract.js');
+      const carries = await accountHasOneTxTransfer(
+        account.handle.network.indexerHttpUrl,
+        account.address,
+      );
+      if (!live || carries !== false) return;
+      setIdentityStep('upgrade');
+    })();
+    return () => {
+      live = false;
+    };
+  }, [
+    accountContractAddress,
+    accountContractOf,
+    identityStep,
+    localSessionActive,
+    localSyncPercent,
+    profile,
+  ]);
+
+  /**
+   * The upgrade starts itself.
+   *
+   * Somebody who opens Passport and is told it is being upgraded should watch
+   * it happen, not be asked to authorise a migration they did not choose and
+   * cannot avoid. The one thing they are asked for is the passkey, which the
+   * platform prompts for on its own.
+   *
+   * It starts ONCE. After a failure the screen carries "Try again", and this
+   * effect stays out of the way — a migration that retried itself in a loop
+   * would burn the sponsor's fees on a problem that is not going away by
+   * itself.
+   */
+  useEffect(() => {
+    if (identityStep !== 'upgrade') return;
+    if (upgradeRunning.current || upgradeBusy || upgradeError !== null || upgradeStep !== null) {
+      return;
+    }
+    void runUpgrade();
+  }, [identityStep, runUpgrade, upgradeBusy, upgradeError, upgradeStep]);
+
+  /* ---------------------------------------------------------------------- */
   /* The account-custody contract card on Home                              */
   /* ---------------------------------------------------------------------- */
 
@@ -8706,6 +9241,26 @@ export default function PassportDemo() {
              here — on a naming ceremony the person has already been
              through. See `recoverPassportByName`. */
           onFindExisting={() => setIdentityStep('recover')}
+        />
+      ) : identityStep === 'upgrade' ? (
+        /* THE ONE-OFF UPGRADE, and it stands where the name step stands: in
+           front of everything, with Home neither beneath it nor beside it. For
+           the minutes this takes, some of what the Passport holds is out of the
+           old account and not yet in the new one, so every figure Home could
+           paint would be a number that is true of neither. See
+           `screens/Upgrade.tsx`, which says so at greater length. */
+        <UpgradeScreen
+          /* The display form here — the screen is prose, and the label is what
+             `runUpgrade` hands the machine. */
+          name={activeAliasRecord?.domain ?? null}
+          step={upgradeStep}
+          busy={upgradeBusy}
+          error={upgradeError}
+          onRetry={() => void runUpgrade()}
+          /* Only ever offered alongside a failure, by the screen itself. The
+             Passport is on its old account at that point and still works: it
+             sends in two transactions, which is what it did yesterday. */
+          onLeave={() => setIdentityStep(null)}
         />
       ) : identityStep === 'recover' ? (
         <RecoverByNameScreen

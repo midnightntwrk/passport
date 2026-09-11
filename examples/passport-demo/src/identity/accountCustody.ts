@@ -84,6 +84,8 @@ import {
   loadContractModule,
 } from './contractRuntime.js';
 import {
+  ONE_TX_TRANSFER_OPERATION,
+  accountHasOneTxTransfer,
   accountPrivateStateFrom,
   accountWitnesses,
   derivePassportContractSecrets,
@@ -829,6 +831,61 @@ export async function accountHoldsDevice(
   return state.activeDeviceCommitments.has(commitment);
 }
 
+/**
+ * Answered once per address per session, because the answer is a fact about a
+ * DEPLOYED build and a deployed build does not change: a contract's entry
+ * points can only move under a maintenance update, which nothing in this app
+ * performs.
+ */
+const oneTransactionSendSupport = new Map<string, boolean>();
+
+/** Drops the cache. For drills, for tests, and for a network switch. */
+export function resetOneTransactionSendSupport(): void {
+  oneTransactionSendSupport.clear();
+}
+
+/**
+ * WHETHER THIS SENDER'S ACCOUNT CAN PAY ANOTHER IN ONE TRANSACTION.
+ *
+ * Paying a `.night` name is two transactions on the build every Passport was
+ * deployed with — out of the sender's account to their own wallet, then into
+ * the recipient's — and one on the recompiled build, whose
+ * `transfer_shielded_to_account` hands the amount to the recipient's contract
+ * address and lets the recipient's own `deposit_shielded` run in the same call
+ * tree. Both builds are live on stagenet at once, so the client has to ask.
+ *
+ * IT IS THE SENDER'S STATE THAT DECIDES, and that is not a preference: the
+ * recipient is reached as an ARGUMENT rather than as a connection, so nothing
+ * about their build is read or needed, while the circuit being called has to
+ * exist in the contract being called against. The deployed contract's own entry
+ * points are the only fact a client can read that says which build it is
+ * talking to (`docs/demo/one-tx-transfer-drill.md`, §4).
+ *
+ * THE READ ITSELF IS `./passportContract.ts`'s, not a second copy of it. That
+ * module owns the circuit's name and the `operations()` decode, and the upgrade
+ * flow asks the same question through the same function — two spellings of
+ * "which build is this" is exactly how a Passport comes to be upgraded and then
+ * sent from as though it had not been.
+ *
+ * A READ THAT COULD NOT BE MADE IS `false`, AND IS NOT CACHED. `null` from that
+ * read means "we could not ask", and for THIS caller the honest consequence of
+ * not knowing is the two-leg path: it works against every account there is, so
+ * an unanswerable question costs a slower send and nothing else. Caching it
+ * would hold the Passport on the slow path for the rest of its session.
+ */
+export async function senderSupportsOneTransactionSend(
+  network: AccountNetwork,
+  contractAddress: string,
+): Promise<boolean> {
+  const address = rawContractAddress(contractAddress);
+  const known = oneTransactionSendSupport.get(address);
+  if (known !== undefined) return known;
+  const supported = await accountHasOneTxTransfer(network.indexerHttpUrl, address);
+  if (supported === null) return false;
+  oneTransactionSendSupport.set(address, supported);
+  return supported;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Providers                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -1424,6 +1481,124 @@ async function decodeShieldedRecipient(
     coinPublicKey: new Uint8Array(decoded.coinPublicKey.data),
     encryptionPublicKey: new Uint8Array(decoded.encryptionPublicKey.data),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Transfers — one transaction, account to account                            */
+/* -------------------------------------------------------------------------- */
+
+export interface TransferShieldedRequest {
+  /** The sender's account-custody contract — the one that pays. */
+  contractAddress: string;
+  /**
+   * The RECIPIENT's account-custody contract, raw 64-hex.
+   *
+   * An ARGUMENT, never a connection, and the distinction is load-bearing:
+   * `findDeployedContract` re-reads a deployed contract's verifier keys against
+   * our compiled build and refuses a pre-upgrade account outright, so a
+   * {@link prepareAccountDeposit} prewarm against one throws before anything is
+   * built (`docs/demo/one-tx-transfer-drill.md`, §4). Handed over as bytes, the
+   * recipient's build is nobody's business: midnight-js resolves the callee's
+   * state by itself and the recipient's own `deposit_shielded` runs inside this
+   * call tree.
+   */
+  recipientContractAddress: string;
+  colourHex: string;
+  amount: bigint;
+}
+
+/** What a one-transaction transfer did, and out of what. */
+export interface TransferShieldedResult extends AccountCustodyTxResult {
+  /** Atomic units of the colour that reached the recipient. */
+  amount: bigint;
+  /**
+   * What the sender's account held of that colour when this was built.
+   *
+   * The circuit spends the whole of it — a Compact contract holds one qualified
+   * coin per colour — and persists `heldBefore - amount` in the same
+   * transaction. Reported so a caller can say what the account will be left
+   * with without reading the ledger a second time and racing it.
+   */
+  heldBefore: bigint;
+}
+
+/**
+ * PAYS ANOTHER PASSPORT'S ACCOUNT IN ONE TRANSACTION.
+ *
+ * `transfer_shielded_to_account` hands the amount to the recipient's contract
+ * address with `sendShielded` and lets the recipient's own `deposit_shielded`
+ * run in the same call tree, so one transaction carries two contract calls and
+ * both ledgers are written in the same block. That replaces the two-leg send —
+ * {@link withdrawShielded} to the sender's own wallet, then
+ * {@link depositShielded} into the recipient's account — for the senders whose
+ * deployed build carries it. {@link senderSupportsOneTransactionSend} is how a
+ * caller finds out, and it is the sender's state that decides.
+ *
+ * IT MAY PAY PART OF THE COIN, and that is the whole difference from
+ * {@link withdrawShielded}. The split branch of `withdraw_shielded` leaves
+ * behind a coin the node refuses every later withdrawal against, which is why
+ * every other send path in this app takes the whole coin out and puts the
+ * change back. This circuit persists its change under the surviving-coin rule
+ * instead, and §3d of the drill spent that change afterwards, twice, on chain.
+ * So there is no whole-coin workaround here and no third leg to run.
+ *
+ * THE PEER ARGUMENT IS PASSED TWICE, which is the deployed circuit's own shape:
+ * the contract reference it sends to, and the address it credits. Encoded
+ * exactly as the live drill encodes it —
+ * `{ bytes: encodeContractAddress(rawContractAddress(address)) }` — because a
+ * recipient that is off by an encoding is a transaction that succeeds and pays
+ * 32 bytes nobody holds.
+ *
+ * The plain call path, not the scoped one: nothing here builds a note
+ * ciphertext for a third-party WALLET, so there is no coin-pk → encryption-pk
+ * mapping to carry. The recipient is a contract, and a contract's coin is the
+ * callee's own business.
+ */
+export async function transferShieldedToAccount(
+  handle: LocalMidnightWallet,
+  deviceSecret: Uint8Array,
+  request: TransferShieldedRequest,
+  onPhase?: (progress: AccountCustodyProgress) => void,
+): Promise<TransferShieldedResult> {
+  onPhase?.({ phase: 'checking' });
+  const colour = colourHexToBytes(request.colourHex);
+  requirePositiveAmount(request.amount, 'A transfer');
+  const sender = rawContractAddress(request.contractAddress);
+  const recipient = rawContractAddress(request.recipientContractAddress);
+  /* An account paying itself would have the same contract spend and merge the
+     same coin inside one call tree. Refused here rather than discovered as a
+     proof that will not build. */
+  if (sender === recipient) {
+    throw new AccountCustodyError(
+      'invalid-request',
+      'That is this Passport’s own account, so there is nothing to transfer.',
+    );
+  }
+  await requireFees();
+
+  const state = await readAccountState(handle.network, sender);
+  const heldBefore = state.shieldedCoins.get(bytesToHex(colour)) ?? 0n;
+  if (heldBefore < request.amount) {
+    throw new AccountCustodyError(
+      'insufficient-balance',
+      `This account holds ${heldBefore} shielded of that colour, and the transfer would move ${request.amount}.`,
+    );
+  }
+
+  const { encodeContractAddress } = await import('@midnight-ntwrk/compact-runtime');
+  const peer = { bytes: encodeContractAddress(recipient) };
+
+  const result = await callAccountCircuit(
+    handle,
+    {
+      contractAddress: sender,
+      circuit: ONE_TX_TRANSFER_OPERATION,
+      args: [peer, peer, colour, request.amount],
+      secrets: { deviceSecret },
+    },
+    onPhase,
+  );
+  return { ...result, amount: request.amount, heldBefore };
 }
 
 /* -------------------------------------------------------------------------- */

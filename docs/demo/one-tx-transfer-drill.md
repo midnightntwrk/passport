@@ -532,6 +532,62 @@ reads the pair out of `.live-drill/one-tx-state.json` and needs them funded.
 `.live-drill/segment-dump.ts` takes a `DRILL_SEED` now, which is what makes the
 single-call comparison above reproducible.
 
+### 3e. The last open question, closed: a pre-upgrade Passport can be paid, and the client that ships is what paid it
+
+§3's third open question — "paying a pre-upgrade Passport is argued, not shown"
+— was untouched by §3d's fix, which §3d says itself. It is now shown, and by
+the code the PWA ships rather than by a drill's own copy of the call:
+`transferShieldedToAccount` in `examples/passport-demo/src/identity/accountCustody.ts`,
+called exactly as `App.tsx` calls it.
+
+**One transaction, two contract calls, into an account on the older build.**
+`acae74be8df537e298f7a6d1f5ab2874d996e2519fb5bfe76c0c12c35c43068a`, **block
+416039**, `SUCCESS`, 65.3 s from the passkey-equivalent to the ledger read.
+
+| | |
+|---|---|
+| Sender | B `26aef743…3a40` — the recompiled build, **12** entry points |
+| Recipient | `fdb4c531…ff50` — the pre-upgrade build, **11** entry points, no `transfer_shielded_to_account` |
+| Moved | 5 mUSD of B's 45 — a **part** of the coin, not the whole of it |
+| Recipient's ledger | `coins[mUSD]` **100 → 105** |
+| Sender's ledger | `coins[mUSD]` **45 → 40** — the change persisted by the circuit |
+| Contract actions | `26aef743… transfer_shielded_to_account`, `fdb4c531… deposit_shielded` |
+
+The recipient held 100 mUSD of that colour before the payment, so its
+`deposit_shielded` took the **merge** branch — the exact shape that produced
+`Custom error: 217` on every attempt before §3d's patches, and the shape run 3's
+refusal (`ee09e273…ad48`) was. It was accepted first time, with no retry and no
+error code to look up.
+
+**Nothing about the recipient was read, asked for, or needed.** The recipient
+was passed as `{ bytes: encodeContractAddress(…) }`, twice, and nothing else;
+`findDeployedContract` was never pointed at it, and the send path's
+`prepareAccountDeposit` prewarm is deliberately not run on this path for exactly
+the reason §4 gives. midnight-js resolved the callee's state by itself.
+
+**Which build each account is was read through the client, not assumed.**
+`senderSupportsOneTransactionSend` answered `true` for B and `false` for the
+recipient, from `ContractState.operations()` alone — and the `false` is the
+point as much as the `true`: it is a recipient the client would refuse to send
+FROM in one transaction and is perfectly happy to pay TO.
+
+**What this closes, and what it corrects.**
+
+1. **§3's third open question is closed**, and so is §3d's "still not shown"
+   (item 4 of that list). A pre-upgrade Passport can be paid in one transaction.
+2. **§4's "not proven, and not to be claimed" list is down to nothing.** Its
+   first item was already superseded by §3d; its second is superseded by this.
+3. **Paying PART of a coin is proved on this circuit**, which `withdraw_shielded`
+   does not allow: the sender's 45 became 40 in the same transaction, and §3d's
+   legs 2–4 had already spent change of exactly that provenance. So the client
+   needs no whole-coin workaround here and no third leg — which is the whole
+   difference between this send and the two-leg one.
+
+**Reproducing it.** `.live-drill/one-tx-client-drill.ts`, built and run exactly
+as §6 describes. It deploys nothing, asks for no grant, and reads the pair out
+of `.live-drill/one-tx-state.json`; the only thing it writes to the chain is the
+one transfer.
+
 ## 4. What this licenses
 
 Proven, on chain, twice:
@@ -551,7 +607,9 @@ Not proven, and not to be claimed:
   hold is worse than the two-transaction send it replaces, and there is no
   "whole coins only" workaround — that was tried and refused. Until §2 is
   resolved, this circuit must not reach a user.
-- that a pre-upgrade Passport can be paid this way. See §3.
+- ~~that a pre-upgrade Passport can be paid this way~~ — **shown on chain in
+  §3e**, through the client the PWA ships. Nothing on this list stands: the
+  first item was superseded by §3d and this one by §3e.
 
 **For the client work that follows.** Two things are already settled and can be
 built on whatever §2 turns out to be. The recipient must be reached as an

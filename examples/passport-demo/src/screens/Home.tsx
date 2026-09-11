@@ -308,6 +308,13 @@ export interface HomeScreenProps {
     nameLeg?: SendSheetProps['nameLeg']
     nameLegAttempt?: SendSheetProps['nameLegAttempt']
     /**
+     * How many steps the running payment has, where the HOST knows and this
+     * screen cannot. In practice that is the one-transaction transfer — a fact
+     * about the sender's deployed contract — and the sheet answers every other
+     * count for itself. See {@link SendSheetProps.nameLegSteps}.
+     */
+    nameLegSteps?: SendSheetProps['nameLegSteps']
+    /**
      * Why the next transfer has to wait, in the host's own plain words, or
      * nothing when it does not. See {@link SendSheetProps.blockedReason}.
      */
@@ -1066,6 +1073,7 @@ export default function HomeScreen(props: HomeScreenProps) {
             phase={send.phase ?? null}
             nameLeg={send.nameLeg ?? null}
             nameLegAttempt={send.nameLegAttempt ?? null}
+            {...(send.nameLegSteps ? { nameLegSteps: send.nameLegSteps } : {})}
             blockedReason={send.blockedReason ?? null}
             /* The sheet's approval is a passkey assertion, so it can hit the
                same mid-session dead end the name step reported on 2026/08/31.

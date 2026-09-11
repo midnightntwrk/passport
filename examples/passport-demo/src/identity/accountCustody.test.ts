@@ -73,7 +73,7 @@
 
 import { createRequire } from 'node:module';
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/contract/index.js';
 
@@ -90,9 +90,42 @@ import {
   grantCommitmentField,
   nightColourBytes,
   nightColourHex,
+  resetOneTransactionSendSupport,
+  senderSupportsOneTransactionSend,
   shieldedCoinFromWalletCoin,
+  transferShieldedToAccount,
   unshieldedAddressBytes,
 } from './accountCustody.js';
+
+/**
+ * THE ONE MOCK IN THIS FILE, AND WHAT IT REPLACES.
+ *
+ * `senderSupportsOneTransactionSend` is a cache over one question asked of the
+ * chain — `accountHasOneTxTransfer` in `./passportContract.ts`, which owns the
+ * indexer read and the `operations()` decode and is drilled where it lives.
+ * What is drilled HERE is the half that can be wrong without a network: that
+ * "we could not ask" is answered as the two-leg path and is never remembered,
+ * that a real answer is remembered, and that one address's answer is not
+ * another's.
+ *
+ * Partial, through `importOriginal`: every other export of that module is the
+ * real one, because this file's decoder fixture executes the real contract and
+ * the derivations below are the real derivations.
+ */
+const accountHasOneTxTransfer = vi.fn<(url: string, address: string) => Promise<boolean | null>>();
+vi.mock('./passportContract.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./passportContract.js')>()),
+  accountHasOneTxTransfer: (url: string, address: string) =>
+    accountHasOneTxTransfer(url, address),
+}));
+
+/** Enough of a network for a read. Nothing in these tests reaches it. */
+const NETWORK = { indexerHttpUrl: 'https://indexer.example/api/v4/graphql' };
+
+/** Two real-shaped account addresses, which is all `rawContractAddress` wants. */
+const SENDER = '76232e38e61923e22eacd098bac5953e9c42e2599deac8ba14617bc79e920312';
+const PEER = '26aef743602f1bd50bb3c41ac9d106635781e8eaf35b3c7903e3c6f2d4913a40';
+const MUSD = '1a2917fbed8b5ce44d12ebc7d337689045f6c96a6bbd39cf3d8691ab310ef6a6';
 
 /* A real preview unshielded address, as the drills produce them — the same one
    `../lib/qrScan.test.ts` uses, so both tests fail together if the address
@@ -542,5 +575,122 @@ describe('the cause a refusal carries', () => {
       expect(error.cause).toBeInstanceOf(Error);
       expect(error.detail).toBe((error.cause as Error).message);
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Which build an account is, as this module caches it                        */
+/* -------------------------------------------------------------------------- */
+
+describe('senderSupportsOneTransactionSend', () => {
+  beforeEach(() => {
+    resetOneTransactionSendSupport();
+    accountHasOneTxTransfer.mockReset();
+  });
+
+  it('is true for an account whose contract carries the circuit', async () => {
+    accountHasOneTxTransfer.mockResolvedValue(true);
+    await expect(senderSupportsOneTransactionSend(NETWORK, SENDER)).resolves.toBe(true);
+  });
+
+  it('is false for an account that does not', async () => {
+    accountHasOneTxTransfer.mockResolvedValue(false);
+    await expect(senderSupportsOneTransactionSend(NETWORK, SENDER)).resolves.toBe(false);
+  });
+
+  it('asks the chain ONCE per address, and remembers both answers', async () => {
+    /* The answer is a fact about a deployed build, and a deployed build does
+       not change — its entry points move only under a maintenance update, which
+       nothing in this app performs. Asking again per send would be one indexer
+       round trip on the critical path of every payment. */
+    accountHasOneTxTransfer.mockResolvedValue(true);
+    await senderSupportsOneTransactionSend(NETWORK, SENDER);
+    await senderSupportsOneTransactionSend(NETWORK, SENDER);
+    expect(accountHasOneTxTransfer).toHaveBeenCalledTimes(1);
+
+    accountHasOneTxTransfer.mockResolvedValue(false);
+    await expect(senderSupportsOneTransactionSend(NETWORK, PEER)).resolves.toBe(false);
+    await expect(senderSupportsOneTransactionSend(NETWORK, PEER)).resolves.toBe(false);
+    expect(accountHasOneTxTransfer).toHaveBeenCalledTimes(2);
+    /* And the first address's answer is still its own. */
+    await expect(senderSupportsOneTransactionSend(NETWORK, SENDER)).resolves.toBe(true);
+    expect(accountHasOneTxTransfer).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers a read that could not be made as false, and does NOT remember it', async () => {
+    /* `null` from that read means "we could not ask". The honest consequence
+       for THIS caller is the two-leg path, which works against every account
+       there is — but remembering it would hold the Passport on the slow path
+       for the rest of the session over one unreachable indexer. */
+    accountHasOneTxTransfer.mockResolvedValue(null);
+    await expect(senderSupportsOneTransactionSend(NETWORK, SENDER)).resolves.toBe(false);
+    accountHasOneTxTransfer.mockResolvedValue(true);
+    await expect(senderSupportsOneTransactionSend(NETWORK, SENDER)).resolves.toBe(true);
+    expect(accountHasOneTxTransfer).toHaveBeenCalledTimes(2);
+  });
+
+  it('normalises the address before it caches or asks', async () => {
+    accountHasOneTxTransfer.mockResolvedValue(true);
+    await senderSupportsOneTransactionSend(NETWORK, `0x${SENDER.toUpperCase()}`);
+    await senderSupportsOneTransactionSend(NETWORK, SENDER);
+    expect(accountHasOneTxTransfer).toHaveBeenCalledTimes(1);
+    expect(accountHasOneTxTransfer).toHaveBeenCalledWith(NETWORK.indexerHttpUrl, SENDER);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* What the one-transaction transfer refuses before it touches anything       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The guards that run before the fee sponsor is asked and before the chain is
+ * read — which is what makes them drillable without a wallet, and what makes
+ * them worth drilling: each one is a transaction that would otherwise be built,
+ * proved, and paid for on the way to being refused.
+ *
+ * The transfer itself is drilled against stagenet, as everything here that
+ * moves money is. See `docs/demo/one-tx-transfer-drill.md` §3e.
+ */
+describe('transferShieldedToAccount, before anything is built', () => {
+  /* No wallet is reached by any of these: every one of them throws in front of
+     the fee gate, which is the first line that would need one. */
+  const NO_WALLET = null as never;
+
+  it('refuses an amount of zero or less', async () => {
+    for (const amount of [0n, -1n]) {
+      await expect(
+        transferShieldedToAccount(NO_WALLET, new Uint8Array(32), {
+          contractAddress: SENDER,
+          recipientContractAddress: PEER,
+          colourHex: MUSD,
+          amount,
+        }),
+      ).rejects.toMatchObject({ code: 'invalid-request' });
+    }
+  });
+
+  it('refuses an account paying itself', async () => {
+    /* The same contract would spend and merge the same coin inside one call
+       tree. Refused by name here rather than discovered as a proof that will
+       not build, minutes later, after a passkey ceremony. */
+    await expect(
+      transferShieldedToAccount(NO_WALLET, new Uint8Array(32), {
+        contractAddress: SENDER,
+        recipientContractAddress: `0x${SENDER.toUpperCase()}`,
+        colourHex: MUSD,
+        amount: 5n,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-request' });
+  });
+
+  it('refuses a colour that is not 32 bytes', async () => {
+    await expect(
+      transferShieldedToAccount(NO_WALLET, new Uint8Array(32), {
+        contractAddress: SENDER,
+        recipientContractAddress: PEER,
+        colourHex: 'ab',
+        amount: 5n,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-request' });
   });
 });
