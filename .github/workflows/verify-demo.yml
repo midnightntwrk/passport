@@ -105,7 +105,11 @@ jobs:
         run: |
           set -euo pipefail
           for contract in account midnames; do
-            destination="examples/passport-demo/contracts/stagenet/${contract}"
+            # Under `contract/`, not one level flatter: since 2026/09/10 the account
+            # module names its own peer as `../../account/contract/index.js`, a path
+            # compactc writes literally, and this is the layout that resolves it
+            # (see examples/passport-demo/scripts/prepare-zk-assets.mjs).
+            destination="examples/passport-demo/contracts/stagenet/${contract}/contract"
             mkdir -p "$destination"
             for file in index.js index.d.ts; do
               source="${MANAGED_ROOT}/${contract}/contract/${file}"
