@@ -1206,7 +1206,16 @@ export default function SendSheet(props: SendSheetProps) {
       setFeeUnknown(messageOf(cause))
     }
     setFeeRechecking(false)
-    if (recheckedMode !== quotedMode) {
+    /* A quote that was never read is not a quote that changed. Pressing Send
+       while the line still says "Checking with the fee sponsor…" used to be
+       answered with "the fee arrangement changed", which was untrue: nothing
+       had been arranged yet. Seen on production by the live walk, 2026/09/11.
+       The first real answer is the quote from here on: a sponsor that will
+       cover the fee lets the send go ahead on that answer, and any other
+       answer is shown on the line and confirmed against, as before. */
+    const feeArrangementChanged =
+      quotedMode === null ? recheckedMode !== 'sponsored' : recheckedMode !== quotedMode
+    if (feeArrangementChanged) {
       setBusy(false)
       setFeeChanged(true)
       return
