@@ -54,6 +54,82 @@
 
 export type PassportContractRecordStatus = 'submitted' | 'deployed' | 'failed';
 
+/**
+ * An upgrade in progress — this Passport moving from the account it has to a
+ * newly deployed one, because the account it has cannot pay another Passport
+ * in a single transaction.
+ *
+ * WHY IT LIVES ON THE RECORD RATHER THAN BESIDE IT (2026/09/10)
+ * ------------------------------------------------------------
+ * An upgrade is four or five sponsored transactions long and every one of them
+ * can be interrupted — a closed tab, a lost socket, a phone that slept. What
+ * makes that survivable is that each step is written down THE MOMENT IT LANDS
+ * and every step re-checks the chain before acting, so a resume repeats
+ * nothing. That is the same lesson the `'submitted'` note above records, and
+ * the expensive half of it is identical: an upgrade that forgot it had already
+ * deployed the new account would deploy a SECOND one, on a second sponsored
+ * fee, and leave the drained funds sitting in the wallet pointing at neither.
+ *
+ * It hangs off the record for the account being upgraded AWAY FROM, so while
+ * this block exists {@link PassportContractRecord.address} is still the old
+ * account and every reader in the app goes on spending from it — which is
+ * right, because until the name is re-pointed and the funds are back that IS
+ * the Passport. `completePassportUpgrade` is the single moment the swap
+ * happens, and it happens after the chain has answered for every step.
+ *
+ * It is deliberately absent from `../identity/backup.ts`'s field allow-list:
+ * an upgrade is a fact about one browser's in-flight migration, and a backup
+ * restored onto another device must not resume it there.
+ */
+export interface PassportUpgradeProgress {
+  /** The account being upgraded away from, raw 64-hex. */
+  fromAddress: string;
+  /**
+   * The `.night` name whose resolver has to be re-pointed, as the label — no
+   * suffix, the same spelling `normalizePassportAlias` produces.
+   *
+   * Empty for a Passport that has no name: there is nothing to re-point, and
+   * the upgrade skips that step rather than inventing a name to fail on.
+   */
+  name: string;
+  /** The new account, from the moment its deploy is SUBMITTED. */
+  toAddress?: string;
+  /** The new account's deploy transaction, as submitted. */
+  toDeployTxId?: string;
+  /** The device commitment the new account carries, as a decimal Field. */
+  toDeviceCommitment?: string;
+  /**
+   * What the old account held when it was drained, by colour — the figure the
+   * refund step pays back in.
+   *
+   * Written with the drain and never recomputed, because by the time the
+   * refund runs the old account holds nothing and the wallet holds this value
+   * mixed in with whatever else it had. Amounts are decimal strings: a `bigint`
+   * does not survive `JSON.stringify`.
+   */
+  drainedNight?: [colour: string, amount: string][];
+  drainedShielded?: [colour: string, amount: string][];
+  /** Set once the old account has been READ BACK holding nothing. */
+  drained?: boolean;
+  /** Set once the indexer has been seen serving the new account's state. */
+  deployed?: boolean;
+  /** Set once the name has been READ BACK resolving to {@link toAddress}. */
+  repointed?: boolean;
+  /** The colours already paid back in, so a resume pays none of them twice. */
+  refundedNight?: string[];
+  refundedShielded?: string[];
+  /** Set once every drained colour is back inside the new account. */
+  refunded?: boolean;
+  startedAt: string;
+  updatedAt?: string;
+  /**
+   * Why the last attempt stopped, in words the reader can act on, or absent
+   * while it is running. Cleared by the next attempt that gets past the step
+   * it failed on.
+   */
+  failureReason?: string;
+}
+
 export interface PassportContractRecord {
   /** The passkey credential this contract's device secret is derived from. */
   credentialId: string;
@@ -125,6 +201,12 @@ export interface PassportContractRecord {
    * allow-list, so it never reaches a backup file.
    */
   restoredAt?: string;
+  /**
+   * An upgrade this browser has started and not finished — see
+   * {@link PassportUpgradeProgress}. Absent on every record that is not
+   * mid-upgrade, which is nearly all of them.
+   */
+  upgrade?: PassportUpgradeProgress;
 }
 
 const STORAGE_KEY = 'passport-contract:v1';
@@ -268,6 +350,38 @@ export function refusePassportContractRecord(record: PassportContractRecord): st
   if (record.status === 'failed' && !record.failureReason) {
     return 'A failed Passport contract record must explain itself with a failureReason.';
   }
+  const upgrade = record.upgrade;
+  if (upgrade !== undefined) {
+    /* The same rule the rest of this predicate keeps, applied to the block that
+       decides whether a resume repeats a sponsored transaction: a step may only
+       be marked done once the thing it produced is written down beside it. A
+       `deployed: true` with no address is exactly the record that would send a
+       resume looking for a contract it cannot name — and then deploy another. */
+    if (typeof upgrade.fromAddress !== 'string' || !upgrade.fromAddress) {
+      return 'An upgrade record must name the account it is upgrading away from.';
+    }
+    if (typeof upgrade.name !== 'string') {
+      return 'An upgrade record must carry the name it re-points, as text — empty where there is none.';
+    }
+    if (typeof upgrade.startedAt !== 'string' || !upgrade.startedAt) {
+      return 'An upgrade record must say when it started.';
+    }
+    if (upgrade.toAddress !== undefined && !upgrade.toAddress) {
+      return 'An upgrade record\'s new account address, when present, must be a real address.';
+    }
+    if (upgrade.deployed === true && !upgrade.toAddress) {
+      return 'An upgrade cannot report a deployed new account without naming its address.';
+    }
+    if (upgrade.repointed === true && !upgrade.toAddress) {
+      return 'An upgrade cannot report a re-pointed name without naming the account it now points at.';
+    }
+    if (upgrade.repointed === true && !upgrade.name) {
+      return 'An upgrade with no name cannot report one as re-pointed.';
+    }
+    if (upgrade.refunded === true && upgrade.drained !== true) {
+      return 'An upgrade cannot report a refund before it reports the drain it is refunding.';
+    }
+  }
   return null;
 }
 
@@ -285,6 +399,132 @@ export function savePassportContractRecord(record: PassportContractRecord): void
     // The deployment still happened; only the memory of it is lost on reload.
   }
   publish();
+}
+
+/* -------------------------------------------------------------------------- */
+/* The upgrade block                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The upgrade this credential has in flight on this network, or null.
+ *
+ * Null for a Passport that is not upgrading and for one whose record this
+ * browser does not hold — a resume has nothing to resume in either case, and
+ * they are the same answer to the only question a caller asks here.
+ */
+export function loadPassportUpgradeProgress(
+  credentialId: string,
+  network: string,
+): PassportUpgradeProgress | null {
+  return loadPassportContractRecord(credentialId, network)?.upgrade ?? null;
+}
+
+/**
+ * Merges what one step just achieved onto the upgrade block, and writes it.
+ *
+ * MERGES rather than replaces, deliberately: each step of `./accountUpgrade.ts`
+ * knows one fact — the new account's address, that the drain is done, which
+ * colour has been paid back — and none of them holds the whole block. A step
+ * that wrote the whole thing would be a step that could erase the one before it
+ * on a stale read, which is precisely the failure the block exists to prevent.
+ *
+ * Refuses outright when this credential has no contract record on this network.
+ * An upgrade is a migration of an account that exists; there is nothing here to
+ * attach one to, and inventing a record would put an address in the store that
+ * no deployment produced.
+ *
+ * Returns the block as it now stands, so the caller carries on with the same
+ * value that was persisted rather than its own copy of it.
+ */
+export function savePassportUpgradeProgress(
+  credentialId: string,
+  network: string,
+  patch: Partial<PassportUpgradeProgress> &
+    Pick<PassportUpgradeProgress, 'fromAddress' | 'name' | 'startedAt'>,
+): PassportUpgradeProgress {
+  const record = loadPassportContractRecord(credentialId, network);
+  if (!record) {
+    throw new Error(
+      'This browser holds no Passport account for that credential on that network, so there is nothing to upgrade.',
+    );
+  }
+  const merged: PassportUpgradeProgress = {
+    ...(record.upgrade ?? {}),
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  /* An explicit `undefined` in the patch CLEARS — that is how a step that got
+     past a failure drops the reason for it, and `JSON.stringify` would drop the
+     key anyway, so leaving it as `undefined` in the object would be a lie about
+     what came back. */
+  for (const key of Object.keys(merged) as (keyof PassportUpgradeProgress)[]) {
+    if (merged[key] === undefined) delete merged[key];
+  }
+  savePassportContractRecord({ ...record, upgrade: merged });
+  return merged;
+}
+
+/**
+ * Switches this Passport onto the new account, and forgets the upgrade.
+ *
+ * The last step, and the only one that changes what the rest of the app spends
+ * from. Everything before it left the old account in place on purpose: until
+ * the name resolves to the new account and the value is back inside it, the old
+ * one IS the Passport, and a store that had already switched would have every
+ * surface reading balances out of a contract nobody can reach by name.
+ *
+ * `ledgerConfirmed` is carried as `true` and is not a courtesy: the caller
+ * reaches this line only after the indexer has been seen serving state at
+ * {@link PassportUpgradeProgress.toAddress}, which is the same evidence a
+ * deployment's own settle demands.
+ */
+export function completePassportUpgrade(credentialId: string, network: string): void {
+  const record = loadPassportContractRecord(credentialId, network);
+  if (!record) {
+    throw new Error(
+      'This browser holds no Passport account for that credential on that network, so there is no upgrade to finish.',
+    );
+  }
+  const upgrade = record.upgrade;
+  if (!upgrade || !upgrade.toAddress || upgrade.deployed !== true) {
+    throw new Error(
+      'An upgrade can only be finished once its new account has been seen on chain.',
+    );
+  }
+  const next: PassportContractRecord = {
+    ...record,
+    status: 'deployed',
+    address: upgrade.toAddress,
+    ledgerConfirmed: true,
+  };
+  if (upgrade.toDeployTxId) next.deployTxId = upgrade.toDeployTxId;
+  if (upgrade.toDeviceCommitment) next.deviceCommitment = upgrade.toDeviceCommitment;
+  /* The new account was deployed by THIS browser, so it is neither recovered
+     from a passkey blob nor restored from a file, whatever the record it
+     replaces claimed. A stale `recovered` here would exempt the new record from
+     the transaction-id rule for ever. */
+  delete next.recovered;
+  delete next.restoredFromBackup;
+  delete next.upgrade;
+  next.updatedAt = new Date().toISOString();
+  savePassportContractRecord(next);
+}
+
+/**
+ * Drops an upgrade block, leaving the record it hangs off untouched.
+ *
+ * For the two states in which there is nothing to resume: the old account turns
+ * out to have the one-transaction transfer already, and the person abandons the
+ * upgrade. It deploys nothing and destroys nothing — an account this browser
+ * forgets it was moving to is still on Midnight, and the funds it holds are
+ * still the holder's.
+ */
+export function clearPassportUpgradeProgress(credentialId: string, network: string): void {
+  const record = loadPassportContractRecord(credentialId, network);
+  if (!record || !record.upgrade) return;
+  const next = { ...record };
+  delete next.upgrade;
+  savePassportContractRecord(next);
 }
 
 /** What became of one record a bulk write was asked to store. */

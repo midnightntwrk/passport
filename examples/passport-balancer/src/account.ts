@@ -172,6 +172,21 @@ interface FaucetModule {
 export interface AccountLedger {
   readonly round: bigint;
   readonly device_count: bigint;
+  /**
+   * The epoch every live device is of. `recover()` bumps it, which is how one
+   * circuit invalidates every device and every grant at once without clearing
+   * a map — a Compact map cannot be cleared in-circuit.
+   */
+  readonly device_epoch: bigint;
+  /**
+   * Device commitment → the epoch it was registered in. A commitment of an
+   * OLDER epoch is still in here and is dead, so every reader of this map has
+   * to compare against {@link device_epoch} rather than trusting membership.
+   */
+  devices: {
+    member(commitment: bigint): boolean;
+    [Symbol.iterator](): Iterator<[bigint, bigint]>;
+  };
   recovery_shares: { size(): bigint };
   night_balances: {
     member(colour: Uint8Array): boolean;
@@ -192,6 +207,18 @@ export interface AccountLedger {
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                     */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The circuit that makes a Passport able to pay another Passport in ONE
+ * transaction, named once so nothing spells it twice.
+ *
+ * It is the whole difference between the account build deployed before
+ * 2026/09/10 and the one deployed since. Receiving is unaffected — the peer is
+ * reached through a contract declaration of `deposit_shielded`, whose verifier
+ * key is byte-identical across both builds — so this is a fact about a SENDER's
+ * contract and about nothing else.
+ */
+export const ONE_TX_TRANSFER_OPERATION = 'transfer_shielded_to_account';
 
 export type AccountFundingErrorCode =
   /** No state at that address, or state that does not decode as an account. */
@@ -710,6 +737,38 @@ export interface AccountFunder {
    */
   balances(contractAddress: string): Promise<AccountBalances>;
   /**
+   * The device commitments this account holds IN ITS CURRENT EPOCH, as decimal
+   * strings — the devices that can authorise a circuit today.
+   *
+   * This is what ownership of an account means in the contract's own terms, and
+   * it is the only thing about an account a third party can check. `/repoint-
+   * alias` compares two accounts' sets: a device commitment is
+   * `derive_device_commitment(device_secret)` and the secret never leaves the
+   * authenticator, so a contract carrying another contract's commitment is a
+   * contract that passkey deployed. See `./repoint.ts`.
+   *
+   * The epoch filter is not a detail. A commitment from an older epoch is still
+   * in the contract's map and is dead; matching on one would let a `recover()`ed
+   * Passport's revoked device move its name.
+   *
+   * Throws `not-an-account` or `indexer-unreachable` exactly as the balance
+   * reads do — "we could not ask" and "it is not ours" must never look alike to
+   * the caller deciding whether to spend.
+   */
+  activeDeviceCommitments(contractAddress: string): Promise<Set<string>>;
+  /**
+   * Whether this account carries `transfer_shielded_to_account` — the circuit
+   * that makes a Passport able to send in ONE transaction — or `null` when the
+   * chain could not be asked.
+   *
+   * THREE ANSWERS, AND THE THIRD IS THE POINT. `ContractState.operations()` is
+   * the deployed build answering for itself rather than a version number
+   * somebody wrote down, and an indexer that could not be reached is neither
+   * "yes" nor "no". The client's own detection keeps the same three-valued rule
+   * for the same reason (`passport-demo/src/identity/passportContract.ts`).
+   */
+  hasOneTxTransfer(contractAddress: string): Promise<boolean | null>;
+  /**
    * Calls `deposit_night` on the account and reads the mirrored balance back.
    * Resolves only once the credit is really visible on chain.
    *
@@ -1219,6 +1278,39 @@ export async function createAccountFunder(
     async balances(contractAddress: string): Promise<AccountBalances> {
       const decoded = await readAccount(rawContractAddress(contractAddress));
       return { night: mirroredNight(decoded), asset: heldAsset(decoded) };
+    },
+
+    async activeDeviceCommitments(contractAddress: string): Promise<Set<string>> {
+      const decoded = await readAccount(rawContractAddress(contractAddress));
+      const active = new Set<string>();
+      for (const [commitment, epoch] of decoded.devices) {
+        /* THE EPOCH, not membership. See the interface note: a dead device is
+           still in this map, and matching one would let a revoked key move a
+           name. */
+        if (epoch === decoded.device_epoch) active.add(commitment.toString());
+      }
+      return active;
+    },
+
+    async hasOneTxTransfer(contractAddress: string): Promise<boolean | null> {
+      let state: unknown;
+      try {
+        state = await reader.queryContractState(rawContractAddress(contractAddress));
+      } catch {
+        return null;
+      }
+      const operations = (state as { operations?: () => (string | Uint8Array)[] } | null)
+        ?.operations;
+      if (typeof operations !== 'function') return null;
+      try {
+        const decoder = new TextDecoder();
+        const names = operations
+          .call(state)
+          .map((entry) => (typeof entry === 'string' ? entry : decoder.decode(entry)));
+        return names.includes(ONE_TX_TRANSFER_OPERATION);
+      } catch {
+        return null;
+      }
     },
 
     async fund(contractAddress: string): Promise<AccountFunding> {

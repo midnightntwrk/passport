@@ -267,6 +267,15 @@ export interface MidnamesLedger {
     left: { bytes: Uint8Array };
     right: { is_left: boolean; left: { bytes: Uint8Array }; right: { bytes: Uint8Array } };
   };
+  /**
+   * `[owner_pubkey, owner_address]`. Only the FIRST half is the registry's
+   * authority: `assert_is_owner` compares `derive_public_key(secretKey())`
+   * against it and looks at nothing else, which is the whole of what decides
+   * whether this service or the holder can call `update_domain_target` on a
+   * leaf. The second half is where a payment made TO the leaf would go, and is
+   * 32 zeros on every leaf this service deploys.
+   */
+  readonly DOMAIN_OWNER: [Uint8Array, { bytes: Uint8Array }];
   domains: {
     size(): bigint;
     member(key: Uint8Array): boolean;
@@ -474,6 +483,39 @@ export interface MidnamesSponsor {
    * this spends a fee-capable DUST coin and it is never a user's turn.
    */
   deployPoolLeaf(): Promise<{ address: string; deployTx: string; deployBlock: number | null }>;
+  /**
+   * Who owns one resolver leaf, as the 32-byte key `assert_is_owner` compares
+   * against — or null where the leaf could not be read.
+   *
+   * Asked before a re-point, because the answer decides whether this service
+   * can do it at all. A leaf `change_owner` has already handed to the holder
+   * cannot be re-pointed from here, and saying so is worth more than a proof
+   * that would be refused in-circuit after the fee was spent.
+   */
+  leafOwnerKey(resolverAddress: string): Promise<Uint8Array | null>;
+  /**
+   * Points one name's resolver leaf at a different account contract.
+   *
+   * The one circuit an upgrade needs from this service: `update_domain_target`
+   * on a leaf this service still owns, so a Passport that has moved to the
+   * account build with `transfer_shielded_to_account` keeps its name. It
+   * registers nothing, deploys nothing, and hands nothing over — the leaf's
+   * owner, the registry entry, and the name's price are all untouched.
+   *
+   * Resolves only when the registry has been READ BACK showing the name
+   * resolving to `contractAddress`, which is the same bar `register` holds
+   * itself to and for the same reason: a target that landed on a different
+   * account is a failure, not a slow success.
+   *
+   * MUST be called inside `wallet.exclusive(...)`: it spends this wallet's
+   * DUST and would otherwise contend with a fee-sponsorship request.
+   */
+  repoint(request: {
+    /** Already normalised through {@link normalisePassportAlias}. */
+    label: string;
+    /** Raw 64-hex account-custody contract the name should resolve to. */
+    contractAddress: string;
+  }): Promise<{ resolverAddress: string; updateTx: string; updateBlock: number | null }>;
 }
 
 /**
@@ -774,6 +816,123 @@ export async function createMidnamesSponsor(
     resolve: resolveAlias,
 
     poolOwnerKey: sponsorOwnerKey,
+
+    async leafOwnerKey(resolverAddress: string): Promise<Uint8Array | null> {
+      const leaf = await readLedger(rawContractAddress(resolverAddress));
+      if (!leaf) return null;
+      const owner = leaf.DOMAIN_OWNER?.[0];
+      return owner instanceof Uint8Array ? owner : null;
+    },
+
+    /**
+     * `update_domain_target` on a leaf this service owns, and the read-back
+     * that proves it landed.
+     *
+     * This is the pooled registration's BIND LEG with the deploy and the
+     * registration taken away — the same circuit, the same private-state
+     * discipline, the same rejection retry, the same DUST wait. It is spelled
+     * out here rather than shared with `register` because the two want
+     * different things from a failure: a bind inside a registration must not
+     * send the caller back to register a name they already own, while this one
+     * has nothing before it to undo and can simply be asked again.
+     *
+     * Rebuilding it is safe by construction, as the bind leg's own note says:
+     * `update_domain_target` sets the leaf's target to one value, running it
+     * twice sets the same value twice, and a run that failed on a DUST
+     * shortfall never reached the node at all.
+     */
+    async repoint(request: {
+      label: string;
+      contractAddress: string;
+    }): Promise<{ resolverAddress: string; updateTx: string; updateBlock: number | null }> {
+      const label = request.label;
+      const contractAddress = rawContractAddress(request.contractAddress);
+
+      const current = await resolveAlias(label);
+      if (!current) {
+        throw new AliasSponsorError(
+          'registry-unreachable',
+          `${aliasDomain(label)} is not registered on ${config.networkId}, so there is no resolver to point anywhere.`,
+        );
+      }
+      const resolverAddress = current.resolverAddress;
+
+      /* ALREADY THERE. Asked before a fee is spent, so a client that retries
+         after a landed re-point pays for one read. */
+      if (current.target.kind === 'contract' && current.target.hex === contractAddress) {
+        return { resolverAddress, updateTx: '', updateBlock: null };
+      }
+
+      const privateStateId = `passport-balancer-midnames-${label}-repoint`;
+      const targetBytes = contractAddressBytes(contractAddress);
+      const update = (): Promise<string> =>
+        withNodeRejectionRetry(
+          async () => {
+            const leafProviders = await contractProviders(config, {
+              privateStateId,
+              initialPrivateState: { secretKey: callerSecretHex },
+              zkConfigProvider: zkConfigProvider as never,
+              proofProvider,
+              walletProvider: wallet.contractWalletProvider(),
+            });
+            const leaf = await findDeployedContract(leafProviders as never, {
+              compiledContract,
+              contractAddress: resolverAddress,
+              privateStateId,
+              initialPrivateState: { secretKey: callerSecretHex },
+            } as never);
+            const callTx = (
+              leaf as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> }
+            ).callTx;
+            /* Gated in-circuit on `derive_public_key(secret) == DOMAIN_OWNER[0]`.
+               The endpoint checks the same thing off-chain first, so a leaf that
+               has been handed to its holder is refused with a sentence rather
+               than with a spent fee and an assertion failure. */
+            const called = await callTx.update_domain_target(contractTargetEither(targetBytes));
+            return transactionIdentifier(called);
+          },
+          { label: `re-pointing ${aliasDomain(label)}`, synced: caughtUp, ...heightGate },
+        );
+
+      const updateIdentifier = await withDustWait(update, {
+        label: `pointing the resolver for ${aliasDomain(label)} at ${contractAddress}`,
+        windowMs: config.dustWaitMs,
+        holdWhileWaiting: () => wallet.hold(SpendPriority.Registration),
+        awaitFreeCoin: (maxMs) =>
+          wallet.awaitFreeDustCoin(maxMs, { minSpecks: FEE_CAPABLE_SPECKS }),
+      });
+
+      /* THE DECISIVE STEP, and it is not "the transaction landed": it is the
+         name pointing at THIS contract, read out of the registry. */
+      let confirmed = false;
+      for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt += 1) {
+        try {
+          const resolved = await resolveAlias(label);
+          if (
+            resolved &&
+            resolved.resolverAddress === resolverAddress &&
+            resolved.target.kind === 'contract' &&
+            resolved.target.hex === contractAddress
+          ) {
+            confirmed = true;
+            break;
+          }
+        } catch {
+          // Indexer lag or a transient failure; asked again below.
+        }
+        await wait(CONFIRM_INTERVAL_MS);
+      }
+      if (!confirmed) {
+        throw new AliasSponsorError(
+          'confirmation-failed',
+          `${aliasDomain(label)} was re-pointed but the registry has not shown it resolving to ${contractAddress} yet.`,
+          `resolver ${resolverAddress}, update ${updateIdentifier}`,
+        );
+      }
+
+      const resolvedTx = await resolveTransactionHash(config.indexerHttpUrls, updateIdentifier);
+      return { resolverAddress, updateTx: resolvedTx.hash, updateBlock: resolvedTx.block };
+    },
 
     async deployPoolLeaf(): Promise<{ address: string; deployTx: string; deployBlock: number | null }> {
       /* ONE private-state id for every pooled leaf, not one per leaf. The

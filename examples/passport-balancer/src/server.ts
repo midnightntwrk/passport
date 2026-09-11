@@ -20,6 +20,14 @@
  *                           name registered TO the user's key and resolving to
  *                           the user's contract out — the balancer paying the
  *                           registry price and both fees
+ *   POST /repoint-alias  →  { name, newAccount, oldAccount } in, that name's
+ *                           resolver pointed at the new account out — the one
+ *                           leg of a Passport's upgrade to the account build
+ *                           that can send in a single transaction which only
+ *                           this service can perform, because the resolver leaf
+ *                           may still be owned by it. Proof of control is what
+ *                           the chain says about the two accounts; see
+ *                           `./repoint.ts`
  *   POST /fund-account   →  { contractAddress } in, an activation grant
  *                           deposited INTO that account-custody contract out —
  *                           BOTH legs: NIGHT into `night_balances`, and 100 mUSD
@@ -212,6 +220,12 @@ import {
   type SwapDesk,
   type SwapEntry,
 } from './swap.js';
+import {
+  RepointReadFailure,
+  createRepointDesk,
+  type RepointDesk,
+  type RepointRequestBody,
+} from './repoint.js';
 
 /**
  * `MidnightBech32m.parse` reports mainnet as the exported `mainnet` symbol (a
@@ -2723,6 +2737,78 @@ async function main(): Promise<void> {
     console.warn(`[gift] items are DISABLED: ${giftDesk.unavailableReason}`);
   }
 
+  /**
+   * The re-point desk. It needs BOTH halves of this service — the registry
+   * sponsor to call `update_domain_target`, and the account funder to read the
+   * two contracts the proof of control compares — so it is disabled unless both
+   * are up, and the refusal names whichever one is missing.
+   *
+   * The spend it makes is exactly one proved `update_domain_target`, which is
+   * the bind leg of a registration and nothing more: no deploy, no
+   * `register_domain_for`, no `change_owner`, no NIGHT.
+   */
+  const repointDesk: RepointDesk = createRepointDesk({
+    networkId: config.networkId,
+    available: sponsor !== null && accountFunder !== null,
+    unavailableReason:
+      sponsor === null ? sponsorUnavailableReason : accountFunder === null ? accountFunderUnavailableReason : null,
+    normaliseAccount: rawContractAddress,
+    normaliseAlias: normalisePassportAlias,
+    domainOf: aliasDomain,
+    resolve: async (label) => (sponsor ? sponsor.resolve(label) : null),
+    leafOwnerKey: async (resolverAddress) =>
+      sponsor ? sponsor.leafOwnerKey(resolverAddress) : null,
+    /* Read through the sponsor rather than recomputed, so the key this desk
+       compares a leaf against is the same 32 bytes the circuit will check. */
+    sponsorOwnerKey: sponsor?.poolOwnerKey ?? new Uint8Array(32),
+    activeDeviceCommitments: async (address) => {
+      if (!accountFunder) {
+        throw new RepointReadFailure(
+          503,
+          'repoint-unsupported',
+          accountFunderUnavailableReason,
+        );
+      }
+      try {
+        return await accountFunder.activeDeviceCommitments(address);
+      } catch (cause) {
+        /* The funder's own taxonomy, kept: "we could not ask" and "that is not
+           one of our accounts" are different answers and get different codes,
+           exactly as they do on `/fund-account`. */
+        if (cause instanceof AccountFundingError) {
+          throw new RepointReadFailure(
+            cause.code === 'indexer-unreachable' ? 503 : 400,
+            cause.code,
+            cause.message,
+          );
+        }
+        throw cause;
+      }
+    },
+    hasOneTxTransfer: async (address) =>
+      accountFunder ? accountFunder.hasOneTxTransfer(address) : null,
+    repoint: async (request) => {
+      if (!sponsor) throw new Error(sponsorUnavailableReason);
+      /* The readiness gate every spend of this wallet passes, asked HERE rather
+         than inside the desk: the desk decides who may ask, and this service
+         decides whether it can pay today. No NIGHT is required — an
+         `update_domain_target` costs a fee and nothing else. */
+      const ready = await readiness({ settle: true });
+      if (ready.refuse) {
+        throw new Error(ready.refuse.message);
+      }
+      const held = sponsor;
+      return wallet.exclusive(() => held.repoint(request), {
+        label: `re-pointing ${aliasDomain(request.label)}`,
+      });
+    },
+  });
+  if (!(sponsor && accountFunder)) {
+    console.warn(
+      `[repoint] moving a name to an upgraded Passport is DISABLED: ${sponsor === null ? sponsorUnavailableReason : accountFunderUnavailableReason}`,
+    );
+  }
+
   const spendGuards: Record<string, { prefix: string; bucket: TokenBucket }> = {
     '/balance-only': { prefix: 'balance', bucket: balanceBucket },
     /* Guarded like the route it undoes, and on the same bucket: it costs a
@@ -2734,6 +2820,11 @@ async function main(): Promise<void> {
        news this service can get that one is dead. */
     '/balance-only/abandon': { prefix: 'abandon', bucket: balanceBucket },
     '/register-alias': { prefix: 'alias', bucket: aliasBucket },
+    /* One proved `update_domain_target` — a registration's bind leg without the
+       deploy, the registration, or the NIGHT — so it is metered on the alias
+       bucket, which is the bucket for "a caller making this service prove
+       something about a name". */
+    '/repoint-alias': { prefix: 'repoint', bucket: aliasBucket },
     '/fund-account': { prefix: 'account', bucket: accountBucket },
     /* A swap pays out one asset grant, so it costs what an activation's asset
        leg costs and is metered on the same bucket. */
@@ -3055,10 +3146,29 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (request.method === 'POST' && path === '/repoint-alias') {
+        let body: RepointRequestBody;
+        try {
+          body = JSON.parse(
+            (await readRawBody(request)).toString('utf8') || '{}',
+          ) as RepointRequestBody;
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message:
+              'The request body must be JSON of the form {"name": "…", "newAccount": "64 hex", "oldAccount": "64 hex"}.',
+          });
+          return;
+        }
+        const outcome = await repointDesk.repoint(body);
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
       respond(request, response, 404, {
         error: 'not-found',
         message:
-          'Routes: GET /status, GET /wallet-status, GET /swap/quote, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account, POST /swap, POST /gift-nft.',
+          'Routes: GET /status, GET /wallet-status, GET /swap/quote, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /repoint-alias, POST /fund-account, POST /swap, POST /gift-nft.',
       });
     })()
       .catch((cause) => {
@@ -3093,7 +3203,7 @@ async function main(): Promise<void> {
 
   server.listen(config.port, config.host, () => {
     console.log(
-      `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account`,
+      `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /repoint-alias, POST /fund-account`,
     );
     console.log('(the wallet is still syncing; /wallet-status answers honestly meanwhile)\n');
   });

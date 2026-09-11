@@ -129,6 +129,120 @@ describe it as available. ClubCoin, which used to be named here as the partner
 dApp, is out of the demo entirely; the `clubcoin-mock` directory survives only
 as the generic URL-callback example.
 
+## Upgrading a Passport
+
+### What it is, and who sees it
+
+The account-custody contract gained a circuit on 2026/09/10 —
+`transfer_shielded_to_account`, the one
+[`one-tx-transfer-drill.md`](one-tx-transfer-drill.md) §3d settles on chain — so
+paying another Passport is one transaction rather than two. A circuit is part of
+a deployed contract's code and there is no upgrade path for one, so this splits
+Passports in half for good:
+
+- a Passport **set up on or after 2026/09/10** carries the circuit and sends in
+  one transaction;
+- a Passport **set up before it** does not, and never will.
+
+**Receiving is unaffected either way.** The recipient's `deposit_shielded` key
+is byte-identical across the two builds, which is why the peer is named through
+a contract declaration of it — so an older Passport can be PAID in one
+transaction today, with nothing done to it. Only sending is at stake.
+
+So an older Passport is migrated, once: drain it, deploy a new account with the
+same commitments derived from the same passkey, move the name across, put the
+value back. About four to six sponsored transactions, nothing the holder pays
+for, no new passkey and no new name. Hector accepted this shape on 2026/09/08.
+
+The screen is `src/screens/Upgrade.tsx` — the claim's three-step view, titled
+"Your Passport is being upgraded". Nothing spendable is on it: for the minutes
+an upgrade takes, some of what the Passport holds is out of the old account and
+not yet in the new one, and any balance shown would be true of neither.
+
+**Before a recording**, either upgrade the demo Passports off camera or set them
+up fresh — a Passport created today needs none of this. An upgrade mid-demo is
+minutes of progress bars.
+
+### Where a stuck upgrade is
+
+Every step is written down the moment it lands, in `localStorage` under
+`passport-contract:v1`, on the record for the account being upgraded away from.
+In the browser console:
+
+```js
+Object.values(JSON.parse(localStorage.getItem('passport-contract:v1'))).map(r => r.upgrade)
+```
+
+An `upgrade` block that is present is an upgrade that has not finished. Read it
+in this order:
+
+| Field | Meaning when set |
+|---|---|
+| `fromAddress` | the account being left — always present |
+| `drainedNight`, `drainedShielded` | what the old account held before anything moved, by colour. Written once, on the first attempt |
+| `drained` | the old account has been READ BACK holding nothing |
+| `toAddress` | the new account's address, written the moment its deploy was SUBMITTED — before the chain answered |
+| `deployed` | the indexer has been seen serving state at `toAddress` |
+| `repointed` | the name has been READ BACK resolving to `toAddress` |
+| `refundedNight`, `refundedShielded` | the colours already paid back in |
+| `refunded` | every drained colour is back inside the new account |
+| `failureReason` | why the last attempt stopped, in the words the screen showed |
+
+The first of those that is **absent** is the step it stopped on. A block with
+`toAddress` and no `deployed` is the one worth knowing: the account may well
+exist — paste `toAddress` into the explorer — and the next attempt asks the
+chain rather than deploying again.
+
+The Passport stays on `address` (the old account) for the whole of this. It
+moves to `toAddress` only at the last step, and the `upgrade` block is deleted
+in the same write.
+
+### Resuming one
+
+Press **Try again** on the screen. There is nothing else to do and nothing to
+clean up first.
+
+Every step checks the chain before it acts — the account already empty, the new
+account already served, the name already resolving to it, the colour already
+back inside — so a resume after a landed step costs one read and never a second
+sponsored fee. A retry is safe from any state, including one where the tab died
+mid-proof.
+
+Two failures need a person rather than a retry:
+
+- **"Your name could not be moved…"**, repeatedly. The name's resolver is moved
+  either by the holder's own Passport or by the balancer's
+  `POST /repoint-alias`, depending on who owns the resolver leaf — a sponsored
+  registration hands it over afterwards, in the background, and that hand-over
+  is allowed to fail. Ask the balancer directly to see which it thinks it is:
+
+  ```
+  curl -s -X POST "$FUNDER_URL/repoint-alias" \
+    -H 'content-type: application/json' \
+    -d '{"name":"alice","newAccount":"<64 hex>","oldAccount":"<64 hex>"}'
+  ```
+
+  `owner-is-user` means the leaf is the holder's and their Passport should be
+  doing this — check that the client had a passkey assertion to derive the owner
+  key from. `not-your-passport` means the two accounts share no live device, so
+  they are not the same Passport. `repoint-unsupported` means the balancer has
+  no registry or no account build loaded; its start-up log says which.
+
+- **A drain that will not empty.** Read the old account's balances in the
+  explorer. A colour that is genuinely still there after a successful withdrawal
+  is a chain problem, not a client one; capture the figures and the transaction
+  before retrying.
+
+### What has not been run
+
+This flow has never been exercised against a live pre-upgrade Passport. Doing so
+needs a funded one **and** the passkey secret that controls it, which only a real
+device has. What is checked is every decision it makes — resume after each step,
+skip what is already done, and who may ask the balancer to move a name — in
+`src/identity/accountUpgrade.test.ts` and
+`examples/passport-balancer/test/repoint.test.ts`. Record the first live run in
+[`validation-log.md`](validation-log.md), by the rules below.
+
 ## Result language
 
 - **Passed:** an actual API call completed and a wallet result or transaction

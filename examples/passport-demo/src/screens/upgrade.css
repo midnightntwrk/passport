@@ -1,0 +1,63 @@
+/*
+ * The upgrade screen's own few rules.
+ *
+ * It is deliberately small. Everything structural — the screen shell, the
+ * three-step stepper, the sub-stage rows, the buttons — is `./identity.css`'s,
+ * imported alongside this file, because the upgrade IS the claim's wait
+ * happening a second time and a reader who has sat through one should recognise
+ * the other immediately. Copying those rules under new names would be two
+ * copies of one design, drifting.
+ *
+ * What is here is the one thing the claim screen has no equivalent of: the
+ * notice a STOPPED upgrade grows, which has to read as "this is paused and
+ * recoverable" rather than as an error card. Every colour is a token from
+ * `./tokens.css`, so it follows the theme like everything else.
+ */
+
+/* A little more room above the title than the name step takes: this screen
+   arrives unasked, in the middle of somebody's session, and the extra air is
+   what stops it reading as an interruption. */
+.mnup-screen .mnid-body {
+  padding-top: clamp(36px, 7svh, 72px);
+}
+
+.mnup-stopped {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-raised);
+}
+
+.mnup-stopped-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+/* The warning mark carries the colour, not the panel. A whole card tinted with
+   a failure colour says "something is broken"; what is true here is that a wait
+   stopped partway and can be picked up, and the copy is what says so. */
+.mnup-stopped-head svg {
+  color: var(--mn-accent);
+  flex: 0 0 auto;
+}
+
+.mnup-stopped-body {
+  margin: 8px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.mnup-stopped-foot {
+  margin: 8px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}

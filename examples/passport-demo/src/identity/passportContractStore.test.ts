@@ -20,13 +20,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  clearPassportUpgradeProgress,
+  completePassportUpgrade,
   loadPassportContractRecord,
   loadPassportContractRecords,
+  loadPassportUpgradeProgress,
   passportContractRecordKey,
   refusePassportContractRecord,
   restorePassportContractRecords,
   savePassportContractRecord,
+  savePassportUpgradeProgress,
   type PassportContractRecord,
+  type PassportUpgradeProgress,
 } from './passportContractStore.js';
 
 const ADDRESS = 'ab'.repeat(32);
@@ -143,5 +148,190 @@ describe('a deploy this browser has sent and not yet had answered for', () => {
     const [outcome] = restorePassportContractRecords([submitted()]);
     expect(outcome?.written).toBe(true);
     expect(loadPassportContractRecord('AQIDBA==', 'stagenet')?.status).toBe('submitted');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The upgrade block                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * An upgrade is four to six sponsored transactions and this block is the only
+ * thing that stops an interrupted one repeating them. The rules below are the
+ * same two the record itself keeps, applied one level down: a step may only be
+ * marked done once what it produced is written beside it, and the Passport does
+ * not move to the new account until the chain has answered for it.
+ */
+const NEW_ADDRESS = '99'.repeat(32);
+const NEW_TX = '88'.repeat(33);
+
+function deployed(): PassportContractRecord {
+  return {
+    credentialId: 'AQIDBA==',
+    network: 'stagenet',
+    status: 'deployed',
+    address: ADDRESS,
+    deployTxId: IDENTIFIER,
+    ledgerConfirmed: true,
+    deviceCommitment: '11',
+  };
+}
+
+function started(): Parameters<typeof savePassportUpgradeProgress>[2] {
+  return { fromAddress: ADDRESS, name: 'alice', startedAt: '2026-09-10T09:00:00.000Z' };
+}
+
+describe('an upgrade in progress', () => {
+  beforeEach(() => {
+    savePassportContractRecord(deployed());
+  });
+
+  it('hangs off the record for the account being left, and reads back', () => {
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', started());
+    expect(loadPassportUpgradeProgress('AQIDBA==', 'stagenet')).toMatchObject({
+      fromAddress: ADDRESS,
+      name: 'alice',
+    });
+    /* And the Passport is still on the account it is on. */
+    expect(loadPassportContractRecord('AQIDBA==', 'stagenet')?.address).toBe(ADDRESS);
+  });
+
+  it('MERGES what each step learned rather than replacing the block', () => {
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', { ...started(), drained: true });
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', {
+      ...started(),
+      toAddress: NEW_ADDRESS,
+      toDeployTxId: NEW_TX,
+    });
+    /* The drain the second write said nothing about is still recorded — a step
+       that erased the one before it would send a resume back to re-drain an
+       account it had already emptied. */
+    expect(loadPassportUpgradeProgress('AQIDBA==', 'stagenet')).toMatchObject({
+      drained: true,
+      toAddress: NEW_ADDRESS,
+      toDeployTxId: NEW_TX,
+    });
+  });
+
+  it('clears a field a step explicitly passes as undefined', () => {
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', {
+      ...started(),
+      failureReason: 'the service was busy',
+    });
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', {
+      ...started(),
+      failureReason: undefined,
+    });
+    expect(loadPassportUpgradeProgress('AQIDBA==', 'stagenet')?.failureReason).toBeUndefined();
+  });
+
+  it('refuses to attach to a credential this browser holds no account for', () => {
+    expect(() => savePassportUpgradeProgress('OTHER', 'stagenet', started())).toThrow(
+      /no Passport account for that credential/,
+    );
+  });
+
+  it('may not report a step done without what that step produced', () => {
+    const withUpgrade = (upgrade: Partial<PassportUpgradeProgress>): PassportContractRecord => ({
+      ...deployed(),
+      upgrade: { ...started(), ...upgrade },
+    });
+    expect(refusePassportContractRecord(withUpgrade({ deployed: true }))).toMatch(
+      /without naming its address/,
+    );
+    expect(refusePassportContractRecord(withUpgrade({ repointed: true }))).toMatch(
+      /without naming the account it now points at/,
+    );
+    expect(
+      refusePassportContractRecord(
+        withUpgrade({ repointed: true, toAddress: NEW_ADDRESS, name: '' }),
+      ),
+    ).toMatch(/no name cannot report one as re-pointed/);
+    expect(refusePassportContractRecord(withUpgrade({ refunded: true }))).toMatch(
+      /before it reports the drain it is refunding/,
+    );
+    expect(
+      refusePassportContractRecord(
+        withUpgrade({ toAddress: NEW_ADDRESS, deployed: true, drained: true, refunded: true }),
+      ),
+    ).toBeNull();
+  });
+
+  it('is not carried into a backup, because it is a fact about one browser', () => {
+    /* The export projects onto a fixed field list (`../identity/backup.ts`),
+       and `upgrade` is deliberately not on it. This is the store's half of
+       that: the field exists on the record and nothing here puts it on the
+       list. */
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', started());
+    const record = loadPassportContractRecord('AQIDBA==', 'stagenet')!;
+    expect(record.upgrade).toBeDefined();
+    expect(refusePassportContractRecord(record)).toBeNull();
+  });
+});
+
+describe('finishing an upgrade', () => {
+  beforeEach(() => {
+    savePassportContractRecord(deployed());
+  });
+
+  it('switches the Passport onto the new account and forgets the block', () => {
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', {
+      ...started(),
+      toAddress: NEW_ADDRESS,
+      toDeployTxId: NEW_TX,
+      toDeviceCommitment: '22',
+      drained: true,
+      deployed: true,
+      repointed: true,
+      refunded: true,
+    });
+    completePassportUpgrade('AQIDBA==', 'stagenet');
+
+    const record = loadPassportContractRecord('AQIDBA==', 'stagenet');
+    expect(record).toMatchObject({
+      status: 'deployed',
+      address: NEW_ADDRESS,
+      deployTxId: NEW_TX,
+      deviceCommitment: '22',
+      ledgerConfirmed: true,
+    });
+    expect(record?.upgrade).toBeUndefined();
+    expect(loadPassportUpgradeProgress('AQIDBA==', 'stagenet')).toBeNull();
+  });
+
+  it('drops a stale recovered or restored flag, because THIS browser deployed it', () => {
+    savePassportContractRecord({ ...deployed(), recovered: true, restoredFromBackup: true });
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', {
+      ...started(),
+      toAddress: NEW_ADDRESS,
+      toDeployTxId: NEW_TX,
+      deployed: true,
+    });
+    completePassportUpgrade('AQIDBA==', 'stagenet');
+    const record = loadPassportContractRecord('AQIDBA==', 'stagenet');
+    expect(record?.recovered).toBeUndefined();
+    expect(record?.restoredFromBackup).toBeUndefined();
+    /* And the record still passes the store's own predicate, which a kept
+       `recovered` would have exempted from the transaction-id rule for ever. */
+    expect(refusePassportContractRecord(record!)).toBeNull();
+  });
+
+  it('refuses before the new account has been seen on chain', () => {
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', {
+      ...started(),
+      toAddress: NEW_ADDRESS,
+      toDeployTxId: NEW_TX,
+    });
+    expect(() => completePassportUpgrade('AQIDBA==', 'stagenet')).toThrow(
+      /only be finished once its new account has been seen on chain/,
+    );
+    expect(loadPassportContractRecord('AQIDBA==', 'stagenet')?.address).toBe(ADDRESS);
+  });
+
+  it('is forgotten without touching the account, when there is nothing to resume', () => {
+    savePassportUpgradeProgress('AQIDBA==', 'stagenet', started());
+    clearPassportUpgradeProgress('AQIDBA==', 'stagenet');
+    expect(loadPassportUpgradeProgress('AQIDBA==', 'stagenet')).toBeNull();
+    expect(loadPassportContractRecord('AQIDBA==', 'stagenet')?.address).toBe(ADDRESS);
   });
 });
