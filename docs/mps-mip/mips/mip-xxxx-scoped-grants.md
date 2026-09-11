@@ -48,7 +48,7 @@ MPS: MPS-0018
      | O12 | Replaces: none per the brief and the published family | adopted |
      | O13 | Security Considerations rendered as a table where the published family uses bold-titled Sn bullets | table retained; the divergence is offered to the editors |
      | O14 | approved deviation from brief T5: canonical JSON (RFC 8785, JCS) replaced by signing the `request` parameter bytes as received, with the proof carried as a detached `proof` fragment parameter and no canonicalisation step anywhere | adopted (sections 9.1 to 9.4, 9.6, R10, R21) |
-     | O15 | E1 stage one folded: the grant seam compiled and measured on the reference contract at spec_version 2 (k256 grantee arm, unshielded and shielded twins, lifecycle on the k256 device arm, 27 recipe vectors agreed three ways). The brief's section 13 [CIRCUIT] items are settled (struct as Map value, Boolean in a hash tuple, tuple arity above ten, kernel.blockTimeLessThan in an assert, if-guarded lifecycle bodies, the Map reset primitive, cost figures) except two: proving times per twin and the change-description precomputation on node (6.5); the node's unit of block time is settled by E3 (O4) | fifteen corrections applied in the text; the remainder is stage two (Path to Active E1) |
+     | O15 | E1 folded, both stages, and the on-node conformance run (E2) with it: the grant seam is compiled and measured on the reference contract at spec_version 2 over the whole thirty-circuit roster, both grantee arms, 34 recipe vectors agreed three ways, and the seam is exercised on node. Every [CIRCUIT] item of the brief's section 13 is now settled, including the two that were open: proving times are measured for every circuit the on-node run exercised, which is three of the six grant twins (6.7), and the change-description precomputation is evidenced on node (6.5); the node's unit of block time is settled by E3 (O4) | both correction lists applied in the text; what remains is the residue named in Path to Active E2 and E6 and in Implementation |
 
      Upstream dependencies: secp256r1 in the Compact language surface (r1
      arm); secp256k1 point operations (schnorr_bip340); a connector
@@ -315,14 +315,19 @@ Rules:
 
 #### 3.3 Key validation
 
-Key validation is exactly the following and no more, performed by the
-authoriser at issuance and by the seam at every use:
+Key validation is exactly the following and no more. The seam performs
+its half at every use. The authoriser's half is an obligation on the
+issuing client, and the contract cannot perform it: `issue_grant` takes
+`grant_id` and never the key, so a weak, off-curve, invalid-curve, or
+foreign key is given a live, well-formed record without complaint and
+the only thing that can refuse it is the seam at use (measured on node,
+Implementation).
 
-| Arm | Check | Not yet evidenced in-circuit |
+| Arm | Check | In-circuit status |
 |---|---|---|
-| `k1` | the coordinate pair `(0, 0)` rejected in either identity-flag encoding (the point at infinity) | on-curve membership; the cofactor is 1, so subgroup membership is vacuous |
-| `v1` | `[8]P != O` (the identity and the whole 8-torsion) | on-curve membership |
-| `r1` | the point at infinity rejected; both coordinates below `p`; `y^2 == x^3 - 3x + b (mod p)` (SEC 1 point validation); at the authoriser, a CBOR Object Signing and Encryption (COSE) key that is not an uncompressed EC2 P-256 key with canonical coordinates is rejected | the curve equation is the in-circuit half not yet evidenced |
+| `k1` | the coordinate pair `(0, 0)` rejected in either identity-flag encoding (the point at infinity) | measured on node in both encodings, which share one `grant_id` because the identity preimage binds `x` and `y` and not the flag, and which one assert refuses. On-curve membership is not checked: the cofactor is 1, so subgroup membership is vacuous, but an off-curve pair, a genuine point of another curve of the same shape, and another arm's coordinates carried as a `k1` key all pass the guard and the scope predicates and are refused only at step 6, as `invalid grant signature` |
+| `v1` | `[8]P != O` (the identity and the whole 8-torsion) | measured on node for the identity `(0, 1)`, refused at the cofactor-clearing assert. No other point outside the prime-order subgroup reaches the assert: the runtime's own curve operations abort on an order-2 point and on an off-curve pair, so such a key cannot be presented through this runtime at all and the operator sees a runtime error rather than a named assert |
+| `r1` | the point at infinity rejected; both coordinates below `p`; `y^2 == x^3 - 3x + b (mod p)` (SEC 1 point validation); at the authoriser, a CBOR Object Signing and Encryption (COSE) key that is not an uncompressed EC2 P-256 key with canonical coordinates is rejected | not evidenced in-circuit; the arm does not ship |
 
 The `r1` key checks are not optional: under the identity key `Q = O`,
 ECDSA verification computes `R' = u1 * G`, so `s = 1` and
@@ -333,10 +338,30 @@ proof is the assertion itself, let an attacker fabricate a
 `clientDataJSON` naming any origin. The identity key is an r1 negative
 vector of Testing item 5; the same correction is raised against the
 schemes MIP, whose section 3.3 item 5 lists signature-side checks only.
-Whether a witness point can be constructed off-curve is not evidenced;
-before this MIP leaves Draft the seam either gains an on-curve assertion
-or cites type-level evidence, and Testing item 2 carries off-curve and
-invalid-curve keys.
+The off-curve open item is settled on the two shipping arms, and not in
+the same way on both. On `v1` the rejection is real but it is the
+runtime's rather than the contract's, so a conformance suite can assert
+the abort and not its message. On `k1` it is settled in the negative:
+nothing stands between an invalid-curve key and the seam except the
+arithmetic of the signature check, which refuses such a key as
+`invalid grant signature`. That message is the absence of a
+curve-membership objection and not evidence that the seam verified
+anything, and an implementation MUST read it so. Before this MIP leaves
+Draft the `k1` seam either gains an on-curve assertion or this section
+stands as the record that curve membership on that arm rests on the
+signature arithmetic alone; Testing item 2 carries the measured
+off-curve and invalid-curve rows on both arms. The `r1` checks remain
+unevidenced in-circuit.
+
+GR-2 is an authoriser obligation and nothing more, measured as such: a
+key enrolled as a device of the account was issued a grant and spent
+under the grant seam, with the record advancing. The seam looks a
+grantee key up in `grants` under the grant tag family and finds a live
+record; nothing in the contract can see that the same key also holds a
+device entry, because device entries are salted rolling commitments and
+not stored keys. The two authorities stay disjoint in the sense GR-2
+states, in that no one credential satisfies both seams in one call, but
+the refusal to issue is enforceable off-chain only.
 
 #### 3.4 Wire forms of keys and off-chain signatures
 
@@ -351,7 +376,12 @@ A wire coordinate at or above the field modulus is not the encoding of
 any point and MUST be rejected, never reduced: the compiled encoding
 writes the canonical residue of each coordinate, so only canonical
 coordinates reproduce the circuit's digest by plain SHA-256, and a
-coordinate of an on-curve point is always canonical.
+coordinate of an on-curve point is always canonical. The rule is
+enforced by the encoding itself rather than by an assert: a `k1`
+coordinate pair presented as a `v1` key is refused by the client's own
+encoder as out of bounds for the prime field, before any transaction
+exists, so a cross-arm key in that direction never reaches the seam
+(measured on node, Implementation).
 
 Wire `scheme` names, keyed to the registry arm. The arm, not the wire
 name, selects the DST marker of section 6.3 and the identity tag of
@@ -600,13 +630,20 @@ the network refuses at admission. The node's admission-time block time
 runs about one block interval plus a network-defined tolerance ahead of
 the wall clock (measured 8.2 to 10.2 s ahead on a 6 s-block localnet;
 the tolerance is the node's and is not pinned here), so `expires_at` is
-a bound, and the grant stops being usable about that margin before it.
-Clients MUST sanity-check a non-zero `expires_at` against their own wall
-clock and a freshly read head block time before signing, SHOULD treat a
-value within one block interval plus the tolerance of the head block
-time as already expired, and an authoriser SHOULD refuse a value already
-in the past. There is no `network_id` cell (R15); the wire `chain`
-member remains normative for the request.
+a bound. The usable horizon is narrower than that margin, because the
+grantee's own proving time falls between its clock reading and the
+node's evaluation: a grant call on a shielded twin at k = 17 measured
+14.5 s from build to the node's refusal, nearly all of it the proof. The
+horizon is therefore one block interval plus the network tolerance plus
+the call's own prove-and-balance time, of the order of 20 s for a
+shielded twin on the reference stack, and a wallet that offers a
+five-second grant offers one that cannot be exercised. Clients MUST
+sanity-check a non-zero `expires_at` against their own wall clock and a
+freshly read head block time before signing, SHOULD treat a value less
+than one block interval plus the tolerance plus their own proving time
+ahead of that head block time as already expired, and an authoriser
+SHOULD refuse a value already in the past. There is no `network_id` cell
+(R15); the wire `chain` member remains normative for the request.
 
 #### 5.2 Feature strings and the mapping table
 
@@ -750,7 +787,20 @@ order:
 The custody chip runs unchanged after step 7. The shielded twins then,
 under a disclosed statement-level branch on whether the send produced
 change, append `change_entry` through the inbox chip in the same circuit
-and return the chip's result.
+and return the chip's result. The seam never checks `change_entry`
+against the coin that send produces: it is an opaque 192-byte argument,
+bound into the challenge of section 6.3 and appended verbatim, so a
+grantee that seals the wrong description strands its own change and
+nothing in the seam refuses it. Sealing the right description is the
+grantee's obligation alone (section 6.5).
+
+Because step 5 precedes step 6, a byte-identical resubmission is refused
+at the scope predicates and never reaches the signature check: once
+`nonce` has moved, the spent-commitment opening no longer matches and
+either that opening or the cumulative cap dominates. A conformance suite
+MUST admit any step-5 needle on a replay row rather than naming one
+(Testing item 2), and exercising the signature on a replay would need an
+opening that still matches, which the seam makes impossible.
 
 This discharges the custody MIP's S5 (a seam MUST NOT be satisfiable by
 circuit-unconstrained data): `origin_hash`, `slot`, `envelope`, and `pk`
@@ -797,9 +847,26 @@ thirteen declared tuple members (the `QualifiedShieldedCoinInfo` is one
 member), sixteen encoded elements, and 568 preimage bytes; the
 unshielded one 256 bytes. Both compile and hash as the raw
 concatenation, so no pre-hashing of the operation arguments is needed
-on the ECDSA arms. The JubJub shielded challenge has fourteen members
-and, by the recipe, 640 bytes (the two 64-byte point elements and the
-grinding nonce); it is not yet compiled and is measured in stage two.
+on the ECDSA arms. The JubJub shielded challenge has fourteen declared
+members, nineteen encoded elements, and 640 preimage bytes, and compiles
+and hashes the same way.
+
+Preimage widths of the compiled encoding, in bytes, for the three grant
+challenges and the three lifecycle challenges of section 6.1:
+
+| Recipe | `k1` | `v1` |
+|---|---|---|
+| `withdraw_unshielded` grant challenge | 256 | 328 |
+| `withdraw_shielded` grant challenge | 568 | 640 |
+| `withdraw_shielded_to_contract` grant challenge | 568 | 640 |
+| `issue_grant` | 200 | 272 |
+| `revoke_grant` | 168 | 240 |
+| `revoke_all_grants` | 136 | 208 |
+
+Every `v1` recipe is its `k1` twin plus 72 bytes: the 64-byte `sig_r`
+element and the 8-byte grinding nonce. A point element counts as one
+declared member and two encoded elements, and the qualified coin as one
+member and four elements.
 
 #### 6.4 Signing (grantee side)
 
@@ -821,8 +888,30 @@ A grantee MUST re-read `nonce` and `enc_key` and re-sign if its
 transaction is not included, and MUST persist `scope_salt`, the
 returned scope, and its running `spent` alongside the key.
 
+On the `v1` arm an authorisation that does not match the call it is
+presented with produces one of two refusals, and a conforming client
+expects both. The seam casts the challenge to a field element before
+evaluating the Schnorr equation, and a challenge the signer did not
+grind is below the field modulus only about 45 per cent of the time, so
+about 55 per cent of such calls abort at the cast's range check and the
+rest at `invalid grant signature`. Which one fires is a property of the
+challenge bytes and not of the seam, so a conformance suite MUST admit
+either needle on that arm. The ECDSA arms do not show it, since their
+challenge is a message and is never cast.
+
+Every in-circuit refusal of section 6.2 arrives at build time in one
+shape, `Unexpected error executing scoped transaction '<unnamed>':
+Error: failed assert: <needle>`, where the needle is the assert's own
+message as this MIP names it; no refusal text outside the specification
+was observed on node. An implementer matches on the needle and MUST NOT
+take the wrapper as the classifier, because the submission phase carries
+a different one (`Unexpected error submitting ...`), which is what a
+proving failure or a mempool refusal produces, and because refusals also
+arrive from the runtime (section 3.3), from the client's encoder
+(section 3.4), and from the node at admission.
+
 Expiry surfaces as one of two signals, both leaving state untouched and
-the signed challenge valid: a build-time abort (`failed assert:
+the signed challenge valid: a build-time abort (`failed assert: grant
 expired`) when the grantee's own clock is at or past `expires_at`, and
 a mempool refusal when the network's admission-time block time is (the
 node answers `Invalid Transaction: Custom error: 104` on a transcript
@@ -830,12 +919,15 @@ read mismatch, which the client submission layer surfaces as a
 `SubmissionError` whose reason is visible only in the RPC log line). On
 either signal the grantee MUST re-read the grant record and the chain
 head, and MUST re-sign only if `expires_at` is `0` or exceeds the head's
-block time by more than the inclusion margin of section 5.1; otherwise
-it treats the grant as expired and requests a new one. Retrying an
-admission refusal without re-reading is pointless, since the network's
-time only advances. A grantee SHOULD NOT take an indexer's latest-block
-timestamp as the head time (measured two blocks behind the node on the
-reference stack).
+block time by more than the inclusion margin of section 5.1, which
+includes the call's own proving time: a k = 17 shielded twin measured
+14.5 s from build to the node's refusal, so a client that budgets only
+the 8.2 to 10.2 s of section 5.1 will sign grants that cannot land.
+Otherwise it treats the grant as expired and requests a new one.
+Retrying an admission refusal without re-reading is pointless, since
+the network's time only advances. A grantee SHOULD NOT take an
+indexer's latest-block timestamp as the head time (measured two blocks
+behind the node on the reference stack).
 
 #### 6.5 Grantee private state and coin selection
 
@@ -845,13 +937,43 @@ scopes imply `read`) and reconstructs coin descriptions and `mt_index`
 values from the inbox and chain data before it can prove. Owner and
 grantee select coins independently; clients SHOULD apply a deterministic
 rule (the smallest coin of the color that covers `amount`, ties broken
-by `mt_index`). The failure modes are a proving failure when both select
-the same coin (no transaction exists, INV-5) and a fee-wasting race when
-both submit; a mis-spend is not one of them. The change description is
-precomputable before proving because the standard library evolves the
-output coin's nonce deterministically from the input coin's (not yet
-evidenced; the fallback is a bounded standalone append twin with an
-`append_budget` in the scope).
+by `mt_index`). The failure modes are a fee-wasting race when both
+submit and, when both select the same coin, a refusal of the loser by
+the node as a double spend; a mis-spend is not one of them, and neither
+is a proving failure, since proving a spend consults the commitment tree
+and not the nullifier set, so the loser's call still proves against the
+post-spend state (INV-5).
+
+The change description is precomputable before proving, and is measured
+so. The standard library derives both output nonces from the input
+coin's nonce, the sent coin under the kernel tag
+`midnight:kernel:nonce_evolve` and the change coin under
+`midnight:kernel:nonce_evolve/2`, each the transient hash of the tag and
+the degraded input nonce, upgraded from transient. A grantee therefore
+computes the change coin, seals it as `change_entry`, and signs over it
+before the call is built. Ten of ten predictions matched the coin the
+circuit returned, on nonce and value alike, and a composed
+contract-recipient call additionally matched the sent coin's nonce,
+which is the pair a composing client needs to build the payee's claim in
+the same transaction. Nothing in the seam checks the seal (section 6.2),
+so a grantee that seals the wrong description strands its own change.
+
+One qualification stands between that rule and a working client. The
+change output is not reliably the last commitment of the spend
+transaction's window, and a contract-owned deposit commitment is not
+reliably the first of its own, so the qualified coin's `mt_index` is
+resolved by trying candidates, and every retry of a signed call costs a
+fresh signature as well as a proof, because the qualified coin is in the
+challenge (section 6.3). Measured over one run: of eleven spends that
+resolved their index by signing and submitting a candidate, six needed a
+second candidate and none needed a third; of eight resolved by
+prove-only trials, which submit nothing, four needed a second trial. A
+grantee SHOULD therefore resolve `mt_index` by prove-only trials before
+it signs. A wrong candidate is not self-describing and MUST NOT be read
+as a diagnosis of the index: the call fails at the prover before
+submission and carries the prover's own error text, or aborts in circuit
+execution with a bare `unreachable`, and nothing reaches the node in
+either case, which is what makes prove-only resolution safe.
 
 #### 6.6 Disclosure
 
@@ -881,49 +1003,127 @@ Over the corresponding device twin a grant twin replaces two
 device-entry hashes with one identity hash and three commitment hashes,
 and adds one map lookup and insert, one widened comparison, one kernel
 comparison, and on shielded twins one inbox insert. Measured on the
-reference contract at `spec_version = 2` (E1 stage one, the k256 arms;
-proving times are not yet measured):
+reference contract at `spec_version = 2` over the whole thirty-circuit
+roster, both device arms and both grantee arms; prover keys are rounded
+from the measured bytes:
 
 | Circuit | k | Rows | Prover key |
 |---|---|---|---|
-| `withdraw_unshielded_with_k256` (device twin, for comparison) | 16 | 61,003 | 117 MB |
-| `withdraw_shielded_with_k256` (device twin, for comparison) | 17 | 74,587 | 235 MB |
-| `withdraw_unshielded_with_grant_k256` | 17 | 64,352 | 235 MB |
-| `withdraw_shielded_with_grant_k256` | 17 | 91,862 | 235 MB |
+| `deposit_unshielded` | 9 | 311 | 0.4 MB |
+| `deposit_shielded` | 13 | 6,484 | 11 MB |
+| `activate_initial_device_with_jubjub` | 14 | 13,412 | 25 MB |
+| `add_device_with_jubjub` | 15 | 26,771 | 49 MB |
+| `remove_device_with_jubjub` | 15 | 32,730 | 49 MB |
+| `rotate_enc_key_with_jubjub` | 15 | 26,725 | 49 MB |
+| `append_inbox_with_jubjub` | 16 | 32,790 | 99 MB |
+| `withdraw_unshielded_with_jubjub` | 15 | 28,877 | 49 MB |
+| `withdraw_shielded_with_jubjub` | 16 | 50,055 | 99 MB |
+| `withdraw_shielded_to_contract_with_jubjub` | 16 | 55,758 | 99 MB |
+| `activate_initial_device_with_k256` | 14 | 14,094 | 29 MB |
+| `add_device_with_k256` | 16 | 58,897 | 117 MB |
+| `remove_device_with_k256` | 16 | 65,404 | 117 MB |
+| `rotate_enc_key_with_k256` | 16 | 58,851 | 117 MB |
+| `append_inbox_with_k256` | 16 | 64,924 | 117 MB |
+| `withdraw_unshielded_with_k256` | 16 | 61,003 | 117 MB |
+| `withdraw_shielded_with_k256` | 17 | 74,587 | 235 MB |
+| `withdraw_shielded_to_contract_with_k256` | 17 | 80,290 | 235 MB |
+| `issue_grant_with_jubjub` | 16 | 52,227 | 99 MB |
+| `revoke_grant_with_jubjub` | 15 | 26,871 | 49 MB |
+| `revoke_all_grants_with_jubjub` | 15 | 26,645 | 49 MB |
+| `withdraw_unshielded_with_grant_jubjub` | 16 | 38,514 | 99 MB |
+| `withdraw_shielded_with_grant_jubjub` | 17 | 66,014 | 197 MB |
+| `withdraw_shielded_to_contract_with_grant_jubjub` | 17 | 71,717 | 197 MB |
 | `issue_grant_with_k256` | 17 | 78,604 | 235 MB |
 | `revoke_grant_with_k256` | 16 | 58,997 | 117 MB |
 | `revoke_all_grants_with_k256` | 16 | 58,771 | 117 MB |
+| `withdraw_unshielded_with_grant_k256` | 17 | 64,355 | 235 MB |
+| `withdraw_shielded_with_grant_k256` | 17 | 91,865 | 235 MB |
+| `withdraw_shielded_to_contract_with_grant_k256` | 17 | 97,568 | 235 MB |
 
-The unshielded grant twin costs 3,349 rows more than its device twin
-and crosses to k=17, doubling the prover key; the shielded grant twin
-costs 17,275 rows more and stays at its device twin's k. The envelope
-is not a circuit-shape parameter (both digests are computed on every
-call), so k does not vary by envelope. k is not a pure function of the
-row count (device circuits of 64,924 and 65,404 rows fit k=16 while the
-unshielded grant twin at 64,352 needs k=17), so an implementation
-quotes k and rows as measured and never predicts one from the other.
-The jubjub grant twins, the remaining k256 twin, and the p256 twins are
-unmeasured; the standalone gate anchors recorded in Implementation are
-expectations only for those arms.
+The seam's cost over the corresponding device twin is constant within an
+arm and a shape and differs across arms: on the k256 arm each shielded
+twin costs 17,278 rows more than its device twin and the unshielded twin
+3,352 more; on the jubjub arm each shielded twin costs 15,959 more and
+the unshielded twin 9,637 more. The shielded figures carry the inbox
+insert for the change entry, which no device twin performs. The seam
+pushes four of the six twins up one k, the k256 unshielded twin to 17,
+the jubjub unshielded twin to 16, and both jubjub shielded twins to 17,
+while the two k256 shielded twins stay at their device twins' k=17.
+Lifecycle is much cheaper on the normative arm: issuance, the most
+expensive lifecycle circuit on both arms, is 52,227 rows at k=16 on
+jubjub against 78,604 at k=17 on k256, and the two revocation circuits
+about 26,800 rows at k=15 against about 58,900 at k=16.
+
+The envelope is not a circuit-shape parameter (both digests are computed
+on every call), so k does not vary by envelope. k is not a pure function
+of the row count (device circuits of 64,924 and 65,404 rows fit k=16
+while the k256 unshielded grant twin at 64,355 needs k=17), and the
+prover key is not a function of k alone (at k=17 a jubjub circuit is
+about 197 MB and a k256 circuit about 235 MB; at k=16 the split is about
+99 MB against 117 MB), so an implementation quotes k, rows, and key
+sizes as measured and never predicts one from another. The p256 twins
+are unmeasured; the standalone gate anchors recorded in Implementation
+are expectations only for that arm.
+
+Proving times, measured at the proof provider and so excluding building,
+balancing, and submission, on the reference stack (node 2.1.0, proof
+server 9.0.0-rc.6, indexer 4.4.0-rc.2, a single-authority localnet with
+6 s blocks, one machine, one run): about 3.4 s at k=15, 5.6 to 8.0 s at
+k=16, and 11.2 to 17.4 s at k=17; 15.1 s for a cross-contract pair of a
+k=17 grant twin with a k=13 deposit proved in one call, and 19.9 and
+30.8 s for the two proofs of a composed pair of k=17 grant twins, which
+is dearer per proof than either twin alone. A grant spend and an
+issuance cost the same order on the same arm, and the jubjub arm is the
+cheaper one at every k the two share. The figures are one machine's,
+and the proof server was the run's least stable component at k=17.
+Three of the six grant twins carry no on-node timing at all: the two
+unshielded ones, because the reference localnet refuses a contract call
+paired with an unshielded offer, and the jubjub contract-recipient
+twin, which the run never called.
 
 Verifier keys depend on the circuit's shape and not on k: 2,745 bytes
 for every k256 circuit and 2,313 for every jubjub circuit (the deposits
-2,121 and 1,353). The reference implementation already exceeds the
-per-block byte and compute budgets with its 18 existing circuits, so it
-deploys in waves; the stage-one roster of 23 circuits carries 57,663
-verifier bytes (43,938 existing, 13,725 grant) against a 50,000-byte
-per-block write limit with about 9,138 bytes of deploy overhead beyond
-the keys, so a one-transaction deploy is refused and **two waves** are
-needed, the same count as today: the first as today (the two deposits
-and the eight k256 circuits, 25,434 verifier bytes), the second one
-hand-built maintenance update carrying the eight jubjub keys (18,504)
-and the five grant keys (13,725). The thirty-circuit roster (33 with
-p256) carries 74,286 verifier bytes and needs **three waves**, two of
-them maintenance updates. The grant circuits MUST be part of the
-`spec_version = 2` deploy wave plan, and maintenance-authority
-retirement MUST follow the last grant wave: a retired account can never
-receive a future arm's circuits, so an account deployed without the
-grant circuits and then retired can never gain grants and must migrate.
+2,121 and 1,353). The thirty-circuit roster (33 with p256) carries
+74,286 verifier bytes against a 50,000-byte per-block write limit, with
+about 9,138 bytes of deploy overhead beyond the keys; waves are
+mandatory independently of the grant circuits, since the eighteen
+pre-existing ones alone price a deploy at 53,076 bytes written. A
+one-transaction deploy of the whole roster is therefore refused before
+any transaction exists and the roster reaches a live account in **three
+waves**: the deploy, carrying the two deposits and the eight circuits of
+the born arm (25,434 verifier bytes), then two hand-built maintenance
+updates (23,994 and 24,858 verifier bytes), the last of which retires
+the maintenance authority. Each update advances the maintenance
+authority counter by exactly one, which a client reads from chain rather
+than assuming.
+
+The per-update ceiling is network-defined and this MIP bounds it only by
+measurement: on node 2.1.0 an update of 29,484 verifier bytes is
+accepted and one of 32,229 is refused, so the ceiling lies in that
+interval, closed to one verifier key. An implementation MUST pack well
+below it. The reference budget is 25,000 verifier bytes, the largest
+accepted payload less about 15 per cent, the margin covering the Dust
+spend the wallet adds when it balances the update, block fullness at
+submission, and the per-block fee-price adjustment. A budget under the
+ceiling does not by itself fix the wave count, since a greedy packer
+over one key order lands the same roster in four waves at 24,000 and in
+three at 25,000.
+
+The two refusals are different mechanisms at different points, and a
+specification that says an update must fit a block MUST say which one it
+means. The all-operations deploy is refused client-side by the fee
+computation, before a transaction exists. An over-large maintenance
+update is refused by the node at admission (`Invalid Transaction:
+Transaction would exhaust the block limits`) with nothing client-side
+objecting first: the client priced every refused payload without
+complaint, so an implementer gets no warning before submission and a
+refused update leaves the authority counter untouched.
+
+The grant circuits MUST be part of the `spec_version = 2` deploy wave
+plan, and maintenance-authority retirement MUST follow the last grant
+wave: a retired account can never receive a future arm's circuits, so
+an account deployed without the grant circuits and then retired can
+never gain grants and must migrate.
 Pure circuits add no keys.
 
 ### 7. Lifecycle
@@ -933,8 +1133,9 @@ Pure circuits add no keys.
 All three lifecycle circuits are device-gated through the unchanged
 device seam, which advances `auth_nonce` and `round` before the body
 runs; every `Map.lookup` is dominated by a `member` branch (section 6.2
-step 2). The bodies compile and execute off-node on the k256 device arm
-(Implementation); the jubjub device arm is stage two of E1.
+step 2). The bodies compile and execute off-node on both device arms;
+on node, issuance is exercised from both, and revocation and the kill
+from the jubjub arm (Implementation).
 
 `issue_grant(grant_id, <plaintext scope>)`:
 
@@ -1018,8 +1219,44 @@ grant need `N` consecutive counters and `N` signatures; the cumulative
 cap is enforced per call against the record as it stands at that call's
 execution, so a transaction cannot exceed `cap` in aggregate; the
 per-call cap is per circuit invocation, never per transaction; the
-recipient pin is evaluated per call and survives grafting; reordering
-composed calls invalidates the signatures.
+recipient pin is evaluated per call and survives grafting.
+
+Reordering composed calls does not invalidate their signatures: each
+stays a valid signature over its own challenge. What fails is the
+transcript, because the out-of-order call records reads of a record
+state that does not hold when it executes, and the node refuses the
+transaction at admission on a read mismatch. The two produce different
+operator-visible behaviour, and an implementation MUST expect the
+transcript refusal rather than a signature failure.
+
+Two calls on one contract in one transaction are measured (a revocation
+composed with a re-issue over one `grant_id`, a batch of two issuances,
+and two grant calls under one grant at consecutive nonces, the last
+appending both change entries in the same transaction). Three mechanics
+are properties of the ledger and of the client software development kit
+rather than of the seam, and a composing client meets every one:
+
+- the second call MUST be built against the state the first produces.
+  Two calls built independently read the same pre-state and record the
+  same `auth_nonce`, or the same grant `nonce`, and the node refuses the
+  pair with `Transcript(Execution(ReadMismatch ...))`;
+- the second call's shielded offer MUST travel with its intent. An
+  intent carries contract actions and unshielded offers only, so a
+  contract call's shielded inputs and outputs live on the transaction;
+  grafting the intent alone yields a transcript claiming nullifiers no
+  offer carries, refused before execution with
+  `Malformed(EffectsCheck(NullifiersNeqClaimedNullifiers))`;
+- which transcript section a call's coins land in is not stable between
+  runs. A guaranteed offer merges and leaves the intent free to be
+  placed at any segment, while a fallible offer's proofs are bound to
+  their own segment and re-keying it is refused with
+  `Malformed(Zswap(InvalidProof))`, so a call whose coins are fallible
+  keeps its own segment and the relative order of the two calls is
+  whatever the segment draw gave.
+
+A tool that reads transcripts MUST read the guaranteed and the fallible
+section alike, since the same circuit was observed in each on
+consecutive transactions.
 
 #### 7.5 Owner-side records
 
@@ -1673,8 +1910,12 @@ MIP's SIG-1 through SIG-5 for the arms it deploys.
   New cells and structs are a redeploy (Backwards Compatibility
   Assessment); twins, lifecycle circuits, pure derivations, and tag
   families are maintenance updates while the authority is live, under
-  the wave rule of section 6.7. Enabling the window bounds later is a
-  circuit revision (`:v2` twins), not a redeploy.
+  the wave rule of section 6.7. That is measured: the twelve grant
+  circuits reached a live account entirely through maintenance updates,
+  in two batches at the authority counter read from chain, with the
+  authority retired in the same update as the last batch. Enabling the
+  window bounds later is a circuit revision (`:v2` twins), not a
+  redeploy.
 - **Scheme.** A grant scheme is a new tag prefix under the authorisation
   MIP section 10's "policy structure" clause, with `grant` as the
   policy-structure segment; a revision of any construction is a new
@@ -1857,15 +2098,36 @@ measured rather than specified here, which is why section 5.1 states
       key validation, GrantViewSeal and the `read_pk` derivation,
       `signin_digest`, the `envelope_digest` separation, and the
       fork-replay statement.
-- [ ] E1: the grant arm on the reference contract at `spec_version = 2`
-      (all lifecycle circuits on both device arms; k256 twins on both
-      envelopes; jubjub twins), with rows, k, prover-key size, and
-      proving time per twin; the layout, arity, and change-append
-      fallbacks settled; Testing item 1 green (stage one complete: k256
-      grantee arm, two twins, lifecycle on the k256 device arm, vectors;
-      stage two lists the remainder).
+- [x] E1: the grant arm on the reference contract at `spec_version = 2`,
+      both stages complete: the two cells and structs, the pure
+      derivations, the seam chips and three grant twins on each grantee
+      arm, and the three lifecycle circuits on each device arm, with k,
+      rows, and prover-key size measured over the whole thirty-circuit
+      roster and proving times measured for every circuit the
+      conformance run exercised; the layout, arity, and change-append
+      questions settled with no fallback taken; Testing item 1 green.
+      Residue, carried by other criteria and not by this one: three of
+      the six grant twins have no on-node timing, the two unshielded
+      ones because the reference localnet refuses a contract call
+      paired with an unshielded offer and the jubjub contract-recipient
+      twin because the run never called it, and the p256 twins wait on
+      the secp256r1 surface.
 - [ ] E2: Testing item 2 green on a node, each case ending with the
-      invariants it exercises.
+      invariants it exercises. Held: twelve rejection rows and nine
+      grantee-key rows green on node, each ending with no transaction
+      and a byte-identical ledger snapshot either side; the
+      within-the-margin expiry row, which is built and submitted and
+      then refused at admission with the ledger byte-identical either
+      side; and the device-key control that measures GR-2. Open, so
+      the box does not close: the faults Testing
+      item 2 lists as green off-node only (the issue rules, the
+      out-of-scope operation flag, recipient-kind mismatch, a wrong
+      envelope, and a prior-incarnation opening) and those that have not
+      run at all (a cumulative wrap attempt, a foreign-color witness
+      coin, the two clock-skew rows on a grant twin, stale epoch, stale
+      generation, the salt-reuse flag, the two-slot revocation row, and
+      the vacuous-verifier control), and the revoke-plus-issue row over
+      an expired but unrevoked id rather than a live one.
 - [x] E3: the on-chain unit of `kernel.blockTimeLessThan` and the
       never-expires arm pinned on a ledger-9 network and recorded in the
       registry entry, with past, future, zero, and wrong-unit cases
@@ -1877,10 +2139,17 @@ measured rather than specified here, which is why section 5.1 states
       read-only grant, a two-element batch, and a zero-DUST refusal.
 - [ ] E5: the vectors of Testing item 5 published, the Rust side linking
       no compiled contract module.
-- [ ] E6: the deploy budget and wave plan of Testing item 6.
+- [ ] E6: the deploy budget and wave plan of Testing item 6. Held: the
+      thirty-circuit roster deployed on node in three waves at the
+      measured per-update ceiling of section 6.7, each update at the
+      authority counter read from chain, with retirement landing in the
+      last one. Open, so the box does not close: the `spec_version = 1`
+      control, which needs a compiled pre-grants build of the contract.
 - [ ] E7: the read handover of Testing item 7, including the
       two-delegate re-seal case.
-- [ ] E8, E9, E10: Testing items 8, 9, and 10.
+- [ ] E8, E9, E10: Testing items 8, 9, and 10 (item 9 green on node;
+      item 10 partial, with the leg that rotates `enc_key` between
+      signing and submission still open; item 8 not run).
 - [ ] E11: an r1 grantee end to end once the secp256r1 surface ships
       (Testing item 12); until then the r1 arm and `schnorr_bip340` are
       marked pending in the registry.
@@ -1901,8 +2170,10 @@ measured rather than specified here, which is why section 5.1 states
 1. Name the external co-author and settle the open items with the
    Foundation and the editors; fold the outcomes into the text.
 2. Extend the reference contract to `spec_version = 2` and run E1, E2,
-   E6, E9, and E10 (E3 is held); correct any byte recipe the compiled
-   encoding contradicts and publish the E5 vectors.
+   E6, E9, and E10 (E1 and E3 are held; E2, E6, and E10 are held in
+   part and their residue is named in the acceptance criteria); correct
+   any byte recipe the compiled encoding contradicts and publish the E5
+   vectors.
 3. Build a reference authoriser page and a reference dApp against the
    text and run E4 and E7; then E8 with the reference signer as agent.
 4. Commission the cryptographer review; fold findings in before editor
@@ -2012,7 +2283,7 @@ the salt.
 | S32 | Maintenance authority above the seam | grant circuits in the wave plan; authority retired after the last wave (6.7) |
 | S33 | Malleated ECDSA twins | both `s` forms accepted; inert because `nonce` advances (SIG-4) |
 | S34 | Pending private key stored before consent | non-extractable storage SHOULD; unavoidable in kind |
-| S35 | Concurrent coin selection | proving failure or a fee-wasting race, never a mis-spend (INV-5) |
+| S35 | Concurrent coin selection | a fee-wasting race, or the loser refused by the node as a double spend; never a mis-spend, and never a proving failure, since proving consults the commitment tree and not the nullifier set (INV-5) |
 | S36 | Fee-payment linkability | a dApp paying DUST from an address linked to its identity links itself to the account; outside the contract |
 | S37 | Authoriser unavailability | a recoverable error carrying no state; any device-key holder can act as authoriser (11.3) |
 | S38 | Toolchain hazards | the vacuous-verifier control of the authorisation MIP's S10; pinned toolchain versions |
@@ -2027,24 +2298,31 @@ the salt.
 | the reference implementation's wave deploy and block-limit numbers | the deploy budget rule of section 6.7 |
 | E3: the kernel block-time comparison on a ledger-9 node (node 2.1.0): 21 unit and enforcement cases and a 13-case admission-time sweep over a probe contract carrying the seam's comparison shape, each case recording the host clock, the node head, the client phase reached, and the node outcome | the unit is whole seconds since the UNIX epoch on the client and the node alike; the comparison is a transcript read (one public input, no constraints) enforced at client build against the wall clock and at node admission against the node's block context, never by the proof; the never-expires arm records no read; the admission-time block time ran 8.2 to 10.2 s ahead of the wall clock on a 6 s-block localnet; the client-side and node-side refusal texts of section 6.4 |
 | the cross-contract-calls experiment | composition in one transaction |
-| E1 stage one: the grant seam compiled on the reference contract at `spec_version = 2` (the two cells and structs, the pure derivations, the k256 seam chips, the unshielded and shielded k256 grant twins, and the three lifecycle circuits on the k256 device arm), measured at k=16 to 17, 58,771 to 91,862 rows, 2,745-byte k256 and 2,313-byte jubjub verifier keys, and executed off-node in a circuit simulator (lifecycle, the unshielded twin, its rejection matrix) | the circuit items settled: a struct as a `Map` value, `Boolean` as a one-byte hash element, tuple arities of thirteen and seventeen hashed as the raw concatenation, the kernel block-time comparison inside an assert, the `if`-guarded lifecycle bodies, and the `Map` reset primitive; the byte recipes of sections 4 and 6.3 reproduced two ways from the text alone (a TypeScript recipe and a Rust recipe linking no compiled module) against the compiled circuits, 27 vectors and two pinned signatures; the deploy budget of section 6.7 |
+| E1 stage one: the grant seam compiled on the reference contract at `spec_version = 2` (the two cells and structs, the pure derivations, the k256 seam chips, the unshielded and shielded k256 grant twins, and the three lifecycle circuits on the k256 device arm), measured at k=16 to 17 and 58,771 to 91,862 rows, the two grant twins re-measured three rows higher in stage two once the envelope assert landed, 2,745-byte k256 and 2,313-byte jubjub verifier keys, and executed off-node in a circuit simulator (lifecycle, the unshielded twin, its rejection matrix) | the circuit items settled: a struct as a `Map` value, `Boolean` as a one-byte hash element, tuple arities of thirteen and seventeen hashed as the raw concatenation, the kernel block-time comparison inside an assert, the `if`-guarded lifecycle bodies, and the `Map` reset primitive; the byte recipes of sections 4 and 6.3 reproduced two ways from the text alone (a TypeScript recipe and a Rust recipe linking no compiled module) against the compiled circuits, 27 vectors and two pinned signatures; the deploy budget of section 6.7 |
+| E1 stage two: the roster completed on the same contract (the jubjub grantee seam and its three twins, the remaining k256 twin, the three lifecycle circuits on the jubjub device arm, the client and Rust signer surfaces for both grantee arms, and an off-node suite of 121 checks over both arms), with the whole thirty-circuit roster measured from 311 rows at k=9 to 97,568 at k=17 | the six grant twins and six lifecycle circuits of section 6.1 exist on both arms with no exported signature changed; the cost table of section 6.7 and the seam's per-arm row cost; the `v1` challenge and lifecycle recipes of section 6.3 and their measured preimage widths, agreed three ways over 34 vectors and three pinned signatures; the `v1` key guard of section 3.3 and the runtime's refusal of every other point outside the prime-order subgroup |
+| E2: the conformance run on a ledger-9 localnet (node 2.1.0, indexer 4.4.0-rc.2, proof server 9.0.0-rc.6), twelve evidence groups from one account and one chain: the three-wave deploy and a cross-arm enrolment, issuance across both device arms, grant spends on both grantee arms, a twelve-row rejection matrix, ten grantee-key rows, the expiry rows with their transaction transcripts read back, composition of two calls on one contract, the one-coin race, the change prediction, and every proof of the run timed at the proof provider, with the per-update ceiling bisected to one verifier key by a separate probe over throwaway accounts | the seam behaves on node as specified on both grantee arms; the change-precomputation rule and the `mt_index` retry rate of section 6.5; the refusal points and wrapper texts of section 6.4; the key-validation findings of section 3.3, including GR-2 as an authoriser obligation the contract cannot enforce; the composition mechanics of section 7.4; the wave plan, the per-update ceiling, and the proving times of section 6.7; the expiry horizon of section 5.1; Testing items 1, 3, and 9 green and items 2, 6, 10, and 11 in part |
 
-Not yet held: any connection protocol on Midnight, origin binding,
-proving times per twin, the on-node matrix (which carries the expiry
-rows of Testing items 1 and 2 onto the grant twins; E3 pinned the
-comparison on a probe contract), the jubjub grantee twins, the
-remaining k256 twin
-(`withdraw_shielded_to_contract_with_grant_k256`), and the lifecycle
-circuits on the jubjub device arm; these are stage two of E1 and the
-remaining experiments of Path to Active.
+Not yet held: any connection protocol on Midnight and the origin
+binding it carries (E4); the read handover (E7); agent and self
+grantees (E8); the r1 arm and its in-circuit key checks, which wait on
+the secp256r1 surface (E11); the off-chain constructions of Testing item
+5 (`request_digest`, `signin_digest`, the `read_pk` derivation,
+GrantViewSeal, the negative key vectors, and the r1 vectors); the
+`spec_version = 1` control of Testing item 6; the recovery epoch bump of
+Testing item 11, which waits on the recovery seam; the leg of Testing
+item 10 that rotates `enc_key` between signing and submission; the
+faults Testing item 2 lists as not run on node; the on-node behaviour
+and proving cost of the two unshielded grant twins, which the reference
+localnet cannot carry, and of the jubjub contract-recipient twin, which
+the run never called; and the independent cryptographer review the
+acceptance criteria require.
 
-At stage one the reference contract carries the two cells, the two
-structs, the pure derivations, the k256 seam chips, two k256 twins,
-three lifecycle circuits on the k256 device arm, and `spec_version = 2`,
-and the Rust signer produces bit-identical `grant_id`, commitments, and
-k1 challenges from the byte recipes alone; stage two completes three
-twins per grantee arm and three lifecycle circuits per device arm. A
-static consent page implementing section
+The reference contract now carries the two cells, the two structs, the
+pure derivations, the seam chips and three grant twins on each grantee
+arm, three lifecycle circuits on each device arm, and
+`spec_version = 2`, and the Rust signer produces bit-identical
+`grant_id`, commitments, and `k1` and `v1` challenges from the byte
+recipes alone. A static consent page implementing section
 9 and a dApp implementing the return leg and sign-in, each runnable
 locally, are the E4 and E7 artefacts. Companion documents: the MPS-0018
 Recommended MIPs bullet, the erratum of section 12, the custody MIP R9
@@ -2063,24 +2341,32 @@ the following. Each item names the invariants it exercises.
    Expiry rows: a record with `expires_at = 0` and one with
    `expires_at = head + 3600` each execute on node with state advancing,
    and the `0` record produces no time read in the transcript (GR-7).
-   Status: green off-node for the unshielded k256 twin in the circuit
-   simulator (no proof, no node); the shielded twins and the node run
-   are pending; the expiry rows are green on node for the comparison
-   shape in a probe contract (E3) and pending on the grant twins.
+   Status: green on node. Issuance from both device arms; a
+   within-scope spend on both grantee arms, with `nonce`,
+   `spent_commit`, and `round` advancing and `auth_nonce` unchanged;
+   and both expiry rows on the grant twins themselves, the accepted
+   transactions read back through the indexer to show that the `0`
+   record's call records no block-time read and the forward-dated one
+   exactly one. The unshielded twins are exercised off-node only, in
+   the circuit simulator, because the reference localnet refuses a
+   contract call paired with an unshielded offer; that is a property of
+   the network the run used rather than a gap in the item.
 2. **Rejection matrix.** The same call aborts with no state change under
    each single fault: out-of-scope operation; over `per_call_cap`; over
-   `cap`; a cumulative wrap attempt; a witness coin of another color; a
+   `cap`; a cumulative wrap attempt; a wrong `spent_prev` opening; a
+   witness coin of another color; a
    witness coin above `max_coin_value`; wrong recipient under a pin;
    recipient-kind mismatch; a stale `enc_pk`; revoked; `expires_at` in
-   the past (the grantee's build aborts with `failed assert: expired`,
-   nothing is submitted); `expires_at` within one block interval plus
-   tolerance of the wall clock (the build succeeds, the node refuses at
-   admission with `Custom error: 104` on a transcript read mismatch,
-   state unchanged); a client clock skewed behind the network by more
-   than the margin (the same admission refusal, showing the check does
-   not rest on the grantee's clock) and skewed ahead (the client refuses
-   a call the chain would accept, a client-quality control rather than
-   a protocol property); stale epoch; stale generation; identical resubmission after success; a
+   the past (the grantee's build aborts with `failed assert: grant
+   expired`, nothing is submitted); `expires_at` within one block
+   interval plus tolerance of the wall clock (the build succeeds, the
+   node refuses at admission with `Custom error: 104` on a transcript
+   read mismatch, state unchanged); a client clock skewed behind the
+   network by more than the margin (the same admission refusal,
+   showing the check does not rest on the grantee's clock) and skewed
+   ahead (the client refuses a call the chain would accept, a
+   client-quality control rather than a protocol property); stale
+   epoch; stale generation; identical resubmission after success; a
    prior-incarnation signature against a re-issue; a cross-scheme key; a
    wrong envelope (k1); an envelope-1 grantee against any withdraw twin
    refused in-circuit (k1); the identity, small-order, off-curve, and
@@ -2092,10 +2378,52 @@ the following. Each item names the invariants it exercises.
    by the harness as non-conforming; revoke one of two slots held by one
    key, the other still authorises and only that one; `device_count`
    untouched; the vacuous-verifier control (GR-2, GR-3, GR-4, GR-5, GR-6,
-   GR-7, GR-9, GR-12, GR-14; the authorisation MIP's S10).
+   GR-7, GR-9, GR-12, GR-14; the authorisation MIP's S10). One row is a
+   control rather than a fault: a device key issued as a grantee is NOT
+   refused by the seam and spends under it, which is the measured
+   content of GR-2 (section 3.3). The replay row admits any of the
+   step-5 needles and a suite MUST NOT name one (section 6.2), and on
+   the `v1` arm a mismatched authorisation admits either the range
+   error of the challenge cast or `invalid grant signature`
+   (section 6.4).
+
+   Status: partial. Every row below that is green on node left the
+   ledger snapshot byte-identical either side, and every one but the
+   admission-margin row ended with no transaction at all, that row
+   being built, proved, and submitted and then refused at admission.
+   Green on node: over `per_call_cap`; over `cap`; a wrong `spent_prev`
+   opening; a witness coin
+   above `max_coin_value`; wrong recipient under a pin; a
+   stale `enc_pk`; revoked; `expires_at` in the past; `expires_at`
+   inside the admission margin, built by the client and refused by the
+   node; identical resubmission after success; a cross-scheme key in
+   both directions; an envelope-1 grantee against a withdraw twin; a
+   grantee calling a device-gated circuit; the identity on both
+   deployed arms; an off-curve pair and an invalid-curve twin on `k1`;
+   an order-2 point and an off-curve pair on `v1` (secp256k1 has prime
+   order, so the identity is its only small-order point);
+   `device_count` untouched across every row; and the device-key
+   control above. Green off-node only, in the circuit simulator: an
+   out-of-scope operation flag, recipient-kind mismatch, a wrong
+   envelope, a prior-incarnation opening against a re-issue, and the
+   issue rules (re-issue of a live id refused, issue over an absent id
+   succeeding, revoke of an absent id aborting, revoke of a tombstone
+   aborting). Not run anywhere: a cumulative wrap attempt; a witness
+   coin of another color; the two clock-skew rows on a grant twin (E3
+   carries them on a probe contract); stale epoch, since no circuit
+   bumps `device_epoch` until the recovery seam lands; stale
+   generation, structurally unreachable while `revoke_all_grants`
+   clears the register; the reused-`scope_salt` harness flag; the
+   two-slot revocation row; and the vacuous-verifier control. Revoke
+   plus issue over one id in one transaction is green, but over a live
+   id, where this item asks it of an expired but unrevoked one.
 3. **Owner liveness.** A pending owner signature still verifies after a
    grant call; a permissionless deposit between grantee signing and
    submission does not invalidate the grantee's call (GR-5; AUTH-8).
+   Status: green on node, both legs, with the second landing the
+   signature made before the intervening deposit rather than a re-signed
+   call, because the qualified coin's index was resolved by prove-only
+   trials before the grantee signed (section 6.5).
 4. **Redirect attack suite.** Open redirect; injection with a `state`
    mismatch; `iss`, `aud` mismatch; expired request; replayed `nonce`;
    proof failure; `clientDataJSON.origin` mismatch; an `rdns:`
@@ -2126,18 +2454,29 @@ the following. Each item names the invariants it exercises.
    signature vector per arm and a high-S vector per ECDSA arm that MUST
    verify; negative vectors for weak, identity, and low-order keys
    (GR-3, GR-4, GR-14). Status: green offline for every derivation of
-   section 4, the k1 challenges of section 6.3 (unshielded and shielded,
-   with the qualified coin written out) and the three k1 lifecycle
-   challenges, `envelope_digest`, and `origin_hash`, agreed three ways
-   (compiled circuits, TypeScript, Rust) over 27 published vectors with
-   two pinned k1 signatures, the high-S k1 twin included; pending are the
-   v1 and r1 challenges and signature vectors, `request_digest`,
-   `signin_digest`, the `read_pk` derivation, GrantViewSeal, and the
-   negative key vectors.
+   section 4; the `k1` and `v1` challenges of section 6.3 (unshielded,
+   shielded, and shielded-to-contract, with the qualified coin written
+   out) and the six lifecycle challenges; `envelope_digest`;
+   `origin_hash`; and the preimage-width table of section 6.3, agreed
+   three ways (the compiled circuits, a TypeScript recipe, and a Rust
+   implementation linking no compiled module) over 34 published vectors
+   with three pinned signatures, the high-S `k1` twin included. A `v1`
+   challenge commits to its own nonce point and grinding nonce, so it
+   cannot exist before it is signed and a suite verifies such a
+   signature rather than pinning it. Pending are the r1 challenges and
+   signature vectors, `request_digest`, `signin_digest`, the `read_pk`
+   derivation, GrantViewSeal, and the negative key vectors.
 6. **Deploy budget.** The full `spec_version = 2` roster deployed in
    waves within the per-block parameters; authority retirement after the
    last wave; a `spec_version = 1` account shown unable to gain grants
-   (GR-3, GR-13; Backwards Compatibility).
+   (GR-3, GR-13; Backwards Compatibility). Status: partial. Green on
+   node for the three-wave deploy of the thirty-circuit roster at the
+   measured per-update ceiling of section 6.7, each update at the
+   authority counter read from chain, and for the retirement landing in
+   the same update as the last batch. Missing: the `spec_version = 1`
+   control, which needs a compiled pre-grants build of the contract that
+   the reference tree does not carry, since its source is the version-2
+   one.
 7. **Read handover.** Read-only grant; seal, decrypt, verify the secret
    against `enc_key`, inbox walk with commitment verification; rotate-
    before-share hides spent history; a second read grant issued and the
@@ -2151,16 +2490,42 @@ the following. Each item names the invariants it exercises.
    from the owner's client with no authoriser page (GR-1, GR-17).
 9. **Composition.** Revoke plus issue in one transaction; batch issuance
    in one transaction; two grant calls under one grant with consecutive
-   nonces; reordering invalidates (GR-5, GR-11, GR-13).
+   nonces; reordering refused (GR-5, GR-11, GR-13). Status: green on
+   node. Each of the three rides one transaction, the third appending
+   both change entries in it, and the reordered pair is refused at
+   admission on a transcript read mismatch rather than by a signature
+   failure (section 7.4). One run saw the reordered pair included with
+   only one of its two calls applied, which is the same verdict by
+   another route; a record advancing by two under the reordered graft
+   would be the counter-example.
 10. **Change and concurrency.** A grantee shielded spend with the change
     entry appended in the same transaction under one-hop; a
     `rotate_enc_key` between signing and submission aborts the call with
-    no orphaned change; owner and grantee selecting the same coin
-    (proving failure, no mis-spend); a coin above `max_coin_value` aborts
-    (GR-7; INV-3, INV-4, INV-5, INV-6).
+    no orphaned change; owner and grantee selecting the same coin (the
+    loser refused by the node as a double spend, no mis-spend); a coin
+    above `max_coin_value` aborts (GR-7; INV-3, INV-4, INV-5, INV-6).
+    Status: partial. Green on node for the change entry appended in the
+    same transaction under one hop, for a coin above `max_coin_value`
+    aborting, and for the same-coin race: the owner's call landed, the
+    grantee's was refused by the node as a double spend with the grant
+    record untouched, and the same grantee call rebuilt against the
+    post-spend state still proved, so the refusal is the ledger's and
+    not the prover's. The same-transaction reading rests on the contract
+    source, where the append is inside the circuit, and on the chain
+    showing no other contract action between the call and the appended
+    entry; the suite's own assertion is the `inbox_count` delta across
+    the call, which is weaker. Missing: a `rotate_enc_key` between
+    signing and submission shown to abort the call with no orphaned
+    change, which the stale-`enc_pk` row of item 2 does not cover, since
+    it proves the abort and says nothing about the change.
 11. **Kill totality.** `revoke_all_grants` and a recovery epoch bump each
     inert every record; re-issue under the new generation or epoch
-    succeeds (GR-9).
+    succeeds (GR-9). Status: partial. Green on node for
+    `revoke_all_grants`: the generation bumped, the register cleared, a
+    pre-kill grant refused as `unknown grant` with no state change, and a
+    re-issue under the new generation spending. Missing: the recovery
+    epoch bump, which no circuit in the roster performs until the
+    recovery seam lands, so that half cannot be run here at all.
 12. **r1 grantee.** End to end once the secp256r1 surface ships; an
     extension-bearing assertion and the identity key as negative cases;
     `rp_commit` opened at the seam (GR-14, GR-15).
@@ -2239,8 +2604,17 @@ the following. Each item names the invariants it exercises.
   [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
   repository; the commit the evidence was taken at is recorded on
   submission.
-- E1 stage one (Implementation): the findings at `contract/GRANTS-E1.md`
-  and the vectors at `contract/src/tests/vectors/grants-e1.json` on the
+- E1, both stages (Implementation): the findings at
+  `contract/GRANTS-E1.md` and the vectors at
+  `contract/src/tests/vectors/grants-e1.json` on the branch
+  `nicolasdp/grants-seam-e1` of the
+  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
+  repository.
+- E2 (Implementation): the findings at `contract/GRANTS-E2.md` and the
+  evidence at `contract/evidence/grants-e2-*.json`, twelve files, one
+  per group (deploy, issue, spend, rejections, liveness, direct, kill,
+  keys, expiry, composition, concurrency, and proving), together with
+  the ceiling bisection at `contract/evidence/wave-ceiling.json`, on the
   branch `nicolasdp/grants-seam-e1` of the
   [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
   repository.
