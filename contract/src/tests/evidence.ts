@@ -15,6 +15,13 @@ export type Verdict = 'PASS' | 'FAIL' | 'PARTIAL';
 export interface Evidence {
   testId: string;
   name: string;
+  /**
+   * An explicit file name under evidence/, for a probe whose evidence file is
+   * cited by a fixed name the default `<testId>-<name>.json` composition
+   * cannot produce. Omitted by every other caller, which therefore keeps the
+   * composed name unchanged.
+   */
+  fileName?: string;
   description: string;
   verdict: Verdict;
   txHash?: string;
@@ -38,7 +45,7 @@ export function writeEvidence(e: Omit<Evidence, 'ranAt' | 'stack'>): void {
       proofServer: process.env.MIDNIGHT_PROOF_TAG ?? 'midnightntwrk/proof-server:9.0.0-rc.6',
     },
   };
-  const file = path.join(EVIDENCE_DIR, `${e.testId.toLowerCase()}-${e.name}.json`);
+  const file = path.join(EVIDENCE_DIR, e.fileName ?? `${e.testId.toLowerCase()}-${e.name}.json`);
   fs.writeFileSync(
     file,
     JSON.stringify(full, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2),

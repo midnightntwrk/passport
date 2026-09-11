@@ -1,0 +1,329 @@
+{
+  "testId": "grants-e2-rejections",
+  "name": "grants-conformance-rejections",
+  "description": "Scoped grants Testing 2: the rejection matrix, each a build-time abort with no transaction and no state change",
+  "verdict": "PASS",
+  "note": "The rejection matrix: every item aborted at build time with no transaction, and the ledger snapshot (round, auth_nonce, inbox_count, device_count, grant_generation, register size) was identical before and after each one.",
+  "details": {
+    "capExhaustingSpendTx": "007650cf3bfebe13fee0f9632ecfaecf64db00a4edd15d93a862ac278d914a4504",
+    "revokeBTx": "0020cf6e1f6ff10a688a537be8d78933047adbd908a5786133f4ea0bcda53bba91",
+    "replayRefusedBy": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cumulative cap exceeded",
+    "rotateEncKeyTx": "0073e25f916a5cb2516df19625c491bf3aa025ccce8e6b293055ec4e1d73946e47",
+    "encKeyOld": "930846a77c3a11f2ad9011e2baf63d94747cf01740148bd6a012734a9e8b1c19",
+    "encKeyNew": "6329638a16a1655e4420dec3476c78cec1a1bfff25c1a4f095b6303e0e33ac09",
+    "inboxEntriesStillReadableWithTheOldSecret": 5,
+    "retainedOldSecret": "58a4ae877bcb4902…",
+    "items": [
+      {
+        "item": "over per_call_cap (grant A, 250 against a 200 per-call cap)",
+        "expected": [
+          "amount above per-call cap"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "13",
+          "authNonce": "8",
+          "inboxCount": "4",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "13",
+          "authNonce": "8",
+          "inboxCount": "4",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: amount above per-call cap"
+      },
+      {
+        "item": "over cap (grant A at 500 of 500, asks 100 within the per-call cap)",
+        "expected": [
+          "cumulative cap exceeded"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cumulative cap exceeded"
+      },
+      {
+        "item": "wrong spent_prev opening (grant A, spent_prev off by one)",
+        "expected": [
+          "spent opening mismatch"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: spent opening mismatch"
+      },
+      {
+        "item": "wrong recipient under a pin (grant G pinned to another coin public key)",
+        "expected": [
+          "recipient not admitted by pin"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: recipient not admitted by pin"
+      },
+      {
+        "item": "coin above max_coin_value (grant D, max_coin_value 50)",
+        "expected": [
+          "coin above max_coin_value"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "14",
+          "authNonce": "8",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: coin above max_coin_value"
+      },
+      {
+        "item": "revoked grant (grant B after revoke_grant_with_jubjub)",
+        "expected": [
+          "grant revoked"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant revoked"
+      },
+      {
+        "item": "expired grant (grant E, expires_at 100 s in the past)",
+        "expected": [
+          "grant expired"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant expired"
+      },
+      {
+        "item": "envelope-1 grantee through withdraw_shielded_with_grant_k256 (grant C)",
+        "expected": [
+          "envelope not admitted for a spend grant"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: envelope not admitted for a spend grant"
+      },
+      {
+        "item": "a grantee key against a device-gated circuit (rotate_enc_key_with_jubjub)",
+        "expected": [
+          "unknown device entry"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry"
+      },
+      {
+        "item": "cross-arm: the jubjub grantee's key at grant B's origin and slot",
+        "expected": [
+          "unknown grant"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown grant"
+      },
+      {
+        "item": "replayed grant A authorisation (identical resubmission)",
+        "expected": [
+          "cumulative cap exceeded",
+          "spent opening mismatch",
+          "invalid grant signature",
+          "range error"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "15",
+          "authNonce": "9",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cumulative cap exceeded"
+      },
+      {
+        "item": "stale enc_pk (grant L signed against the pre-rotation key)",
+        "expected": [
+          "stale encryption key"
+        ],
+        "matchedExpected": true,
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "16",
+          "authNonce": "10",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "16",
+          "authNonce": "10",
+          "inboxCount": "5",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "7"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: stale encryption key"
+      }
+    ],
+    "itemCount": 12
+  },
+  "ranAt": "2026-09-11T16:52:10.796Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

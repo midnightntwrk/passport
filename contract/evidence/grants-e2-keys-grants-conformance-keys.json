@@ -1,0 +1,545 @@
+{
+  "testId": "grants-e2-keys",
+  "name": "grants-conformance-keys",
+  "description": "Scoped grants Testing 2 (key rows), GR-14, GR-4, GR-2 and the authorisation MIP S10/S12: grantee-key validation on both arms, on node",
+  "verdict": "PASS",
+  "note": "Grantee-key validation as the seam performs it on node: the identity in both encodings the k256 type admits, an off-curve pair, a point of another curve of the same shape (the invalid-curve twin), the JubJub identity (0, 1), a small-order point, an off-curve JubJub pair, each arm's key against the other arm's twin, and a device key issued as a grantee. Each row records whether a transaction existed, the stage the refusal landed at, and the verbatim text. The issue leg is the finding: issue_grant takes grant_id, never the key, so no key check is possible in-circuit at issuance, and the reference client does not perform the section 3.3 check either.",
+  "details": {
+    "rows": [
+      {
+        "item": "k1 identity, flagged encoding {0, 0, identity: true}",
+        "what": "the secp256k1 point at infinity as a grantee key",
+        "issueTx": "00e71eca69839d15eccd0d925b93d8843de9ae02e2cd58df7de72a5aab27975da9",
+        "grantId": "95c21a67c919f761aaedb8070d5b86786f6f73714e2eb8a45cd31d89fd774338",
+        "expected": [
+          "device key is the point at infinity"
+        ],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2454:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed assert: device key is the point at infinity"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_k256'"
+            },
+            {
+              "name": "CompactError",
+              "tag": null,
+              "message": "failed assert: device key is the point at infinity"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "30",
+          "authNonce": "15",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "2"
+        },
+        "ledgerAfter": {
+          "round": "30",
+          "authNonce": "15",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "2"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "k1 identity, unflagged twin {0, 0, identity: false}",
+        "what": "the same point under the encoding a flag-based guard would miss; same grant_id, same record",
+        "issueTx": "00e71eca69839d15eccd0d925b93d8843de9ae02e2cd58df7de72a5aab27975da9",
+        "grantId": "95c21a67c919f761aaedb8070d5b86786f6f73714e2eb8a45cd31d89fd774338",
+        "expected": [
+          "device key is the point at infinity"
+        ],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2462:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed assert: device key is the point at infinity"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_k256'"
+            },
+            {
+              "name": "CompactError",
+              "tag": null,
+              "message": "failed assert: device key is the point at infinity"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "30",
+          "authNonce": "15",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "2"
+        },
+        "ledgerAfter": {
+          "round": "30",
+          "authNonce": "15",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "2"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "k1 off-curve coordinate pair (1, 1)",
+        "what": "a coordinate pair satisfying no secp256k1 point equation",
+        "issueTx": "005fe6061336db4b30af0d3b0eac5f059da56280c3cc37834a1d3d11f0d0ec5585",
+        "grantId": "6cbb5c4b1dfc1f68255fe7a66f4e488ef34ad4e6b64b028f96f9034f45ca9609",
+        "expected": [],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2478:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed assert: invalid grant signature"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_k256'"
+            },
+            {
+              "name": "CompactError",
+              "tag": null,
+              "message": "failed assert: invalid grant signature"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "31",
+          "authNonce": "16",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "3"
+        },
+        "ledgerAfter": {
+          "round": "31",
+          "authNonce": "16",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "3"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "k1 invalid-curve twin on y^2 = x^3 + 2",
+        "what": "a well-formed point of a different curve of the same shape — what an invalid-curve attack presents",
+        "issueTx": "00d222f9d0acb23e0fdef7738e3bb0c22d7f340d5527ee298d59241eee94655e1d",
+        "grantId": "0c4c5512aaa11580f2e5920c72bfd90c8c97dfef641dedf0eb53699824eb0ece",
+        "expected": [],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2499:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed assert: invalid grant signature"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_k256'"
+            },
+            {
+              "name": "CompactError",
+              "tag": null,
+              "message": "failed assert: invalid grant signature"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "32",
+          "authNonce": "17",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "4"
+        },
+        "ledgerAfter": {
+          "round": "32",
+          "authNonce": "17",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "4"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "v1 grantee key presented against the k256 twin (another curve's shape)",
+        "what": "the JubJub grantee key's coordinates carried as a Secp256k1Point through withdraw_shielded_with_grant_k256",
+        "issueTx": "0049fdeb54813c09364ac802187b22a57f7587ef493ba2b214323d8886013c35c0",
+        "grantId": "3fb85cd89e92dce1dc31e551fda546eabb8c63a499fad12a9827376c9add0666",
+        "expected": [],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2515:7)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed assert: invalid grant signature"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_k256'"
+            },
+            {
+              "name": "CompactError",
+              "tag": null,
+              "message": "failed assert: invalid grant signature"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "33",
+          "authNonce": "18",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "5"
+        },
+        "ledgerAfter": {
+          "round": "33",
+          "authNonce": "18",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "5"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "v1 identity (0, 1)",
+        "what": "the JubJub identity as a grantee key",
+        "issueTx": "002aefb35f3b5c0b4bbd466fa79d6df3eaee289eb32a83c5c1489589d9783483d9",
+        "grantId": "24d8448f2b15d0c9b6fd42444989a7a3431546286a2fefc7ba4a52dc8df0db52",
+        "expected": [
+          "grantee key has small order"
+        ],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grantee key has small order",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grantee key has small order",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grantee key has small order\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2541:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grantee key has small order"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed assert: grantee key has small order"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_jubjub'"
+            },
+            {
+              "name": "CompactError",
+              "tag": null,
+              "message": "failed assert: grantee key has small order"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "34",
+          "authNonce": "19",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "6"
+        },
+        "ledgerAfter": {
+          "round": "34",
+          "authNonce": "19",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "6"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "v1 order-2 point (0, q - 1)",
+        "what": "a point of small order but outside the prime-order subgroup",
+        "issueTx": "00aaca02f1c16a0a24f5bc70e9501718505f3b293f842e84bf9e5c18ee9fff34ce",
+        "grantId": "faecb98f9592755bf1402b9307dfc886a1b9798d9fa65ce15ec9d645a5bb10d2",
+        "expected": [],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2556:22)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_jubjub'"
+            },
+            {
+              "name": "RuntimeError",
+              "tag": null,
+              "message": "unreachable"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "35",
+          "authNonce": "20",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "7"
+        },
+        "ledgerAfter": {
+          "round": "35",
+          "authNonce": "20",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "7"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "v1 off-curve coordinate pair (1, 1)",
+        "what": "a pair satisfying neither the twisted-Edwards equation nor any subgroup condition",
+        "issueTx": "00a111f4b01890e1aeee30d8748449817e2298ca2020e56d881d36799f5edc0d71",
+        "grantId": "f757c14d601d8eb5238e253ce02431ae29bb718e127f0958d2adf4837abd8b75",
+        "expected": [],
+        "matchedExpected": true,
+        "refusalStage": "build",
+        "transactionSubmitted": false,
+        "txId": null,
+        "error": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'",
+        "errorChain": {
+          "name": "Error",
+          "message": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'",
+          "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:89:14)\n    at async CustodyAccount.withdrawShieldedWithGrantAuth (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/wallet/account.ts:746:15)\n    at async keyRow (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2393:24)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:2575:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/src/tests/grants-conformance.ts:987:1)",
+          "causeChain": [
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'"
+            },
+            {
+              "name": "ContractRuntimeError",
+              "tag": "ContractRuntimeError",
+              "message": "Error executing circuit 'withdraw_shielded_with_grant_jubjub'"
+            },
+            {
+              "name": "Error",
+              "tag": null,
+              "message": "failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+            }
+          ]
+        },
+        "ledgerBefore": {
+          "round": "36",
+          "authNonce": "21",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "8"
+        },
+        "ledgerAfter": {
+          "round": "36",
+          "authNonce": "21",
+          "inboxCount": "15",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "8"
+        },
+        "stateUnchanged": true
+      },
+      {
+        "item": "k1 grantee key presented against the jubjub twin",
+        "what": "the secp256k1 grantee key coordinates carried as a JubjubPoint",
+        "refusalStage": "before a transaction exists (client-side encoding or issuance)",
+        "transactionSubmitted": false,
+        "error": "out of bounds for prime field",
+        "kx": "48170741555215968393839623872020190605682429647044408392300594581821913520118",
+        "jubjubBaseFieldModulus": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "coordinateAboveTheModulus": true
+      }
+    ],
+    "refillDeposits": [
+      {
+        "value": "1000",
+        "nonce": "501683a2e7a09fdef0309d4ba888c7a890a8c2450c888d78ea383bd829e29cdf",
+        "candidates": [
+          "443",
+          "444"
+        ]
+      },
+      {
+        "value": "1000",
+        "nonce": "d909e733749a2505bfe6597e964180c7808433328006215440506fc671d6d1e2",
+        "candidates": [
+          "446",
+          "447"
+        ]
+      },
+      {
+        "value": "1000",
+        "nonce": "cd657611fb793d743911c482f72663416a147235d4c126ecf1fa9408ef62ee60",
+        "candidates": [
+          "449",
+          "450"
+        ]
+      },
+      {
+        "value": "1000",
+        "nonce": "b1f99df24203022a33a3bfd3fffa2ef7676680829ff94678f2602ee5f0b12e4b",
+        "candidates": [
+          "452",
+          "453"
+        ]
+      }
+    ],
+    "coinAbandonedAfterS9": {
+      "value": "25",
+      "nonce": "ea7bacf669dd4692c47e8a6e66b215f3bacfb2a8a411b17fc57d0cfacaa0d500"
+    },
+    "k256IdentityEncodingsShareOneGrantId": true,
+    "issuanceFinding": "ISSUED WITHOUT COMPLAINT. issue_grant_with_<arm> takes grant_id (Bytes<32>) and never the grantee key, so the contract cannot apply the section 3.3 checks at issuance; and CustodyAccount.issueGrant, which is this package's authoriser, does not apply them either. Every weak-key row below therefore has a live, well-formed record behind it, and the only thing that refuses is the seam at use.",
+    "k256OffCurveIsOffCurve": true,
+    "k256InvalidCurvePoint": {
+      "curve": "y^2 = x^3 + 2",
+      "x": "3",
+      "y": "96328686030029451746606799749843082175136920865428714315981278333859709946682",
+      "onSecp256k1": false
+    },
+    "smallOrderRejectionSite": "the RUNTIME, not the guard: circuit execution trapped inside the curve built-in before the guard could compare anything, so the rejection is the runtime's and the assert is never reached",
+    "smallOrderRejectionText": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_with_grant_jubjub'",
+    "deviceKeyAsGranteeIssueTx": "00857ad13100e0a1d8c26134270b3754f19cf8b72e253e5a25d34e97e41fb4b2b5",
+    "deviceKeyAsGranteeIssueRefused": false,
+    "deviceKeyAsGranteeSpendTx": "00c133008820531e8ece7be4e559a42c3521234ebf6f7b75f8184f24a6ba9a7853",
+    "deviceKeyAsGranteeRecord": {
+      "epoch": "0",
+      "gen": "1",
+      "issued_at": "22",
+      "nonce": "1",
+      "active": true,
+      "spent_commit": "8e85ac18c1b4f15025f514d1116ffbae9c2951b7b2b673da1a247391a2e46aff",
+      "per_call_cap": "20",
+      "cap": "40",
+      "expires_at": "0",
+      "read": true,
+      "op_withdraw_shielded": true,
+      "op_withdraw_shielded_to_contract": false
+    },
+    "deviceKeyAsGranteeSpendAttempts": [
+      {
+        "mtIndex": "444",
+        "outcome": "accepted: 00c133008820531e8ece7be4e559a42c3521234ebf6f7b75f8184f24a6ba9a7853"
+      }
+    ],
+    "gr2Finding": "GR-2 is an AUTHORISER obligation only, confirmed on node. A key enrolled as a device of this account was issued a grant and spent under the grant seam in the same run: the seam looks the key up in `grants` under the grant tag family and finds a live record, and nothing in the contract can see that the same key also holds a device entry, because device entries are salted rolling commitments rather than stored keys. The two authorities remain disjoint in the sense GR-2 states (no ONE credential satisfies both seams in one call), but the refusal to issue is enforceable only off-chain, and this package's client does not enforce it.",
+    "rowCount": 9
+  },
+  "ranAt": "2026-09-11T16:52:10.797Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

@@ -209,7 +209,7 @@ export class CustodyAccount {
       salt,
       activate: (device, s) => {
         const name = `activate_initial_device_with_${device.arm}`;
-        return submitWithDustRetry(name, () => (found as any).callTx[name](device.pk, s));
+        return submitWithDustRetry(name, () => (found as any).callTx[name](...activationArgs(device, s)));
       },
       finish: () => {
         const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
@@ -222,7 +222,7 @@ export class CustodyAccount {
   /** Low-level activation call against a live account (bootstrap probes). */
   activateInitialDevice(device: AnyDevice, salt: Uint8Array): Promise<unknown> {
     const name = `activate_initial_device_with_${device.arm}`;
-    return submitWithDustRetry(name, () => this.handle.callTx[name](device.pk, salt));
+    return submitWithDustRetry(name, () => this.handle.callTx[name](...activationArgs(device, salt)));
   }
 
   static async connect(
@@ -769,6 +769,19 @@ export class CustodyAccount {
   get callTx(): any {
     return this.handle.callTx;
   }
+}
+
+/**
+ * The arm's activation arguments. The k256 activation takes the device's
+ * envelope as a third argument, because the boot commitment and the entry it
+ * derives both bind it (`derive_boot_commitment_with_k256(salt, pk,
+ * envelope)`); the jubjub arm has no envelope. Passing only `(pk, salt)` on
+ * the k256 arm fails before a transaction exists with
+ * `activate_initial_device_with_k256: expected 4 arguments (as invoked from
+ * Typescript), received 3`.
+ */
+function activationArgs(device: AnyDevice, salt: Uint8Array): unknown[] {
+  return device.arm === 'k256' ? [device.pk, salt, device.envelope] : [device.pk, salt];
 }
 
 function pkKey(pk: { x: bigint; y: bigint }): string {
