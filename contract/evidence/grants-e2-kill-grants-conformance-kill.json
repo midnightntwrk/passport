@@ -1,0 +1,55 @@
+{
+  "testId": "grants-e2-kill",
+  "name": "grants-conformance-kill",
+  "description": "Scoped grants Testing 11: revoke_all_grants makes every record inert; re-issue under the new generation works",
+  "verdict": "PASS",
+  "note": "revoke_all_grants bumped grant_generation to 1 and cleared the register; a call under a pre-kill grant fails at the membership assert; a grant re-issued under the new generation carries gen 1 and nonce 0 and authorises a spend.",
+  "details": {
+    "grantGenerationBefore": "0",
+    "grantCountBefore": "8",
+    "revokeAllTx": "0004ecdb551439ed54db73f4593a3c4c468eed4b22fe7fe6d6252c65ce44cfed2f",
+    "grantGenerationAfter": "1",
+    "grantsEmptyAfter": true,
+    "grantCountAfter": "0",
+    "postKillSpendError": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown grant",
+    "postKillStateUnchanged": true,
+    "postKillMatchedUnknownGrant": true,
+    "reissuedRecord": {
+      "epoch": "0",
+      "gen": "1",
+      "issued_at": "14",
+      "nonce": "0",
+      "active": true,
+      "spent_commit": "6dc0b33cf86aa7c64e8fd4dc9535d711133b9c3a15ab3e85740625e1808b199e",
+      "per_call_cap": "50",
+      "cap": "100",
+      "expires_at": "0",
+      "read": true,
+      "op_withdraw_shielded": true,
+      "op_withdraw_shielded_to_contract": false
+    },
+    "reissuedGenerationIsOne": true,
+    "reissuedNonceIsZero": true,
+    "reissuedSpendTx": "0017b37bdad4d47c1b828c818b24ad2a4e89bfbb1269d6e82114a02c60f512ef0e",
+    "reissuedRecordAfterSpend": {
+      "epoch": "0",
+      "gen": "1",
+      "issued_at": "14",
+      "nonce": "1",
+      "active": true,
+      "spent_commit": "27d1e3f4058b190a59c4d3f49aed2dd882147bd1cee9fcf5f7f3afa14ebb6e1b",
+      "per_call_cap": "50",
+      "cap": "100",
+      "expires_at": "0",
+      "read": true,
+      "op_withdraw_shielded": true,
+      "op_withdraw_shielded_to_contract": false
+    }
+  },
+  "ranAt": "2026-09-11T16:52:10.797Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

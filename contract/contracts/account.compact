@@ -235,6 +235,51 @@ export ledger booted: Boolean;
 // per account, so pre-activation state carries no cross-account-stable
 // device value.
 
+// Scoped grants (the scoped-grants MIP, section 4.1). A grant admits one
+// grantee key to a bounded subset of the withdraw operations; the grantee
+// is not a device, never counts toward device_count, and never touches
+// auth_nonce. The record stores no key, no origin, and no scheme: it is
+// keyed by grant_id, a contract-recomputable commitment to (account, arm,
+// key, [envelope,] origin_hash, slot), and every private field of the scope
+// is held as a salted commitment. The struct field names, types, and widths
+// are the MIP's; a grant-capable account exposes spec_version = 2.
+
+export struct GrantScope {
+  op_withdraw_unshielded:           Boolean;
+  op_withdraw_shielded:             Boolean;
+  op_withdraw_shielded_to_contract: Boolean;
+  read:                             Boolean;
+  object_commit:                    Bytes<32>;
+  per_call_cap:                     Uint<128>;
+  cap:                              Uint<128>;
+  expires_at:                       Uint<64>;
+  rp_commit:                        Bytes<32>;
+  read_pk_hash:                     Bytes<32>;
+  window_len:                       Uint<64>;
+  window_cap:                       Uint<128>;
+}
+
+export struct GrantRecord {
+  epoch:         Uint<32>;
+  gen:           Uint<32>;
+  issued_at:     Uint<64>;
+  nonce:         Uint<64>;
+  spent_commit:  Bytes<32>;
+  window_start:  Uint<64>;
+  window_spent:  Uint<128>;
+  active:        Boolean;
+  scope:         GrantScope;
+}
+
+export ledger grants: Map<Bytes<32>, GrantRecord>;
+// Keyed by grant_id. Written only by the device-gated lifecycle circuits
+// (whole record) and by a grant twin (its own record's nonce and
+// spent_commit). A record with active = false is a tombstone.
+
+export ledger grant_generation: Uint<32>;
+// Bumped only by revoke_all_grants. A record whose gen differs from it is
+// inert (GR-9), as is one whose epoch differs from device_epoch.
+
 // ── Constructor ─────────────────────────────────────────────────────────────
 //
 // MIP-0013 §3 semantics via the boot commitment (see the `boot` cell): the
@@ -247,12 +292,13 @@ constructor(initial_device_boot: Bytes<32>, encryption_key: Bytes<32>) {
   round        = 0 as Uint<64>;
   enc_key      = disclose(encryption_key);
   inbox_count  = 0 as Uint<64>;
-  spec_version = 1 as Uint<32>;
+  spec_version = 2 as Uint<32>;
   boot         = disclose(initial_device_boot);
   booted       = false;
   device_epoch = 0 as Uint<32>;
   device_count = 0 as Uint<8>;
   auth_nonce   = 0 as Uint<64>;
+  grant_generation = 0 as Uint<32>;
 }
 
 // ── Bootstrap (per arm) ─────────────────────────────────────────────────────
@@ -1261,4 +1307,1099 @@ export circuit remove_device_with_k256(
     kernel.self(), pk, envelope, device_epoch,
     ((use_counter + (1 as Uint<64>)) as Uint<64>)
   ));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Scoped grants (the scoped-grants MIP): a second authoriser class behind
+// the same custody chips.
+//
+// A grant twin `<operation>_with_grant_<arm>` verifies a grant record and a
+// grantee signature where the device twin verifies a device entry and a
+// device signature, then calls the SAME custody chip. The grant seam is
+// three chips per grantee arm (authenticate, check the spend scope, settle)
+// over the pure derivations below, the scope chip and the shielded-bounds
+// helper being arm-agnostic and shared; the lifecycle circuits (issue,
+// revoke, revoke all) sit behind the unchanged device seam of the device
+// arm that authorises them. Grant calls read and advance the record's own
+// nonce and never auth_nonce (GR-5), so a grantee cannot invalidate a
+// pending owner authorisation.
+//
+// Roster at spec_version = 2 (MIP section 6.1): 30 non-pure circuits, the
+// 18 existing ones (four permissionless circuits, the two deposits and the
+// two initial-device activations, and seven device-gated operations on
+// each of the two device arms), 6 grant twins (three per grantee arm,
+// jubjub and k256), and 6 lifecycle circuits (three per device arm). Both
+// grantee arms and both device arms are populated below.
+//
+// Every preimage is a byte concatenation of fixed-width elements hashed
+// with SHA-256 (persistentHash over byte atoms is SHA-256 of the raw
+// concatenation); the exported pure circuits are one implementation of the
+// recipe, not its definition. Tag families (MIP section 14):
+//   midnight:account:grant:id:{v1,k1:v1}          raw 32-byte pad, element
+//   midnight:account:grant:{obj,spent,rp,scope}:v1 raw 32-byte pad, element
+//   midnight:account:grant:auth:v1:<op>            hashed from a 64-byte pad,
+//                                                  the jubjub grantee arm
+//   midnight:account:grant:auth:k1:v1:<op>         hashed from a 64-byte pad,
+//                                                  the k256 grantee arm
+//   midnight:account:auth:{v1,k1:v1}:{issue_grant,revoke_grant,
+//     revoke_all_grants}                            the existing device family
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Grant identity (MIP section 4.3) ────────────────────────────────────────
+//
+// Recomputed in-circuit from the presented key at every use, so a mismatch
+// of key, origin, slot, arm, or envelope fails at the membership assert. The
+// k256 key is bound as the little-endian affine coordinate bytes, as the
+// arm's device entries bind it; the JubJub key as the JubjubPoint element.
+
+export pure circuit derive_grant_id_with_k256(
+  self_addr:   ContractAddress,
+  pk:          Secp256k1Point,
+  envelope:    Uint<8>,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<8>, Bytes<32>, Uint<8>]>(
+    [pad(32, "midnight:account:grant:id:k1:v1"), self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     envelope, origin_hash, slot]
+  );
+}
+
+export pure circuit derive_grant_id_with_jubjub(
+  self_addr:   ContractAddress,
+  pk:          JubjubPoint,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, Bytes<32>, Uint<8>]>(
+    [pad(32, "midnight:account:grant:id:v1"), self_addr, pk, origin_hash, slot]
+  );
+}
+
+// ── Commitments and the scope digest (MIP section 4.5) ──────────────────────
+//
+// The hiding of all three commitments rests on scope_salt being fresh per
+// issuance and staying with the owner and the grantee.
+
+export pure circuit derive_grant_object_commit(
+  scope_salt:     Bytes<32>,
+  color:          Bytes<32>,
+  recipient_kind: Uint<8>,
+  recipient:      Bytes<32>,
+  max_coin_value: Uint<128>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>, Bytes<32>, Uint<128>]>(
+    [pad(32, "midnight:account:grant:obj:v1"), scope_salt, color,
+     recipient_kind, recipient, max_coin_value]
+  );
+}
+
+export pure circuit derive_grant_spent_commit(
+  scope_salt: Bytes<32>,
+  spent:      Uint<128>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Uint<128>]>(
+    [pad(32, "midnight:account:grant:spent:v1"), scope_salt, spent]
+  );
+}
+
+export pure circuit derive_grant_rp_commit(
+  scope_salt: Bytes<32>,
+  rp_id_hash: Bytes<32>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>]>(
+    [pad(32, "midnight:account:grant:rp:v1"), scope_salt, rp_id_hash]
+  );
+}
+
+// The single element through which the issue_grant device challenge binds
+// the whole plaintext scope. Flags enter as single bytes: a Boolean's
+// field-aligned encoding is a one-byte atom (0x01 true, 0x00 false), so the
+// Boolean elements below hash exactly as flag(b) of the MIP's notation.
+export pure circuit derive_grant_scope_digest(
+  scope_salt:                       Bytes<32>,
+  op_withdraw_unshielded:           Boolean,
+  op_withdraw_shielded:             Boolean,
+  op_withdraw_shielded_to_contract: Boolean,
+  read:                             Boolean,
+  color:                            Bytes<32>,
+  recipient_kind:                   Uint<8>,
+  recipient:                        Bytes<32>,
+  max_coin_value:                   Uint<128>,
+  per_call_cap:                     Uint<128>,
+  cap:                              Uint<128>,
+  expires_at:                       Uint<64>,
+  rp_id_hash:                       Bytes<32>,
+  read_pk_hash:                     Bytes<32>,
+  window_len:                       Uint<64>,
+  window_cap:                       Uint<128>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Boolean, Boolean, Boolean, Boolean, Bytes<32>, Uint<8>, Bytes<32>, Uint<128>, Uint<128>, Uint<128>, Uint<64>, Bytes<32>, Bytes<32>, Uint<64>, Uint<128>]>(
+    [pad(32, "midnight:account:grant:scope:v1"), scope_salt,
+     op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read,
+     color, recipient_kind, recipient, max_coin_value,
+     per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash, window_len, window_cap]
+  );
+}
+
+// ── Grant challenge constructions, grantee arm k256 (MIP section 6.3) ───────
+//
+// Preimage:
+//   [DST, self, pk_x, pk_y, grant_id, issued_at, ...args, ...witness_values,
+//    g.nonce]
+// with DST = persistentHash<[Bytes<64>]> of
+// "midnight:account:grant:auth:k1:v1:<operation>" zero-padded to 64 bytes.
+// No signature term and no grinding nonce, as on the device arm. grant_id
+// makes one signature unusable across two grants of the same key;
+// issued_at isolates incarnations of one id (GR-6); the record's nonce,
+// read in-circuit, is the freshness element (GR-5).
+
+export pure circuit challenge_withdraw_unshielded_with_grant_k256(
+  self_addr:   ContractAddress,
+  pk:          Secp256k1Point,
+  grant_id:    Bytes<32>,
+  issued_at:   Uint<64>,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  recipient:   UserAddress,
+  nonce_value: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:grant:auth:k1:v1:withdraw_unshielded")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>, Bytes<32>, Uint<128>, UserAddress, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     grant_id, issued_at, color, amount, recipient, nonce_value]
+  );
+}
+
+// The shielded twin binds the held_coin return value (AUTH-10) and the
+// change entry the grantee pre-encrypted, with the enc_key it encrypted to.
+export pure circuit challenge_withdraw_shielded_with_grant_k256(
+  self_addr:    ContractAddress,
+  pk:           Secp256k1Point,
+  grant_id:     Bytes<32>,
+  issued_at:    Uint<64>,
+  recipient:    ZswapCoinPublicKey,
+  color:        Bytes<32>,
+  amount:       Uint<128>,
+  change_entry: Bytes<192>,
+  enc_pk:       Bytes<32>,
+  coin:         QualifiedShieldedCoinInfo,
+  nonce_value:  Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:grant:auth:k1:v1:withdraw_shielded")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     grant_id, issued_at, recipient, color, amount, change_entry, enc_pk, coin, nonce_value]
+  );
+}
+
+// The contract-recipient twin binds the ContractAddress recipient in place
+// of the Zswap key; otherwise the shielded twin's shape.
+export pure circuit challenge_withdraw_shielded_to_contract_with_grant_k256(
+  self_addr:    ContractAddress,
+  pk:           Secp256k1Point,
+  grant_id:     Bytes<32>,
+  issued_at:    Uint<64>,
+  recipient:    ContractAddress,
+  color:        Bytes<32>,
+  amount:       Uint<128>,
+  change_entry: Bytes<192>,
+  enc_pk:       Bytes<32>,
+  coin:         QualifiedShieldedCoinInfo,
+  nonce_value:  Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:grant:auth:k1:v1:withdraw_shielded_to_contract")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>, ContractAddress, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     grant_id, issued_at, recipient, color, amount, change_entry, enc_pk, coin, nonce_value]
+  );
+}
+
+// ── Grant challenge constructions, grantee arm jubjub (MIP section 6.3) ─────
+//
+// Preimage:
+//   [DST, self, sig_r, pk, grant_id, issued_at, ...args, ...witness_values,
+//    g.nonce, grind_nonce]
+// with DST = persistentHash<[Bytes<64>]> of
+// "midnight:account:grant:auth:v1:<operation>" zero-padded to 64 bytes.
+// As on the jubjub device arm, the signature commitment R and a grinding
+// nonce enter the preimage: the signer grinds grind_nonce until the hash,
+// read little-endian, is strictly below the JubJub subgroup order
+// (MIP-0013 section 5.2), so the in-circuit scalar cast is canonical.
+// grant_id, issued_at, and the record's nonce play the parts described for
+// the k256 family above (GR-5, GR-6). No envelope exists on this arm.
+
+export pure circuit challenge_withdraw_unshielded_with_grant_jubjub(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  grant_id:    Bytes<32>,
+  issued_at:   Uint<64>,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  recipient:   UserAddress,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:grant:auth:v1:withdraw_unshielded")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, grant_id, issued_at, color, amount, recipient, nonce_value, grind_nonce]
+  );
+}
+
+// The shielded twins bind the held_coin return value (AUTH-10) and the
+// change entry the grantee pre-encrypted, with the enc_key it encrypted to:
+// fourteen members, the qualified coin one of them.
+export pure circuit challenge_withdraw_shielded_with_grant_jubjub(
+  self_addr:    ContractAddress,
+  sig_r:        JubjubPoint,
+  pk:           JubjubPoint,
+  grant_id:     Bytes<32>,
+  issued_at:    Uint<64>,
+  recipient:    ZswapCoinPublicKey,
+  color:        Bytes<32>,
+  amount:       Uint<128>,
+  change_entry: Bytes<192>,
+  enc_pk:       Bytes<32>,
+  coin:         QualifiedShieldedCoinInfo,
+  nonce_value:  Uint<64>,
+  grind_nonce:  Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:grant:auth:v1:withdraw_shielded")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, grant_id, issued_at,
+     recipient, color, amount, change_entry, enc_pk, coin, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_withdraw_shielded_to_contract_with_grant_jubjub(
+  self_addr:    ContractAddress,
+  sig_r:        JubjubPoint,
+  pk:           JubjubPoint,
+  grant_id:     Bytes<32>,
+  issued_at:    Uint<64>,
+  recipient:    ContractAddress,
+  color:        Bytes<32>,
+  amount:       Uint<128>,
+  change_entry: Bytes<192>,
+  enc_pk:       Bytes<32>,
+  coin:         QualifiedShieldedCoinInfo,
+  nonce_value:  Uint<64>,
+  grind_nonce:  Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:grant:auth:v1:withdraw_shielded_to_contract")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, ContractAddress, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, grant_id, issued_at,
+     recipient, color, amount, change_entry, enc_pk, coin, nonce_value, grind_nonce]
+  );
+}
+
+// ── Lifecycle challenge constructions, device arm k256 (MIP section 6.1) ────
+//
+// In the existing device tag family ("midnight:account:auth:k1:v1:*") and
+// the existing k256 preimage shape. issue_grant's argument list is
+// [grant_id, scope_digest]: the whole plaintext scope enters through the
+// digest (GR-16).
+
+export pure circuit challenge_issue_grant_with_k256(
+  self_addr:    ContractAddress,
+  pk:           Secp256k1Point,
+  grant_id:     Bytes<32>,
+  scope_digest: Bytes<32>,
+  nonce_value:  Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:k1:v1:issue_grant")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     grant_id, scope_digest, nonce_value]
+  );
+}
+
+export pure circuit challenge_revoke_grant_with_k256(
+  self_addr:   ContractAddress,
+  pk:          Secp256k1Point,
+  grant_id:    Bytes<32>,
+  nonce_value: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:k1:v1:revoke_grant")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     grant_id, nonce_value]
+  );
+}
+
+export pure circuit challenge_revoke_all_grants_with_k256(
+  self_addr:   ContractAddress,
+  pk:          Secp256k1Point,
+  nonce_value: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:k1:v1:revoke_all_grants")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     nonce_value]
+  );
+}
+
+// ── Lifecycle challenge constructions, device arm jubjub (MIP section 6.1) ──
+//
+// In the existing device tag family ("midnight:account:auth:v1:*") and the
+// existing jubjub preimage shape (sig_r before pk, grind_nonce last), with
+// the same argument lists as the k256 family: issue_grant carries
+// [grant_id, scope_digest] (GR-16).
+
+export pure circuit challenge_issue_grant_with_jubjub(
+  self_addr:    ContractAddress,
+  sig_r:        JubjubPoint,
+  pk:           JubjubPoint,
+  grant_id:     Bytes<32>,
+  scope_digest: Bytes<32>,
+  nonce_value:  Uint<64>,
+  grind_nonce:  Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:issue_grant")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Bytes<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, grant_id, scope_digest, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_revoke_grant_with_jubjub(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  grant_id:    Bytes<32>,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:revoke_grant")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, grant_id, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_revoke_all_grants_with_jubjub(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:revoke_all_grants")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, nonce_value, grind_nonce]
+  );
+}
+
+// ── The grant seam (MIP section 6.2), grantee arm k256 ──────────────────────
+//
+// Three chips shared by the arm's twins, in the MIP's step order:
+//   authenticate_grant  steps 1 to 3: key guard, identity, liveness;
+//   check_spend_scope   steps 4 and 5: operation flag, object commitment,
+//                       caps, spent commitment, recipient pin (arm-agnostic);
+//   settle_grant        steps 6 and 7: signature over the twin's challenge,
+//                       write-back of nonce + 1 and the new spent_commit,
+//                       round.
+// The challenge is computed by the twin between authenticate and settle
+// because it binds the record's nonce and issued_at, which only the lookup
+// yields. Every predicate is evaluated over the value the custody chip will
+// consume. Disclosed per call: grant_id (lookup and write-back), the
+// rewritten nonce and spent_commit, and the kernel comparison's argument;
+// pk, origin_hash, slot, scope_salt, the openings, spent_prev, enc_pk, and
+// the signature stay witness data (GR-15).
+
+circuit authenticate_grant_with_k256(
+  pk:          Secp256k1Point,
+  envelope:    Uint<8>,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): [Bytes<32>, GrantRecord] {
+  // Every caller of this chip is a spend. A connector `signData` key
+  // (envelope 1) is a blind 32-byte signing surface, and every element of a
+  // grant challenge is public or attacker-chosen, so another site the same
+  // wallet connects to could obtain a valid spend signature by asking the
+  // wallet to sign an opaque message. Envelope-1 grants are therefore
+  // read-only: issuable and enumerable, with no twin to call. Enforced here
+  // rather than delegated to the authoriser, which the threat model does
+  // not trust.
+  assert(envelope == (0 as Uint<8>), "envelope not admitted for a spend grant");
+  // Step 1: the same weak-key rejection the device seam applies (GR-14).
+  require_live_k256_key(pk);
+  // Step 2: identity. The lookup is dominated by the membership assert;
+  // never combine the two in one boolean expression, both operands of which
+  // are evaluated.
+  const id = disclose(derive_grant_id_with_k256(kernel.self(), pk, envelope, origin_hash, slot));
+  assert(grants.member(id), "unknown grant");
+  const g = grants.lookup(id);
+  // Step 3: liveness. The expiry test is a select with both sides
+  // evaluated; the kernel comparison's argument reaches the public
+  // transcript, which is harmless because the record is public.
+  assert(g.active, "grant revoked");
+  assert(g.epoch == device_epoch, "grant epoch stale");
+  assert(g.gen == grant_generation, "grant generation stale");
+  assert(g.scope.expires_at == (0 as Uint<64>) || kernel.blockTimeLessThan(g.scope.expires_at),
+         "grant expired");
+  return [id, g];
+}
+
+// Steps 4 and 5 over the consumed values: obj_color is the witness coin's
+// color on the shielded twins and the color argument on the unshielded one;
+// this_kind and recipient_bytes are the twin's recipient kind and the bytes
+// of the recipient it sends to. Returns the narrowed cumulative spend.
+circuit check_spend_scope(
+  g:                GrantRecord,
+  op_admitted:      Boolean,
+  scope_salt:       Bytes<32>,
+  obj_color:        Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  amount:           Uint<128>,
+  spent_prev:       Uint<128>,
+  this_kind:        Uint<8>,
+  recipient_bytes:  Bytes<32>,
+): Uint<128> {
+  assert(op_admitted, "operation not in scope");
+  assert(derive_grant_object_commit(scope_salt, obj_color, recipient_kind, pinned_recipient, max_coin_value)
+           == g.scope.object_commit,
+         "scope object mismatch");
+  assert(amount <= g.scope.per_call_cap, "amount above per-call cap");
+  assert(derive_grant_spent_commit(scope_salt, spent_prev) == g.spent_commit,
+         "spent opening mismatch");
+  // Widened sum first, then the cap test, then the narrowing cast: the two
+  // failures are distinct (a wrap attempt fails the cap, never the cast).
+  const wide = spent_prev + amount;
+  assert(wide <= g.scope.cap, "cumulative cap exceeded");
+  const new_spent = wide as Uint<128>;
+  assert(recipient_kind == (0 as Uint<8>)
+           || (recipient_kind == this_kind && pinned_recipient == recipient_bytes),
+         "recipient not admitted by pin");
+  return new_spent;
+}
+
+// The shielded twins' additional step-5 predicates: the consumed coin's
+// value is bounded by the committed max_coin_value (R7), and the enc_key
+// the grantee encrypted the change entry to is the live one, so a rotation
+// between signing and inclusion aborts the call instead of orphaning change.
+// Kept as a separate chip, shared by every grantee arm: the MIP states the
+// step-5 predicate set as normative and its order informative (the one
+// normative order being the widened sum tested against cap before it is
+// narrowed, which check_spend_scope keeps), so these two predicates follow
+// the shared chip's five. Every predicate is still asserted before any
+// custody chip executes (GR-7); only the abort precedence differs.
+circuit check_shielded_grant_bounds(
+  coin:           QualifiedShieldedCoinInfo,
+  max_coin_value: Uint<128>,
+  enc_pk:         Bytes<32>,
+): [] {
+  assert(coin.value <= max_coin_value, "coin above max_coin_value");
+  assert(enc_pk == enc_key, "stale encryption key");
+}
+
+// Steps 6 and 7. The signature covers envelope_digest(envelope, h), both S
+// forms accepted, as on the device arm. The write-back is a full struct
+// literal with the record's own fields carried through; auth_nonce,
+// devices, device_count, and enc_key are never written here.
+circuit settle_grant_with_k256(
+  id:         Bytes<32>,
+  g:          GrantRecord,
+  pk:         Secp256k1Point,
+  envelope:   Uint<8>,
+  challenge:  Bytes<32>,
+  sig:        Secp256k1EcdsaSignature,
+  scope_salt: Bytes<32>,
+  new_spent:  Uint<128>,
+): [] {
+  const digest = envelope_digest(envelope, challenge);
+  assert(secp256k1EcdsaVerify(digest, sig, pk), "invalid grant signature");
+  grants.insert(id, GrantRecord {
+    epoch:        g.epoch,
+    gen:          g.gen,
+    issued_at:    g.issued_at,
+    nonce:        ((g.nonce + (1 as Uint<64>)) as Uint<64>),
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),
+    window_start: g.window_start,
+    window_spent: g.window_spent,
+    active:       g.active,
+    scope:        g.scope
+  });
+  bump_round();
+}
+
+// ── The grant seam (MIP section 6.2), grantee arm jubjub ────────────────────
+//
+// The normative arm's authenticate and settle chips, over the shared
+// check_spend_scope and check_shielded_grant_bounds. There is no envelope on
+// this arm: a JubJub grantee signs the ground challenge directly, as a
+// JubJub device does. Disclosure is as on the k256 arm (GR-15).
+
+circuit authenticate_grant_with_jubjub(
+  pk:          JubjubPoint,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): [Bytes<32>, GrantRecord] {
+  // Step 1: the cofactor-clearing guard of the jubjub device seam (GR-14,
+  // MIP section 3.3). [8]P == O exactly when P has small order, and a
+  // grantee key of small order would let the key-dependent term of the
+  // Schnorr equation be predicted or erased. The identity (0, 1) yields a
+  // well-formed grant_id, so this guard is the only thing that rejects it.
+  assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
+         "grantee key has small order");
+  // Step 2: identity. The lookup is dominated by the membership assert.
+  const id = disclose(derive_grant_id_with_jubjub(kernel.self(), pk, origin_hash, slot));
+  assert(grants.member(id), "unknown grant");
+  const g = grants.lookup(id);
+  // Step 3: liveness, as on the k256 arm.
+  assert(g.active, "grant revoked");
+  assert(g.epoch == device_epoch, "grant epoch stale");
+  assert(g.gen == grant_generation, "grant generation stale");
+  assert(g.scope.expires_at == (0 as Uint<64>) || kernel.blockTimeLessThan(g.scope.expires_at),
+         "grant expired");
+  return [id, g];
+}
+
+// Steps 6 and 7. Verification is s·G == R + c·pk over the ground challenge:
+// the twin's challenge binds sig_r and grind_nonce, and the signer ground it
+// below the JubJub subgroup order (MIP-0013 section 5.2), so the scalar
+// image of the cast chain is canonical. The write-back is the k256 chip's,
+// field for field; auth_nonce, devices, device_count, and enc_key are never
+// written here.
+circuit settle_grant_with_jubjub(
+  id:         Bytes<32>,
+  g:          GrantRecord,
+  pk:         JubjubPoint,
+  challenge:  Bytes<32>,
+  sig_r:      JubjubPoint,
+  sig_s:      Field,
+  scope_salt: Bytes<32>,
+  new_spent:  Uint<128>,
+): [] {
+  const c = challenge as Field;
+  assert(
+    ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(pk, c as JubjubScalar)),
+    "invalid grant signature"
+  );
+  grants.insert(id, GrantRecord {
+    epoch:        g.epoch,
+    gen:          g.gen,
+    issued_at:    g.issued_at,
+    nonce:        ((g.nonce + (1 as Uint<64>)) as Uint<64>),
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),
+    window_start: g.window_start,
+    window_spent: g.window_spent,
+    active:       g.active,
+    scope:        g.scope
+  });
+  bump_round();
+}
+
+// ── Grant twins, grantee arm k256 (MIP section 6.1) ─────────────────────────
+//
+// Operation arguments first, then the grant authorising material in the
+// MIP's order. There is no nonce argument: the record's nonce is read
+// in-circuit. Recipient kinds: 1 UserAddress, 2 ZswapCoinPublicKey,
+// 3 ContractAddress.
+
+export circuit withdraw_unshielded_with_grant_k256(
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  recipient:        UserAddress,
+  pk:               Secp256k1Point,
+  envelope:         Uint<8>,
+  origin_hash:      Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  sig:              Secp256k1EcdsaSignature,
+): [] {
+  const [id, g] = authenticate_grant_with_k256(pk, envelope, origin_hash, slot);
+  const new_spent = check_spend_scope(
+    g, g.scope.op_withdraw_unshielded, scope_salt, color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev,
+    1 as Uint<8>, recipient.bytes
+  );
+  const challenge = challenge_withdraw_unshielded_with_grant_k256(
+    kernel.self(), pk, id, g.issued_at, color, amount, recipient, g.nonce
+  );
+  settle_grant_with_k256(id, g, pk, envelope, challenge, sig, scope_salt, new_spent);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+// The witness is invoked first so its returned value enters the challenge
+// (AUTH-10) and the scope predicates test the coin actually consumed. After
+// the custody chip, the change entry the grantee pre-encrypted is appended
+// through the inbox chip in the same circuit, under a disclosed branch on
+// whether the send produced change (INV-4 under a grant).
+export circuit withdraw_shielded_with_grant_k256(
+  recipient:        ZswapCoinPublicKey,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  pk:               Secp256k1Point,
+  envelope:         Uint<8>,
+  origin_hash:      Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  sig:              Secp256k1EcdsaSignature,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_k256(pk, envelope, origin_hash, slot);
+  const new_spent = check_spend_scope(
+    g, g.scope.op_withdraw_shielded, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev,
+    2 as Uint<8>, recipient.bytes
+  );
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_with_grant_k256(
+    kernel.self(), pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin, g.nonce
+  );
+  settle_grant_with_k256(id, g, pk, envelope, challenge, sig, scope_salt, new_spent);
+  const result = do_withdraw_shielded(recipient, amount, coin);
+  if (disclose(result.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return result;
+}
+
+// The contract-recipient twin: the direct-transfer mode of MIP-0012 §6.6
+// under a grant, with the device twin's linking caveat (the output MUST be
+// claimed by the receiving contract's deposit path in the same
+// client-composed transaction). Recipient kind 3. Returns [sent, change] as
+// the device twin does; the change entry is appended under the same
+// disclosed branch on the change half.
+export circuit withdraw_shielded_to_contract_with_grant_k256(
+  recipient:        ContractAddress,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  pk:               Secp256k1Point,
+  envelope:         Uint<8>,
+  origin_hash:      Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  sig:              Secp256k1EcdsaSignature,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_k256(pk, envelope, origin_hash, slot);
+  const new_spent = check_spend_scope(
+    g, g.scope.op_withdraw_shielded_to_contract, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev,
+    3 as Uint<8>, recipient.bytes
+  );
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_to_contract_with_grant_k256(
+    kernel.self(), pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin, g.nonce
+  );
+  settle_grant_with_k256(id, g, pk, envelope, challenge, sig, scope_salt, new_spent);
+  const [sent, change] = do_withdraw_shielded_to_contract(recipient, amount, coin);
+  if (disclose(change.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return [sent, change];
+}
+
+// ── Grant twins, grantee arm jubjub (MIP section 6.1) ───────────────────────
+//
+// The k256 bodies over the jubjub chips. The trailer is the MIP's jubjub
+// row: no envelope, and the Schnorr material (sig_r, sig_s, grind_nonce) in
+// place of the ECDSA signature. The challenge is computed between
+// authenticate and settle because it binds g.issued_at and g.nonce.
+
+export circuit withdraw_unshielded_with_grant_jubjub(
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  recipient:        UserAddress,
+  pk:               JubjubPoint,
+  origin_hash:      Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  sig_r:            JubjubPoint,
+  sig_s:            Field,
+  grind_nonce:      Uint<64>,
+): [] {
+  const [id, g] = authenticate_grant_with_jubjub(pk, origin_hash, slot);
+  const new_spent = check_spend_scope(
+    g, g.scope.op_withdraw_unshielded, scope_salt, color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev,
+    1 as Uint<8>, recipient.bytes
+  );
+  const challenge = challenge_withdraw_unshielded_with_grant_jubjub(
+    kernel.self(), sig_r, pk, id, g.issued_at, color, amount, recipient, g.nonce, grind_nonce
+  );
+  settle_grant_with_jubjub(id, g, pk, challenge, sig_r, sig_s, scope_salt, new_spent);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+export circuit withdraw_shielded_with_grant_jubjub(
+  recipient:        ZswapCoinPublicKey,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  pk:               JubjubPoint,
+  origin_hash:      Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  sig_r:            JubjubPoint,
+  sig_s:            Field,
+  grind_nonce:      Uint<64>,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_jubjub(pk, origin_hash, slot);
+  const new_spent = check_spend_scope(
+    g, g.scope.op_withdraw_shielded, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev,
+    2 as Uint<8>, recipient.bytes
+  );
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_with_grant_jubjub(
+    kernel.self(), sig_r, pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin,
+    g.nonce, grind_nonce
+  );
+  settle_grant_with_jubjub(id, g, pk, challenge, sig_r, sig_s, scope_salt, new_spent);
+  const result = do_withdraw_shielded(recipient, amount, coin);
+  if (disclose(result.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return result;
+}
+
+export circuit withdraw_shielded_to_contract_with_grant_jubjub(
+  recipient:        ContractAddress,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  pk:               JubjubPoint,
+  origin_hash:      Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  sig_r:            JubjubPoint,
+  sig_s:            Field,
+  grind_nonce:      Uint<64>,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_jubjub(pk, origin_hash, slot);
+  const new_spent = check_spend_scope(
+    g, g.scope.op_withdraw_shielded_to_contract, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev,
+    3 as Uint<8>, recipient.bytes
+  );
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_to_contract_with_grant_jubjub(
+    kernel.self(), sig_r, pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin,
+    g.nonce, grind_nonce
+  );
+  settle_grant_with_jubjub(id, g, pk, challenge, sig_r, sig_s, scope_salt, new_spent);
+  const [sent, change] = do_withdraw_shielded_to_contract(recipient, amount, coin);
+  if (disclose(change.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return [sent, change];
+}
+
+// ── Grant lifecycle chips (MIP section 7.1) ─────────────────────────────────
+//
+// Device-gated through the unchanged device seam, which has advanced
+// auth_nonce and round before these bodies run. Every Map.lookup is
+// dominated by a member branch or assert. No spread or update syntax: every
+// struct literal is spelled out in full.
+
+circuit do_issue_grant(
+  grant_id:                         Bytes<32>,
+  op_withdraw_unshielded:           Boolean,
+  op_withdraw_shielded:             Boolean,
+  op_withdraw_shielded_to_contract: Boolean,
+  read:                             Boolean,
+  color:                            Bytes<32>,
+  recipient_kind:                   Uint<8>,
+  recipient:                        Bytes<32>,
+  max_coin_value:                   Uint<128>,
+  per_call_cap:                     Uint<128>,
+  cap:                              Uint<128>,
+  expires_at:                       Uint<64>,
+  rp_id_hash:                       Bytes<32>,
+  read_pk_hash:                     Bytes<32>,
+  window_len:                       Uint<64>,
+  window_cap:                       Uint<128>,
+  scope_salt:                       Bytes<32>,
+): [] {
+  const id = disclose(grant_id);
+  // No live record under this id. Issue over an absent id, a tombstone, or
+  // an inert record succeeds; expiry is not evaluated here, so an expired
+  // but unrevoked record is live for this test (revoke first, MIP 7.2).
+  if (grants.member(id)) {
+    const old = grants.lookup(id);
+    assert(!old.active || old.epoch != device_epoch || old.gen != grant_generation,
+           "grant already active");
+  }
+  // Issue rules of MIP section 5.1, in order.
+  const spend = op_withdraw_unshielded || op_withdraw_shielded || op_withdraw_shielded_to_contract;
+  assert(spend || read, "empty scope");
+  assert(!(op_withdraw_shielded || op_withdraw_shielded_to_contract) || read,
+         "shielded spend requires read");
+  assert(per_call_cap <= cap, "per-call cap above cap");
+  assert(!spend || cap > (0 as Uint<128>), "spend without cap");
+  assert(!spend || max_coin_value >= per_call_cap, "coin bound below per-call cap");
+  assert(!read || read_pk_hash != pad(32, ""), "read without delegate key");
+  assert(window_len == (0 as Uint<64>) && window_cap == (0 as Uint<128>),
+         "window bounds reserved");
+  assert(spend
+           || (color == pad(32, "") && recipient_kind == (0 as Uint<8>)
+               && recipient == pad(32, "") && max_coin_value == (0 as Uint<128>)
+               && per_call_cap == (0 as Uint<128>) && cap == (0 as Uint<128>)),
+         "read-only grant carries object fields");
+  // The whole record. color, recipient, max_coin_value, and rp_id_hash are
+  // never disclosed; only their commitments are.
+  grants.insert(id, GrantRecord {
+    epoch:        device_epoch,
+    gen:          grant_generation,
+    issued_at:    auth_nonce,
+    nonce:        0 as Uint<64>,
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, 0 as Uint<128>)),
+    window_start: 0 as Uint<64>,
+    window_spent: 0 as Uint<128>,
+    active:       true,
+    scope: GrantScope {
+      op_withdraw_unshielded:           disclose(op_withdraw_unshielded),
+      op_withdraw_shielded:             disclose(op_withdraw_shielded),
+      op_withdraw_shielded_to_contract: disclose(op_withdraw_shielded_to_contract),
+      read:                             disclose(read),
+      object_commit: disclose(derive_grant_object_commit(
+        scope_salt, color, recipient_kind, recipient, max_coin_value
+      )),
+      per_call_cap:  disclose(per_call_cap),
+      cap:           disclose(cap),
+      expires_at:    disclose(expires_at),
+      rp_commit:     disclose(derive_grant_rp_commit(scope_salt, rp_id_hash)),
+      read_pk_hash:  disclose(read_pk_hash),
+      window_len:    0 as Uint<64>,
+      window_cap:    0 as Uint<128>
+    }
+  });
+}
+
+circuit do_revoke_grant(grant_id: Bytes<32>): [] {
+  const id = disclose(grant_id);
+  assert(grants.member(id), "unknown grant");
+  const old = grants.lookup(id);
+  assert(old.active, "grant not live");
+  grants.insert(id, GrantRecord {
+    epoch:        old.epoch,
+    gen:          old.gen,
+    issued_at:    old.issued_at,
+    nonce:        old.nonce,
+    spent_commit: old.spent_commit,
+    window_start: old.window_start,
+    window_spent: old.window_spent,
+    active:       false,
+    scope:        old.scope
+  });
+}
+
+// The generation bump carries safety (GR-9); clearing the map is the
+// optional state relief the MIP permits.
+circuit do_revoke_all_grants(): [] {
+  grant_generation = ((grant_generation + (1 as Uint<32>)) as Uint<32>);
+  grants.resetToDefault();
+}
+
+// ── Grant lifecycle, device arm k256 ────────────────────────────────────────
+
+export circuit issue_grant_with_k256(
+  grant_id:                         Bytes<32>,
+  op_withdraw_unshielded:           Boolean,
+  op_withdraw_shielded:             Boolean,
+  op_withdraw_shielded_to_contract: Boolean,
+  read:                             Boolean,
+  color:                            Bytes<32>,
+  recipient_kind:                   Uint<8>,
+  recipient:                        Bytes<32>,
+  max_coin_value:                   Uint<128>,
+  per_call_cap:                     Uint<128>,
+  cap:                              Uint<128>,
+  expires_at:                       Uint<64>,
+  rp_id_hash:                       Bytes<32>,
+  read_pk_hash:                     Bytes<32>,
+  window_len:                       Uint<64>,
+  window_cap:                       Uint<128>,
+  scope_salt:                       Bytes<32>,
+  pk:                               Secp256k1Point,
+  use_counter:                      Uint<64>,
+  sig:                              Secp256k1EcdsaSignature,
+  envelope:                         Uint<8>,
+): [] {
+  const scope_digest = derive_grant_scope_digest(
+    scope_salt, op_withdraw_unshielded, op_withdraw_shielded,
+    op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
+    max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
+    window_len, window_cap
+  );
+  const challenge = challenge_issue_grant_with_k256(
+    kernel.self(), pk, grant_id, scope_digest, auth_nonce
+  );
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
+  do_issue_grant(
+    grant_id, op_withdraw_unshielded, op_withdraw_shielded,
+    op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
+    max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
+    window_len, window_cap, scope_salt
+  );
+}
+
+export circuit revoke_grant_with_k256(
+  grant_id:    Bytes<32>,
+  pk:          Secp256k1Point,
+  use_counter: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
+): [] {
+  const challenge = challenge_revoke_grant_with_k256(
+    kernel.self(), pk, grant_id, auth_nonce
+  );
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
+  do_revoke_grant(grant_id);
+}
+
+export circuit revoke_all_grants_with_k256(
+  pk:          Secp256k1Point,
+  use_counter: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
+): [] {
+  const challenge = challenge_revoke_all_grants_with_k256(
+    kernel.self(), pk, auth_nonce
+  );
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
+  do_revoke_all_grants();
+}
+
+// ── Grant lifecycle, device arm jubjub ──────────────────────────────────────
+//
+// The k256 bodies behind the jubjub device seam, which advances auth_nonce
+// and round before the shared chip runs.
+
+export circuit issue_grant_with_jubjub(
+  grant_id:                         Bytes<32>,
+  op_withdraw_unshielded:           Boolean,
+  op_withdraw_shielded:             Boolean,
+  op_withdraw_shielded_to_contract: Boolean,
+  read:                             Boolean,
+  color:                            Bytes<32>,
+  recipient_kind:                   Uint<8>,
+  recipient:                        Bytes<32>,
+  max_coin_value:                   Uint<128>,
+  per_call_cap:                     Uint<128>,
+  cap:                              Uint<128>,
+  expires_at:                       Uint<64>,
+  rp_id_hash:                       Bytes<32>,
+  read_pk_hash:                     Bytes<32>,
+  window_len:                       Uint<64>,
+  window_cap:                       Uint<128>,
+  scope_salt:                       Bytes<32>,
+  pk:                               JubjubPoint,
+  use_counter:                      Uint<64>,
+  sig_r:                            JubjubPoint,
+  sig_s:                            Field,
+  grind_nonce:                      Uint<64>,
+): [] {
+  const scope_digest = derive_grant_scope_digest(
+    scope_salt, op_withdraw_unshielded, op_withdraw_shielded,
+    op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
+    max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
+    window_len, window_cap
+  );
+  const challenge = challenge_issue_grant_with_jubjub(
+    kernel.self(), sig_r, pk, grant_id, scope_digest, auth_nonce, grind_nonce
+  );
+  require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
+  do_issue_grant(
+    grant_id, op_withdraw_unshielded, op_withdraw_shielded,
+    op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
+    max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
+    window_len, window_cap, scope_salt
+  );
+}
+
+export circuit revoke_grant_with_jubjub(
+  grant_id:    Bytes<32>,
+  pk:          JubjubPoint,
+  use_counter: Uint<64>,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_revoke_grant_with_jubjub(
+    kernel.self(), sig_r, pk, grant_id, auth_nonce, grind_nonce
+  );
+  require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
+  do_revoke_grant(grant_id);
+}
+
+export circuit revoke_all_grants_with_jubjub(
+  pk:          JubjubPoint,
+  use_counter: Uint<64>,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_revoke_all_grants_with_jubjub(
+    kernel.self(), sig_r, pk, auth_nonce, grind_nonce
+  );
+  require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
+  do_revoke_all_grants();
 }

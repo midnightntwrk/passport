@@ -1,0 +1,614 @@
+{
+  "testId": "grants-e2-wave-ceiling",
+  "fileName": "wave-ceiling.json",
+  "name": "wave-ceiling",
+  "description": "The per-maintenance-update verifier-byte ceiling on node 2.1.0, measured by bisection: for each probe size a throwaway wave-1 account receives ONE maintenance update inserting N verifier keys, priced client-side against the chain ledger parameters and then submitted, with the accept/refuse outcome, the verbatim refusal text, and the refusal mechanism recorded.",
+  "verdict": "PASS",
+  "note": "MEASURED BRACKET: a single maintenance update of 12 verifier keys (29484 verifier bytes) is accepted and lands; one of 13 keys (32229 verifier bytes) is refused. The bracket is closed to one key. The refusal comes from node-at-submission: the node refuses the transaction at its mempool, after the client has priced, balanced, and handed it over. The client fee computation bounds NOTHING here: every refused payload priced without complaint, `normalizeFullness` never threw, and `fees` returned a figure, so the only thing that says no is the node. That is the asymmetry with the all-operations DEPLOY, which the client refuses up front. The per-update ceiling therefore sits in (29484, 32229] verifier bytes, not in the (18,504, 39,600] range the first run left open. At the shipped budget of 25000 verifier bytes per update, which is the largest accepted payload less a stated safety margin, the thirty-circuit roster plans as 3 waves: the deploy plus 10 keys (23994 bytes) and 10 keys (24858 bytes). A budget at or below the ceiling does not by itself fix the wave count: the packing is greedy over the same key order, so a lower budget can cost a wave (18,504 costs four). The deploy evidence records the plan planWaves actually produced on chain.",
+  "details": {
+    "probeOrder": "the reported-refused payload first, then bisection by halving; every attempt kept",
+    "firstArm": "k256",
+    "waveOne": {
+      "circuits": [
+        "deposit_unshielded",
+        "deposit_shielded",
+        "activate_initial_device_with_k256",
+        "withdraw_unshielded_with_k256",
+        "append_inbox_with_k256",
+        "withdraw_shielded_with_k256",
+        "withdraw_shielded_to_contract_with_k256",
+        "rotate_enc_key_with_k256",
+        "add_device_with_k256",
+        "remove_device_with_k256"
+      ],
+      "verifierBytes": 25434
+    },
+    "remainingKeys": [
+      {
+        "n": 1,
+        "id": "activate_initial_device_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 2313
+      },
+      {
+        "n": 2,
+        "id": "withdraw_unshielded_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 4626
+      },
+      {
+        "n": 3,
+        "id": "append_inbox_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 6939
+      },
+      {
+        "n": 4,
+        "id": "withdraw_shielded_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 9252
+      },
+      {
+        "n": 5,
+        "id": "withdraw_shielded_to_contract_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 11565
+      },
+      {
+        "n": 6,
+        "id": "rotate_enc_key_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 13878
+      },
+      {
+        "n": 7,
+        "id": "add_device_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 16191
+      },
+      {
+        "n": 8,
+        "id": "remove_device_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 18504
+      },
+      {
+        "n": 9,
+        "id": "withdraw_unshielded_with_grant_k256",
+        "keyBytes": 2745,
+        "cumulativeBytes": 21249
+      },
+      {
+        "n": 10,
+        "id": "withdraw_shielded_with_grant_k256",
+        "keyBytes": 2745,
+        "cumulativeBytes": 23994
+      },
+      {
+        "n": 11,
+        "id": "withdraw_shielded_to_contract_with_grant_k256",
+        "keyBytes": 2745,
+        "cumulativeBytes": 26739
+      },
+      {
+        "n": 12,
+        "id": "issue_grant_with_k256",
+        "keyBytes": 2745,
+        "cumulativeBytes": 29484
+      },
+      {
+        "n": 13,
+        "id": "revoke_grant_with_k256",
+        "keyBytes": 2745,
+        "cumulativeBytes": 32229
+      },
+      {
+        "n": 14,
+        "id": "revoke_all_grants_with_k256",
+        "keyBytes": 2745,
+        "cumulativeBytes": 34974
+      },
+      {
+        "n": 15,
+        "id": "withdraw_unshielded_with_grant_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 37287
+      },
+      {
+        "n": 16,
+        "id": "withdraw_shielded_with_grant_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 39600
+      },
+      {
+        "n": 17,
+        "id": "withdraw_shielded_to_contract_with_grant_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 41913
+      },
+      {
+        "n": 18,
+        "id": "issue_grant_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 44226
+      },
+      {
+        "n": 19,
+        "id": "revoke_grant_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 46539
+      },
+      {
+        "n": 20,
+        "id": "revoke_all_grants_with_jubjub",
+        "keyBytes": 2313,
+        "cumulativeBytes": 48852
+      }
+    ],
+    "rosterVerifierBytes": 74286,
+    "priorRunAnchors": {
+      "accepted": {
+        "keys": 8,
+        "verifierBytes": 18504,
+        "source": "grants E2 first run, on chain (wave 2 of the four-wave deploy)"
+      },
+      "refusedClaim": {
+        "keys": 16,
+        "verifierBytes": 39600,
+        "source": "grants E2 first run, prose only — the claim this probe tests"
+      }
+    },
+    "bracket": {
+      "largestAcceptedKeys": 12,
+      "largestAcceptedVerifierBytes": 29484,
+      "smallestRefusedKeys": 13,
+      "smallestRefusedVerifierBytes": 32229,
+      "closedToOneKey": true,
+      "refusalMechanisms": [
+        "node-at-submission"
+      ]
+    },
+    "waveCountAtCandidateBudgets": [
+      {
+        "budget": 18504,
+        "shipped": false,
+        "waves": 4,
+        "batches": [
+          {
+            "keys": 8,
+            "bytes": 18504
+          },
+          {
+            "keys": 6,
+            "bytes": 16470
+          },
+          {
+            "keys": 6,
+            "bytes": 13878
+          }
+        ]
+      },
+      {
+        "budget": 20000,
+        "shipped": false,
+        "waves": 4,
+        "batches": [
+          {
+            "keys": 8,
+            "bytes": 18504
+          },
+          {
+            "keys": 7,
+            "bytes": 18783
+          },
+          {
+            "keys": 5,
+            "bytes": 11565
+          }
+        ]
+      },
+      {
+        "budget": 24000,
+        "shipped": false,
+        "waves": 4,
+        "batches": [
+          {
+            "keys": 10,
+            "bytes": 23994
+          },
+          {
+            "keys": 9,
+            "bytes": 22545
+          },
+          {
+            "keys": 1,
+            "bytes": 2313
+          }
+        ]
+      },
+      {
+        "budget": 25000,
+        "shipped": true,
+        "waves": 3,
+        "batches": [
+          {
+            "keys": 10,
+            "bytes": 23994
+          },
+          {
+            "keys": 10,
+            "bytes": 24858
+          }
+        ]
+      },
+      {
+        "budget": 26000,
+        "shipped": false,
+        "waves": 3,
+        "batches": [
+          {
+            "keys": 10,
+            "bytes": 23994
+          },
+          {
+            "keys": 10,
+            "bytes": 24858
+          }
+        ]
+      },
+      {
+        "budget": 30000,
+        "shipped": false,
+        "waves": 3,
+        "batches": [
+          {
+            "keys": 12,
+            "bytes": 29484
+          },
+          {
+            "keys": 8,
+            "bytes": 19368
+          }
+        ]
+      },
+      {
+        "budget": 40000,
+        "shipped": false,
+        "waves": 3,
+        "batches": [
+          {
+            "keys": 16,
+            "bytes": 39600
+          },
+          {
+            "keys": 4,
+            "bytes": 9252
+          }
+        ]
+      }
+    ],
+    "attempts": [
+      {
+        "n": 16,
+        "seq": 1,
+        "keyIds": [
+          "activate_initial_device_with_jubjub",
+          "withdraw_unshielded_with_jubjub",
+          "append_inbox_with_jubjub",
+          "withdraw_shielded_with_jubjub",
+          "withdraw_shielded_to_contract_with_jubjub",
+          "rotate_enc_key_with_jubjub",
+          "add_device_with_jubjub",
+          "remove_device_with_jubjub",
+          "withdraw_unshielded_with_grant_k256",
+          "withdraw_shielded_with_grant_k256",
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "issue_grant_with_k256",
+          "revoke_grant_with_k256",
+          "revoke_all_grants_with_k256",
+          "withdraw_unshielded_with_grant_jubjub",
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "verifierBytes": 39600,
+        "account": "2f0cc416ef001e675709cd2ee7c531fe679282ce34c559310060012f812a6aed",
+        "authorityCounter": "0",
+        "price": {
+          "serialisedBytes": 40208,
+          "plain": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "40135",
+              "bytesWritten": "40312",
+              "bytesChurned": "32360"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.040135,
+              "bytesWritten": 0.80624,
+              "bytesChurned": 0.0006472
+            },
+            "fees": "18107516183281641"
+          },
+          "enforcingTimeToDismiss": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "40135",
+              "bytesWritten": "40312",
+              "bytesChurned": "32360"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.040135,
+              "bytesWritten": 0.80624,
+              "bytesChurned": 0.0006472
+            },
+            "fees": "18107516183281641"
+          }
+        },
+        "phase": "submit",
+        "outcome": "refused",
+        "mechanism": "node-at-submission",
+        "durationMs": 3492,
+        "error": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "errorText": "Transaction submission error",
+        "rpcLog": [
+          "2026-09-11 09:37:52        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Transaction would exhaust the block limits"
+        ],
+        "nodeErrorVerbatim": "1010: Invalid Transaction: Transaction would exhaust the block limits",
+        "nodeLog": [],
+        "nodeLogCapture": "empty"
+      },
+      {
+        "n": 12,
+        "seq": 2,
+        "keyIds": [
+          "activate_initial_device_with_jubjub",
+          "withdraw_unshielded_with_jubjub",
+          "append_inbox_with_jubjub",
+          "withdraw_shielded_with_jubjub",
+          "withdraw_shielded_to_contract_with_jubjub",
+          "rotate_enc_key_with_jubjub",
+          "add_device_with_jubjub",
+          "remove_device_with_jubjub",
+          "withdraw_unshielded_with_grant_k256",
+          "withdraw_shielded_with_grant_k256",
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "issue_grant_with_k256"
+        ],
+        "verifierBytes": 29484,
+        "account": "2f0cc416ef001e675709cd2ee7c531fe679282ce34c559310060012f812a6aed",
+        "authorityCounter": "0",
+        "price": {
+          "serialisedBytes": 30031,
+          "plain": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "29958",
+              "bytesWritten": "30043",
+              "bytesChurned": "26088"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.029958,
+              "bytesWritten": 0.60086,
+              "bytesChurned": 0.00052176
+            },
+            "fees": "13496035594143376"
+          },
+          "enforcingTimeToDismiss": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "29958",
+              "bytesWritten": "30043",
+              "bytesChurned": "26088"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.029958,
+              "bytesWritten": 0.60086,
+              "bytesChurned": 0.00052176
+            },
+            "fees": "13496035594143376"
+          }
+        },
+        "phase": "included",
+        "outcome": "accepted",
+        "mechanism": "none",
+        "durationMs": 20492,
+        "txId": "00c8f8e1f6136429383547d615733d23d172c927be0e17794873a3ef2228ae0627",
+        "blockHeight": 1380,
+        "txStatus": "SucceedEntirely"
+      },
+      {
+        "n": 14,
+        "seq": 3,
+        "keyIds": [
+          "activate_initial_device_with_jubjub",
+          "withdraw_unshielded_with_jubjub",
+          "append_inbox_with_jubjub",
+          "withdraw_shielded_with_jubjub",
+          "withdraw_shielded_to_contract_with_jubjub",
+          "rotate_enc_key_with_jubjub",
+          "add_device_with_jubjub",
+          "remove_device_with_jubjub",
+          "withdraw_unshielded_with_grant_k256",
+          "withdraw_shielded_with_grant_k256",
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "issue_grant_with_k256",
+          "revoke_grant_with_k256",
+          "revoke_all_grants_with_k256"
+        ],
+        "verifierBytes": 34974,
+        "account": "52729305b35ee4af9eaeb6f62de157cb4c85cee6fc73c7a255498fb99f054586",
+        "authorityCounter": "0",
+        "price": {
+          "serialisedBytes": 35540,
+          "plain": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "35467",
+              "bytesWritten": "35598",
+              "bytesChurned": "29224"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.035467,
+              "bytesWritten": 0.71196,
+              "bytesChurned": 0.0005844800000000001
+            },
+            "fees": "15990521317636918"
+          },
+          "enforcingTimeToDismiss": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "35467",
+              "bytesWritten": "35598",
+              "bytesChurned": "29224"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.035467,
+              "bytesWritten": 0.71196,
+              "bytesChurned": 0.0005844800000000001
+            },
+            "fees": "15990521317636918"
+          }
+        },
+        "phase": "submit",
+        "outcome": "refused",
+        "mechanism": "node-at-submission",
+        "durationMs": 3471,
+        "error": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "errorText": "Transaction submission error",
+        "rpcLog": [
+          "2026-09-11 09:38:33        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Transaction would exhaust the block limits"
+        ],
+        "nodeErrorVerbatim": "1010: Invalid Transaction: Transaction would exhaust the block limits",
+        "nodeLog": [],
+        "nodeLogCapture": "empty"
+      },
+      {
+        "n": 13,
+        "seq": 4,
+        "keyIds": [
+          "activate_initial_device_with_jubjub",
+          "withdraw_unshielded_with_jubjub",
+          "append_inbox_with_jubjub",
+          "withdraw_shielded_with_jubjub",
+          "withdraw_shielded_to_contract_with_jubjub",
+          "rotate_enc_key_with_jubjub",
+          "add_device_with_jubjub",
+          "remove_device_with_jubjub",
+          "withdraw_unshielded_with_grant_k256",
+          "withdraw_shielded_with_grant_k256",
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "issue_grant_with_k256",
+          "revoke_grant_with_k256"
+        ],
+        "verifierBytes": 32229,
+        "account": "52729305b35ee4af9eaeb6f62de157cb4c85cee6fc73c7a255498fb99f054586",
+        "authorityCounter": "0",
+        "price": {
+          "serialisedBytes": 32783,
+          "plain": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "32710",
+              "bytesWritten": "32818",
+              "bytesChurned": "27656"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.03271,
+              "bytesWritten": 0.65636,
+              "bytesChurned": 0.00055312
+            },
+            "fees": "14742156307085602"
+          },
+          "enforcingTimeToDismiss": {
+            "cost": {
+              "readTime": "2040000000",
+              "computeTime": "2290658388",
+              "blockUsage": "32710",
+              "bytesWritten": "32818",
+              "bytesChurned": "27656"
+            },
+            "normalized": {
+              "readTime": 0.00102,
+              "computeTime": 0.0011453291940000001,
+              "blockUsage": 0.03271,
+              "bytesWritten": 0.65636,
+              "bytesChurned": 0.00055312
+            },
+            "fees": "14742156307085602"
+          }
+        },
+        "phase": "submit",
+        "outcome": "refused",
+        "mechanism": "node-at-submission",
+        "durationMs": 3446,
+        "error": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "errorText": "Transaction submission error",
+        "rpcLog": [
+          "2026-09-11 09:38:37        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Transaction would exhaust the block limits"
+        ],
+        "nodeErrorVerbatim": "1010: Invalid Transaction: Transaction would exhaust the block limits",
+        "nodeLog": [],
+        "nodeLogCapture": "empty"
+      }
+    ]
+  },
+  "ranAt": "2026-09-11T08:38:39.192Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

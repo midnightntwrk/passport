@@ -1,0 +1,605 @@
+{
+  "testId": "block-time",
+  "name": "sweep",
+  "description": "kernel.blockTimeLessThan / kernel.blockTimeGreaterThan on the node: argument matrix in seconds, milliseconds, 0, 2^63, and block height, through before/after/never circuits; plus enforcement-point rows where the client clock and the including block disagree.",
+  "verdict": "PASS",
+  "note": "Each row records the argument, the host clock and the chain head at submission, the client-side phase reached, and the node-side outcome. The conclusion is drawn in GRANTS-E3.md.",
+  "details": {
+    "contractAddress": "1723b7324f07209597f957905ab727598f72989c76e4c3060698efddcec6b604",
+    "deployTx": "00ed0433233903978a19ea53777ea0e3948d3e57934e89dc72161fa211b6c93626",
+    "clientTimeSource": "compact-runtime createCallContext: maybeTime ?? Math.floor(Date.now() / 1000)",
+    "clock": {
+      "hostNowMs": 1789059801094,
+      "nodeHead": {
+        "height": 324,
+        "hash": "0x8e43a539ff83fea4aadb3ec666015c97f17cf9d61bf59962ffcc032f4f381262",
+        "timestampMs": 1789059798001
+      },
+      "indexerLatest": {
+        "height": 322,
+        "hash": "05fc79d8cf3e21d5051751de1cde111aa45debac264147c0c5b2420eeecde2db",
+        "timestamp": 1789059786007
+      },
+      "hostMinusNodeMs": 3093,
+      "hostMinusIndexerMs": 15087
+    },
+    "ledgerParameters": {
+      "global_ttl_s": "1209600",
+      "min_time_to_dismiss": "15.000ms",
+      "time_to_dismiss_per_byte": "2.000μs"
+    },
+    "txTtlMs": 60000,
+    "inclusionWaitMs": 150000,
+    "rows": [
+      {
+        "n": 1,
+        "circuit": "before",
+        "label": "now_s + 2",
+        "argument": "1789059803",
+        "nowS": 1789059801,
+        "nowMs": 1789059801102,
+        "clientAssumedTimeS": 1789059801,
+        "purpose": "sweep: blockTimeLessThan with t 2 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 322,
+          "hash": "05fc79d8cf3e21d5051751de1cde111aa45debac264147c0c5b2420eeecde2db",
+          "timestamp": 1789059786007
+        },
+        "nodeHead": {
+          "height": 324,
+          "hash": "0x8e43a539ff83fea4aadb3ec666015c97f17cf9d61bf59962ffcc032f4f381262",
+          "timestampMs": 1789059798001
+        },
+        "clientPhase": "submit",
+        "clientOutcome": "submit-time abort: Transaction submission error",
+        "nodeOutcome": "mempool-rejected (see clientOutcome)",
+        "passesBefore": "0",
+        "passesAfter": "0",
+        "durationMs": 3073,
+        "clientError": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "clientErrorText": "(FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]",
+        "refusedAtMs": 1789059802627,
+        "rpcLog": [
+          "2026-09-10 18:03:22        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 104"
+        ],
+        "nodeLog": [
+          "🚫 Rejected transaction b4555890208d30349e15527e0e2afed65c6e02fd994d5271a7953a6f02c45414 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))"
+        ]
+      },
+      {
+        "n": 2,
+        "circuit": "before",
+        "label": "now_s + 5",
+        "argument": "1789059809",
+        "nowS": 1789059804,
+        "nowMs": 1789059804184,
+        "clientAssumedTimeS": 1789059804,
+        "purpose": "sweep: blockTimeLessThan with t 5 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 322,
+          "hash": "05fc79d8cf3e21d5051751de1cde111aa45debac264147c0c5b2420eeecde2db",
+          "timestamp": 1789059786007
+        },
+        "nodeHead": {
+          "height": 325,
+          "hash": "0x83bf1210199b70ada3b48abaef6036716f4a32f4a75e84fc23dc5f47277509e7",
+          "timestampMs": 1789059804007
+        },
+        "clientPhase": "submit",
+        "clientOutcome": "submit-time abort: Transaction submission error",
+        "nodeOutcome": "mempool-rejected (see clientOutcome)",
+        "passesBefore": "0",
+        "passesAfter": "0",
+        "durationMs": 3050,
+        "clientError": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "clientErrorText": "(FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]",
+        "refusedAtMs": 1789059805682,
+        "rpcLog": [
+          "2026-09-10 18:03:25        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 104"
+        ],
+        "nodeLog": [
+          "🚫 Rejected transaction b4555890208d30349e15527e0e2afed65c6e02fd994d5271a7953a6f02c45414 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))",
+          "🚫 Rejected transaction 151caf17795fb76cab4c45d748d0a25548daddefd82fef04c8708f5724d3adf5 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))"
+        ]
+      },
+      {
+        "n": 3,
+        "circuit": "before",
+        "label": "now_s + 8",
+        "argument": "1789059815",
+        "nowS": 1789059807,
+        "nowMs": 1789059807244,
+        "clientAssumedTimeS": 1789059807,
+        "purpose": "sweep: blockTimeLessThan with t 8 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 323,
+          "hash": "e05bcfa231ba2ac7c8911a3865b1e5c14b314ad11df7dce860b4f88651b9c2ad",
+          "timestamp": 1789059792003
+        },
+        "nodeHead": {
+          "height": 325,
+          "hash": "0x83bf1210199b70ada3b48abaef6036716f4a32f4a75e84fc23dc5f47277509e7",
+          "timestampMs": 1789059804007
+        },
+        "clientPhase": "submit",
+        "clientOutcome": "submit-time abort: Transaction submission error",
+        "nodeOutcome": "mempool-rejected (see clientOutcome)",
+        "passesBefore": "0",
+        "passesAfter": "0",
+        "durationMs": 3044,
+        "clientError": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "clientErrorText": "(FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]",
+        "refusedAtMs": 1789059808739,
+        "rpcLog": [
+          "2026-09-10 18:03:28        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 104"
+        ],
+        "nodeLog": [
+          "🚫 Rejected transaction b4555890208d30349e15527e0e2afed65c6e02fd994d5271a7953a6f02c45414 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))",
+          "🚫 Rejected transaction 151caf17795fb76cab4c45d748d0a25548daddefd82fef04c8708f5724d3adf5 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))",
+          "🚫 Rejected transaction ae70ee4f5a18e143a87d36a058ba1eb2321c69a481fa238d73210c961a370c93 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))"
+        ]
+      },
+      {
+        "n": 4,
+        "circuit": "before",
+        "label": "now_s + 10",
+        "argument": "1789059820",
+        "nowS": 1789059810,
+        "nowMs": 1789059810298,
+        "clientAssumedTimeS": 1789059810,
+        "purpose": "sweep: blockTimeLessThan with t 10 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 323,
+          "hash": "e05bcfa231ba2ac7c8911a3865b1e5c14b314ad11df7dce860b4f88651b9c2ad",
+          "timestamp": 1789059792003
+        },
+        "nodeHead": {
+          "height": 326,
+          "hash": "0xf73880842a42022d9e9966bfcc1cd04fe02403d7ebf91b81073c93c86fd491cf",
+          "timestampMs": 1789059810002
+        },
+        "clientPhase": "submit",
+        "clientOutcome": "submit-time abort: Transaction submission error",
+        "nodeOutcome": "mempool-rejected (see clientOutcome)",
+        "passesBefore": "0",
+        "passesAfter": "0",
+        "durationMs": 3062,
+        "clientError": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "clientErrorText": "(FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]",
+        "refusedAtMs": 1789059811808,
+        "rpcLog": [
+          "2026-09-10 18:03:31        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 104"
+        ],
+        "nodeLog": [
+          "🚫 Rejected transaction 151caf17795fb76cab4c45d748d0a25548daddefd82fef04c8708f5724d3adf5 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))",
+          "🚫 Rejected transaction ae70ee4f5a18e143a87d36a058ba1eb2321c69a481fa238d73210c961a370c93 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))",
+          "🚫 Rejected transaction c4c9e819b269031e838e15f738ca62fc662c5e566e40a47eb3edfc79afaf9c36 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))"
+        ]
+      },
+      {
+        "n": 5,
+        "circuit": "before",
+        "label": "now_s + 12",
+        "argument": "1789059825",
+        "nowS": 1789059813,
+        "nowMs": 1789059813368,
+        "clientAssumedTimeS": 1789059813,
+        "purpose": "sweep: blockTimeLessThan with t 12 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 324,
+          "hash": "8e43a539ff83fea4aadb3ec666015c97f17cf9d61bf59962ffcc032f4f381262",
+          "timestamp": 1789059798001
+        },
+        "nodeHead": {
+          "height": 326,
+          "hash": "0xf73880842a42022d9e9966bfcc1cd04fe02403d7ebf91b81073c93c86fd491cf",
+          "timestampMs": 1789059810002
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 00f1f957feed687366abb2ddf33c3cb4d6691c1afa3ea23ddf9d0c666e9b0a36c8",
+        "nodeOutcome": "included: status SucceedEntirely in block #327 ts 1789059816009",
+        "passesBefore": "0",
+        "passesAfter": "1",
+        "durationMs": 20058,
+        "submitDoneMs": 1789059829384,
+        "txId": "00f1f957feed687366abb2ddf33c3cb4d6691c1afa3ea23ddf9d0c666e9b0a36c8",
+        "submittedIntentTtls": [
+          "2026-09-10T17:04:33.000Z",
+          "2026-09-10T18:03:33.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 327,
+          "blockHash": "f02b824c58f94be73bf7168f14239781df1d06d53de9b87fce2f56ae5757b0e6",
+          "blockTimestamp": 1789059816009,
+          "txHash": "8634e69f9daf866e913597c2b6a7a19467fed9e572043e09b6d1cbcc1145de4a",
+          "blockTimeMinusArgS": "-9",
+          "inclusionLatencyS": 3
+        }
+      },
+      {
+        "n": 6,
+        "circuit": "before",
+        "label": "now_s + 15",
+        "argument": "1789059848",
+        "nowS": 1789059833,
+        "nowMs": 1789059833441,
+        "clientAssumedTimeS": 1789059833,
+        "purpose": "sweep: blockTimeLessThan with t 15 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 327,
+          "hash": "f02b824c58f94be73bf7168f14239781df1d06d53de9b87fce2f56ae5757b0e6",
+          "timestamp": 1789059816009
+        },
+        "nodeHead": {
+          "height": 329,
+          "hash": "0xe7e6c85cd494ec815a1219efe1d6d895f3255648ff721384b9391a8dbfcbe35e",
+          "timestampMs": 1789059828001
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 0089490d68de8cbedeebe8c65f452d7d4165aca9f8899b410eedbb8b2f4b2a7005",
+        "nodeOutcome": "included: status SucceedEntirely in block #331 ts 1789059840001",
+        "passesBefore": "1",
+        "passesAfter": "2",
+        "durationMs": 24093,
+        "submitDoneMs": 1789059853508,
+        "txId": "0089490d68de8cbedeebe8c65f452d7d4165aca9f8899b410eedbb8b2f4b2a7005",
+        "submittedIntentTtls": [
+          "2026-09-10T18:03:53.000Z",
+          "2026-09-10T17:04:53.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 331,
+          "blockHash": "b857945d561b9e9e560b1039d641d778e14b62065e6b5c7fbc6be07d84232550",
+          "blockTimestamp": 1789059840001,
+          "txHash": "8ae0cb5fa17d45833f8e1ec8941268d2eef12ab8790b794c7abc7b6c99affb39",
+          "blockTimeMinusArgS": "-8",
+          "inclusionLatencyS": 7
+        }
+      },
+      {
+        "n": 7,
+        "circuit": "before",
+        "label": "now_s + 20",
+        "argument": "1789059877",
+        "nowS": 1789059857,
+        "nowMs": 1789059857552,
+        "clientAssumedTimeS": 1789059857,
+        "purpose": "sweep: blockTimeLessThan with t 20 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 331,
+          "hash": "b857945d561b9e9e560b1039d641d778e14b62065e6b5c7fbc6be07d84232550",
+          "timestamp": 1789059840001
+        },
+        "nodeHead": {
+          "height": 333,
+          "hash": "0xb47701f9eb97ef508bb65cc603b1f5e4a8c688d79335a4bdde08ea07719794f5",
+          "timestampMs": 1789059852003
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 00186d94e4d5f75e57a5cd67f1307d2ae11e3ebda91af66e3fdbe3358a620ad9f0",
+        "nodeOutcome": "included: status SucceedEntirely in block #335 ts 1789059864005",
+        "passesBefore": "2",
+        "passesAfter": "3",
+        "durationMs": 24096,
+        "submitDoneMs": 1789059877626,
+        "txId": "00186d94e4d5f75e57a5cd67f1307d2ae11e3ebda91af66e3fdbe3358a620ad9f0",
+        "submittedIntentTtls": [
+          "2026-09-10T17:05:17.000Z",
+          "2026-09-10T18:04:17.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 335,
+          "blockHash": "16bce895e4a88ad5fbcbbdd85fc7685987a8c93ef4537c8bb037a9486d71434c",
+          "blockTimestamp": 1789059864005,
+          "txHash": "cde80b8c3db9d165e4c4a39e2dfceca5e9add82899c01fdcf5692fa08b371c5a",
+          "blockTimeMinusArgS": "-13",
+          "inclusionLatencyS": 7
+        }
+      },
+      {
+        "n": 8,
+        "circuit": "after",
+        "label": "now_s - 1",
+        "argument": "1789059880",
+        "nowS": 1789059881,
+        "nowMs": 1789059881654,
+        "clientAssumedTimeS": 1789059881,
+        "purpose": "sweep: blockTimeGreaterThan with t 1 s behind the host clock",
+        "indexerLatest": {
+          "height": 335,
+          "hash": "16bce895e4a88ad5fbcbbdd85fc7685987a8c93ef4537c8bb037a9486d71434c",
+          "timestamp": 1789059864005
+        },
+        "nodeHead": {
+          "height": 337,
+          "hash": "0xa4c00c3fe47fa895e4a0905d5e93d13d5cff903dd5ce7cd09d3e5cc0343d6622",
+          "timestampMs": 1789059876001
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 0023869cdf2ca6962710b42d8df83e1a02af93abaf4d610662b99b9204a2ccd52a",
+        "nodeOutcome": "included: status SucceedEntirely in block #339 ts 1789059888006",
+        "passesBefore": "3",
+        "passesAfter": "4",
+        "durationMs": 24084,
+        "submitDoneMs": 1789059901712,
+        "txId": "0023869cdf2ca6962710b42d8df83e1a02af93abaf4d610662b99b9204a2ccd52a",
+        "submittedIntentTtls": [
+          "2026-09-10T17:05:41.000Z",
+          "2026-09-10T18:04:41.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 339,
+          "blockHash": "f859d37d6d263ee59a87ad0cc9ec4aa1c5571021f762e602eed4655645163151",
+          "blockTimestamp": 1789059888006,
+          "txHash": "4bca0ef8c9ce64250735160da95cc96b07f8f957fa303048a86e6b902e3ce46b",
+          "blockTimeMinusArgS": "8",
+          "inclusionLatencyS": 7
+        }
+      },
+      {
+        "n": 9,
+        "circuit": "after",
+        "label": "now_s - 3",
+        "argument": "1789059902",
+        "nowS": 1789059905,
+        "nowMs": 1789059905750,
+        "clientAssumedTimeS": 1789059905,
+        "purpose": "sweep: blockTimeGreaterThan with t 3 s behind the host clock",
+        "indexerLatest": {
+          "height": 339,
+          "hash": "f859d37d6d263ee59a87ad0cc9ec4aa1c5571021f762e602eed4655645163151",
+          "timestamp": 1789059888006
+        },
+        "nodeHead": {
+          "height": 341,
+          "hash": "0x0c7e00b68ddde9fe8581051cca3a66591c7a8dfa416703879979ca3531a6a8f2",
+          "timestampMs": 1789059900002
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 00e67967eb1a909c119d41e12f867e18b456021c08af6be7ee7d30ffd7fc4bdc4e",
+        "nodeOutcome": "included: status SucceedEntirely in block #343 ts 1789059912008",
+        "passesBefore": "4",
+        "passesAfter": "5",
+        "durationMs": 24075,
+        "submitDoneMs": 1789059925789,
+        "txId": "00e67967eb1a909c119d41e12f867e18b456021c08af6be7ee7d30ffd7fc4bdc4e",
+        "submittedIntentTtls": [
+          "2026-09-10T18:05:05.000Z",
+          "2026-09-10T17:06:05.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 343,
+          "blockHash": "2453aa56d062305475406bda100b9abfba80f5f00bcea0ef6c0ff2d49fb96c0c",
+          "blockTimestamp": 1789059912008,
+          "txHash": "8e9bd2e44e3803fd0bf176556cc3c49b3bf1c89d38b43f7b050f7a4ae25adf45",
+          "blockTimeMinusArgS": "10",
+          "inclusionLatencyS": 7
+        }
+      },
+      {
+        "n": 10,
+        "circuit": "after",
+        "label": "now_s - 6",
+        "argument": "1789059923",
+        "nowS": 1789059929,
+        "nowMs": 1789059929832,
+        "clientAssumedTimeS": 1789059929,
+        "purpose": "sweep: blockTimeGreaterThan with t 6 s behind the host clock",
+        "indexerLatest": {
+          "height": 343,
+          "hash": "2453aa56d062305475406bda100b9abfba80f5f00bcea0ef6c0ff2d49fb96c0c",
+          "timestamp": 1789059912008
+        },
+        "nodeHead": {
+          "height": 345,
+          "hash": "0x8607a8626a3862f65b3c02c0e1b4644d56aaa81d1734b3c18b1fe8e8338aed11",
+          "timestampMs": 1789059924012
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 0086ba5c6ca4ed2ab5269eed41f7a8e51f43d8fdceb3a2b94e774518c6421e13a0",
+        "nodeOutcome": "included: status SucceedEntirely in block #347 ts 1789059936001",
+        "passesBefore": "5",
+        "passesAfter": "6",
+        "durationMs": 24136,
+        "submitDoneMs": 1789059949926,
+        "txId": "0086ba5c6ca4ed2ab5269eed41f7a8e51f43d8fdceb3a2b94e774518c6421e13a0",
+        "submittedIntentTtls": [
+          "2026-09-10T17:06:29.000Z",
+          "2026-09-10T18:05:29.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 347,
+          "blockHash": "5e7dcbcbaa9b086876cab50693ec0d88dd07c916c6b1e376136a5aaef4907d5b",
+          "blockTimestamp": 1789059936001,
+          "txHash": "d8c5b146df4f2f12cb078b2c13d65663a5645cea276ed5d4c35ea9fcc3735594",
+          "blockTimeMinusArgS": "13",
+          "inclusionLatencyS": 7
+        }
+      },
+      {
+        "n": 11,
+        "circuit": "after",
+        "label": "now_s - 12",
+        "argument": "1789059941",
+        "nowS": 1789059953,
+        "nowMs": 1789059953983,
+        "clientAssumedTimeS": 1789059953,
+        "purpose": "sweep: blockTimeGreaterThan with t 12 s behind the host clock",
+        "indexerLatest": {
+          "height": 347,
+          "hash": "5e7dcbcbaa9b086876cab50693ec0d88dd07c916c6b1e376136a5aaef4907d5b",
+          "timestamp": 1789059936001
+        },
+        "nodeHead": {
+          "height": 349,
+          "hash": "0xd9861258aa406a24f8fc102aadfd368ad1b0c9dd63ff3819a934e6de09e09f66",
+          "timestampMs": 1789059948002
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 0091957afae32a44318d236be1ec7a4b5c630f7e233035fc93a7f283d647cb6dac",
+        "nodeOutcome": "included: status SucceedEntirely in block #351 ts 1789059960002",
+        "passesBefore": "6",
+        "passesAfter": "7",
+        "durationMs": 22771,
+        "submitDoneMs": 1789059972720,
+        "txId": "0091957afae32a44318d236be1ec7a4b5c630f7e233035fc93a7f283d647cb6dac",
+        "submittedIntentTtls": [
+          "2026-09-10T17:06:54.000Z",
+          "2026-09-10T18:05:54.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 351,
+          "blockHash": "f5d5356cb197ce4a85b42546e56b3accfb4b2e7e9302a0d7e180ba1b4cf8c3bc",
+          "blockTimestamp": 1789059960002,
+          "txHash": "436873b1db5db99ea5491831f9a7448258542034720c177b32e428ce7c1fd924",
+          "blockTimeMinusArgS": "19",
+          "inclusionLatencyS": 7
+        }
+      },
+      {
+        "n": 12,
+        "circuit": "after",
+        "label": "now_s - 20",
+        "argument": "1789059956",
+        "nowS": 1789059976,
+        "nowMs": 1789059976764,
+        "clientAssumedTimeS": 1789059976,
+        "purpose": "sweep: blockTimeGreaterThan with t 20 s behind the host clock",
+        "indexerLatest": {
+          "height": 351,
+          "hash": "f5d5356cb197ce4a85b42546e56b3accfb4b2e7e9302a0d7e180ba1b4cf8c3bc",
+          "timestamp": 1789059960002
+        },
+        "nodeHead": {
+          "height": 353,
+          "hash": "0x35b11879317c147b3b5e75dddfdb087b600c921536f19fc3682ec70f232dc883",
+          "timestampMs": 1789059972011
+        },
+        "clientPhase": "submitted",
+        "clientOutcome": "submitted 00f121adeebd8d474b79e77ea2b65910d7a737a9ca080e9e3d27ff5e8a513f2702",
+        "nodeOutcome": "included: status SucceedEntirely in block #355 ts 1789059984002",
+        "passesBefore": "7",
+        "passesAfter": "8",
+        "durationMs": 24134,
+        "submitDoneMs": 1789059996863,
+        "txId": "00f121adeebd8d474b79e77ea2b65910d7a737a9ca080e9e3d27ff5e8a513f2702",
+        "submittedIntentTtls": [
+          "2026-09-10T18:06:16.000Z",
+          "2026-09-10T17:07:16.000Z"
+        ],
+        "included": {
+          "status": "SucceedEntirely",
+          "blockHeight": 355,
+          "blockHash": "3554e3fc598dfda51cc5b8a42a1f81804cdb52e4f47c946fc886202afe5bd152",
+          "blockTimestamp": 1789059984002,
+          "txHash": "477c062cdd30b7406cb58e9497da2be85a993ef2f87e7007543f6b31ada1da55",
+          "blockTimeMinusArgS": "28",
+          "inclusionLatencyS": 8
+        }
+      },
+      {
+        "n": 13,
+        "circuit": "never",
+        "label": "now_s + 10",
+        "argument": "1789060010",
+        "nowS": 1789060000,
+        "nowMs": 1789060000913,
+        "clientAssumedTimeS": 1789060000,
+        "purpose": "sweep: the MIP arm with t 10 s ahead of the host clock",
+        "indexerLatest": {
+          "height": 355,
+          "hash": "3554e3fc598dfda51cc5b8a42a1f81804cdb52e4f47c946fc886202afe5bd152",
+          "timestamp": 1789059984002
+        },
+        "nodeHead": {
+          "height": 357,
+          "hash": "0x04f4ce79199d80e8fe52d12aa8bc1d73868add921cf2502ace8925a04699f7a0",
+          "timestampMs": 1789059996009
+        },
+        "clientPhase": "submit",
+        "clientOutcome": "submit-time abort: Transaction submission error",
+        "nodeOutcome": "mempool-rejected (see clientOutcome)",
+        "passesBefore": "8",
+        "passesAfter": "8",
+        "durationMs": 3062,
+        "clientError": {
+          "name": "(FiberFailure) SubmissionError",
+          "message": "Transaction submission error",
+          "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+          "causeChain": [
+            {
+              "name": "(FiberFailure) SubmissionError",
+              "tag": null,
+              "message": "Transaction submission error"
+            }
+          ]
+        },
+        "clientErrorText": "(FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-k1-arm/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]",
+        "refusedAtMs": 1789060002435,
+        "rpcLog": [
+          "2026-09-10 18:06:42        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 104"
+        ],
+        "nodeLog": [
+          "🚫 Rejected transaction c4bf8b9a567c5fdb460023d83636c64a9a52d54eca821e8794725fd29f17391a from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))"
+        ]
+      }
+    ]
+  },
+  "ranAt": "2026-09-10T17:06:43.975Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

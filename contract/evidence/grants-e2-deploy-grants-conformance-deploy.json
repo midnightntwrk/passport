@@ -1,0 +1,167 @@
+{
+  "testId": "grants-e2-deploy",
+  "name": "grants-conformance-deploy",
+  "description": "Scoped grants Testing 6: the spec_version = 2 roster deployed in waves, the maintenance authority retired after the last wave, and both device arms live",
+  "verdict": "PARTIAL",
+  "note": "The 30-circuit spec_version = 2 roster deployed in 3 waves within the per-block parameters, with the wave plan computed from the compiled artefacts and the authority counter read from chain before each maintenance wave; after the last wave the on-chain maintenance authority carries an empty committee at threshold 1, which no signature set can satisfy. The spec_version = 1 control of Testing item 6 was NOT run: it needs a compiled v1 build of the contract, which this tree does not carry. Hence PARTIAL.",
+  "details": {
+    "clientId": "https://grants-e2.example",
+    "originHash": "82c5e9d34d26c42429753950ff889e384b60db9e383c7d90cfd1bbd78feecdd5",
+    "colorMain": "2ccbdcdf4343f97195c89da2c8fd975d54a4f2d8f54d8b02d67f078dc2b756b2",
+    "colorAux": "d085068de8f1aed8023403d060be6df9644038acf880016516968208eacb65ec",
+    "verifierByteBudget": 25000,
+    "waveBudgetFinding": "MEASURED by probe:wave-ceiling (evidence/wave-ceiling.json, node 2.1.0): the per-maintenance-update ceiling sits in (29,484, 32,229] verifier bytes. One update carrying 12 verifier keys (29,484 bytes) lands; 13 keys (32,229), 14 keys (34,974) and 16 keys (39,600) are each refused by the node at submission with \"1010: Invalid Transaction: Transaction would exhaust the block limits\". The client fee computation refuses none of them: it priced every refused payload, normalizeFullness did not throw, and fees returned a figure. The NODE therefore bounds a maintenance update, while the client-side \"exceeded block limit in transaction fee computation\" is what bounds the all-operations DEPLOY. This run drove wave-deploy at 25000 verifier bytes per update (the shipped default being the largest accepted payload less a stated safety margin), and the plan below is what that budget produces.",
+    "rosterSize": 30,
+    "rosterVerifierBytes": 74286,
+    "plan": [
+      {
+        "index": 1,
+        "kind": "deploy",
+        "circuitCount": 10,
+        "verifierBytes": 25434,
+        "retiresAuthority": false,
+        "circuits": [
+          "deposit_unshielded",
+          "deposit_shielded",
+          "activate_initial_device_with_k256",
+          "withdraw_unshielded_with_k256",
+          "append_inbox_with_k256",
+          "withdraw_shielded_with_k256",
+          "withdraw_shielded_to_contract_with_k256",
+          "rotate_enc_key_with_k256",
+          "add_device_with_k256",
+          "remove_device_with_k256"
+        ]
+      },
+      {
+        "index": 2,
+        "kind": "maintenance",
+        "circuitCount": 10,
+        "verifierBytes": 23994,
+        "retiresAuthority": false,
+        "circuits": [
+          "activate_initial_device_with_jubjub",
+          "withdraw_unshielded_with_jubjub",
+          "append_inbox_with_jubjub",
+          "withdraw_shielded_with_jubjub",
+          "withdraw_shielded_to_contract_with_jubjub",
+          "rotate_enc_key_with_jubjub",
+          "add_device_with_jubjub",
+          "remove_device_with_jubjub",
+          "withdraw_unshielded_with_grant_k256",
+          "withdraw_shielded_with_grant_k256"
+        ]
+      },
+      {
+        "index": 3,
+        "kind": "maintenance",
+        "circuitCount": 10,
+        "verifierBytes": 24858,
+        "retiresAuthority": true,
+        "circuits": [
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "issue_grant_with_k256",
+          "revoke_grant_with_k256",
+          "revoke_all_grants_with_k256",
+          "withdraw_unshielded_with_grant_jubjub",
+          "withdraw_shielded_with_grant_jubjub",
+          "withdraw_shielded_to_contract_with_grant_jubjub",
+          "issue_grant_with_jubjub",
+          "revoke_grant_with_jubjub",
+          "revoke_all_grants_with_jubjub"
+        ]
+      }
+    ],
+    "accountA": "f2c6e86a60e6f7e59858f567da2a644fbe4d5d71814c13b5e759663feb85a982",
+    "authorityCounterPerWave": [
+      {
+        "wave": 2,
+        "circuits": 10,
+        "verifierBytes": 23994,
+        "authorityCounterBefore": "0"
+      },
+      {
+        "wave": 3,
+        "circuits": 10,
+        "verifierBytes": 24858,
+        "authorityCounterBefore": "1"
+      }
+    ],
+    "waveTransactions": [
+      {
+        "kind": "ContractDeploy",
+        "txHash": "419df08d6271332b533ab774f2803b7d317c42dc0aed7ad42b991d05126fc12a",
+        "blockHeight": 5888,
+        "status": "RegularTransaction/SUCCESS @block 5888"
+      },
+      {
+        "kind": "ContractUpdate",
+        "txHash": "7fa79e2eb04ff072a19c8806d1f68e3dd65824cf0d7fa01a82ae6e28167d4383",
+        "blockHeight": 5891,
+        "status": "RegularTransaction/SUCCESS @block 5891"
+      },
+      {
+        "kind": "ContractUpdate",
+        "txHash": "a9c51fe6daf300b44ab66737628c8f45eec5898f94786af8d885b3d295853bd7",
+        "blockHeight": 5894,
+        "status": "RegularTransaction/SUCCESS @block 5894"
+      }
+    ],
+    "contractActions": [
+      {
+        "kind": "ContractDeploy",
+        "entryPoint": null,
+        "txHash": "419df08d6271332b533ab774f2803b7d317c42dc0aed7ad42b991d05126fc12a",
+        "blockHeight": 5888
+      },
+      {
+        "kind": "ContractUpdate",
+        "entryPoint": null,
+        "txHash": "7fa79e2eb04ff072a19c8806d1f68e3dd65824cf0d7fa01a82ae6e28167d4383",
+        "blockHeight": 5891
+      },
+      {
+        "kind": "ContractUpdate",
+        "entryPoint": null,
+        "txHash": "a9c51fe6daf300b44ab66737628c8f45eec5898f94786af8d885b3d295853bd7",
+        "blockHeight": 5894
+      },
+      {
+        "kind": "ContractCall",
+        "entryPoint": "activate_initial_device_with_k256",
+        "txHash": "3bc6e4eb29ee10e48a97b1eab724bbd87aa868707c26327694a56f5f090886f4",
+        "blockHeight": 5898
+      }
+    ],
+    "maintenanceAuthorityAfterWaves": {
+      "committee": 0,
+      "threshold": 1,
+      "counter": "2"
+    },
+    "specVersion": "2",
+    "initialLedger": {
+      "round": "1",
+      "authNonce": "0",
+      "inboxCount": "0",
+      "deviceCount": "1",
+      "grantGeneration": "0",
+      "grantCount": "0"
+    },
+    "specVersion1Control": "NOT RUN. Testing item 6 also asks that a spec_version = 1 account be shown unable to gain grants. That control needs a compiled v1 (pre-grants) build of the contract, which this tree does not carry: contracts/account.compact is the spec_version = 2 source and the managed artefacts are its 30-circuit roster. The control is therefore outstanding, and the deploy leg of item 6 is reported without it.",
+    "crossArmEnrolmentTx": "00563c5287ac819a5469c5f6e4fd6f47238604c1ec875c111c2660ef12ce03dd16",
+    "afterEnrolment": {
+      "round": "2",
+      "authNonce": "1",
+      "inboxCount": "0",
+      "deviceCount": "2",
+      "grantGeneration": "0",
+      "grantCount": "0"
+    }
+  },
+  "ranAt": "2026-09-11T16:52:10.795Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

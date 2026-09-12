@@ -1,0 +1,1473 @@
+{
+  "testId": "grants-e2-proving",
+  "name": "grants-conformance-proving",
+  "description": "Proving time per circuit over the whole E2 run, with the compiled k of each circuit",
+  "verdict": "PASS",
+  "note": "Proving time measured at providers.proofProvider.proveTx for every proof of the run, attributed to the circuit of the call it served, with the compiled k of each circuit from the measurement table; wall-clock per call (build, prove, submit) recorded alongside.",
+  "details": {
+    "provingTable": [
+      {
+        "circuit": "withdraw_shielded_with_grant_jubjub x2 (composed)",
+        "k": null,
+        "proofs": 2,
+        "minMs": 19947,
+        "medianMs": 25369,
+        "maxMs": 30791
+      },
+      {
+        "circuit": "withdraw_shielded_with_k256",
+        "k": 17,
+        "proofs": 1,
+        "minMs": 16181,
+        "medianMs": 16181,
+        "maxMs": 16181
+      },
+      {
+        "circuit": "withdraw_shielded_with_grant_k256",
+        "k": 17,
+        "proofs": 2,
+        "minMs": 13592,
+        "medianMs": 15507,
+        "maxMs": 17422
+      },
+      {
+        "circuit": "withdraw_shielded_to_contract_with_grant_k256 + deposit_shielded",
+        "k": null,
+        "proofs": 1,
+        "minMs": 15116,
+        "medianMs": 15116,
+        "maxMs": 15116
+      },
+      {
+        "circuit": "issue_grant_with_k256",
+        "k": 17,
+        "proofs": 7,
+        "minMs": 12853,
+        "medianMs": 13941,
+        "maxMs": 17253
+      },
+      {
+        "circuit": "withdraw_shielded_with_grant_jubjub",
+        "k": 17,
+        "proofs": 11,
+        "minMs": 11157,
+        "medianMs": 12309,
+        "maxMs": 15126
+      },
+      {
+        "circuit": "withdraw_shielded_with_grant_jubjub (prove-only trials)",
+        "k": null,
+        "proofs": 8,
+        "minMs": 11246,
+        "medianMs": 12047,
+        "maxMs": 12774
+      },
+      {
+        "circuit": "withdraw_shielded_with_grant_jubjub (prove-only, spent coin)",
+        "k": null,
+        "proofs": 1,
+        "minMs": 11779,
+        "medianMs": 11779,
+        "maxMs": 11779
+      },
+      {
+        "circuit": "issue_grant_with_jubjub x2 (composed)",
+        "k": null,
+        "proofs": 1,
+        "minMs": 9270,
+        "medianMs": 9270,
+        "maxMs": 9270
+      },
+      {
+        "circuit": "rotate_enc_key_with_k256",
+        "k": 16,
+        "proofs": 1,
+        "minMs": 7962,
+        "medianMs": 7962,
+        "maxMs": 7962
+      },
+      {
+        "circuit": "append_inbox_with_k256",
+        "k": 16,
+        "proofs": 1,
+        "minMs": 7946,
+        "medianMs": 7946,
+        "maxMs": 7946
+      },
+      {
+        "circuit": "add_device_with_k256",
+        "k": 16,
+        "proofs": 1,
+        "minMs": 7706,
+        "medianMs": 7706,
+        "maxMs": 7706
+      },
+      {
+        "circuit": "revoke_grant_with_jubjub + issue_grant_with_jubjub (composed)",
+        "k": null,
+        "proofs": 1,
+        "minMs": 7388,
+        "medianMs": 7388,
+        "maxMs": 7388
+      },
+      {
+        "circuit": "issue_grant_with_jubjub",
+        "k": 16,
+        "proofs": 17,
+        "minMs": 5575,
+        "medianMs": 5683,
+        "maxMs": 6647
+      },
+      {
+        "circuit": "revoke_all_grants_with_jubjub",
+        "k": 15,
+        "proofs": 1,
+        "minMs": 3446,
+        "medianMs": 3446,
+        "maxMs": 3446
+      },
+      {
+        "circuit": "revoke_grant_with_jubjub",
+        "k": 15,
+        "proofs": 1,
+        "minMs": 3416,
+        "medianMs": 3416,
+        "maxMs": 3416
+      },
+      {
+        "circuit": "faucet.mint_shielded",
+        "k": null,
+        "proofs": 8,
+        "minMs": 1352,
+        "medianMs": 1467,
+        "maxMs": 1753
+      },
+      {
+        "circuit": "deposit_shielded",
+        "k": 13,
+        "proofs": 8,
+        "minMs": 973,
+        "medianMs": 1023,
+        "maxMs": 1142
+      },
+      {
+        "circuit": "(deploy / activation)",
+        "k": null,
+        "proofs": 8,
+        "minMs": 0,
+        "medianMs": 1,
+        "maxMs": 2246
+      }
+    ],
+    "totalProofs": 81,
+    "failedProofAttempts": 12,
+    "totalProvingMs": 818043,
+    "proofs": [
+      {
+        "label": "deploy:account-A (3 waves + activate)",
+        "circuits": [],
+        "ms": 0,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-A (3 waves + activate)",
+        "circuits": [],
+        "ms": 1,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-A (3 waves + activate)",
+        "circuits": [],
+        "ms": 1,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-A (3 waves + activate)",
+        "circuits": [
+          "activate_initial_device_with_k256"
+        ],
+        "ms": 2074,
+        "ok": true
+      },
+      {
+        "label": "add_device_with_k256 (enrol jubjub device)",
+        "circuits": [
+          "add_device_with_k256"
+        ],
+        "ms": 7706,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant A)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 15090,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (grant B)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 6402,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant C)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 12951,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (grant D)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5575,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant E)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 13077,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant L)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 12853,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant G)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 13941,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (main color)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1682,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (funding)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 1084,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #1, 200)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 13337,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #2, 100)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11393,
+        "ok": false
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #2, 100)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12729,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "circuits": [
+          "withdraw_shielded_with_grant_k256"
+        ],
+        "ms": 16752,
+        "ok": false
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "circuits": [
+          "withdraw_shielded_with_grant_k256"
+        ],
+        "ms": 16416,
+        "ok": false
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "circuits": [
+          "withdraw_shielded_with_grant_k256"
+        ],
+        "ms": 13592,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #3, 200 — exhausts the cap)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 14427,
+        "ok": false
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #3, 200 — exhausts the cap)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12309,
+        "ok": true
+      },
+      {
+        "label": "revoke_grant_with_jubjub (grant B)",
+        "circuits": [
+          "revoke_grant_with_jubjub"
+        ],
+        "ms": 3416,
+        "ok": true
+      },
+      {
+        "label": "rotate_enc_key_with_k256 (owner rotates between signing and submission)",
+        "circuits": [
+          "rotate_enc_key_with_k256"
+        ],
+        "ms": 7962,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #1, 100 — between owner signing and submission)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11595,
+        "ok": false
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #1, 100 — between owner signing and submission)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12191,
+        "ok": true
+      },
+      {
+        "label": "append_inbox_with_k256 (pre-signed, submitted after a grant call)",
+        "circuits": [
+          "append_inbox_with_k256"
+        ],
+        "ms": 7946,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (aux color)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1621,
+        "ok": true
+      },
+      {
+        "label": "S7 leg (b) coin: prove-only trial at mt_index 433",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 13184,
+        "ok": false
+      },
+      {
+        "label": "S7 leg (b) coin: prove-only trial at mt_index 432",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12774,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (permissionless, between grantee signing and submission)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 1142,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #2, pre-signed across a deposit)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12370,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-B (3 waves + activate)",
+        "circuits": [],
+        "ms": 1,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-B (3 waves + activate)",
+        "circuits": [],
+        "ms": 1,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-B (3 waves + activate)",
+        "circuits": [],
+        "ms": 0,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-B (3 waves + activate)",
+        "circuits": [
+          "activate_initial_device_with_k256"
+        ],
+        "ms": 2246,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant F)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 16119,
+        "ok": false
+      },
+      {
+        "label": "issue_grant_with_k256 (grant F)",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 17253,
+        "ok": true
+      },
+      {
+        "label": "submit composed direct transfer (grant twin + payee claim)",
+        "circuits": [
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "deposit_shielded"
+        ],
+        "ms": 17688,
+        "ok": false
+      },
+      {
+        "label": "submit composed direct transfer (grant twin + payee claim)",
+        "circuits": [
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "deposit_shielded"
+        ],
+        "ms": 15116,
+        "ok": true
+      },
+      {
+        "label": "revoke_all_grants_with_jubjub",
+        "circuits": [
+          "revoke_all_grants_with_jubjub"
+        ],
+        "ms": 3446,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant A (re-issued under generation 1))",
+        "circuits": [
+          "issue_grant_with_k256"
+        ],
+        "ms": 15539,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (re-issued A, 25)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 14466,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 1)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1753,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 1)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 1080,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 2)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1357,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 2)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 984,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 3)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1352,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 3)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 997,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 4)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1358,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 4)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 973,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (k256 identity point)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 6518,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (k256 off-curve pair)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5595,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (k256 invalid-curve twin)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5653,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub key as a k256 grantee)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5610,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub identity (0, 1))",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5656,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub order-2 point)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5575,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub off-curve pair)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5665,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (device key as grantee)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5633,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (a DEVICE key acting as a grantee)",
+        "circuits": [
+          "withdraw_shielded_with_grant_k256"
+        ],
+        "ms": 17422,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (expires_at = 0)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 6644,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (expires_at = head + 3600)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5683,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z0, expires_at = 0)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 13223,
+        "ok": false
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z0, expires_at = 0)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12275,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z1, expires_at = head + 3600)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 15126,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (expires_at inside the admission margin)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 6647,
+        "ok": true
+      },
+      {
+        "label": "S12 margin coin: prove-only trial at mt_index 459",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 14208,
+        "ok": false
+      },
+      {
+        "label": "S12 margin coin: prove-only trial at mt_index 458",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12726,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (expiry inside the admission margin)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11500,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the record S13a re-issues)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5723,
+        "ok": true
+      },
+      {
+        "label": "composed revoke + issue over one grant id",
+        "circuits": [
+          "revoke_grant_with_jubjub",
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 7388,
+        "ok": true
+      },
+      {
+        "label": "composed batch issuance (two grants)",
+        "circuits": [
+          "issue_grant_with_jubjub",
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 9270,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the grant S13c spends twice)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5740,
+        "ok": true
+      },
+      {
+        "label": "S13c coin A: prove-only trial at mt_index 459",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11283,
+        "ok": false
+      },
+      {
+        "label": "S13c coin A: prove-only trial at mt_index 458",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11930,
+        "ok": true
+      },
+      {
+        "label": "S13c coin B: prove-only trial at mt_index 446",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11246,
+        "ok": true
+      },
+      {
+        "label": "S13c control coin C: prove-only trial at mt_index 450",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12185,
+        "ok": true
+      },
+      {
+        "label": "S13c control coin D: prove-only trial at mt_index 452",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 12134,
+        "ok": true
+      },
+      {
+        "label": "composed pair, REORDERED (nonce n + 1 first)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub",
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 27887,
+        "ok": false
+      },
+      {
+        "label": "composed pair, REORDERED (nonce n + 1 first)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub",
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 30791,
+        "ok": true
+      },
+      {
+        "label": "composed pair, two grant calls under ONE grant",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub",
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 19947,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the grant S14a races)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 6488,
+        "ok": true
+      },
+      {
+        "label": "S14a coin: prove-only trial at mt_index 463",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11959,
+        "ok": true
+      },
+      {
+        "label": "race: the owner proves and submits first",
+        "circuits": [
+          "withdraw_shielded_with_k256"
+        ],
+        "ms": 16181,
+        "ok": true
+      },
+      {
+        "label": "race: the grantee proves the same coin second",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11157,
+        "ok": true
+      },
+      {
+        "label": "race leg (ii): prove the grantee call over the coin the owner already spent",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11779,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the grant S14b pre-signs under)",
+        "circuits": [
+          "issue_grant_with_jubjub"
+        ],
+        "ms": 5707,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (S14b coin)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1576,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (S14b coin)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 1048,
+        "ok": true
+      },
+      {
+        "label": "S14b coin: prove-only trial at mt_index 467",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11609,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (S14b intervening deposit)",
+        "circuits": [
+          "mint_shielded"
+        ],
+        "ms": 1358,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (permissionless, after the grantee signed)",
+        "circuits": [
+          "deposit_shielded"
+        ],
+        "ms": 991,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (the ORIGINAL pre-deposit signature)",
+        "circuits": [
+          "withdraw_shielded_with_grant_jubjub"
+        ],
+        "ms": 11985,
+        "ok": true
+      }
+    ],
+    "calls": [
+      {
+        "label": "deploy:faucet",
+        "ms": 20604,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-A (3 waves + activate)",
+        "ms": 78848,
+        "ok": true
+      },
+      {
+        "label": "add_device_with_k256 (enrol jubjub device)",
+        "ms": 28780,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant A)",
+        "ms": 36059,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (grant B)",
+        "ms": 24024,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant C)",
+        "ms": 30703,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (grant D)",
+        "ms": 22685,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant E)",
+        "ms": 30681,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant L)",
+        "ms": 29336,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant G)",
+        "ms": 30700,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (main color)",
+        "ms": 32336,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (funding)",
+        "ms": 21087,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #1, 200)",
+        "ms": 32529,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #2, 100)",
+        "ms": 11601,
+        "ok": false,
+        "note": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/pr"
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #2, 100)",
+        "ms": 31109,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "ms": 35735,
+        "ok": false,
+        "note": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/pr"
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "ms": 29724,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #3, 200 — exhausts the cap)",
+        "ms": 14706,
+        "ok": false,
+        "note": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/pr"
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #3, 200 — exhausts the cap)",
+        "ms": 34363,
+        "ok": true
+      },
+      {
+        "label": "revoke_grant_with_jubjub (grant B)",
+        "ms": 23449,
+        "ok": true
+      },
+      {
+        "label": "rotate_enc_key_with_k256 (owner rotates between signing and submission)",
+        "ms": 29543,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #1, 100 — between owner signing and submission)",
+        "ms": 11803,
+        "ok": false,
+        "note": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/pr"
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #1, 100 — between owner signing and submission)",
+        "ms": 29237,
+        "ok": true
+      },
+      {
+        "label": "append_inbox_with_k256 (pre-signed, submitted after a grant call)",
+        "ms": 25539,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (aux color)",
+        "ms": 39038,
+        "ok": true
+      },
+      {
+        "label": "S7 leg (b) coin: prove-only trial at mt_index 433",
+        "ms": 13185,
+        "ok": false,
+        "note": "'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
+      },
+      {
+        "label": "S7 leg (b) coin: prove-only trial at mt_index 432",
+        "ms": 12774,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (permissionless, between grantee signing and submission)",
+        "ms": 23510,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #2, pre-signed across a deposit)",
+        "ms": 29401,
+        "ok": true
+      },
+      {
+        "label": "deploy:account-B (3 waves + activate)",
+        "ms": 79063,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant F)",
+        "ms": 54779,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_to_contract_with_grant_k256 (build)",
+        "ms": 129,
+        "ok": true
+      },
+      {
+        "label": "submit composed direct transfer (grant twin + payee claim)",
+        "ms": 17688,
+        "ok": false,
+        "note": "'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
+      },
+      {
+        "label": "withdraw_shielded_to_contract_with_grant_k256 (build)",
+        "ms": 121,
+        "ok": true
+      },
+      {
+        "label": "submit composed direct transfer (grant twin + payee claim)",
+        "ms": 31629,
+        "ok": true
+      },
+      {
+        "label": "revoke_all_grants_with_jubjub",
+        "ms": 19293,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_k256 (grant A (re-issued under generation 1))",
+        "ms": 35842,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (re-issued A, 25)",
+        "ms": 36273,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 1)",
+        "ms": 33534,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 1)",
+        "ms": 27772,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 2)",
+        "ms": 34393,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 2)",
+        "ms": 21103,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 3)",
+        "ms": 41074,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 3)",
+        "ms": 21099,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (refill 4)",
+        "ms": 34388,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (refill 4)",
+        "ms": 21081,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (k256 identity point)",
+        "ms": 25960,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (k256 off-curve pair)",
+        "ms": 23763,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (k256 invalid-curve twin)",
+        "ms": 23888,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub key as a k256 grantee)",
+        "ms": 23885,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub identity (0, 1))",
+        "ms": 23890,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub order-2 point)",
+        "ms": 23890,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (jubjub off-curve pair)",
+        "ms": 23879,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (device key as grantee)",
+        "ms": 23922,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (a DEVICE key acting as a grantee)",
+        "ms": 38560,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (expires_at = 0)",
+        "ms": 25551,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (expires_at = head + 3600)",
+        "ms": 24031,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z0, expires_at = 0)",
+        "ms": 13437,
+        "ok": false,
+        "note": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/pr"
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z0, expires_at = 0)",
+        "ms": 34370,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z1, expires_at = head + 3600)",
+        "ms": 36112,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (expires_at inside the admission margin)",
+        "ms": 24725,
+        "ok": true
+      },
+      {
+        "label": "S12 margin coin: prove-only trial at mt_index 459",
+        "ms": 14208,
+        "ok": false,
+        "note": "'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
+      },
+      {
+        "label": "S12 margin coin: prove-only trial at mt_index 458",
+        "ms": 12727,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (expiry inside the admission margin)",
+        "ms": 14515,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the record S13a re-issues)",
+        "ms": 26968,
+        "ok": true
+      },
+      {
+        "label": "composed revoke + issue over one grant id",
+        "ms": 23933,
+        "ok": true
+      },
+      {
+        "label": "composed batch issuance (two grants)",
+        "ms": 30040,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the grant S13c spends twice)",
+        "ms": 23436,
+        "ok": true
+      },
+      {
+        "label": "S13c coin A: prove-only trial at mt_index 459",
+        "ms": 11283,
+        "ok": false,
+        "note": "'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
+      },
+      {
+        "label": "S13c coin A: prove-only trial at mt_index 458",
+        "ms": 11930,
+        "ok": true
+      },
+      {
+        "label": "S13c coin B: prove-only trial at mt_index 446",
+        "ms": 11246,
+        "ok": true
+      },
+      {
+        "label": "S13c control coin C: prove-only trial at mt_index 450",
+        "ms": 12185,
+        "ok": true
+      },
+      {
+        "label": "S13c control coin D: prove-only trial at mt_index 452",
+        "ms": 12134,
+        "ok": true
+      },
+      {
+        "label": "composed pair, REORDERED (nonce n + 1 first)",
+        "ms": 65307,
+        "ok": true
+      },
+      {
+        "label": "composed pair, two grant calls under ONE grant",
+        "ms": 39369,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the grant S14a races)",
+        "ms": 27962,
+        "ok": true
+      },
+      {
+        "label": "S14a coin: prove-only trial at mt_index 463",
+        "ms": 11959,
+        "ok": true
+      },
+      {
+        "label": "race: the owner proves and submits first",
+        "ms": 35234,
+        "ok": true
+      },
+      {
+        "label": "race: the grantee proves the same coin second",
+        "ms": 14201,
+        "ok": true
+      },
+      {
+        "label": "race leg (ii): prove the grantee call over the coin the owner already spent",
+        "ms": 11780,
+        "ok": true
+      },
+      {
+        "label": "issue_grant_with_jubjub (the grant S14b pre-signs under)",
+        "ms": 25042,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (S14b coin)",
+        "ms": 33739,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (S14b coin)",
+        "ms": 26482,
+        "ok": true
+      },
+      {
+        "label": "S14b coin: prove-only trial at mt_index 467",
+        "ms": 11609,
+        "ok": true
+      },
+      {
+        "label": "faucet mint_shielded (S14b intervening deposit)",
+        "ms": 35586,
+        "ok": true
+      },
+      {
+        "label": "deposit_shielded (permissionless, after the grantee signed)",
+        "ms": 19753,
+        "ok": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (the ORIGINAL pre-deposit signature)",
+        "ms": 30674,
+        "ok": true
+      }
+    ],
+    "wallClockMsTotal": 2652536,
+    "proofServerRestarts": [
+      {
+        "label": "outage during: withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "at": "2026-09-11T16:16:43.348Z"
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "at": "2026-09-11T16:16:43.349Z"
+      },
+      {
+        "label": "outage during: issue_grant_with_k256 (grant F)",
+        "at": "2026-09-11T16:24:18.530Z"
+      },
+      {
+        "label": "issue_grant_with_k256 (grant F)",
+        "at": "2026-09-11T16:24:18.532Z"
+      },
+      {
+        "label": "deliberate: the composed direct transfer",
+        "at": "2026-09-11T16:24:57.105Z"
+      },
+      {
+        "label": "deliberate: the device-key-as-grantee spend",
+        "at": "2026-09-11T16:35:26.607Z"
+      },
+      {
+        "label": "rawSubmit",
+        "at": "2026-09-11T16:45:19.833Z"
+      }
+    ],
+    "changePredictions": [
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #1, 200)",
+        "predictedNonce": "71a7ec96fdcbc6b5c0ef1a108a0ac704282ab0780052eec2347d10ee7069ff00",
+        "predictedValue": "800",
+        "actualNonce": "71a7ec96fdcbc6b5c0ef1a108a0ac704282ab0780052eec2347d10ee7069ff00",
+        "actualValue": "800",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #2, 100)",
+        "predictedNonce": "42d969b3309f3f6ee071980871181bf91399f66fca617e387ebe4436f0ec5500",
+        "predictedValue": "700",
+        "actualNonce": "42d969b3309f3f6ee071980871181bf91399f66fca617e387ebe4436f0ec5500",
+        "actualValue": "700",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "predictedNonce": "077540d22619b8749dbe2f21358b3fa789781b14a3e38eacf52934f2dfc2d600",
+        "predictedValue": "600",
+        "actualNonce": "077540d22619b8749dbe2f21358b3fa789781b14a3e38eacf52934f2dfc2d600",
+        "actualValue": "600",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #3, 200 — exhausts the cap)",
+        "predictedNonce": "cdb3690a4390086c9d3f6107291241bad82ec1847a8387792b2d38b4f55f8c00",
+        "predictedValue": "400",
+        "actualNonce": "cdb3690a4390086c9d3f6107291241bad82ec1847a8387792b2d38b4f55f8c00",
+        "actualValue": "400",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #1, 100 — between owner signing and submission)",
+        "predictedNonce": "acca3d0d0ebb2bd20de72db4cee8ed73d2f42e9ab7074f6370182eefba2b3300",
+        "predictedValue": "300",
+        "actualNonce": "acca3d0d0ebb2bd20de72db4cee8ed73d2f42e9ab7074f6370182eefba2b3300",
+        "actualValue": "300",
+        "matched": true
+      },
+      {
+        "label": "L #2 (pre-signed across a deposit)",
+        "predictedNonce": "206c6e4626361442bbd360e165e6fe3ab23a542285e4a89713c7bb67c598b000",
+        "predictedValue": "200",
+        "actualNonce": "206c6e4626361442bbd360e165e6fe3ab23a542285e4a89713c7bb67c598b000",
+        "actualValue": "200",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (re-issued A, 25)",
+        "predictedNonce": "ea7bacf669dd4692c47e8a6e66b215f3bacfb2a8a411b17fc57d0cfacaa0d500",
+        "predictedValue": "25",
+        "actualNonce": "ea7bacf669dd4692c47e8a6e66b215f3bacfb2a8a411b17fc57d0cfacaa0d500",
+        "actualValue": "25",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (a DEVICE key acting as a grantee)",
+        "predictedNonce": "28c5402e8635b500c325ea89db436117043dffc419f7f5f1578dfeff5bab5700",
+        "predictedValue": "980",
+        "actualNonce": "28c5402e8635b500c325ea89db436117043dffc419f7f5f1578dfeff5bab5700",
+        "actualValue": "980",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z0, expires_at = 0)",
+        "predictedNonce": "e497c41613873fe69238f675af468866bb5684a676244a1bc62cac57aff7f600",
+        "predictedValue": "950",
+        "actualNonce": "e497c41613873fe69238f675af468866bb5684a676244a1bc62cac57aff7f600",
+        "actualValue": "950",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z1, expires_at = head + 3600)",
+        "predictedNonce": "ed022d16464e9362c6a4ee9ee9313ac184a9cdebd9479103aef4d46c39cdfd00",
+        "predictedValue": "920",
+        "actualNonce": "ed022d16464e9362c6a4ee9ee9313ac184a9cdebd9479103aef4d46c39cdfd00",
+        "actualValue": "920",
+        "matched": true
+      }
+    ],
+    "changePredictionAllMatched": true
+  },
+  "ranAt": "2026-09-11T16:52:10.798Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}
