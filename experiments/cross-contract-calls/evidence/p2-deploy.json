@@ -3,19 +3,19 @@
   "name": "deploy",
   "description": "Deploy Tally, deploy Caller with a contract-typed constructor argument, and probe the block-pinned indexer state query cross-contract resolution depends on",
   "verdict": "PASS",
-  "note": "Both contracts deployed (tally cc147a4641f6…, caller 543818d13a1f…); the contract reference round-trips through the constructor and ledger; indexer-standalone 4.4.0-rc.2 ANSWERS the block-pinned contract(address:, offset:) query — the upstream mainline-indexer weak link is not present here.",
+  "note": "Both contracts deployed (tally 4f8fc4f7c525…, caller d2938fa034b5…); the contract reference round-trips through the constructor and ledger; indexer-standalone 4.4.0-rc.2 ANSWERS the block-pinned contract(address:, offset:) query — the upstream mainline-indexer weak link is not present here.",
   "details": {
-    "tallyAddress": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+    "tallyAddress": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
     "tallyInitial": {
       "total": "0",
       "writes": "0"
     },
     "constructorArg": "{ bytes: Uint8Array(32) }",
-    "callerAddress": "543818d13a1f19d794583e6bb93ede201e4f6788487d280853d84a34c9c3759b",
-    "storedReference": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+    "callerAddress": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+    "storedReference": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
     "pinnedBlock": {
-      "hash": "d6863e5511bbb476d0e70f1c9f63f77dabc76baa7e33dbd5b708621585e0a851",
-      "height": 201
+      "hash": "da9805e53280347e845e85f18f10914a402624000cbf85f6edf54ae88e1b8435",
+      "height": 34
     },
     "providerPinnedQuery": "returned contract state (decoded)",
     "rawPinnedQuery": {
@@ -24,7 +24,7 @@
       "state": "6d69646e696768743a636f6e74726163742d73746174655b76385d3a6c000840… (8690 hex chars)"
     }
   },
-  "ranAt": "2026-09-03T18:46:08.285Z",
+  "ranAt": "2026-09-14T10:30:51.142Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
     "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
