@@ -41,7 +41,7 @@ the callee's address, the hash of the callee's circuit, and the communication
 commitment to the caller's transcript; verification refuses a transaction whose
 claim matches no call in the segment, and refuses a second claim on the same
 triple; and the caller's effects reach the first public input of its proof, so
-no caller can claim a call its circuit did not emit. Any observer can
+no claim enters a contract's transcript except by its own circuit. Any observer can
 reconstruct the edge from the transaction alone, and the ledger derives the
 calling contract's address per call frame and places it in the virtual machine
 context. The one party that can read none of it is the callee, whose
@@ -76,8 +76,8 @@ in neither, in no other CoIP, and in no upstream issue.
 transcript effect (`compiler/midnight-ledger.ss:195-210`), verification refuses
 the transaction unless a matching call is present in the same segment
 (`ledger/src/verify.rs:1633-1653`), and the caller's transcript effects reach
-the first public input of its proof (`verify.rs:1978-1991`, `1946-1960`), so a
-caller cannot claim a call its circuit did not emit. Any observer can
+the first public input of its proof (`verify.rs:1978-1991`, `1946-1960`), so no
+claim enters a contract's transcript except by its own circuit. Any observer can
 reconstruct the edge after the fact (`verify.rs:1113-1200`): an indexer can say
 which contract called ours; our contract cannot.
 
@@ -135,7 +135,7 @@ owner-signed bundle verified inside the callee, which authenticates the owner
 rather than the caller, and so cannot express the converse rule: this operation
 only when driven by contract C.
 
-**Whatever authority rests on must be unforgeable, and one residual is open.**
+**Whatever authority rests on must be unforgeable, and the one residual is lending.**
 The User arm rests on verified ownership of unshielded inputs; the Contract arm
 rests on a claim a contract emits, and that claim is disciplined at
 verification. Alongside the subset check above, `effects_check` rejects a
@@ -144,17 +144,29 @@ commitment) triple within a segment (`ledger/src/verify.rs:1610-1631`); it runs
 on every standard transaction (`verify.rs:654`); and the specification states
 both checks as assertions (`spec/intents-transactions.md:600`, `611`). With the
 caller's effects reaching the first public input of its proof, no third party
-can fabricate or duplicate a claim. What remains open is voluntary lending:
-`kernel.claimContractCall` takes wholly chosen arguments from Compact source,
-as we confirmed by compiling one on 0.34.0, so a contract exporting such a
-circuit may name itself the caller of an otherwise-unclaimed call in the same
-intent. That reading of the resolution order (`find_map` over the intent's
-actions, `ledger/src/structure.rs:2685-2693`) is our inference from source,
-unsettled on a node, and we offer to probe it in the cross-contract harness. No
-upstream test exercises the arm either: every context in
+can fabricate or duplicate a claim. What the discipline does not prevent is
+voluntary lending, and we have now observed it: `kernel.claimContractCall`
+takes wholly chosen arguments from Compact source, and on node 2.1.0 with
+`ledger-9.1.0.0-rc.3` a contract exporting such a circuit claimed a root call
+made by the client, which no circuit of the claimant had made; the transaction
+was admitted (`SucceedEntirely`), and the ledger's own `ContractCall::context`,
+run over the admitted bytes off-node, resolves that call's caller to the
+claimant (`find_map` over the intent's actions,
+`ledger/src/structure.rs:2685-2693`) and the claimant's own frame to no caller.
+The three disciplines were refused at node admission by name, as
+`RealCallsSubsetCheckFailure`, `ClaimedCallsUniquenessFailure`, and
+`CallSequencingViolation`, the last of which forces a claimant to precede the
+call it claims; and over refused bytes carrying two claims on one call, the
+derivation taken alone prefers the earlier claimant to the contract that
+genuinely made the call, so the arm is lendable but, on the checks exercised,
+not overridable. A value read from slot 6 would therefore mean the contract
+whose transcript claims this call, which need not be a contract that called
+anything. No upstream test exercises the arm: every context in
 `ledger/tests/composable.rs` is built with `QueryContext::new`, whose derived
 default gives no caller. The arm is, as far as we can establish, specified,
-implemented, unexercised upstream, and unobserved by us.
+implemented, unexercised upstream, and observed by us in the derivation over
+admitted bytes, though never in a callee reading the value, which no released
+Compact can express.
 
 ### Non-goals
 
@@ -308,7 +320,9 @@ branches on it is open question 5.
    admission with a `ReadMismatch`, in the manner of a transcript read
    (`onchain-vm/src/result_mode.rs:47-59`), so that a provenance assertion
    fails at admission rather than failing to prove? We measured that for
-   `kernel.blockTimeLessThan` on node 2.1.0, and the extrapolation is ours.
+   `kernel.blockTimeLessThan` on node 2.1.0, and the claim-discipline
+   failures above likewise surfaced at admission rather than at proving, but
+   neither is a context read, and the extrapolation is ours.
 2. **Cost and layering.** The context array is already declared extensible "in
    a minor version increment" (`spec/onchain-runtime.md:205-207`). Do goals 1
    and 2 therefore need only a language surface, while goal 3 needs new wire
@@ -316,10 +330,15 @@ branches on it is open question 5.
    goal 3 name the entry-point hash the ledger already matches on, or a
    contract-operation identity carrying verifier-key version, the two differing
    under contract maintenance?
-3. **Consent.** A callee has no say today in who names it. If provenance is
-   exposed, is caller-side suppression (Aztec permits a null sender for
-   private-to-public calls, the callee deciding whether null is acceptable)
-   worth the interface complexity where the edge is already public?
+3. **Consent and binding.** A callee has no say today in who names it, and a
+   claimant need not have called at all: a claim is caller-side consent to be
+   named, indistinguishable on chain from a call the claimant's circuit made.
+   Should the claim be bound to the runtime's own call trace, so that only a
+   contract that called may be named, or is consent the intended semantics?
+   And if provenance is exposed, is caller-side suppression (Aztec permits a
+   null sender for private-to-public calls, the callee deciding whether null
+   is acceptable) worth the interface complexity where the edge is already
+   public?
 4. **Cross-intent composition.** The matcher scans only the containing intent's
    actions, and the uniqueness and subset checks are likewise keyed per
    segment, so what is the caller value for a call composed across intents of
@@ -348,17 +367,24 @@ branches on it is open question 5.
 
 ## References
 
-- **Our evidence:** the cross-contract-calls experiment, eight probes on a
+- **Our evidence:** the cross-contract-calls experiment, ten probes on a
   ledger-9 localnet including atomic failure, unshielded value movement, and
-  shielded value movement, produced by Midnight Passport (ARC), 2026/09/03, at
-  `midnightntwrk/passport`, `experiments/cross-contract-calls/`. Pins: compactc
-  0.34.0, language 0.26.0, compact-runtime 0.19.0, `ledger-9.1.0.0-rc.3`, node
-  `2.1.0`, indexer `4.4.0-rc.2`, proof server `9.0.0-rc.6`, midnight-js
-  `5.0.0-beta.7`. Compiler probes, 2026/09/14, reconfirming that `kernel.caller`
-  is rejected on 0.33.0-rc.2, 0.34.0-rc.0, and 0.34.0, and that both an impostor
-  contract forwarding a stored address and a contract emitting
-  `kernel.claimContractCall` with chosen arguments compile. No probe of ours
-  reads context slot 6. One ARC working document is quoted in UC4 and is not a
+  shielded value movement (P0 to P7, 2026/09/03), caller derivation (P8,
+  2026/09/14), and voluntary lending with its three controls (P9,
+  2026/09/14), produced by Midnight Passport (ARC) at `midnightntwrk/passport`,
+  `experiments/cross-contract-calls/`. Pins: compactc 0.34.0, language 0.26.0,
+  compact-runtime 0.19.0, `ledger-9.1.0.0-rc.3`, node `2.1.0`, indexer
+  `4.4.0-rc.2`, proof server `9.0.0-rc.6`, midnight-js `5.0.0-beta.7`. P8 runs
+  the ledger's own `ContractCall::context` (`rust/caller-context/`, built from
+  `midnightntwrk/midnight-ledger` at the same git tag) over our transaction
+  bytes off-node, including bytes byte-identical to a finalised block; P9's
+  refusals are the node's, named in its log and tied to each captured arm by
+  transaction hash. Compiler probes, 2026/09/14, reconfirming that
+  `kernel.caller` is rejected on 0.33.0-rc.2, 0.34.0-rc.0, and 0.34.0, and that
+  both an impostor contract forwarding a stored address and a contract emitting
+  `kernel.claimContractCall` with chosen arguments compile. No circuit of ours
+  reads context slot 6, so no node has been observed evaluating such a read.
+  One ARC working document is quoted in UC4 and is not a
   published standard: our scoped-grants MIP draft (`midnightntwrk/passport`
   PR #154, open; the quoted sentence is requirement R1).
 - **Ledger sources,** `midnightntwrk/midnight-ledger` at tag

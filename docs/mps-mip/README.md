@@ -73,7 +73,9 @@ together; the upstream copies are canonical.
   layer at all. Complements MPS-0029 (wallet identity, same slot) and
   MPS-0021 (Phase 2 witnesses); `Requires: none`. Filled from the
   cross-contract-calls experiment (`experiments/cross-contract-calls/`)
-  and a source reading of `ledger-9.1.0.0-rc.3`. Co-authored with the
+  and a source reading of `ledger-9.1.0.0-rc.3`, with the Contract arm
+  observed on our transaction bytes by P8 and voluntary lending admitted
+  on the node by P9 (2026/09/14). Co-authored with the
   Midnight Foundation; MPS-0029's author to be invited to review before
   the upstream filing.
 - **Recovery paths (building block three; not yet drafted)**:
