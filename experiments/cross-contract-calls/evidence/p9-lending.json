@@ -1,0 +1,1354 @@
+{
+  "testId": "P9",
+  "name": "lending",
+  "description": "Voluntary lending: a contract emits kernel.claimContractCall on client-supplied arguments for a call it never made, so the ledger derives it as that call's caller",
+  "verdict": "PASS",
+  "txHash": "006cfacb2b95d9319038b804a40629ba4f78089ad3831eba630c031a1ee4555c5e",
+  "note": "Voluntary lending WORKS: a Lender contract claiming a root Tally.set call it never made landed on node 2.1.0, and the ledger's own derivation resolves that call's caller to Contract(<Lender>). The Lender exports kernel.claimContractCall on wholly client-supplied arguments; the two calls were composed into ONE intent, claimant first, proven, and submitted as tx 006cfacb2b95d931… (SucceedEntirely). The Lender's own call resolves to None, so the identity is lent rather than shared. This is the Lender consenting, not a third party forging: the claim is an effect of the Lender's own proven transcript, and a contract exporting no such circuit cannot be made to lend. Confirmed on lend and lend-balanced; the derivation is off-node, because no circuit can read slot 6. Controls: control-a: refused at submission, node Custom error 212; control-b: refused at submission, node Custom error 216; control-c: refused at submission, node Custom error 219.",
+  "details": {
+    "hexFiles": [
+      {
+        "stage": "offline-composed",
+        "file": "evidence/p9-tx-offline-composed.hex",
+        "bytes": 1683,
+        "sha256": "ecc945b4b05b1cd4708b5c2c159fbbda2717a0572b06cdb8ab10708ac28a2c4a"
+      },
+      {
+        "stage": "lend",
+        "file": "evidence/p9-tx-lend.hex",
+        "bytes": 6778,
+        "sha256": "c46e5d91fc5a0a9e37f33b7c9714fe49a9ca33ce95a118d0af33fdf9c87a452b"
+      },
+      {
+        "stage": "lend-balanced",
+        "file": "evidence/p9-tx-lend-balanced.hex",
+        "bytes": 10042,
+        "sha256": "bfefe229c54a88bad0b1ed334d5c604d5b712dd32d02fb10a59621531da805c1"
+      },
+      {
+        "stage": "control-a",
+        "file": "evidence/p9-tx-control-a.hex",
+        "bytes": 6778,
+        "sha256": "e7543c6e10a4bf8642e73ccb6b3e1733842dcb69573281347f1e8bf3e1e51b1a"
+      },
+      {
+        "stage": "control-a-balanced",
+        "file": "evidence/p9-tx-control-a-balanced.hex",
+        "bytes": 10043,
+        "sha256": "9a78bbf126c1b40284a02df9760819901e94618a9c27bba3470ad521db8f29d4"
+      },
+      {
+        "stage": "control-b",
+        "file": "evidence/p9-tx-control-b.hex",
+        "bytes": 13393,
+        "sha256": "affadaac8809c772a2d8399b2ef923f1b3e40611e7ad0b5b76ebbf7811e4e8db"
+      },
+      {
+        "stage": "control-b-balanced",
+        "file": "evidence/p9-tx-control-b-balanced.hex",
+        "bytes": 16661,
+        "sha256": "ba53ae4316f76863b4b35daaed34251195973d776fb36dc58018342b18935f77"
+      },
+      {
+        "stage": "control-c",
+        "file": "evidence/p9-tx-control-c.hex",
+        "bytes": 6778,
+        "sha256": "2c9a3353e3d40631fab5d89e689c835228cece0116dab9809b8b360a1971cf9d"
+      },
+      {
+        "stage": "control-c-balanced",
+        "file": "evidence/p9-tx-control-c-balanced.hex",
+        "bytes": 10043,
+        "sha256": "b4e8e5d2f74fc74328170ec5f722f10ac3f53e60eca1ef9aeeae2ea8e9b92c7a"
+      }
+    ],
+    "armsRequested": [
+      "main",
+      "control-a",
+      "control-b",
+      "control-c"
+    ],
+    "entryPointHashes": {
+      "set": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+      "get": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+      "write_then_read": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+      "lend": "0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d"
+    },
+    "kernelPrimitive": {
+      "declaredSignature": "kernel.claimContractCall(addr: Bytes<32>, ep_hash: Bytes<32>, comm: Field): []",
+      "establishedFrom": "compactc 0.34.0 diagnostics: zero arguments gives \"Kernel claimContractCall requires 3 arguments but received 0\"; a ContractAddress struct in position 1 gives \"expected first argument of claimContractCall to have type Bytes<32> but received struct ContractAddress<bytes: Bytes<32>>\"; a Uint<64> gives \"expected second argument ... to have type Bytes<32>\" and \"expected third argument ... to have type Field\"",
+      "disclosureRequired": "all three arguments need disclose(): \"ledger operation might disclose the address of a contract being called\"",
+      "ledgerWriteRequired": "no: a claim-only circuit with no ledger field compiles. Lender.lends is a harness convention (EXPERIMENT_GUIDELINE: every probe circuit changes public state, because a zero-effect call can hang the wallet SDK finalisation watch)."
+    },
+    "offline": {
+      "addressesFrom": "offline deploy (ContractDeploy.address of locally built deploy transactions; NOT the live pair)",
+      "tallyAddress": "ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a",
+      "lenderAddress": "9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be",
+      "setCall": {
+        "entryPoint": "set",
+        "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+        "communicationCommitment": "7320880c16793f4929d6dc7967ac5287892a2c77e9b8f0a01c0a7b09f1979e7a6a",
+        "commBigInt": "48161811863988102098835235901486111928917236834083433336754665664443501545504"
+      },
+      "buildMs": 26,
+      "claimEmitted": {
+        "section": "guaranteed",
+        "seq": "0",
+        "address": "ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a",
+        "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+        "commitment": "7320880c16793f4929d6dc7967ac5287892a2c77e9b8f0a01c0a7b09f1979e7a6a"
+      },
+      "fieldRoundTrip": "exact (address, ep_hash, and commitment all match the source call)",
+      "graft": {
+        "accepted": true,
+        "segment": 46369,
+        "order": [
+          "lend@9f3f63a74003",
+          "set@ce4e3f21db09"
+        ]
+      },
+      "merged": {
+        "serializedBytes": 1683,
+        "segments": [
+          46369
+        ],
+        "calls": [
+          {
+            "segment": 46369,
+            "index": 0,
+            "address": "9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be",
+            "entryPoint": "lend",
+            "entryPointHash": "0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d",
+            "communicationCommitment": "730c3edf66d52514635526c4b26fadb14e730a06365ea41980afbcfeebf5698811",
+            "commBigInt": "7930340940131916619761236255997225474854906861601559821528365305302574120460",
+            "claims": [
+              {
+                "section": "guaranteed",
+                "seq": "0",
+                "address": "ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a",
+                "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                "commitment": "7320880c16793f4929d6dc7967ac5287892a2c77e9b8f0a01c0a7b09f1979e7a6a"
+              }
+            ],
+            "unshieldedInputsInIntent": 0
+          },
+          {
+            "segment": 46369,
+            "index": 1,
+            "address": "ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a",
+            "entryPoint": "set",
+            "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+            "communicationCommitment": "7320880c16793f4929d6dc7967ac5287892a2c77e9b8f0a01c0a7b09f1979e7a6a",
+            "commBigInt": "48161811863988102098835235901486111928917236834083433336754665664443501545504",
+            "claims": [],
+            "unshieldedInputsInIntent": 0
+          }
+        ],
+        "claimAudit": {
+          "subsetCheckExpected": "pass",
+          "uniquenessCheckExpected": "pass",
+          "sequencingCheckExpected": "pass",
+          "matched": [
+            {
+              "claimant": "lend@9f3f63a74003",
+              "claimantIndex": 0,
+              "claimed": "set@ce4e3f21db09",
+              "claimedIndex": 1,
+              "sequencingOk": true
+            }
+          ],
+          "unmatched": [],
+          "duplicated": []
+        }
+      },
+      "possible": true
+    },
+    "tallyAddress": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+    "lenderAddress": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+    "lenderDeployment": "connected to the recorded deployment dd315f4cfd0e…",
+    "before": {
+      "tally": {
+        "total": "7",
+        "writes": "9"
+      },
+      "lender": {
+        "lends": "3"
+      }
+    },
+    "arms": {
+      "main": {
+        "arm": "main",
+        "expectation": "Lender.lend claims a direct ROOT Tally.set call in the same intent (claimant first)",
+        "built": true,
+        "stageReached": "finality",
+        "accepted": true,
+        "graft": {
+          "accepted": true,
+          "segment": 18402,
+          "order": [
+            "lend@dd315f4cfd0e",
+            "set@4f8fc4f7c525"
+          ]
+        },
+        "composition": {
+          "setCall": {
+            "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+            "entryPoint": "set",
+            "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+            "communicationCommitment": "73c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708",
+            "commBigInt": "3828786191992918870839536473624222025807458013706246863486341016785592186818"
+          },
+          "commitmentHandedToLender": "3828786191992918870839536473624222025807458013706246863486341016785592186818",
+          "commitmentOffset": "0",
+          "claimantFirst": true,
+          "merged": {
+            "serializedBytes": 1685,
+            "segments": [
+              18402
+            ],
+            "calls": [
+              {
+                "segment": 18402,
+                "index": 0,
+                "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+                "entryPoint": "lend",
+                "entryPointHash": "0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d",
+                "communicationCommitment": "7386e16f2696338337ae418c911265585f2ba12affa31af01fa1f975811ba98205",
+                "commBigInt": "2492421498022507295574837841215196103798067426914134649221030545782368887174",
+                "claims": [
+                  {
+                    "section": "guaranteed",
+                    "seq": "0",
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "commitment": "73c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708"
+                  }
+                ],
+                "unshieldedInputsInIntent": 0
+              },
+              {
+                "segment": 18402,
+                "index": 1,
+                "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                "entryPoint": "set",
+                "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                "communicationCommitment": "73c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708",
+                "commBigInt": "3828786191992918870839536473624222025807458013706246863486341016785592186818",
+                "claims": [],
+                "unshieldedInputsInIntent": 0
+              }
+            ],
+            "claimAudit": {
+              "subsetCheckExpected": "pass",
+              "uniquenessCheckExpected": "pass",
+              "sequencingCheckExpected": "pass",
+              "matched": [
+                {
+                  "claimant": "lend@dd315f4cfd0e",
+                  "claimantIndex": 0,
+                  "claimed": "set@4f8fc4f7c525",
+                  "claimedIndex": 1,
+                  "sequencingOk": true
+                }
+              ],
+              "unmatched": [],
+              "duplicated": []
+            }
+          }
+        },
+        "timings": {
+          "proveMs": 117,
+          "balanceMs": 301,
+          "submitMs": 14293,
+          "finaliseMs": 1019
+        },
+        "hex": [
+          {
+            "stage": "lend",
+            "file": "evidence/p9-tx-lend.hex",
+            "bytes": 6778,
+            "sha256": "c46e5d91fc5a0a9e37f33b7c9714fe49a9ca33ce95a118d0af33fdf9c87a452b"
+          },
+          {
+            "stage": "lend-balanced",
+            "file": "evidence/p9-tx-lend-balanced.hex",
+            "bytes": 10042,
+            "sha256": "bfefe229c54a88bad0b1ed334d5c604d5b712dd32d02fb10a59621531da805c1"
+          }
+        ],
+        "txId": "006cfacb2b95d9319038b804a40629ba4f78089ad3831eba630c031a1ee4555c5e",
+        "status": "SucceedEntirely",
+        "blockHeight": 1105
+      },
+      "control-a": {
+        "arm": "control-a",
+        "expectation": "the same composition with comm + 1 — expected refusal by the effects_check subset rule",
+        "built": true,
+        "stageReached": "submission",
+        "accepted": false,
+        "graft": {
+          "accepted": true,
+          "segment": 20330,
+          "order": [
+            "lend@dd315f4cfd0e",
+            "set@4f8fc4f7c525"
+          ]
+        },
+        "composition": {
+          "setCall": {
+            "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+            "entryPoint": "set",
+            "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+            "communicationCommitment": "73b4fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408",
+            "commBigInt": "3993568603434335987115798522521333208316686467825717833790938515605384068532"
+          },
+          "commitmentHandedToLender": "3993568603434335987115798522521333208316686467825717833790938515605384068533",
+          "commitmentOffset": "1",
+          "claimantFirst": true,
+          "merged": {
+            "serializedBytes": 1685,
+            "segments": [
+              20330
+            ],
+            "calls": [
+              {
+                "segment": 20330,
+                "index": 0,
+                "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+                "entryPoint": "lend",
+                "entryPointHash": "0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d",
+                "communicationCommitment": "73da3de905121fd1cb032ce0a2882b4415162b998bc0e8f3574e51b505604fcb05",
+                "commBigInt": "2620782023783771655086344324441579556810852312007314444338838021550847376858",
+                "claims": [
+                  {
+                    "section": "guaranteed",
+                    "seq": "0",
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "commitment": "73b5fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408"
+                  }
+                ],
+                "unshieldedInputsInIntent": 0
+              },
+              {
+                "segment": 20330,
+                "index": 1,
+                "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                "entryPoint": "set",
+                "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                "communicationCommitment": "73b4fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408",
+                "commBigInt": "3993568603434335987115798522521333208316686467825717833790938515605384068532",
+                "claims": [],
+                "unshieldedInputsInIntent": 0
+              }
+            ],
+            "claimAudit": {
+              "subsetCheckExpected": "FAIL (RealCallsSubsetCheckFailure)",
+              "uniquenessCheckExpected": "pass",
+              "sequencingCheckExpected": "pass",
+              "matched": [],
+              "unmatched": [
+                "lend@dd315f4cfd0e claims 73b5fd4bc5ea8a57"
+              ],
+              "duplicated": []
+            }
+          }
+        },
+        "timings": {
+          "proveMs": 111,
+          "balanceMs": 295
+        },
+        "hex": [
+          {
+            "stage": "control-a",
+            "file": "evidence/p9-tx-control-a.hex",
+            "bytes": 6778,
+            "sha256": "e7543c6e10a4bf8642e73ccb6b3e1733842dcb69573281347f1e8bf3e1e51b1a"
+          },
+          {
+            "stage": "control-a-balanced",
+            "file": "evidence/p9-tx-control-a-balanced.hex",
+            "bytes": 10043,
+            "sha256": "9a78bbf126c1b40284a02df9760819901e94618a9c27bba3470ad521db8f29d4"
+          }
+        ],
+        "refusal": {
+          "stage": "submission",
+          "classifier": "node-rejected",
+          "errorCode": "submission-refused",
+          "message": "Transaction submission error",
+          "error": {
+            "name": "(FiberFailure) SubmissionError",
+            "message": "Transaction submission error",
+            "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+            "causeChain": [
+              {
+                "name": "(FiberFailure) SubmissionError",
+                "tag": null,
+                "message": "Transaction submission error"
+              }
+            ]
+          },
+          "nodeRpcLines": [
+            "2026-09-14 13:17:57        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 212"
+          ],
+          "substrateCustomErrorCode": 212
+        }
+      },
+      "control-b": {
+        "arm": "control-b",
+        "expectation": "a genuine write_then_read sub-call ALSO claimed by Lender — expected refusal by the uniqueness rule",
+        "built": true,
+        "stageReached": "submission",
+        "accepted": false,
+        "graft": {
+          "accepted": true,
+          "segment": 11842,
+          "order": [
+            "lend@dd315f4cfd0e",
+            "write_then_read@d2938fa034b5",
+            "set@4f8fc4f7c525",
+            "get@4f8fc4f7c525"
+          ]
+        },
+        "composition": {
+          "subCall": {
+            "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+            "entryPoint": "set",
+            "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+            "communicationCommitment": "739829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251",
+            "commBigInt": "36669464696401821993814056066495553586361656457056016899806178051568717277592",
+            "indexBeforeGraft": 1
+          },
+          "alreadyClaimedBy": "write_then_read@d2938fa034b5",
+          "subCallCommitmentReadableFromUnprovenTx": true,
+          "merged": {
+            "serializedBytes": 3557,
+            "segments": [
+              11842
+            ],
+            "calls": [
+              {
+                "segment": 11842,
+                "index": 0,
+                "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+                "entryPoint": "lend",
+                "entryPointHash": "0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d",
+                "communicationCommitment": "73ada000d5526f17e2307563098a0a0793348e002f10ef5cc3fee73f595c421272",
+                "commBigInt": "51595925990631444204702036027226305929021495762843372126656280524225133977773",
+                "claims": [
+                  {
+                    "section": "guaranteed",
+                    "seq": "0",
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "commitment": "739829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251"
+                  }
+                ],
+                "unshieldedInputsInIntent": 0
+              },
+              {
+                "segment": 11842,
+                "index": 1,
+                "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                "entryPoint": "write_then_read",
+                "entryPointHash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+                "communicationCommitment": "73349add55fc600626407ed45fedc43c6e877b9c2cc63cc0ec567692d7804bb93f",
+                "commBigInt": "28823097272281360045465390265482069493384737183894329927133530854459006884404",
+                "claims": [
+                  {
+                    "section": "guaranteed",
+                    "seq": "1",
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                    "commitment": "73a0ad4160b62ab2309198de692e7fa81c1eac9692270de5d1c990d493963dec45"
+                  },
+                  {
+                    "section": "guaranteed",
+                    "seq": "0",
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "commitment": "739829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251"
+                  }
+                ],
+                "unshieldedInputsInIntent": 0
+              },
+              {
+                "segment": 11842,
+                "index": 2,
+                "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                "entryPoint": "set",
+                "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                "communicationCommitment": "739829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251",
+                "commBigInt": "36669464696401821993814056066495553586361656457056016899806178051568717277592",
+                "claims": [],
+                "unshieldedInputsInIntent": 0
+              },
+              {
+                "segment": 11842,
+                "index": 3,
+                "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                "entryPoint": "get",
+                "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                "communicationCommitment": "73a0ad4160b62ab2309198de692e7fa81c1eac9692270de5d1c990d493963dec45",
+                "commBigInt": "31626987525620585079266384308405839422184723233210814599596616283939338825120",
+                "claims": [],
+                "unshieldedInputsInIntent": 0
+              }
+            ],
+            "claimAudit": {
+              "subsetCheckExpected": "pass",
+              "uniquenessCheckExpected": "FAIL (ClaimedCallsUniquenessFailure)",
+              "sequencingCheckExpected": "pass",
+              "matched": [
+                {
+                  "claimant": "lend@dd315f4cfd0e",
+                  "claimantIndex": 0,
+                  "claimed": "set@4f8fc4f7c525",
+                  "claimedIndex": 2,
+                  "sequencingOk": true
+                },
+                {
+                  "claimant": "write_then_read@d2938fa034b5",
+                  "claimantIndex": 1,
+                  "claimed": "get@4f8fc4f7c525",
+                  "claimedIndex": 3,
+                  "sequencingOk": true
+                },
+                {
+                  "claimant": "write_then_read@d2938fa034b5",
+                  "claimantIndex": 1,
+                  "claimed": "set@4f8fc4f7c525",
+                  "claimedIndex": 2,
+                  "sequencingOk": true
+                }
+              ],
+              "unmatched": [],
+              "duplicated": [
+                "11842|4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f|29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01|739829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251"
+              ]
+            }
+          }
+        },
+        "timings": {
+          "proveMs": 126,
+          "balanceMs": 290
+        },
+        "hex": [
+          {
+            "stage": "control-b",
+            "file": "evidence/p9-tx-control-b.hex",
+            "bytes": 13393,
+            "sha256": "affadaac8809c772a2d8399b2ef923f1b3e40611e7ad0b5b76ebbf7811e4e8db"
+          },
+          {
+            "stage": "control-b-balanced",
+            "file": "evidence/p9-tx-control-b-balanced.hex",
+            "bytes": 16661,
+            "sha256": "ba53ae4316f76863b4b35daaed34251195973d776fb36dc58018342b18935f77"
+          }
+        ],
+        "refusal": {
+          "stage": "submission",
+          "classifier": "node-rejected",
+          "errorCode": "submission-refused",
+          "message": "Transaction submission error",
+          "error": {
+            "name": "(FiberFailure) SubmissionError",
+            "message": "Transaction submission error",
+            "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+            "causeChain": [
+              {
+                "name": "(FiberFailure) SubmissionError",
+                "tag": null,
+                "message": "Transaction submission error"
+              }
+            ]
+          },
+          "nodeRpcLines": [
+            "2026-09-14 13:17:59        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 216"
+          ],
+          "substrateCustomErrorCode": 216
+        }
+      },
+      "control-c": {
+        "arm": "control-c",
+        "expectation": "the main composition ordered [set, lend] — expected refusal by call_sequencing_check",
+        "built": true,
+        "stageReached": "submission",
+        "accepted": false,
+        "graft": {
+          "accepted": true,
+          "segment": 48061,
+          "order": [
+            "set@4f8fc4f7c525",
+            "lend@dd315f4cfd0e"
+          ]
+        },
+        "composition": {
+          "setCall": {
+            "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+            "entryPoint": "set",
+            "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+            "communicationCommitment": "7328f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e",
+            "commBigInt": "13787600400741226093199215714602732536436929600126915508266553419129143752488"
+          },
+          "commitmentHandedToLender": "13787600400741226093199215714602732536436929600126915508266553419129143752488",
+          "commitmentOffset": "0",
+          "claimantFirst": false,
+          "merged": {
+            "serializedBytes": 1685,
+            "segments": [
+              48061
+            ],
+            "calls": [
+              {
+                "segment": 48061,
+                "index": 0,
+                "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                "entryPoint": "set",
+                "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                "communicationCommitment": "7328f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e",
+                "commBigInt": "13787600400741226093199215714602732536436929600126915508266553419129143752488",
+                "claims": [],
+                "unshieldedInputsInIntent": 0
+              },
+              {
+                "segment": 48061,
+                "index": 1,
+                "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+                "entryPoint": "lend",
+                "entryPointHash": "0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d",
+                "communicationCommitment": "7346bbc9675bf237fda9423725a4af3558c784014d55ef1472c91e5e2818dbee1f",
+                "commBigInt": "14443720041238391151574066478102186800975722996729318945219299074982860667718",
+                "claims": [
+                  {
+                    "section": "guaranteed",
+                    "seq": "0",
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "commitment": "7328f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e"
+                  }
+                ],
+                "unshieldedInputsInIntent": 0
+              }
+            ],
+            "claimAudit": {
+              "subsetCheckExpected": "pass",
+              "uniquenessCheckExpected": "pass",
+              "sequencingCheckExpected": "FAIL (CallSequencingViolation)",
+              "matched": [
+                {
+                  "claimant": "lend@dd315f4cfd0e",
+                  "claimantIndex": 1,
+                  "claimed": "set@4f8fc4f7c525",
+                  "claimedIndex": 0,
+                  "sequencingOk": false
+                }
+              ],
+              "unmatched": [],
+              "duplicated": []
+            }
+          }
+        },
+        "timings": {
+          "proveMs": 100,
+          "balanceMs": 288
+        },
+        "hex": [
+          {
+            "stage": "control-c",
+            "file": "evidence/p9-tx-control-c.hex",
+            "bytes": 6778,
+            "sha256": "2c9a3353e3d40631fab5d89e689c835228cece0116dab9809b8b360a1971cf9d"
+          },
+          {
+            "stage": "control-c-balanced",
+            "file": "evidence/p9-tx-control-c-balanced.hex",
+            "bytes": 10043,
+            "sha256": "b4e8e5d2f74fc74328170ec5f722f10ac3f53e60eca1ef9aeeae2ea8e9b92c7a"
+          }
+        ],
+        "refusal": {
+          "stage": "submission",
+          "classifier": "node-rejected",
+          "errorCode": "submission-refused",
+          "message": "Transaction submission error",
+          "error": {
+            "name": "(FiberFailure) SubmissionError",
+            "message": "Transaction submission error",
+            "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-provenance-mps/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+            "causeChain": [
+              {
+                "name": "(FiberFailure) SubmissionError",
+                "tag": null,
+                "message": "Transaction submission error"
+              }
+            ]
+          },
+          "nodeRpcLines": [
+            "2026-09-14 13:18:00        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 219"
+          ],
+          "substrateCustomErrorCode": 219
+        }
+      }
+    },
+    "callerAddress": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+    "rustCallerDerivation": {
+      "tool": "rust/caller-context @ midnight-ledger ledger-9.1.0.0-rc.3 (4823b5351b17cc49e30f19760dbd30a73cf95e22)",
+      "what": "the ledger's own ContractCall::context(...).caller at ledger-9.1.0.0-rc.3, run off-node over the bytes this run captured. NOT a node evaluating a slot-6 read: Compact has no reader for context slot 6, so these are the values the ledger computes and marshals into that slot, not values a contract was seen to receive.",
+      "lenderAddress": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+      "tallyAddress": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+      "runs": [
+        {
+          "stage": "offline-composed",
+          "file": "evidence/p9-tx-offline-composed.hex",
+          "bytes": 1683,
+          "sha256": "ecc945b4b05b1cd4708b5c2c159fbbda2717a0572b06cdb8ab10708ac28a2c4a",
+          "nodeOutcome": {
+            "submitted": false,
+            "note": "built offline; never submitted"
+          },
+          "deserialisedAs": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+          "perCall": [
+            {
+              "segment": 46369,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> ce4e3f21db09/29b07fa866ea/20880c16793f (matches call #1)"
+              ]
+            },
+            {
+              "segment": 46369,
+              "actionIndex": 1,
+              "entryPoint": "set",
+              "address": "ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a",
+              "caller": "Contract(9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be)",
+              "selectedByActionIndex": 0,
+              "claimedBy": [
+                "#0 lend@9f3f63a74003 (seq 0)"
+              ],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": false,
+          "contestedCalls": [],
+          "claimGraphObservations": [],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-offline-composed.hex (hex-text, 1683 bytes)\nheader tag: transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\n  ok   Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 46369 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment 0c3edf66d52514635526c4b26fadb14e730a06365ea41980afbcfeebf5698811\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=20880c16793f4929d6dc7967ac5287892a2c77e9b8f0a01c0a7b09f1979e7a6a -> matches call #1\n    claimed by               none\n    context().caller         None\n\n  call #1 ce4e3f21db092ae5a9e08d1be10bf9b7ec28cf37b8ff1ecbe3db14435459ce3a::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 20880c16793f4929d6dc7967ac5287892a2c77e9b8f0a01c0a7b09f1979e7a6a\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be::lend (guaranteed transcript, seq 0)\n    context().caller         Contract(9f3f63a740030758a6f61307c1e1eaee1c5742a73781bb3bafe6d404099694be) (selected by call #0)\n"
+        },
+        {
+          "stage": "lend",
+          "file": "evidence/p9-tx-lend.hex",
+          "bytes": 6778,
+          "sha256": "c46e5d91fc5a0a9e37f33b7c9714fe49a9ca33ce95a118d0af33fdf9c87a452b",
+          "nodeOutcome": {
+            "arm": "main",
+            "submitted": true,
+            "accepted": true,
+            "txId": "006cfacb2b95d9319038b804a40629ba4f78089ad3831eba630c031a1ee4555c5e",
+            "status": "SucceedEntirely",
+            "blockHeight": 1105,
+            "refusedAt": null,
+            "errorCode": null,
+            "substrateCustomErrorCode": null
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "perCall": [
+            {
+              "segment": 18402,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/c2f7e2ba184f (matches call #1)"
+              ]
+            },
+            {
+              "segment": 18402,
+              "actionIndex": 1,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+              "selectedByActionIndex": 0,
+              "claimedBy": [
+                "#0 lend@dd315f4cfd0e (seq 0)"
+              ],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": true,
+          "contestedCalls": [],
+          "claimGraphObservations": [],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-lend.hex (hex-text, 6778 bytes)\nheader tag: transaction[v12](signature[v2],proof,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):�����G���'\n  ok   Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 18402 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment 86e16f2696338337ae418c911265585f2ba12affa31af01fa1f975811ba98205\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708 -> matches call #1\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend (guaranteed transcript, seq 0)\n    context().caller         Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7) (selected by call #0)\n"
+        },
+        {
+          "stage": "lend-balanced",
+          "file": "evidence/p9-tx-lend-balanced.hex",
+          "bytes": 10042,
+          "sha256": "bfefe229c54a88bad0b1ed334d5c604d5b712dd32d02fb10a59621531da805c1",
+          "nodeOutcome": {
+            "arm": "main",
+            "submitted": true,
+            "accepted": true,
+            "txId": "006cfacb2b95d9319038b804a40629ba4f78089ad3831eba630c031a1ee4555c5e",
+            "status": "SucceedEntirely",
+            "blockHeight": 1105,
+            "refusedAt": null,
+            "errorCode": null,
+            "substrateCustomErrorCode": null
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "perCall": [
+            {
+              "segment": 18402,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/c2f7e2ba184f (matches call #1)"
+              ]
+            },
+            {
+              "segment": 18402,
+              "actionIndex": 1,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+              "selectedByActionIndex": 0,
+              "claimedBy": [
+                "#0 lend@dd315f4cfd0e (seq 0)"
+              ],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": true,
+          "contestedCalls": [],
+          "claimGraphObservations": [],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-lend-balanced.hex (hex-text, 10042 bytes)\nheader tag: transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr[v1]):����'\n  fail Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr['\n  ok   Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 1 — 0 action(s): 0 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\nintent segment 18402 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment 86e16f2696338337ae418c911265585f2ba12affa31af01fa1f975811ba98205\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708 -> matches call #1\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment c2f7e2ba184f092ca6afb3e30e03bad672b266556df0132eab3319ee24047708\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend (guaranteed transcript, seq 0)\n    context().caller         Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7) (selected by call #0)\n"
+        },
+        {
+          "stage": "control-a",
+          "file": "evidence/p9-tx-control-a.hex",
+          "bytes": 6778,
+          "sha256": "e7543c6e10a4bf8642e73ccb6b3e1733842dcb69573281347f1e8bf3e1e51b1a",
+          "nodeOutcome": {
+            "arm": "control-a",
+            "submitted": true,
+            "accepted": false,
+            "txId": null,
+            "status": null,
+            "blockHeight": null,
+            "refusedAt": "submission",
+            "errorCode": "submission-refused",
+            "substrateCustomErrorCode": 212
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "perCall": [
+            {
+              "segment": 20330,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/b5fd4bc5ea8a (matches NO call)"
+              ]
+            },
+            {
+              "segment": 20330,
+              "actionIndex": 1,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [
+            "None"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": false,
+          "contestedCalls": [],
+          "claimGraphObservations": [
+            {
+              "segment": 20330,
+              "anomalies": [
+                "call #0 claim [0] (guaranteed transcript, seq 0) matches no call in this intent; effects_check requires every claim to match a real call in the segment (verify.rs:1633-1653)"
+              ]
+            }
+          ],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-control-a.hex (hex-text, 6778 bytes)\nheader tag: transaction[v12](signature[v2],proof,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):����jO���'\n  ok   Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 20330 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment da3de905121fd1cb032ce0a2882b4415162b998bc0e8f3574e51b505604fcb05\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=b5fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408 -> matches call #none\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment b4fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               none\n    context().caller         None\n\n  claim-graph observations (not verdicts; well_formed is not run here)\n    - call #0 claim [0] (guaranteed transcript, seq 0) matches no call in this intent; effects_check requires every claim to match a real call in the segment (verify.rs:1633-1653)\n"
+        },
+        {
+          "stage": "control-a-balanced",
+          "file": "evidence/p9-tx-control-a-balanced.hex",
+          "bytes": 10043,
+          "sha256": "9a78bbf126c1b40284a02df9760819901e94618a9c27bba3470ad521db8f29d4",
+          "nodeOutcome": {
+            "arm": "control-a",
+            "submitted": true,
+            "accepted": false,
+            "txId": null,
+            "status": null,
+            "blockHeight": null,
+            "refusedAt": "submission",
+            "errorCode": "submission-refused",
+            "substrateCustomErrorCode": 212
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "perCall": [
+            {
+              "segment": 20330,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/b5fd4bc5ea8a (matches NO call)"
+              ]
+            },
+            {
+              "segment": 20330,
+              "actionIndex": 1,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [
+            "None"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": false,
+          "contestedCalls": [],
+          "claimGraphObservations": [
+            {
+              "segment": 20330,
+              "anomalies": [
+                "call #0 claim [0] (guaranteed transcript, seq 0) matches no call in this intent; effects_check requires every claim to match a real call in the segment (verify.rs:1633-1653)"
+              ]
+            }
+          ],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-control-a-balanced.hex (hex-text, 10043 bytes)\nheader tag: transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr[v1]):����'\n  fail Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr['\n  ok   Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 1 — 0 action(s): 0 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\nintent segment 20330 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment da3de905121fd1cb032ce0a2882b4415162b998bc0e8f3574e51b505604fcb05\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=b5fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408 -> matches call #none\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment b4fd4bc5ea8a57c027c982a5544c9a331fee66176ce59792990540459c47d408\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               none\n    context().caller         None\n\n  claim-graph observations (not verdicts; well_formed is not run here)\n    - call #0 claim [0] (guaranteed transcript, seq 0) matches no call in this intent; effects_check requires every claim to match a real call in the segment (verify.rs:1633-1653)\n"
+        },
+        {
+          "stage": "control-b",
+          "file": "evidence/p9-tx-control-b.hex",
+          "bytes": 13393,
+          "sha256": "affadaac8809c772a2d8399b2ef923f1b3e40611e7ad0b5b76ebbf7811e4e8db",
+          "nodeOutcome": {
+            "arm": "control-b",
+            "submitted": true,
+            "accepted": false,
+            "txId": null,
+            "status": null,
+            "blockHeight": null,
+            "refusedAt": "submission",
+            "errorCode": "submission-refused",
+            "substrateCustomErrorCode": 216
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "perCall": [
+            {
+              "segment": 11842,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/9829d039fc17 (matches call #2)"
+              ]
+            },
+            {
+              "segment": 11842,
+              "actionIndex": 1,
+              "entryPoint": "write_then_read",
+              "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/9829d039fc17 (matches call #2)",
+                "seq 1 -> 4f8fc4f7c525/d9482b6fb2d7/a0ad4160b62a (matches call #3)"
+              ]
+            },
+            {
+              "segment": 11842,
+              "actionIndex": 2,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+              "selectedByActionIndex": 0,
+              "claimedBy": [
+                "#0 lend@dd315f4cfd0e (seq 0)",
+                "#1 write_then_read@d2938fa034b5 (seq 0)"
+              ],
+              "claims": []
+            },
+            {
+              "segment": 11842,
+              "actionIndex": 3,
+              "entryPoint": "get",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+              "selectedByActionIndex": 1,
+              "claimedBy": [
+                "#1 write_then_read@d2938fa034b5 (seq 1)"
+              ],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": true,
+          "contestedCalls": [
+            {
+              "call": "#2 set@4f8fc4f7c525",
+              "claimedBy": [
+                "#0 lend@dd315f4cfd0e (seq 0)",
+                "#1 write_then_read@d2938fa034b5 (seq 0)"
+              ],
+              "selectedByActionIndex": 0,
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+            }
+          ],
+          "claimGraphObservations": [
+            {
+              "segment": 11842,
+              "anomalies": [
+                "call #2 is claimed by 2 calls (#0, #1); effects_check enforces claim uniqueness per segment (verify.rs:1610-1631), and the caller derivation takes the first in action order, #0"
+              ]
+            }
+          ],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-control-b.hex (hex-text, 13393 bytes)\nheader tag: transaction[v12](signature[v2],proof,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):����B����'\n  ok   Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 11842 — 4 action(s): 4 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment ada000d5526f17e2307563098a0a0793348e002f10ef5cc3fee73f595c421272\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=9829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251 -> matches call #2\n    claimed by               none\n    context().caller         None\n\n  call #1 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read\n    ep_hash                  ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247\n    communication_commitment 349add55fc600626407ed45fedc43c6e877b9c2cc63cc0ec567692d7804bb93f\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=9829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251 -> matches call #2\n      [guaranteed] seq=1 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1 comm=a0ad4160b62ab2309198de692e7fa81c1eac9692270de5d1c990d493963dec45 -> matches call #3\n    claimed by               none\n    context().caller         None\n\n  call #2 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 9829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend (guaranteed transcript, seq 0)\n    claimed by               call #1 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 0)\n    context().caller         Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7) (selected by call #0)\n\n  call #3 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::get\n    ep_hash                  d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1\n    communication_commitment a0ad4160b62ab2309198de692e7fa81c1eac9692270de5d1c990d493963dec45\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #1 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 1)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #1)\n\n  claim-graph observations (not verdicts; well_formed is not run here)\n    - call #2 is claimed by 2 calls (#0, #1); effects_check enforces claim uniqueness per segment (verify.rs:1610-1631), and the caller derivation takes the first in action order, #0\n"
+        },
+        {
+          "stage": "control-b-balanced",
+          "file": "evidence/p9-tx-control-b-balanced.hex",
+          "bytes": 16661,
+          "sha256": "ba53ae4316f76863b4b35daaed34251195973d776fb36dc58018342b18935f77",
+          "nodeOutcome": {
+            "arm": "control-b",
+            "submitted": true,
+            "accepted": false,
+            "txId": null,
+            "status": null,
+            "blockHeight": null,
+            "refusedAt": "submission",
+            "errorCode": "submission-refused",
+            "substrateCustomErrorCode": 216
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "perCall": [
+            {
+              "segment": 11842,
+              "actionIndex": 0,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/9829d039fc17 (matches call #2)"
+              ]
+            },
+            {
+              "segment": 11842,
+              "actionIndex": 1,
+              "entryPoint": "write_then_read",
+              "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/9829d039fc17 (matches call #2)",
+                "seq 1 -> 4f8fc4f7c525/d9482b6fb2d7/a0ad4160b62a (matches call #3)"
+              ]
+            },
+            {
+              "segment": 11842,
+              "actionIndex": 2,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+              "selectedByActionIndex": 0,
+              "claimedBy": [
+                "#0 lend@dd315f4cfd0e (seq 0)",
+                "#1 write_then_read@d2938fa034b5 (seq 0)"
+              ],
+              "claims": []
+            },
+            {
+              "segment": 11842,
+              "actionIndex": 3,
+              "entryPoint": "get",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+              "selectedByActionIndex": 1,
+              "claimedBy": [
+                "#1 write_then_read@d2938fa034b5 (seq 1)"
+              ],
+              "claims": []
+            }
+          ],
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": true,
+          "contestedCalls": [
+            {
+              "call": "#2 set@4f8fc4f7c525",
+              "claimedBy": [
+                "#0 lend@dd315f4cfd0e (seq 0)",
+                "#1 write_then_read@d2938fa034b5 (seq 0)"
+              ],
+              "selectedByActionIndex": 0,
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+            }
+          ],
+          "claimGraphObservations": [
+            {
+              "segment": 11842,
+              "anomalies": [
+                "call #2 is claimed by 2 calls (#0, #1); effects_check enforces claim uniqueness per segment (verify.rs:1610-1631), and the caller derivation takes the first in action order, #0"
+              ]
+            }
+          ],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-control-b-balanced.hex (hex-text, 16661 bytes)\nheader tag: transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr[v1]):����'\n  fail Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr['\n  ok   Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 1 — 0 action(s): 0 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\nintent segment 11842 — 4 action(s): 4 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment ada000d5526f17e2307563098a0a0793348e002f10ef5cc3fee73f595c421272\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=9829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251 -> matches call #2\n    claimed by               none\n    context().caller         None\n\n  call #1 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read\n    ep_hash                  ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247\n    communication_commitment 349add55fc600626407ed45fedc43c6e877b9c2cc63cc0ec567692d7804bb93f\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=9829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251 -> matches call #2\n      [guaranteed] seq=1 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1 comm=a0ad4160b62ab2309198de692e7fa81c1eac9692270de5d1c990d493963dec45 -> matches call #3\n    claimed by               none\n    context().caller         None\n\n  call #2 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 9829d039fc1732a8f16a67d45a5b801c6a613c473b142d0c10476ef1772e1251\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend (guaranteed transcript, seq 0)\n    claimed by               call #1 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 0)\n    context().caller         Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7) (selected by call #0)\n\n  call #3 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::get\n    ep_hash                  d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1\n    communication_commitment a0ad4160b62ab2309198de692e7fa81c1eac9692270de5d1c990d493963dec45\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #1 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 1)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #1)\n\n  claim-graph observations (not verdicts; well_formed is not run here)\n    - call #2 is claimed by 2 calls (#0, #1); effects_check enforces claim uniqueness per segment (verify.rs:1610-1631), and the caller derivation takes the first in action order, #0\n"
+        },
+        {
+          "stage": "control-c",
+          "file": "evidence/p9-tx-control-c.hex",
+          "bytes": 6778,
+          "sha256": "2c9a3353e3d40631fab5d89e689c835228cece0116dab9809b8b360a1971cf9d",
+          "nodeOutcome": {
+            "arm": "control-c",
+            "submitted": true,
+            "accepted": false,
+            "txId": null,
+            "status": null,
+            "blockHeight": null,
+            "refusedAt": "submission",
+            "errorCode": "submission-refused",
+            "substrateCustomErrorCode": 219
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,embedded-fr[v1])",
+          "perCall": [
+            {
+              "segment": 48061,
+              "actionIndex": 0,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+              "selectedByActionIndex": 1,
+              "claimedBy": [
+                "#1 lend@dd315f4cfd0e (seq 0)"
+              ],
+              "claims": []
+            },
+            {
+              "segment": 48061,
+              "actionIndex": 1,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/28f7ec62f691 (matches call #0)"
+              ]
+            }
+          ],
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": true,
+          "contestedCalls": [],
+          "claimGraphObservations": [],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-control-c.hex (hex-text, 6778 bytes)\nheader tag: transaction[v12](signature[v2],proof,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):���������'\n  ok   Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 48061 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 28f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #1 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend (guaranteed transcript, seq 0)\n    context().caller         Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7) (selected by call #1)\n\n  call #1 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment 46bbc9675bf237fda9423725a4af3558c784014d55ef1472c91e5e2818dbee1f\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=28f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e -> matches call #0\n    claimed by               none\n    context().caller         None\n"
+        },
+        {
+          "stage": "control-c-balanced",
+          "file": "evidence/p9-tx-control-c-balanced.hex",
+          "bytes": 10043,
+          "sha256": "b4e8e5d2f74fc74328170ec5f722f10ac3f53e60eca1ef9aeeae2ea8e9b92c7a",
+          "nodeOutcome": {
+            "arm": "control-c",
+            "submitted": true,
+            "accepted": false,
+            "txId": null,
+            "status": null,
+            "blockHeight": null,
+            "refusedAt": "submission",
+            "errorCode": "submission-refused",
+            "substrateCustomErrorCode": 219
+          },
+          "deserialisedAs": "Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "headerTag": "transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+          "perCall": [
+            {
+              "segment": 48061,
+              "actionIndex": 0,
+              "entryPoint": "set",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "caller": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+              "selectedByActionIndex": 1,
+              "claimedBy": [
+                "#1 lend@dd315f4cfd0e (seq 0)"
+              ],
+              "claims": []
+            },
+            {
+              "segment": 48061,
+              "actionIndex": 1,
+              "entryPoint": "lend",
+              "address": "dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7",
+              "caller": "None",
+              "selectedByActionIndex": null,
+              "claimedBy": [],
+              "claims": [
+                "seq 0 -> 4f8fc4f7c525/29b07fa866ea/28f7ec62f691 (matches call #0)"
+              ]
+            }
+          ],
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "expectedIfLendingHolds": "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)",
+          "lendingHeld": true,
+          "contestedCalls": [],
+          "claimGraphObservations": [],
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p9-tx-control-c-balanced.hex (hex-text, 10043 bytes)\nheader tag: transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr[v1]):����'\n  fail Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr['\n  ok   Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 1 — 0 action(s): 0 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\nintent segment 48061 — 2 action(s): 2 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 28f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #1 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend (guaranteed transcript, seq 0)\n    context().caller         Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7) (selected by call #1)\n\n  call #1 dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7::lend\n    ep_hash                  0291d6a69273e0f6a96afbb1eee83f0229737de30d01f9d60e53167f7a246b7d\n    communication_commitment 46bbc9675bf237fda9423725a4af3558c784014d55ef1472c91e5e2818dbee1f\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=28f7ec62f6912da2943adbbff11578af6af4d187a1f3301dfc08b4185a817b1e -> matches call #0\n    claimed by               none\n    context().caller         None\n"
+        }
+      ],
+      "lendingConfirmedOn": [
+        "lend",
+        "lend-balanced"
+      ],
+      "lendingContradictedOn": [],
+      "controlResolutions": [
+        {
+          "stage": "control-a",
+          "setCallCaller": [
+            "None"
+          ],
+          "matchesTheLender": false
+        },
+        {
+          "stage": "control-a-balanced",
+          "setCallCaller": [
+            "None"
+          ],
+          "matchesTheLender": false
+        },
+        {
+          "stage": "control-b",
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "matchesTheLender": true
+        },
+        {
+          "stage": "control-b-balanced",
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "matchesTheLender": true
+        },
+        {
+          "stage": "control-c",
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "matchesTheLender": true
+        },
+        {
+          "stage": "control-c-balanced",
+          "setCallCaller": [
+            "Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)"
+          ],
+          "matchesTheLender": true
+        }
+      ],
+      "lendingConfirmed": true
+    },
+    "interpretation": {
+      "lending": "A contract that exports a chosen-argument claim circuit can name itself the caller of a root call composed with it in the same intent. The node admitted the composition and the ledger derives that call's caller as Contract(<Lender>).",
+      "voluntaryNotForgery": "This is voluntary lending by the Lender, not forgery by a third party. The claim is an effect of the Lender's own transcript, it reaches the first public input of the Lender's proof, and a contract that exports no such circuit cannot be made to emit one. What a claim circuit gives away is the exclusive right to be the contract the ledger names as the caller of a call in the same intent.",
+      "rootCallerIsDecidedByComposition": "The claimed call here is a ROOT call, made directly by the client rather than by any circuit of the claimant. The ledger nonetheless derives its caller as the claimant, so a callee reading slot 6 would see a contract that did not call it. Correspondingly, the Lender call itself resolves to None.",
+      "actionOrderDecidesTheWinner": "Where one call is claimed twice, the ledger takes the FIRST claimant in action order (find_map over intent.actions): [{\"call\":\"#2 set@4f8fc4f7c525\",\"claimedBy\":[\"#0 lend@dd315f4cfd0e (seq 0)\",\"#1 write_then_read@d2938fa034b5 (seq 0)\"],\"selectedByActionIndex\":0,\"caller\":\"Contract(dd315f4cfd0e1e3e8322f113810fc79b12edb7402d970609abbf9ba8da59a1d7)\"}]. A second claimant placed earlier therefore supersedes the contract that genuinely made the call, in the derivation. The uniqueness rule is what stops such a transaction reaching a block, so the integrity of the Contract arm rests on that check rather than on the derivation.",
+      "enforcementIsAtTheNode": "Every control was built, proven, balanced, and submitted; the refusals came from the node: [{\"arm\":\"control-a\",\"stage\":\"submission\",\"code\":212},{\"arm\":\"control-b\",\"stage\":\"submission\",\"code\":216},{\"arm\":\"control-c\",\"stage\":\"submission\",\"code\":219}]. Nothing in the client refused these compositions, and the caller-derivation tool never refuses anything, so the checks that discipline claims are observable only as a submission verdict.",
+      "derivationIgnoresSequencing": "The derivation tool runs ContractCall::context alone and never runs well_formed, so it resolves a caller for control-c (claimant AFTER the claimed call) as readily as for the main arm. The node refused those bytes. A caller value read off unverified bytes therefore means nothing on its own: the sequencing, subset, and uniqueness checks are what make the derivation meaningful, and they live at admission.",
+      "notObserved": "No node was observed evaluating a slot-6 read, because Compact has no reader for context slot 6 and no circuit in this experiment reads it. The caller values here are what the ledger computes and marshals into that slot, established by running the ledger's own ContractCall::context off-node over the submitted bytes.",
+      "errorCodeMapping": "The node reports its refusals as Substrate InvalidTransaction::Custom(u8) codes. The mapping from code to named check is not established here: it lives in the node, and midnight-ledger carries no numbering for MalformedTransaction. What each control isolates is established by its construction, not by its code."
+    },
+    "after": {
+      "tally": {
+        "total": "7",
+        "writes": "10"
+      },
+      "lender": {
+        "lends": "4"
+      }
+    },
+    "stateMoved": {
+      "tallyWrites": "9 → 10",
+      "lenderLends": "3 → 4"
+    }
+  },
+  "ranAt": "2026-09-14T12:18:00.702Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}
