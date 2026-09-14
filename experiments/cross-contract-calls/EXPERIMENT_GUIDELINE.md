@@ -1,7 +1,7 @@
 # Experiment Brief: Compact Cross-Contract Calls
 
 **Date opened:** 2026/09/03
-**Component:** contract composability for the account contract (consequences for MIP-0012 section 6.6, MIP-0013 privacy claims, and the MIP-0007 delegated-owner amendment).
+**Component:** contract composability for the account contract (consequences for MIP-0012 section 6.6, MIP-0013 privacy claims, and, in the opposite direction, the MIP-0007 delegated-owner amendment, which needs the registry as callee to recognise the account as its caller).
 **Base:** harness copied from the account-custody reference implementation (worktree `arc-passport-k1-arm/contract/`, branch `nicolasdp/ecdsa-k1-arm`, commit `2b0b55d`); house format from `experiments/contract-to-contract-transfer/`.
 
 ## Question
@@ -93,8 +93,13 @@ are newer on npm.
   P7 is the on-chain verdict on that fix.
 - **The 0.33.0-rc line.** Superseded by the stable 0.34.0 pin; an earlier
   draft of this experiment targeted it and was reconciled.
-- **`kernel.caller()`.** Branch-only (`dyb/ccc2`); no released line lets a
-  callee identify its calling contract, so no probe keys authority on it.
+- **`kernel.caller()`.** No released compactc exposes it, so no probe keys
+  authority on it. The ledger below does derive the calling contract's
+  address per call frame and place it at VM context slot 6 (MPS-0029;
+  `spec/contracts.md`, section Context; `ledger/src/structure.rs`,
+  `ContractCall::context`, at tag `ledger-9.1.0.0-rc.3`), so the gap a probe
+  would hit is the missing Compact surface, plus, for the calling circuit's
+  identity, a record no layer keeps.
 - **Dynamic implementation binding.** Draft CoIP-3 (PR #628); one
   implementation per contract type, resolved statically, is the shipped
   model.

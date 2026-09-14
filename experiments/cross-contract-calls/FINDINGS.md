@@ -88,9 +88,11 @@ contract.
 Two consequences follow. First, the account's circuit signatures are now a
 public ABI that third-party contracts can compile against, which raises the
 cost of the pending erratum fixes (weak-key and revocation) once dependents
-exist. Second, the MIP-0007 delegated-owner amendment gains a working
-mechanism: a counterparty contract can drive owner-authorised account
-operations atomically with its own bookkeeping.
+exist. Second, a counterparty contract can drive owner-authorised account
+operations atomically with its own bookkeeping. That is not yet the
+MIP-0007 delegated-owner amendment, which runs the other way: there the
+registry is the callee and must recognise the account as its caller, which
+is precisely the capability no released line provides.
 
 ### 6. Toolchain drift: forwarded arguments must be disclosed
 
@@ -194,12 +196,16 @@ must survive into any pull request, MIP amendment, or adoption discussion:
    contracts need no client-side pairing discipline and can never half
    complete. This is the property that makes contractual composition safer
    than the client-composed graft it replaces.
-2. **A callee cannot identify its caller.** `kernel.caller()` exists only on
-   an upstream development branch. On every released line, no contract can
-   grant authority because the passport account (or any specific contract)
-   called it; authority must travel in the arguments, as the account's
-   signature seam already does. Any design that keys access on caller
-   identity is unimplementable until upstream ships caller identification.
+2. **A callee cannot identify its caller, and the gap is in the language.**
+   The ledger already derives the calling contract's address per call frame
+   and places it at VM context slot 6; Compact has no reader for that slot,
+   and no layer anywhere records which circuit of the caller invoked the
+   callee. On every released line, therefore, no contract can grant
+   authority because the passport account (or any specific contract) called
+   it; authority must travel in the arguments, as the account's signature
+   seam already does. Any design that keys access on the calling contract is
+   unimplementable until upstream surfaces the slot, and any design that
+   keys it on the calling circuit needs a protocol change as well.
 3. **Becoming a callee makes the account's circuits a public ABI.** Third
    party contracts compile against exact circuit signatures and deployed
    verifier keys, so every dependent breaks when a signature changes. The
@@ -248,10 +254,21 @@ must survive into any pull request, MIP amendment, or adoption discussion:
   contracts are designed around; no probe submitted the failing control.
   Likewise `take_shielded` claimed exactly one coin, so its
   `mergeCoinImmediate` branch for a second incoming coin never executed.
-- **`kernel.caller()`.** Branch-only; on every released line a callee cannot
-  identify its calling contract. P5 works despite this because the account's
-  seam authenticates the owner's signature, not the caller: any counterparty
-  contract holding a valid owner-signed bundle can drive the call.
+- **Reading the caller from inside a callee.** No probe attempted it,
+  because the language has no reader for it: `kernel` has sixteen members on
+  compactc 0.34.0 and `caller` is not among them (`operation caller
+  undefined for ledger field type Kernel`). The ledger below is not the
+  obstacle. At `ledger-9.1.0.0-rc.3` `ContractCall::context` derives
+  `CallContext.caller` per call frame, taking the calling contract's address
+  from whichever other call in the same intent claims this call and falling
+  back to unshielded input ownership only when none does, and the onchain
+  runtime marshals that value into VM context slot 6. What is missing is the
+  Compact surface on that slot and, separately and more deeply, any record
+  anywhere of the calling circuit: the claimed-call record carries the
+  callee's entry-point hash, never the caller's. P5 works regardless,
+  because the account's seam authenticates the owner's signature, not the
+  caller: any counterparty contract holding a valid owner-signed bundle can
+  drive the call.
 - **Dynamic implementation binding.** Draft CoIP-3; the shipped model
   resolves one implementation per declared contract type statically at
   compile time, and no probe exercises substituting a callee implementation.
