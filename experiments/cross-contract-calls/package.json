@@ -5,9 +5,10 @@
   "private": true,
   "description": "Cross-contract call validation on the ledger-9 toolchain: how Compact contract-to-contract calls work end to end (compile, deploy, prove, submit, atomic failure), and whether the passport account contract can participate as a callee.",
   "scripts": {
-    "compile": "npm run compile:tally && npm run compile:caller && npm run compile:till && npm run compile:payer && npm run compile:account && npm run compile:account-gate",
+    "compile": "npm run compile:tally && npm run compile:caller && npm run compile:lender && npm run compile:till && npm run compile:payer && npm run compile:account && npm run compile:account-gate",
     "compile:tally": "compact compile +0.34.0 contracts/tally.compact contracts/managed/Tally",
     "compile:caller": "compact compile +0.34.0 --compact-path contracts/managed contracts/caller.compact contracts/managed/Caller",
+    "compile:lender": "compact compile +0.34.0 contracts/lender.compact contracts/managed/Lender",
     "compile:till": "compact compile +0.34.0 contracts/till.compact contracts/managed/Till",
     "compile:payer": "compact compile +0.34.0 --compact-path contracts/managed contracts/payer.compact contracts/managed/Payer",
     "compile:account": "compact compile +0.34.0 --feature-zkir-v3 contracts/account.compact contracts/managed/Account",
@@ -21,6 +22,8 @@
     "p5": "tsx src/tests/p5-passport-callee.ts",
     "p6": "tsx src/tests/p6-unshielded-value.ts",
     "p7": "tsx src/tests/p7-shielded-value.ts",
+    "p8": "tsx src/tests/p8-caller-derivation.ts",
+    "p9": "tsx src/tests/p9-lending.ts",
     "findings": "tsx src/compose-findings.ts"
   },
   "devDependencies": {

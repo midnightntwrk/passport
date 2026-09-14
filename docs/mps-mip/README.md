@@ -48,6 +48,20 @@ together; the upstream copies are canonical.
   length-agnostic client-data hashing, [CRYPTO] envelope-binding and
   malleability-inertness review, [RULING] the k1 Interim-status
   registration. Tracked by passport issue #51 and PR #146.
+- `mps/mps-call-provenance.md` — **Cross-Contract Call Provenance in
+  Compact Circuits**: a Compact callee cannot learn whether a contract
+  invoked it, which contract, or which circuit. The ledger already
+  derives the calling contract's address per call frame (VM context
+  slot 6, Contract arm first, unshielded-owner fallback second) and
+  Compact has no reader for it; the calling circuit is recorded by no
+  layer at all. Complements MPS-0029 (wallet identity, same slot) and
+  MPS-0021 (Phase 2 witnesses); `Requires: none`. Filled from the
+  cross-contract-calls experiment (`experiments/cross-contract-calls/`)
+  and a source reading of `ledger-9.1.0.0-rc.3`, with the Contract arm
+  observed on our transaction bytes by P8 and voluntary lending admitted
+  on the node by P9 (2026/09/14). Co-authored with the
+  Midnight Foundation; MPS-0029's author to be invited to review before
+  the upstream filing.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract
