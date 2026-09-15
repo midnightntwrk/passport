@@ -101,7 +101,7 @@ export interface AppBrowserProps {
    * deployed account: the approval sheet is then never shown and the app is
    * told `wallet-unavailable` rather than being left waiting.
    */
-  executeTransfer?: (intent: PassportTransferIntent) => Promise<{ txId: string }>
+  executeTransfer?: (intent: PassportTransferIntent) => Promise<{ txId: string; sponsored?: boolean }>
   /**
    * The wallet the approval sheet is describing. `networkId` is the network a
    * recipient address must belong to; `formattedBalance` is NIGHT in display
@@ -623,7 +623,7 @@ export default function AppBrowser(props: AppBrowserProps) {
     }
     setSigning(true)
     try {
-      const { txId } = await wallet({
+      const { txId, sponsored } = await wallet({
         recipientAddress: pendingTx.request.intent.recipientAddress,
         amount: pendingTx.amount,
         purpose: pendingTx.request.intent.purpose,
@@ -631,7 +631,9 @@ export default function AppBrowser(props: AppBrowserProps) {
       })
       /* Nothing is ever reported as submitted without the node's own id. */
       if (!txId) throw new Error('Passport returned no transaction id.')
-      postTx(pendingTx.request, { status: 'submitted', txId })
+      /* `sponsored` only as `true` and only when the seam said so (2026/09/14):
+         the field an app renders "network fee covered" on. */
+      postTx(pendingTx.request, { status: 'submitted', txId, ...(sponsored === true ? { sponsored: true } : {}) })
       setTxOutcome({ kind: 'submitted', txId })
       /* No toast is raised here. The send seam this component is handed
          (`App.tsx`'s `executeAppTransfer`) already raises the submitted toast,

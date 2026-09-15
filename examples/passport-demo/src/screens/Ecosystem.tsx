@@ -40,6 +40,14 @@ export interface EcosystemProps {
   /** Offered when no name is held on this network. */
   onClaimName?: () => void
   /**
+   * Offered beside it (2026/09/15): the way back into a Passport this browser
+   * does not remember. A passkey that reached Home with no account — a synced
+   * passkey on a new machine, or records this browser no longer holds — was
+   * shown "Choose a name" and nothing else, and choosing one would have made a
+   * second Passport for a person who already had one.
+   */
+  onFindExisting?: () => void
+  /**
    * Re-runs the REAL claim path for a queued name — availability re-check,
    * funds re-check, then the two on-chain transactions. Rendered only on
    * queued records; omit (with no disabled reason) to hide the action.
@@ -109,6 +117,7 @@ export function EcosystemIdentity(props: EcosystemProps) {
     incentives,
     variant = 'card',
     onClaimName,
+    onFindExisting,
     onRegisterNow,
     registerNowDisabledReason,
     registerNowBusy,
@@ -192,12 +201,20 @@ export function EcosystemIdentity(props: EcosystemProps) {
           </div>
         ) : null}
 
-        {!record && onClaimName ? (
+        {!record && (onClaimName || onFindExisting) ? (
           <div className="mnid-panel-actions">
-            <button type="button" className="mnid-link" onClick={onClaimName}>
-              <Tag size={14} aria-hidden="true" />
-              Choose a name
-            </button>
+            {onClaimName ? (
+              <button type="button" className="mnid-link" onClick={onClaimName}>
+                <Tag size={14} aria-hidden="true" />
+                Choose a name
+              </button>
+            ) : null}
+            {onFindExisting ? (
+              <button type="button" className="mnid-link" onClick={onFindExisting}>
+                <ArrowRight size={14} aria-hidden="true" />
+                I already have a Passport
+              </button>
+            ) : null}
           </div>
         ) : null}
       </article>

@@ -1,0 +1,95 @@
+@import './tokens.css';
+
+/* The signed-in identity row on Home. Loaded by `DynamicIdentity.tsx`, which
+   renders nothing unless a Dynamic environment id is configured AND somebody
+   is signed in — so in every build shipped today none of this ever matches.
+
+   It sits in the `.mnhome-body` footer stack and borrows `.mnhome-support`
+   for its button, so the action looks like the "Back up or restore" pill it
+   sits beside rather than inventing a second kind of quiet control. */
+.mndyn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-raised, transparent);
+}
+
+.mndyn-who {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mndyn-who svg { flex: none; color: var(--mn-accent); }
+
+.mndyn-addr {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  /* Never widens the column. A long value belongs in the `title`, not in a
+     row that pushes Home's footer sideways. */
+  overflow-wrap: anywhere;
+}
+
+.mndyn-action { margin-top: 2px; }
+.mndyn-spin { animation: mndyn-spin 1s linear infinite; }
+@keyframes mndyn-spin { to { transform: rotate(360deg); } }
+
+.mndyn-note {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mndyn-note-error { color: var(--mn-danger, var(--mn-text-primary)); }
+
+.mndyn-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The whole signature, wrapped rather than truncated: the point of this row is
+   that somebody can read the bytes and compare them with another run. */
+.mndyn-sig {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-active, transparent);
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.mndyn-copy {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+
+.mndyn-copy:hover { color: var(--mn-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mndyn-spin { animation-duration: 2.4s; }
+}

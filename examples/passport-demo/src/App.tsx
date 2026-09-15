@@ -6143,7 +6143,7 @@ export default function PassportDemo() {
       amount: bigint;
       purpose: string;
       origin: string;
-    }): Promise<{ txId: string }> => {
+    }): Promise<{ txId: string; sponsored: boolean }> => {
       const account = requireAccount();
       try {
         const { nightColourHex, withdrawNight } = await import('./identity/accountCustody.js');
@@ -6186,7 +6186,9 @@ export default function PassportDemo() {
             // The account's balance has moved; the session row already carries
             // the transaction meanwhile.
             void refreshLocalBalances();
-            return { txId: result.txId };
+            /* Decided by what the sponsor did, as the custody result records
+               it — the one fact an app may render "network fee covered" on. */
+            return { txId: result.txId, sponsored: result.feePaidBy === 'sponsored' };
           } catch (cause) {
             updateActivity(entry.id, {
               status: 'error',
@@ -8736,6 +8738,13 @@ export default function PassportDemo() {
       setAliasFailure(null);
       setIdentityStep('alias');
     },
+    /* The same door the name step offers, reachable from Home (2026/09/15):
+       a passkey that signed in with no account remembered here is not a new
+       Passport, and "Choose a name" alone made it look like one. */
+    onFindExisting: () => {
+      setAliasFailure(null);
+      setIdentityStep('recover');
+    },
     ...registerNowProps,
   };
 
@@ -8913,8 +8922,19 @@ export default function PassportDemo() {
     const network = account.handle.network.networkId;
     const asked = passportContractRecordKey(credentialId, network);
     if (upgradeProbed.current.has(asked)) return;
-    if (loadPassportUpgradeProgress(credentialId, network) !== null) {
+    const stored = loadPassportUpgradeProgress(credentialId, network);
+    if (stored !== null) {
       upgradeProbed.current.add(asked);
+      /* A STOPPED UPGRADE IS SHOWN, NOT RESTARTED (2026/09/15). The progress
+         block remembers why the last attempt stopped, and a visit that found
+         one used to hand the machine straight back to the effect below, which
+         ran the same drain into the same wall for minutes before the person
+         saw "Try again" — on every visit, which is what "the upgrade starts
+         each time I open the site" reported. Putting the recorded reason on
+         screen first keeps that effect out of the way: the screen opens on
+         "Try again" and "Not now", and the person decides. An interrupted
+         attempt with no recorded failure still resumes on sight. */
+      if (stored.failureReason) setUpgradeError(stored.failureReason);
       setIdentityStep('upgrade');
       return;
     }

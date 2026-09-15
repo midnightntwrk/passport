@@ -84,7 +84,16 @@ interface TxConsentProps {
     amount: bigint;
     purpose: string;
     origin: string;
-  }) => Promise<{ txId: string }>;
+  }) => Promise<{
+    txId: string;
+    /**
+     * True only when the fee sponsor balanced the transaction that was
+     * submitted. Passed through to the app as `sponsored`, which is the one
+     * field an app may render "network fee covered" on. Absent means unknown,
+     * and unknown is reported as not sponsored.
+     */
+    sponsored?: boolean;
+  }>;
   /** The wallet the approval sheet is describing. Null with no local session. */
   transferContext?: PassportTransferContext | null;
 }
@@ -333,7 +342,7 @@ export function PassportTxConsent({
     try {
       /* The seam runs the passkey ceremony and only then signs and submits —
          the same single ceremony per approved action as the embedded flow. */
-      const { txId } = await wallet({
+      const { txId, sponsored } = await wallet({
         recipientAddress: pending.request.intent.recipientAddress,
         amount,
         purpose: pending.request.intent.purpose,
@@ -341,7 +350,11 @@ export function PassportTxConsent({
       });
       /* Nothing is ever reported as submitted without the node's own id. */
       if (!txId) throw new Error('Passport returned no transaction id.');
-      reply(pending, { status: 'submitted', txId });
+      /* `sponsored` travels only as `true`, and only when the seam said so
+         (2026/09/14): the app renders "network fee covered" on that field and
+         nothing else, and until now the reply never carried it, so a fee the
+         sponsor had paid was reported to the app as paid by the user. */
+      reply(pending, { status: 'submitted', txId, ...(sponsored === true ? { sponsored: true } : {}) });
       setOutcome({ kind: 'submitted', txId });
     } catch (cause) {
       /* Cancelling the passkey verification sheet is the user declining, not a

@@ -30,7 +30,14 @@ const styles = {
     position: 'fixed',
     zIndex: 130,
     right: 16,
-    bottom: 16,
+    /* TOP, NOT BOTTOM (2026/09/14). Every onboarding screen puts its one
+       control at the foot of the page, and at the pop-up's own size
+       (620×780) a notice pinned to the bottom sat exactly over "Choose my
+       name": a first-time user arriving from a partner app could not tap past
+       Welcome, and only the keyboard got through. Found by the live walk. The
+       top of those screens is a heading, which a notice may cover for a
+       moment; a button, never. */
+    top: 16,
     left: 16,
     display: 'flex',
     justifyContent: 'center',

@@ -312,3 +312,51 @@
   .mnob-stage { margin-top: clamp(48px, 12svh, 160px); }
   .mnob-primary { width: auto; min-width: 280px; }
 }
+
+/* The social entry, and the note it turns into once somebody is signed in.
+   Present in the stylesheet unconditionally; rendered only by a build with a
+   Dynamic environment id (see `ContinueWithSocial.tsx`). Quieter than
+   `.mnob-primary` and louder than `.mnob-alt`, because it is a real second
+   route rather than a variation on the first — but it is never the way this
+   screen is finished. */
+.mnob-social {
+  width: 100%;
+  margin-top: 14px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 18px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  background: transparent;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.mnob-social:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnob-social:disabled { opacity: .5; cursor: default; }
+
+.mnob-social-note {
+  margin: 14px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mnob-social-note svg { flex: none; margin-top: 2px; }
+.mnob-social-spin { animation: mnob-spin 1s linear infinite; }

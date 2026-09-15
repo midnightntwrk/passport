@@ -45,6 +45,30 @@ if (!import.meta.env.DEV || window.location.origin === requiredDevelopmentOrigin
     </React.StrictMode>,
   );
 
+  /* Social sign-in, when this build has been given an environment id — which
+     no build shipped today has.
+
+     THE CONDITION IS WRITTEN OUT RATHER THAN CALLED, and that is the whole
+     point of it. `isDynamicEnabled()` is the same question and reads better,
+     but it is a function call, and a function call is opaque to the bundler.
+     Vite substitutes `import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID` with a
+     literal at build time, so with the variable unset this reads `if
+     (undefined)` and Rollup deletes the branch, the `import()`, and every
+     chunk reachable from it. MEASURED, 2026/09/14: written as a call, a
+     flag-off build emitted the SDK anyway — 118 chunks and 10,169,722 bytes of
+     JavaScript, against 44 and 3,219,674 written this way. Nothing would ever
+     have fetched those 7 MB; they would just have been deployed. A dynamic
+     import is not dead code to a bundler merely because the branch above it
+     is false at run time.
+
+     Two more properties, both deliberate: it runs AFTER `root.render`, and its
+     rejection is swallowed. The Passport is already on screen before any of
+     this is attempted, so a vendor that will not load costs a secondary
+     button and never a boot. */
+  if (import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID) {
+    void import('./lib/dynamic.js').then((module) => module.mountDynamic()).catch(() => {});
+  }
+
   // Retire the inline splash from index.html once React has painted, keeping
   // it on screen for at least 500ms so a fast load reads as a deliberate beat
   // rather than a flash. The element is removed after its opacity transition.
