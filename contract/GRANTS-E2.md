@@ -1001,9 +1001,9 @@ it may take at most 16.266ms
 
 The same call for a non-native color, at essentially the same size, is admitted
 with 4.975 ms of headroom, and both unshielded grant twins are admitted with the
-largest headroom of any funded shape. Upstream ledger issue **#761** (open)
+largest headroom of any funded shape. Upstream ledger issue **[#761](https://github.com/midnightntwrk/midnight-ledger/issues/761)** (open)
 records the mechanism, that the client under-reserves the NIGHT change output
-balancing adds, and issue **#222** (closed) records a Foundation datapoint that
+balancing adds, and issue **[#222](https://github.com/midnightntwrk/midnight-ledger/issues/222)** (closed) records a Foundation datapoint that
 the shape works for a non-native color and fails only for NIGHT, which is
 exactly the split measured here. The refusal is client-side, from the ledger's
 own `cost(params, true)`: no NIGHT transaction was submitted in this run, so
