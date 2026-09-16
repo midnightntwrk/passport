@@ -11,7 +11,10 @@ and atomic failure on the released pin set, then replaces the toy callee
 with the real account contract behind its authorisation seam, and finally
 moves real value, unshielded and shielded, across the call boundary with a
 payer/till pair funded by in-circuit mints so the known node 2.1.0 fee wall
-stays out of the question. It differs
+stays out of the question. Two provenance probes then ask what the ledger
+itself derives as each call's caller, by running the ledger's own code on
+the transaction bytes, and whether a contract can lend that identity to a
+call it never made. It differs
 from [`experiments/contract-to-contract-transfer/`](../contract-to-contract-transfer/)
 in one sentence: that experiment grafted two contracts into one transaction
 client-side on ledger 8, whereas here the composition is expressed in the
@@ -21,10 +24,11 @@ circuit itself and proven as a call tree on ledger 9. See
 
 ## Probes
 
-All eight probes pass (2026/09/03): P0 to P5 on a clean `./run-all.sh
---fresh` reproduction, and the value probes P6 and P7 first attempt against
-the same localnet; see [`FINDINGS.md`](FINDINGS.md) for the evidence-backed
-table.
+All ten probes pass: P0 to P5 on a clean `./run-all.sh --fresh`
+reproduction and the value probes P6 and P7 first attempt against the same
+localnet (2026/09/03), then the provenance probes P8 and P9 on a fresh
+ledger-9 localnet (2026/09/14); see [`FINDINGS.md`](FINDINGS.md) for the
+evidence-backed table.
 
 | ID | Question | Verdict |
 |----|----------|---------|
@@ -36,22 +40,28 @@ table.
 | P5 | Can the account contract be a callee behind its authorisation seam? (best-effort) | PASS |
 | P6 | Does unshielded value move contract to contract across an in-circuit call (send plus same-transaction claim, mint-funded)? | PASS |
 | P7 | Does shielded value move across the boundary: a callee executing `receiveShielded` on the published runtime (the issue #658 verdict), driven by a witness-consuming root? | PASS |
+| P8 | What does the ledger's own `CallContext.caller` derivation resolve to on the real bytes of our composed transaction (sub-calls to `Contract(<Caller>)`, the root to `None`)? | PASS |
+| P9 | Can a contract lend itself as the caller of a root call its circuit never made, by emitting `kernel.claimContractCall` on client-supplied arguments, and where does the node refuse the subset, uniqueness, and sequencing controls? | PASS (lending admitted; all three controls refused at node admission by name) |
 
 ## Run
 
 ```sh
-./run-all.sh                 # compile (real keys), devnet up, P0 → P7, gated
+./run-all.sh                 # compile (real keys), devnet up, P0 → P9, gated
 ./run-all.sh --fresh         # reset chain state first
 ./run-all.sh --tests p2,p3   # a subset, ungated
 ```
 
 Prerequisites: Docker (daemon running), Node.js >= 22, `compact` on PATH with
-the 0.34.0 toolchain installed (`compact update`), openssl. Probes are
-sequential: P0 and P1 are chainless; P2 deploys and writes `deployment.json`;
-P3 and P4 reconnect from it; P5 to P7 are self-contained, each deploying its
-own pair (P6 and P7 record theirs in `deployment.json` under `till-p6`,
-`payer-p6`, `till-p7`, and `payer-p7`). In a full run each probe gates on
-the previous verdict.
+the 0.34.0 toolchain installed (`compact update`), openssl, and, for P8 and
+P9, a Rust toolchain (1.98 stable was used) with the caller-derivation tool
+built beforehand: `cd rust/caller-context && cargo build --release`
+(`run-all.sh` does not build it, and both probes write `BLOCKED` with that
+instruction when the binary is absent). Probes are sequential: P0 and P1
+are chainless; P2 deploys and writes `deployment.json`; P3, P4, P8, and P9
+reconnect from it (P9 also deploys the Lender, recorded under `lender`);
+P5 to P7 are self-contained, each deploying its own pair (P6 and P7 record
+theirs in `deployment.json` under `till-p6`, `payer-p6`, `till-p7`, and
+`payer-p7`). In a full run each probe gates on the previous verdict.
 
 ## Layout
 
@@ -73,8 +83,21 @@ the previous verdict.
   `ContractAddress` separately, funds itself by in-circuit mint of its own
   color, and pays across the call boundary (`pay_unshielded`, and
   `pay_shielded` consuming the `payer_coin` coin-store witness).
-- `src/tests/p0..p7`: the probes; every probe writes `evidence/*.json`, and
-  `src/compose-findings.ts` regenerates the results table in `FINDINGS.md`.
+- `contracts/lender.compact`: the P9 claimant; `lend(addr, ep_hash, comm)`
+  emits `kernel.claimContractCall` on client-supplied arguments for a call
+  its own circuit never made, and bumps a `lends` counter.
+- `src/tests/p0..p9`: the probes (P9's composition helpers in
+  `src/tests/p9-compose.ts`); every probe writes `evidence/*.json`, P8 and
+  P9 also write the transaction captures they analyse as
+  `evidence/p8-tx-*.hex` and `evidence/p9-tx-*.hex` (with the node's own
+  refusal lines for the P9 controls in `evidence/p9-node-rejections.txt`),
+  and `src/compose-findings.ts` regenerates the results table in
+  `FINDINGS.md`.
+- `rust/caller-context/`: the Rust tool P8 and P9 call. It runs the ledger's
+  own `ContractCall::context(...).caller` derivation, from `midnight-ledger`
+  at git tag `ledger-9.1.0.0-rc.3` (no path dependency; `Cargo.lock`
+  tracked), over serialised transaction bytes off-node and prints the
+  per-call caller graph; see its `README.md` for what it is not.
 - `src/node/`: wallet and provider plumbing (leaf `NodeZkConfigProvider`
   per contract, `nodeZkConfigRegistry` into the proof provider so call trees
   prove).
