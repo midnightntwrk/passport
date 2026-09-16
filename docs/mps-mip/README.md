@@ -48,6 +48,22 @@ together; the upstream copies are canonical.
   length-agnostic client-data hashing, [CRYPTO] envelope-binding and
   malleability-inertness review, [RULING] the k1 Interim-status
   registration. Tracked by passport issue #51 and PR #146.
+- `mips/mip-xxxx-scoped-grants.md` — **Scoped Grants and dApp Connection
+  for Custody Accounts (C10, C11, C12, C23)**: the successor extension
+  MIP-0013 reserves behind `require_authorised()`. A grant is a
+  contract-maintained record admitting one grantee key of a registered
+  scheme to a bounded subset of the asset-facing circuits (operations,
+  one color, per-call and cumulative caps, recipient pin, expiry),
+  enforced in-circuit and revocable from chain state; the connection
+  ceremony is a redirect to an authoriser carrying a canonical
+  `GrantRequest`, passkey consent, one device-gated `issue_grant`, and a
+  return leg the dApp verifies against chain state. Read access is the
+  MIP-0012 viewing capability sealed to a dApp key and recorded
+  declaratively. Requires a `spec_version = 2` redeploy. Reviewed
+  through four lenses; the open items for editors and the Foundation
+  (co-author, companion erratum wording, salt and commitment rulings)
+  are collected in an editors' note at the head of the file. Co-authored
+  with the Midnight Foundation.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract
