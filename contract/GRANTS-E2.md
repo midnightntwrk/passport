@@ -55,18 +55,20 @@ SDK.
 | Run | one run of the whole scenario, 2026/09/11, every group from one account and one chain; all twelve evidence files are from it |
 | Run totals | 2,652,536 ms of wall clock; 81 successful proofs totalling 633,868 ms, 24 per cent of it; 12 failed proof attempts adding a further 184,175 ms, so all proving is 818,043 ms, 31 per cent |
 
-The localnet carries the limitation this package records: a contract call
-paired with an **unshielded** offer prices above the node's
-`OutsideTimeToDismiss` budget and is mempool-rejected, so `deposit_unshielded`
-and every unshielded funded flow are impossible here. The consequence for the
+The localnet carries the limitation this package records, and this run read it
+more broadly than the measurement below supports: what it refuses is a small
+contract call carrying a NIGHT unshielded input that balancing pairs with a
+NIGHT change output, which is how `deposit_unshielded` funds an account here, so
+no unshielded funded flow could be reached in this run. The consequence for the
 matrix is that every spend in this run is a shielded one. The unshielded grant
 twins (`withdraw_unshielded_with_grant_k256` and
-`withdraw_unshielded_with_grant_jubjub`) are exercised only off-node, where the
-local simulator executes `receiveUnshielded` and `sendUnshielded` in full:
+`withdraw_unshielded_with_grant_jubjub`) are exercised only off-node here, where
+the local simulator executes `receiveUnshielded` and `sendUnshielded` in full:
 `src/tests/grants-offline.ts`, 121 checks over both arms, carries their whole
-rejection matrix. The two coverage halves are complementary rather than
-overlapping, and neither arm's unshielded twin has been proved or submitted to
-a node by any run.
+rejection matrix. As of this run neither arm's unshielded twin had been proved
+or submitted to a node; both are now held on node for a non-native color, and
+the limit is priced per shape, in the 2026/09/16 section at the end of this
+file.
 
 ## The scenarios
 
@@ -220,6 +222,20 @@ from the stage-two measurement table.
 | `faucet.mint_shielded` | not measured | 8 | 1,352 | 1,467 | 1,753 |
 | `deposit_shielded` | 13 | 8 | 973 | 1,023 | 1,142 |
 | deploy and activation submissions | 14 for the activation | 8 | 0 | 1 | 2,246 |
+| `withdraw_unshielded_with_grant_k256` (2026/09/16 run) | 17 | 1 | 17,155 | 17,155 | 17,155 |
+| `withdraw_unshielded_with_grant_jubjub` (2026/09/16 run) | 16 | 4 | 5,612 | 5,667 | 6,818 |
+| `revoke_grant_with_k256` (2026/09/16 run) | 16 | 1 | 8,035 | 8,035 | 8,035 |
+| `issue_grant_with_k256` (2026/09/16 run) | 17 | 6 | 13,037 | 13,142 | 16,203 |
+| `issue_grant_with_jubjub` (2026/09/16 run) | 16 | 4 | 5,677 | 5,798 | 6,504 |
+| `add_device_with_k256` (2026/09/16 run) | 16 | 1 | 8,098 | 8,098 | 8,098 |
+| `faucet.mint_unshielded` (2026/09/16 run) | not measured | 1 | 837 | 837 | 837 |
+| `deposit_unshielded` (2026/09/16 run) | 9 | 1 | 139 | 139 | 139 |
+
+The last eight rows are the unshielded run of 2026/09/16, on the same stack and
+the same host but a fresh chain and a fresh account; they are kept separate
+rather than merged because they are a different run. They carry the first
+proving times either unshielded grant twin has had, and both fall inside the
+bands this run measured for their k.
 
 Readings. Proving time tracks k closely on this hardware: about 3.4 s at k=15,
 5.6 to 8.0 s at k=16, and 11.2 to 17.4 s at k=17, with a composed pair of k=17
@@ -729,9 +745,9 @@ not the retry.
      grant twins themselves, with the transcript check that a `0` record
      records no time read and a forward-dated one records exactly one. The
      item's own "pending" status line can be deleted. One coverage note that is
-     not a gap in the item: the unshielded twins are exercised off-node only,
-     because this localnet refuses a contract call carrying an unshielded
-     offer.
+     not a gap in the item: the unshielded twins are exercised off-node only in
+     this run, because the funding leg they need is what this localnet refuses;
+     both are now held on node for a non-native color (the 2026/09/16 section).
    - **Item 2, rejection matrix: PARTIAL.** Ran on node and green: over
      `per_call_cap`; over `cap`; a witness coin above `max_coin_value`; wrong
      recipient under a pin; a stale `enc_pk`; revoked; `expires_at` in the
@@ -847,11 +863,15 @@ not the retry.
   times across the run (three recoveries from an out-of-memory death at k = 17,
   two deliberate recycles before the heaviest calls), so figures either
   side of a restart are not from an identical server state.
-- Every grant spend in this run is shielded, because the node refuses a contract
-  call carrying an unshielded offer. The unshielded twins' on-node behaviour is
-  therefore unmeasured, including their proving cost, and the k=17 figure for
-  `withdraw_unshielded_with_grant_k256` has no timing beside it. Their whole
-  rejection matrix is covered off-node by `src/tests/grants-offline.ts`.
+- Every grant spend in this run is shielded, because the funding leg the
+  unshielded twins need, a small contract call carrying a NIGHT unshielded input
+  that balancing pairs with a NIGHT change output, is what this localnet
+  refuses. The unshielded twins' on-node behaviour was therefore unmeasured in
+  this run, including their proving cost, and the k=17 figure for
+  `withdraw_unshielded_with_grant_k256` had no timing beside it. Their whole
+  rejection matrix is covered off-node by `src/tests/grants-offline.ts`. Both
+  are now held on node for a non-native color, with proving times: see the
+  2026/09/16 section at the end of this file.
 - The suite asserts the same-transaction inbox append as a counter delta across
   the call. The stronger reading, that the append cannot be a later transaction,
   follows from the contract source (the append is inside the same circuit) and
@@ -869,3 +889,284 @@ not the retry.
 - The scenario assumes an account that starts at `round` 1 and `auth_nonce` 0,
   so every run deploys a fresh account A and a fresh account B. The chain itself
   is reused; nothing in the suite requires a fresh localnet.
+
+## 2026/09/16: the unshielded grant twins on node (GRANTS-E4)
+
+This run closes the largest gap the sections above leave. E2 recorded that
+neither arm's unshielded twin had been proved or submitted to a node by any run,
+attributed that to a localnet refusing a contract call carrying an unshielded
+offer, and left the two circuits with a compiled k and no timing. Both
+statements are now superseded by measurement, and the sections above are
+corrected to match: the refusal is narrower than this file claimed, and both
+unshielded grant twins are proved, submitted, and included on node.
+
+| Item | Value |
+|---|---|
+| Suite | `src/tests/grants-unshielded.ts`, `npm run test:grants-unshielded`; `GRANTS_E4_GROUPS=<group>` truncates the scenario after a group, as in E2 |
+| Probe | `src/tests/probe-dismiss-cost.ts`, `npm run probe:dismiss-cost`; prices a built and balanced transaction with the node's own check and discards it unsubmitted |
+| Evidence | `evidence/grants-e4-funding-*.json`, `-issue-`, `-spend-`, `-rejections-`, `-proving-` (five files, all PASS) and `evidence/dismiss-cost.json` (`DISMISS-COST`, PARTIAL: seven of eight shapes priced) |
+| Stack | the pinned line and images of this package, unchanged: node 2.1.0-2e92c4ae642c, indexer-standalone 4.4.0-rc.2, proof-server 9.0.0-rc.6, compactc 0.33.0-rc.2 with `--feature-zkir-v3`, midnight-js 5.0.0-beta.4, ledger-v9 1.0.0-rc.3 |
+| Chain | a fresh ledger-9 localnet (`down -v`, `up -d`), blocks 1 to 728 over the run |
+| Account | `d16e893de9b868c896e3a39b97c67840c18cdca24e3ec6a231dbb632b8f738e7`, k256-born, a jubjub device enrolled cross-arm, authority retired at counter 2 |
+| Working color | the non-native `47c510ac90ff49691e820282602fb802848dc0d2e4d192fbbfa386bcfbf7ca8d`, faucet-minted at 3,000 and deposited whole |
+| Run totals | 664,015 ms of wall clock, 23 successful proofs totalling 166,037 ms, 0 failed proof attempts, 0 proof-server restarts, 0 prover retries |
+
+A separate suite file rather than a thirteenth group in `grants-conformance.ts`:
+that scenario is one sequence and `GRANTS_E2_GROUPS` truncates rather than
+skips, so a group appended at its end could only be produced by re-running
+every group before it, rewriting all twelve merged E2 evidence files on every
+unshielded run. Nothing here needs E2's shielded coin capture, candidate-index
+retry, or inbox plumbing either.
+
+### What the node refuses, priced per shape
+
+The limit is `Transaction::cost` in `ledger/src/structure.rs`: a transaction is
+refused when `(guaranteed_cost + validation_cost).max_time()` exceeds
+`max(time_to_dismiss_per_byte * est_size, min_time_to_dismiss)`. This chain
+prints `time_to_dismiss_per_byte: 2.000us` and `min_time_to_dismiss: 15.000ms`,
+so the budget is `max(2 us * est_size, 15 ms)`, and `est_size` of a proven
+transaction is its serialised length (`block_usage = est_size` is an identity in
+the same file). The node enforces with the identical call
+(`ledger/src/ledger_9/mod.rs`), which is what makes an off-node price a verdict
+rather than a guess: the probe builds and proves each shape through this
+package's own client, lets the wallet balance it, intercepts the submission, and
+then prices the balanced transaction against the `LedgerParameters` it reads
+from the indexer.
+
+| id | Shape | Circuit | Offer (intended) | Serialised B | `est_size` B | Dismissal ms | Allowed ms | Margin ms | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| (a) | coinless control | `append_inbox_with_k256` | none, proof only | 10,776 | 10,708 | <= 12.943 | 21.416 | >= 8.473 spare | ADMIT |
+| (b) | faucet mint to a user | `mint_unshielded` | 0 inputs, 1 non-native output | 9,736 | 9,668 | <= 9.094 | 19.336 | >= 10.242 spare | ADMIT |
+| (c) | deposit NIGHT | `deposit_unshielded` | 1 NIGHT input, plus the NIGHT change output balancing adds | 8,201 | 8,133 | **16.504** | **16.266** | **0.238 over** | **REFUSE** |
+| (d) | deposit a non-native color | `deposit_unshielded` | 1 non-native input | 8,180 | 8,112 | <= 11.249 | 16.224 | >= 4.975 spare | ADMIT |
+| (e) | device withdraw | `withdraw_unshielded_with_jubjub` | 0 inputs, 1 output to a `UserAddress` | 10,776 | 10,708 | <= 13.524 | 21.416 | >= 7.892 spare | ADMIT |
+| (f) | grant twin, jubjub grantee | `withdraw_unshielded_with_grant_jubjub` | 0 inputs, 1 output to a `UserAddress` | 11,028 | 10,960 | <= 13.180 | 21.920 | >= 8.740 spare | ADMIT |
+| (g) | grant twin, k256 grantee | `withdraw_unshielded_with_grant_k256` | 0 inputs, 1 output to a `UserAddress` | 11,614 | 11,546 | <= 13.180 | 23.092 | >= 9.912 spare | ADMIT |
+| (h) | to-contract grant twin | `withdraw_shielded_to_contract_with_grant_{jubjub,k256}` | shielded, not unshielded | | | | | | NOT PRICED: no unshielded twin exists |
+
+How to read the table. `<=` marks a derived upper bound, used on every shape the
+ledger admitted, because a passing shape reports no triple: the dismissal figure
+is `max(readTime, computeTime)` of the returned cost map, which charges
+validation plus application while dismissal charges guaranteed plus validation,
+so it is an upper bound and the margin beside it is a lower bound on the
+headroom. The budget is derived from the chain's own printed limits and
+`est_size` from the cost map's `blockUsage`. The one refused row calibrates the
+derivation and agrees at display precision: `blockUsage` 8,133 equals the
+reported size, the derived budget of 16.266 ms equals the reported budget, and
+the derived bound of 16.503991281 ms is sound against a reported 16.504 ms.
+`est_size` is `serialised - 68` on every row, the JavaScript binding's tag
+header. The `Offer` column is the shape the probe intended to build and is not
+read back off the built transaction: the actually submitted non-native deposit
+created zero unshielded outputs, so that row carries a single input and no
+change.
+
+Two corrections to the method note the probe's own evidence file carries.
+
+1. **The off-node price is exact, not conservative.** `cost` charges a call's
+   verifier-key read at the ledger default `VERIFIER_KEY_SIZE` of 2,875 bytes
+   while the node's `cost_with_state` reads the real size from state, 2,745
+   bytes for every k256 circuit here and 2,313 for every jubjub one, but
+   `cell_read` quantises to 4 KiB blocks, so all three price at one block, and
+   the operations-map index collapses to the same bucket for the same reason.
+   The probe records both calls and they are byte-identical on all seven priced
+   shapes, with the refused row producing the same triple either way. The
+   0.238 ms overrun on (c) is therefore the exact figure and not an
+   overstatement. The `method` string inside `evidence/dismiss-cost.json` still
+   carries the superseded "marginally conservative" wording.
+2. **The refused shape is the funding leg, and it takes both elements.** The
+   per-element offer costs of `application_cost`, reproduced from the chain's
+   own printed model, are 680.000 us for a plain input, 0 for a plain output,
+   3,446.912 us for a NIGHT input, and 2,491.388 us for a NIGHT output. A NIGHT
+   input alone would price (d) at 14.016 ms against its 16.224 ms budget and be
+   admitted with 2.2 ms to spare; the input paired with the change output prices
+   at 16.507 ms, which is the 16.504 ms measured. The composition is forced
+   rather than inferred: no other arrangement of the four element costs
+   reproduces the measured (c) minus (d) delta of 5,255.139 us, against the
+   5,258.300 us the element table predicts, a residual of 3.16 us.
+
+### The blocker, corrected
+
+The statement this file carried, that the localnet refuses a contract call
+paired with an unshielded offer, is too broad. What this localnet refuses is the
+funding leg: a small contract call carrying a NIGHT unshielded input that
+balancing pairs with a NIGHT change output, which prices at 16.504 ms of
+dismissal time against a 16.266 ms budget for its 8,133-byte `est_size`. The
+verbatim ledger message is
+
+```
+Error: exceeded the maximum time to dismiss for transaction size; this
+transaction would take 16.504ms to dismiss, but given its size of 8133 bytes,
+it may take at most 16.266ms
+```
+
+The same call for a non-native color, at essentially the same size, is admitted
+with 4.975 ms of headroom, and both unshielded grant twins are admitted with the
+largest headroom of any funded shape. Upstream ledger issue **[#761](https://github.com/midnightntwrk/midnight-ledger/issues/761)** (open)
+records the mechanism, that the client under-reserves the NIGHT change output
+balancing adds, and issue **[#222](https://github.com/midnightntwrk/midnight-ledger/issues/222)** (closed) records a Foundation datapoint that
+the shape works for a non-native color and fails only for NIGHT, which is
+exactly the split measured here. The refusal is client-side, from the ledger's
+own `cost(params, true)`: no NIGHT transaction was submitted in this run, so
+there is no node log line for it.
+
+One further reading the table supplies. The two twins have identical modelled
+times, 13.180 ms of compute and 7.123 ms of read, because their offer is the
+same zero-input, one-output `sendUnshielded` and the grant seam adds no
+ledger-priced element; what differs is size, and size only buys budget. The
+k256 twin is 586 bytes larger and therefore gets 1.172 ms more allowance, so
+against this limit the heavier arm is the safer one.
+
+### The twins on node
+
+Five grant spends, on both grantee arms, releasing 600 of the deposited 3,000
+through `sendUnshielded` to a `UserAddress`. Each debited the mirror by exactly
+the amount released, advanced the record `nonce` by one, re-committed
+`spent_commit` to the cumulative release, advanced `round` by one, and left
+`auth_nonce`, `device_count`, `inbox_count`, and the register size untouched.
+The mirror trace is 3000, 2800, 2700, 2550, 2450, 2400; nonces 1, 2, and 3 run
+consecutively under grant U1 for a cumulative 350 of its 500 cap, with
+`spent_commit` matching `derive_grant_spent_commit(salt, cumulative)` on all
+five; grant U2 paid the address its scope pins at recipient kind 1.
+
+| Call | Circuit | Proving ms | Proven B | Submitted B | Transaction | Finality |
+|---|---|---|---|---|---|---|
+| enrol the jubjub device | `add_device_with_k256` | 8,098 | 7,381 | 10,634 | `ed98132c880a3dea…` | SUCCESS at 644 |
+| mint 3,000 to the funding wallet | `faucet.mint_unshielded` | 837 | 6,469 | 9,735 | `2e19439fb6828418…` | SUCCESS at 647 |
+| deposit 3,000 into the account | `deposit_unshielded` | 139 | 4,721 | 8,180 | `3181843340184c1b…` | SUCCESS at 653 |
+| U1 spends 200 | `withdraw_unshielded_with_grant_jubjub` | 6,818 | 7,821 | 11,087 | `ed50c7b4aac6334a…` | SUCCESS at 705 |
+| U1 spends 100 | `withdraw_unshielded_with_grant_jubjub` | 5,624 | 7,821 | 11,092 | `aa40e5ca3e79757c…` | SUCCESS at 709 |
+| U2 spends 150 to its pinned recipient | `withdraw_unshielded_with_grant_k256` | 17,155 | 8,409 | 11,681 | `fc0884287a92967b…` | SUCCESS at 715 |
+| U7 spends 100, exhausting its cap | `withdraw_unshielded_with_grant_jubjub` | 5,612 | 7,819 | 11,090 | `e1154b50b11fcddc…` | SUCCESS at 719 |
+| U1 spends 50 | `withdraw_unshielded_with_grant_jubjub` | 5,710 | 7,819 | 11,089 | `da09c66bf39d7d21…` | SUCCESS at 723 |
+| revoke U6 | `revoke_grant_with_k256` | 8,035 | 7,785 | 11,036 | `522d5cbcaf079bae…` | SUCCESS at 728 |
+
+Ten grants were issued first, six on the k256 device arm at 13,037 to 16,203 ms
+and four on the jubjub arm at 5,677 to 6,504 ms, every one advancing
+`auth_nonce` and `round` by exactly one, every `object_commit` recomputed from
+its opening and matched. The wave deploy plus activation proved in 2,124 ms and
+submitted 10,470 bytes.
+
+**The two unshielded twins have proving times for the first time.**
+`withdraw_unshielded_with_grant_jubjub` at k=16 proves in 5,612 to 6,818 ms over
+four proofs, and `withdraw_unshielded_with_grant_k256` at k=17 in 17,155 ms over
+one. Both sit inside the bands the E2 table reports for their k, 5.6 to 8.0 s at
+k=16 and 11.2 to 17.4 s at k=17. The k256 figure is a single sample and is not a
+characterised cost.
+
+The submitted sizes confirm the pricing table to within proof randomness: shape
+(d) was priced at 8,180 bytes and submitted at 8,180, shape (f) at 11,028
+against 11,087 to 11,092, and shape (g) at 11,614 against 11,681. Nothing the
+table predicted ADMIT was refused by the node.
+
+Verification after the run, independent of the suite's own assertions: all
+nineteen recorded transaction hashes were re-queried on the live indexer by the
+`hash` offset and each resolves to a `RegularTransaction/SUCCESS` at the claimed
+height carrying the claimed entry point. Each twin created exactly one
+unshielded output and zero unshielded inputs, at 200, 100, 150, 100, and 50, and
+the deposit spent one 3,000 input and created no output. The k256 twin's
+on-chain recipient decodes from bech32m to
+`bc610dd07c52f59012a88c2f9f1c5f34cbacc75b868202975d6f19beaf37284b`, the address
+its scope pins.
+
+### The rejection rows newly held, by class
+
+Fourteen rows against a real funded on-chain account, labelled by the contract
+stage each aborts at. Every row is a build-time abort: no transaction existed,
+so the node logged nothing, and the seven-field ledger snapshot the suite takes
+either side of each row (`round`, `auth_nonce`, `inbox_count`, `device_count`,
+`grant_generation`, register size, and this color's mirror) is unchanged.
+
+**Class A, pre-custody: the fault aborts before `do_withdraw_unshielded` is
+entered, so the mirror is never read.**
+
+| # | Stage | Row | Message |
+|---|---|---|---|
+| A1 | `authenticate_grant_with_k256`, the envelope assert | an envelope-1 connector grantee through the k256 twin (U9) | `envelope not admitted for a spend grant` |
+| A2 | `authenticate_grant_with_jubjub`, step 2 | a foreign grantee key with no record | `unknown grant` |
+| A3 | `authenticate_grant_with_k256`, step 3 | a revoked grant (U6) | `grant revoked` |
+| A4 | `authenticate_grant_with_jubjub`, step 3 | an expired grant (U5) | `grant expired` |
+| A5 | `check_spend_scope`, step 4 (`op_admitted`) | a shielded-only scope (U4) through the unshielded twin | `operation not in scope` |
+| A6 | `check_spend_scope`, step 4 (`object_commit`) | a wrong `scope_salt` in the opening (U1) | `scope object mismatch` |
+| A7 | `check_spend_scope`, step 5 (`per_call_cap`) | 250 against a 200 per-call cap (U1) | `amount above per-call cap` |
+| A8 | `check_spend_scope`, step 5 (`spent_commit`) | a wrong `spent_prev` opening, off by one (U1) | `spent opening mismatch` |
+| A9 | `check_spend_scope`, step 5 (`cap`) | U7 at 100 of 100, asking 100 within its per-call cap | `cumulative cap exceeded` |
+| A10 | `check_spend_scope`, step 5 (the pin) | U3 pins another `UserAddress`; the call pays the funding wallet | `recipient not admitted by pin` |
+| A11 | `settle_grant_with_jubjub`, step 6 | a byte-identical replay of U1 #3 after the record nonce advanced | `range error at account.compact line 1906 char 13` or `invalid grant signature` |
+| A11b | `settle_grant_with_jubjub`, step 6 | a tampered signature on the live context (`sig_s` off by one) | `invalid grant signature` |
+
+**Class B, in-custody: the call passes the whole seam and the whole scope check,
+reaches `do_withdraw_unshielded`, and is refused there by `debit_unshielded`.**
+
+| # | Stage | Row | Message |
+|---|---|---|---|
+| B1 | `debit_unshielded`, the member assert | a color the mirror never held (U8) | `no balance for color` |
+| B2 | `debit_unshielded`, the balance assert | 4,000 against a mirror of 2,400, both inside U10's 4,000 caps | `insufficient balance` |
+
+Three readings.
+
+- **Class B emits no unshielded offer either.** `do_withdraw_unshielded` runs
+  `debit_unshielded(c, a)`, which asserts membership and then `bal >= amount`,
+  before `sendUnshielded`. No rejection row of these twins can therefore put an
+  unshielded offer on the wire, which is why the whole matrix is untouched by
+  the time-to-dismiss limit. The row fields recording that
+  (`emittedUnshieldedOffer`, `reachedDoWithdrawUnshielded`) are inferences from
+  the contract source rather than introspections of a built transaction; the
+  node-log capture beside them is genuinely run per row and returns no line for
+  every row.
+- **A11 is the one non-deterministic row.** `settle_grant_with_jubjub` opens
+  with `const c = challenge as Field` (`contracts/account.compact:1906`), which
+  needs the 32-byte challenge below the BLS12-381 scalar modulus, true for
+  about 45.3 per cent of draws. A grantee's own signature always clears the cast
+  because the jubjub signer grinds `grind_nonce` until the challenge it signs is
+  in range, but a replay recomputes the challenge from the record's advanced
+  nonce with the old grind nonce, so it is a fresh draw and about 54.7 per cent
+  of the time the cast raises a range error before the Schnorr assert is
+  reached. Both refuse before any write. The row accepts either needle and
+  records which fired; A11b was added to reach the signature assert
+  deterministically, by altering only `sig_s`, which the jubjub challenge does
+  not bind.
+- **Two rows of E2's matrix do not exist here, and are retired rather than
+  owed.** A stale `enc_pk` and a coin above `max_coin_value` both live in
+  `check_shielded_grant_bounds`, which only the shielded twins call. The
+  unshielded twins take neither an `enc_pk` nor a `change_entry` argument: an
+  unshielded send produces no change coin to seal, so a rotation can orphan
+  nothing, and no coin-value bound applies because no coin is consumed.
+  `max_coin_value` still enters the scope digest and the object commitment, and
+  so is covered by A6.
+
+Row A5 is worth noting against the E2 status above, which lists an out-of-scope
+operation flag among the faults Testing item 2 still owes on node. It now runs
+on node, on the unshielded twin.
+
+### What stays unproven
+
+- **The NIGHT arm, end to end.** Skipped deliberately and recorded with its
+  price in `details.nightArmSkipped` of the funding group. No NIGHT deposit and
+  no NIGHT grant spend has been built, submitted, or refused on node by any run;
+  what exists is the client-side price above and the two upstream issues.
+- **`withdraw_unshielded_with_jubjub`, the device-authorised unshielded
+  withdraw, shape (e).** Priced ADMIT with 7.892 ms of headroom and never
+  submitted. No suite carries it on node, because `test:auth*` funds with NIGHT.
+  The unshielded arm as a whole is therefore still not held on node: what is
+  held is `deposit_unshielded` of a non-native color and the two unshielded
+  grant twins.
+- **The rejection matrix as node refusals.** All fourteen rows are build-time
+  aborts, as E2's twelve were. What E4 adds is that the pre-state is a real
+  funded on-chain account and the real chain state does not move; it does not
+  add node-side refusals.
+- **The unshielded to-contract twin does not exist.** The suite asserts this
+  against the compiled roster rather than assuming it: the contract exports
+  `withdraw_shielded_to_contract_with_grant_k256` and `..._jubjub` and no
+  `withdraw_unshielded_to_contract` counterpart, so shape (h) is a shielded
+  shape, already built, proved, and submitted on node by E2's S8.
+- **Sample size on the k256 grantee arm.** Four of the five spends use the
+  jubjub grantee arm and one the k256 arm, so
+  `withdraw_unshielded_with_grant_k256` has exactly one on-node datapoint and
+  one proving sample.
+
+Four runs stand behind this. Runs 1 and 3 aborted during bring-up and wrote no
+evidence; run 2 was green except for the rejections group, which was PARTIAL on
+the A11 needle before the row admitted both and A11b was added; run 4 is the run
+in evidence. The proof server sat at about 5.0 GiB of the virtual machine's
+7.65 GiB throughout, so E2's headroom warning still applies to a longer run
+even though this one saw no outage.
