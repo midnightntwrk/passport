@@ -1,0 +1,146 @@
+{
+  "testId": "grants-e2-concurrency",
+  "name": "grants-conformance-concurrency",
+  "description": "Scoped grants Testing 10 (remaining leg), INV-5, Testing 3 leg (b): owner and grantee over one coin, and a pre-signed grantee call across a permissionless deposit",
+  "verdict": "PASS",
+  "note": "The owner and a grantee select the same held coin and both build; the loser is recorded with the stage it failed at and the winner's spend is shown intact, with no mis-spend. Testing item 3 leg (b) is re-run properly: the qualified coin index is resolved by prove-only candidate trials BEFORE the grantee signs, a permissionless deposit_shielded then lands, and the ORIGINAL signature is built, proved, and submitted unchanged.",
+  "details": {
+    "raceCoin": {
+      "value": "990",
+      "nonce": "c609a402a1622dcb71608f9948127d245981a7c12e15a42d113ed6ba0ff9ef00",
+      "resolvedIndex": "463",
+      "attempts": [
+        {
+          "mtIndex": "463",
+          "outcome": "proved (nothing submitted)"
+        }
+      ]
+    },
+    "ownerCallRebuilds": 0,
+    "race": {
+      "grantId": "b1c0aec3c5e07caf1f00a9ea535c7cef48586a793c760565a274da02177d267e",
+      "issueTx": "002816c2c4f97b02d50323b94538f5aeee04f9dc6b928781dc8426c50088d4ef6b",
+      "winner": {
+        "who": "the owner, through withdraw_shielded_with_k256",
+        "accepted": true,
+        "stage": "submitted",
+        "txId": "00f30d9f0573c17227765f5fc0f960d3a77c7f2ee18aadc69a1ff844e9c46c931e",
+        "error": null,
+        "authNonceBefore": "32",
+        "authNonceAfter": "33",
+        "roundBefore": "52",
+        "roundAfter": "53"
+      },
+      "loser": {
+        "who": "the grantee, through withdraw_shielded_with_grant_jubjub, over the same coin",
+        "accepted": false,
+        "stage": "submit",
+        "txId": null,
+        "error": "Transaction submission error",
+        "rpcLog": [
+          "RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 239"
+        ],
+        "nodeLog": [
+          "🚫 Rejected transaction df060b7bb6b70c4aedb0642671259ec38a731fd7ca35120bf9fa7d9cd1c2c6f5 from mempool: guaranteed execution would fail: Zswap(NullifierAlreadyPresent(Nullifier(d820a7661f5e4ae3a822b92544b02b8b7f5bbff66486d1da3afc74bedfe184c0)))"
+        ],
+        "ledgerBefore": {
+          "round": "53",
+          "authNonce": "33",
+          "inboxCount": "20",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "17"
+        },
+        "ledgerAfter": {
+          "round": "53",
+          "authNonce": "33",
+          "inboxCount": "20",
+          "deviceCount": "2",
+          "grantGeneration": "1",
+          "grantCount": "17"
+        },
+        "stateUnchanged": true,
+        "grantRecordAfter": {
+          "epoch": "0",
+          "gen": "1",
+          "issued_at": "32",
+          "nonce": "0",
+          "active": true,
+          "spent_commit": "5dfd56948cc655b966cb67a8d7717e5fbee597bd7f2110b7ac1538f641f7250d",
+          "per_call_cap": "30",
+          "cap": "60",
+          "expires_at": "0",
+          "read": true,
+          "op_withdraw_shielded": true,
+          "op_withdraw_shielded_to_contract": false
+        },
+        "grantNonceUnmoved": true
+      },
+      "misSpendPossible": false,
+      "spentCoinRebuilt": {
+        "note": "the same grant call rebuilt against the state AFTER the owner spent the coin, so no transcript read is stale; only the coin is gone",
+        "proved": true,
+        "stage": "proved (nothing was submitted)",
+        "error": null,
+        "stateUnchanged": true
+      }
+    },
+    "ownerChangePrediction": {
+      "predictedNonce": "2c9512c037187303f5d914214088669b604437973f33adfc8d7700844c18bf00",
+      "predictedValue": "980",
+      "note": "the owner twin returns its change through the same standard-library nonce evolution; the value is carried forward for the next leg and verified by the prove-only resolution below"
+    },
+    "preSignedDepositTx": "0059987dfd80588b5e18dff46f579104f8dcc6b0f3b52e729adb87ce4fe6565068",
+    "preSignedCoin": {
+      "value": "100",
+      "resolvedIndex": "467",
+      "attempts": [
+        {
+          "mtIndex": "467",
+          "outcome": "proved (nothing submitted)"
+        }
+      ],
+      "note": "resolved by prove-only candidate trials BEFORE the grantee signed; nothing was submitted by a trial"
+    },
+    "preSigned": {
+      "grantId": "b7b7bdeb9749e2b77b5323e30867d6494adc3a8f6d185a01490da37d1c954457",
+      "issueTx": "00f7999126c141c063f219ab15139430b96d16a66008e145a7044b8297baea544d",
+      "granteeSignedAt": "2026-09-11T16:50:36.519Z",
+      "signatureFingerprint": "7b2272223a7b2278223a22313038323139373137373537353432323236333632",
+      "signedOverGrantNonce": "0",
+      "interveningDepositTx": "00ef875b7823f7b9465cac9df6e74844e26c9cad2b59f93228f9a62892b176513e",
+      "inboxBeforeDeposit": "21",
+      "inboxAfterDeposit": "22",
+      "roundAfterDeposit": "56",
+      "accepted": true,
+      "stage": "submitted",
+      "txId": "00894781610df53a45f971f24e66f1904b745f28a0a09ecc46a79da87c946d05c5",
+      "error": null,
+      "rpcLog": [],
+      "nodeLog": [],
+      "roundAfterCall": "57",
+      "recordAfter": {
+        "epoch": "0",
+        "gen": "1",
+        "issued_at": "34",
+        "nonce": "1",
+        "active": true,
+        "spent_commit": "9b201ee24960f1ade18f53858f2f957f8bdb121743b64451471dd6b107684238",
+        "per_call_cap": "30",
+        "cap": "60",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      },
+      "reSigned": false,
+      "landedWithTheOriginalSignature": true
+    }
+  },
+  "ranAt": "2026-09-11T16:52:10.798Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

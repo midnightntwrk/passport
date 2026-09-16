@@ -82,6 +82,31 @@ keeps the ECDSA premium off the normative arm). Later arms
 seam chip, one challenge family, one thin export per operation; the
 custody chips do not change.
 
+A second authoriser class sits beside the device set at
+`spec_version = 2`: a **grantee**, a key the owner enrols into the `grants`
+register under a scope rather than into the device set, and which can spend
+within that scope without holding a device. Grantees are co-resident the same
+way. Each grantee arm (`jubjub` and `k256` today, `p256` when that curve has a
+Compact surface) exports three grant twins over the unchanged custody chips,
+`withdraw_unshielded_with_grant_<arm>`, `withdraw_shielded_with_grant_<arm>`,
+and `withdraw_shielded_to_contract_with_grant_<arm>`; each device arm exports
+the three lifecycle circuits `issue_grant_with_<arm>`,
+`revoke_grant_with_<arm>`, and `revoke_all_grants_with_<arm>`, so an owner on
+either device arm issues to a grantee on either grantee arm. A grant twin
+authenticates against the record found at `grant_id` (a contract-recomputed
+commitment to the account, arm, key, envelope, origin, and slot), asserts the
+whole scope in-circuit before any custody chip runs, verifies the grantee
+signature, and writes back only that record's `nonce` and `spent_commit`:
+`auth_nonce`, the device set, and `enc_key` are never written by a grant call,
+so an owner signature pending across a grant call still verifies. Lifecycle is
+device-gated, and the register is killable in one call, since
+`revoke_all_grants` bumps `grant_generation` and clears the map. The grant
+twins are the most expensive circuits in the contract: their prover keys
+measure 99 MB (unshielded) and 197 MB (shielded) on the jubjub arm and 235 MB
+for every k256 grant twin, beside the 49 MB and 99 MB of the jubjub device
+withdraw twins and the 117 MB and 235 MB of the k256 ones. Per-circuit costs
+are in "Scoped grants" below.
+
 The arms share one device set (arm-marked entry DSTs keep them
 disjoint), one `device_count`, and one last-device rule. **Cross-arm
 enrolment is first-class**: `add_device_with_<arm>` binds the NEW device
@@ -178,6 +203,8 @@ export WALLET_SEED_SECONDARY=000000000000000000000000000000000000000000000000000
 
 # Offline (no localnet needed; both suites run BOTH arms)
 npm run test:unit                    # signer pipelines, codec, domain separation
+npm run test:grants-offline          # scoped grants: lifecycle and the unshielded
+                                     # grant twin on both arms, in the simulator
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
@@ -186,6 +213,20 @@ npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
 npm run test:custody-discovery      # MIP-0012 test 4
 npm run test:custody-payments        # MIP-0012 tests 7, 8
 npm run test:leak-audit              # MIP-0012 test 5
+npm run test:grants-conformance      # scoped grants Testing 1, 2, 3, 6, 9, 10, 11
+                                     # GRANTS_E2_GROUPS=<group> truncates the
+                                     # scenario after a group (it is one
+                                     # sequence, so a subset is a prefix):
+                                     # deploy, issue, spend, rejections,
+                                     # liveness, direct, kill, keys, expiry,
+                                     # composition, concurrency, proving
+
+# On-node probes (each deploys its own throwaway accounts; none is a suite)
+npm run probe:wave-ceiling           # the per-maintenance-update verifier-byte
+                                     # ceiling, by bisection (evidence/wave-ceiling.json)
+npm run probe:block-time             # the unit and enforcement point of
+                                     # kernel.blockTimeLessThan (GRANTS-E3.md)
+npm run probe:revocation             # remove_device retires an entry, not a device
 
 # On-node, currently BLOCKED by the localnet fee limit (see below):
 # every flow that carries an unshielded offer in a contract call.
@@ -213,11 +254,53 @@ with roughly 17 or more typical entry points is undeployable in one
 transaction.
 
 The reference client therefore deploys in waves
-(`src/wallet/wave-deploy.ts`): wave 1 carries the deposits and the
-initial device's arm (10 operations, ~34 KB written — a functional
-single-arm account); wave 2 adds the other arm's 8 verifier keys in one
+(`src/wallet/wave-deploy.ts`), packed greedily against a per-update
+verifier-byte budget: wave 1 is the deploy itself and carries the deposits
+and the initial device's arm (10 operations, 25,434 verifier bytes, about
+34 KB written, a functional single-arm account); every later wave is one
 batched `MaintenanceUpdate`, hand-built against the ledger API and signed
 with the maintenance authority key the deploy stored locally.
+
+At `spec_version = 2` the roster is **thirty circuits and 74,286 verifier
+bytes** (3,474 for the deposits, 18,504 and 21,960 for the two device arms,
+13,878 and 16,470 for the two grant arms).
+
+**The per-update ceiling is measured** (`npm run probe:wave-ceiling`,
+`evidence/wave-ceiling.json`): by bisection over throwaway wave-1 accounts, an
+update of 12 verifier keys (29,484 verifier bytes) is accepted and lands, while
+13 keys (32,229), 14 keys (34,974) and 16 keys (39,600) are each refused by the
+node at submission with `1010: Invalid Transaction: Transaction would exhaust
+the block limits`. The ceiling therefore sits in **(29,484, 32,229] verifier
+bytes**, closed to one key, on node 2.1.0. The refusal is the node's alone: the
+client priced every refused payload without complaint (`cost` returned,
+`normalizeFullness` did not throw, `fees` returned a figure). The client-side
+`exceeded block limit in transaction fee computation` bounds the
+all-operations DEPLOY instead, before a transaction exists. The two are
+different mechanisms at different points, and for a maintenance update nothing
+client-side warns an implementer.
+
+`VERIFIER_BYTE_BUDGET` therefore defaults to **25,000** verifier bytes: the
+largest accepted payload less a safety margin of 4,484 bytes, about 15 per
+cent, rounded down, the margin covering the Dust spend balancing adds, block
+fullness, and the per-block fee-price adjustment. At that default the roster
+lands in **three waves**, measured end to end on the localnet:
+
+| Wave | Kind | Circuits | Verifier bytes | Authority counter before | Result |
+|---|---|---|---|---|---|
+| 1 | deploy | 10 | 25,434 | (deploy) | SUCCESS at block 5,888 |
+| 2 | maintenance | 10 | 23,994 | 0 | SUCCESS at block 5,891 |
+| 3 | maintenance | 10 | 24,858 | 1 | SUCCESS at block 5,894, retires the authority |
+
+After the last wave the account reads `committee = 0, threshold = 1,
+counter = 2`, with 30 operations and `spec_version = 2`, which is the count MIP
+section 6.7 predicts, reached by a packing of 10 and 10 rather than the 16 and
+4 its own arithmetic implies. The budget stays overridable through an
+environment variable of the same name. A budget under the ceiling does not by
+itself bring the roster down to three waves: the planner packs greedily over
+one key order, so
+18,504, 20,000, and 24,000 all cost four waves, and the E2 run that predates
+the measurement used 18,504 and took four. Details and evidence in
+`GRANTS-E2.md`.
 
 Not through midnight-js's published circuit maintenance interface, for two
 reasons. It cannot produce a current key: compact-js 2.5.5-rc.6 hardcodes
@@ -230,13 +313,14 @@ upstream finding on this branch** (recorded under "Ecosystem dependencies
 observed"), alongside the block limit above and the fee-model rejection
 below.
 
-Wave 2 also demonstrates the arm-migration mechanism: adding an arm's
-circuits to a LIVE account by maintenance update is how a secp256r1 arm
-would reach accounts deployed before it exists. That mechanism carries a
-custody cost the reference refuses to pay silently, so wave 2 ends by
-retiring the authority — see below.
+The maintenance waves also demonstrate the arm-migration mechanism: adding an
+arm's circuits to a LIVE account by maintenance update is how a secp256r1 arm
+would reach accounts deployed before it exists, and it is how the twelve grant
+circuits reached the account measured above. That mechanism carries a custody
+cost the reference refuses to pay silently, so the last wave ends by retiring
+the authority, as below.
 
-### The maintenance authority sits above the seam, so wave 2 retires it
+### The maintenance authority sits above the seam, so the last wave retires it
 
 Deploying a contract mints a contract maintenance authority and stores its
 signing key locally. This is inherited from the standard deploy path
@@ -259,8 +343,8 @@ a shielded withdrawal is replaced by a relation that verifies no signature
 at all, with no device key involved. Replacement needs the remove and the
 insert in one update; a bare insert over an existing key is refused.
 
-Wave 2 is the last operation that needs the authority, so the same update
-retires it: the batch ends with a `ReplaceAuthority` installing an empty
+The last wave is the last operation that needs the authority, so the same
+update retires it: the batch ends with a `ReplaceAuthority` installing an empty
 committee at threshold 1, which no signature set can satisfy. The identical
 swap then fails against a default-deployed account, whose on-chain state
 shows `committee = 0, threshold = 1`. After deploy, the seam is the only way
@@ -296,6 +380,38 @@ longer windows push even deploy transactions over the limit, and an intent
 TTL within ~10 s of build time is rejected as
 `Malformed(TransactionApplication(IntentTtlExpired))`.
 
+## Scoped grants
+
+The twelve grant circuits of `spec_version = 2`, measured with `zkir-v3
+mock-compile` and the generated `keys/` directory. Six twins (three operations
+on each grantee arm) and six lifecycle circuits (three on each device arm).
+Verifier keys are 2,745 bytes for every k256 circuit and 2,313 for every jubjub
+one, as everywhere else in this contract.
+
+| Circuit | k | Rows | Prover key bytes |
+|---|---|---|---|
+| `withdraw_unshielded_with_grant_jubjub` | 16 | 38,514 | 98,577,378 |
+| `withdraw_shielded_with_grant_jubjub` | 17 | 66,014 | 197,145,788 |
+| `withdraw_shielded_to_contract_with_grant_jubjub` | 17 | 71,717 | 197,146,307 |
+| `issue_grant_with_jubjub` | 16 | 52,227 | 98,579,365 |
+| `revoke_grant_with_jubjub` | 15 | 26,871 | 49,292,097 |
+| `revoke_all_grants_with_jubjub` | 15 | 26,645 | 49,290,943 |
+| `withdraw_unshielded_with_grant_k256` | 17 | 64,355 | 234,896,051 |
+| `withdraw_shielded_with_grant_k256` | 17 | 91,865 | 234,898,319 |
+| `withdraw_shielded_to_contract_with_grant_k256` | 17 | 97,568 | 234,898,837 |
+| `issue_grant_with_k256` | 17 | 78,604 | 234,898,194 |
+| `revoke_grant_with_k256` | 16 | 58,997 | 117,453,434 |
+| `revoke_all_grants_with_k256` | 16 | 58,771 | 117,452,209 |
+
+Against the corresponding device twin, the grant seam costs 3,352 rows on the
+k256 unshielded twin and 17,278 on each k256 shielded twin, and 9,637 and
+15,959 on the jubjub arm; the shielded figures carry the inbox insert for the
+change entry, which no device twin performs. It pushes four of the six twins
+up one k (both jubjub shielded twins, the jubjub unshielded twin, and the k256
+unshielded twin; the k256 shielded twins are already at k=17). Proving times measured on the reference localnet are about 3.4 s at
+k=15, 5.6 to 8.0 s at k=16, and 11.2 to 17.4 s at k=17, with a composed pair of
+two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
+
 ## Conformance map
 
 | Suite | MIP-0012 Testing | MIP-0013 Testing | Invariants exercised |
@@ -311,6 +427,9 @@ TTL within ~10 s of build time is rejected as
 | `leak-audit` | 5 | — | INV-2 (with positive control) |
 | `custody-unshielded` | 6 | — | INV-8 |
 | `custody-payments` | 7, 8 | — | INV-6 (one-hop); direct-transfer mode |
+| `grants-offline` | n/a | n/a | MIP-scoped-grants Testing 1 and 2, the off-node halves: lifecycle, the unshielded grant twin, and the rejection matrix on **both grantee arms** in the circuit simulator; GR-1, GR-3, GR-5, GR-6, GR-7, GR-12, GR-13, GR-14 |
+| `grants-conformance` | n/a | n/a | MIP-scoped-grants Testing 1, 3, and 9 green on node; 6, 10, and 11 partial; 2 partial, so the Path to Active checkbox for E2 cannot close (see `GRANTS-E2.md` for what each is missing). Twelve scenario groups, each its own evidence file and each selectable as a `GRANTS_E2_GROUPS` prefix: deploy (the three-wave deploy at the measured 25,000-byte budget), issue, spend, rejections, liveness, direct, kill, keys, expiry, composition, concurrency, proving; GR-1 to GR-9, GR-11 to GR-14, AUTH-5, AUTH-8, AUTH-9, INV-4, INV-5, INV-6 |
+| `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
 
 Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
 exercise BOTH arms; the remaining on-node suites drive the k256 arm (the

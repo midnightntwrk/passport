@@ -8,6 +8,7 @@
     "compile": "compact compile +0.33.0-rc.2 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.33.0-rc.2 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.33.0-rc.2 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
+    "test:grants-offline": "tsx src/tests/grants-offline.ts",
     "test:crossimpl-offline": "tsx src/tests/crossimpl-offline.ts",
     "test:auth-crossimpl": "tsx src/tests/auth-crossimpl.ts",
     "test:auth": "tsx src/tests/auth-conformance.ts",
@@ -18,8 +19,11 @@
     "test:custody-discovery": "tsx src/tests/custody-discovery.ts",
     "test:custody-unshielded": "tsx src/tests/custody-unshielded.ts",
     "test:custody-payments": "tsx src/tests/custody-payments.ts",
+    "test:grants-conformance": "tsx src/tests/grants-conformance.ts",
     "test:leak-audit": "tsx src/tests/leak-audit.ts",
-    "probe:revocation": "tsx src/tests/probe-revocation.ts"
+    "probe:revocation": "tsx src/tests/probe-revocation.ts",
+    "probe:block-time": "tsx src/tests/probe-block-time.ts",
+    "probe:wave-ceiling": "tsx src/tests/probe-wave-ceiling.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

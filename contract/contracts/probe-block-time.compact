@@ -1,0 +1,34 @@
+pragma language_version >= 0.17.0;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// PROBE (not part of the standard): the unit and semantics of the kernel
+// block-time comparisons, measured on the node rather than in the
+// simulator. Grants E3 for the scoped-grants MIP (section 5.1, expires_at).
+//
+// `passes` counts the calls whose comparison held and were included, so a
+// ledger read distinguishes "included and passed" from "never landed".
+// ---------------------------------------------------------------------------
+
+export ledger passes: Counter;
+
+// Holds when the block time is strictly before t.
+export circuit before(t: Uint<64>): [] {
+  assert(kernel.blockTimeLessThan(disclose(t)), "not before");
+  passes.increment(1);
+}
+
+// Holds when the block time is strictly after t.
+export circuit after(t: Uint<64>): [] {
+  assert(kernel.blockTimeGreaterThan(disclose(t)), "not after");
+  passes.increment(1);
+}
+
+// The MIP's never-expires arm: 0 means never. The parameter carries a
+// disclose() because it is a circuit input rather than a ledger cell; the
+// comparison shape is otherwise the MIP's.
+export circuit never(t: Uint<64>): [] {
+  assert(disclose(t) == (0 as Uint<64>) || kernel.blockTimeLessThan(disclose(t)), "expired");
+  passes.increment(1);
+}

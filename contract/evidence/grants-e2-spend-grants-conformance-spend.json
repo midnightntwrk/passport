@@ -1,0 +1,222 @@
+{
+  "testId": "grants-e2-spend",
+  "name": "grants-conformance-spend",
+  "description": "Scoped grants Testing 1, 9, 10: grant shielded spends with the change entry appended in the same transaction, consecutive nonces, both grantee arms",
+  "verdict": "PASS",
+  "note": "Grant shielded spends execute on node on both grantee arms. Each advances the record nonce by one and re-commits spent_commit to the cumulative value released, advances round by one, leaves auth_nonce and device_count untouched, and appends the change entry in the SAME transaction (inbox_count + 1), where the entry decrypts to the change coin the circuit returned. The change coin description was predicted before proving from the standard library nonce evolution and matched the circuit result every time.",
+  "details": {
+    "recipientCoinPublicKey": "1bd4f827be97ff013c4a702e4b08f30ec378728a54670cf7cc92cb9b1a14eff6",
+    "depositTx": "00d39b1f929356fbed2712c4739f4f103011c5191d4a5c45d5bf1b33c8e9a2b4f1",
+    "depositCandidates": [
+      "423"
+    ],
+    "inboxCountAfterDeposit": "1",
+    "spendA1": {
+      "txId": "00a814eb4e582124532bc768fe60ab91a60a172f4884c8e4a7b63a01faf41a89c9",
+      "attempts": [
+        {
+          "mtIndex": "423",
+          "outcome": "accepted: 00a814eb4e582124532bc768fe60ab91a60a172f4884c8e4a7b63a01faf41a89c9"
+        }
+      ],
+      "record": {
+        "epoch": "0",
+        "gen": "0",
+        "issued_at": "2",
+        "nonce": "1",
+        "active": true,
+        "spent_commit": "f766e853bd28c2345a8077a9bc23b561bc4856725f4287adb50c2851767750c9",
+        "per_call_cap": "200",
+        "cap": "500",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      },
+      "authNonceBefore": "8",
+      "authNonceAfter": "8",
+      "roundBefore": "10",
+      "roundAfter": "11",
+      "deviceCountBefore": "2",
+      "deviceCountAfter": "2",
+      "inboxBefore": "1",
+      "inboxAfter": "2"
+    },
+    "spendA1SpentCommitMatches": true,
+    "changeEntryDecrypts": true,
+    "spendA2": {
+      "txId": "00a7c6cd6dcbcdfbfcbdf9a6fefa824b559210fb84672034f8f4d0038967a42dde",
+      "attempts": [
+        {
+          "mtIndex": "425",
+          "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server"
+        },
+        {
+          "mtIndex": "424",
+          "outcome": "accepted: 00a7c6cd6dcbcdfbfcbdf9a6fefa824b559210fb84672034f8f4d0038967a42dde"
+        }
+      ],
+      "record": {
+        "epoch": "0",
+        "gen": "0",
+        "issued_at": "2",
+        "nonce": "2",
+        "active": true,
+        "spent_commit": "8beb94f5f01bdfaff99d394d3af53d010efe7c913e5e889453925edbc68d42e0",
+        "per_call_cap": "200",
+        "cap": "500",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      }
+    },
+    "spendA2SpentCommitMatches": true,
+    "spendB1": {
+      "txId": "00b1b481dfc343c4ab3b7b4c6b28cb2ae72daa63e05172790876735abad84805e6",
+      "attempts": [
+        {
+          "mtIndex": "427",
+          "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server"
+        },
+        {
+          "mtIndex": "426",
+          "outcome": "accepted: 00b1b481dfc343c4ab3b7b4c6b28cb2ae72daa63e05172790876735abad84805e6"
+        }
+      ],
+      "record": {
+        "epoch": "0",
+        "gen": "0",
+        "issued_at": "3",
+        "nonce": "1",
+        "active": true,
+        "spent_commit": "04f43709b516d3ad02c6813771d16774ff578a9aefe90a87e740b64a87d275a4",
+        "per_call_cap": "100",
+        "cap": "100",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      }
+    },
+    "changePredictions": [
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #1, 200)",
+        "predictedNonce": "71a7ec96fdcbc6b5c0ef1a108a0ac704282ab0780052eec2347d10ee7069ff00",
+        "predictedValue": "800",
+        "actualNonce": "71a7ec96fdcbc6b5c0ef1a108a0ac704282ab0780052eec2347d10ee7069ff00",
+        "actualValue": "800",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #2, 100)",
+        "predictedNonce": "42d969b3309f3f6ee071980871181bf91399f66fca617e387ebe4436f0ec5500",
+        "predictedValue": "700",
+        "actualNonce": "42d969b3309f3f6ee071980871181bf91399f66fca617e387ebe4436f0ec5500",
+        "actualValue": "700",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (B #1, 100)",
+        "predictedNonce": "077540d22619b8749dbe2f21358b3fa789781b14a3e38eacf52934f2dfc2d600",
+        "predictedValue": "600",
+        "actualNonce": "077540d22619b8749dbe2f21358b3fa789781b14a3e38eacf52934f2dfc2d600",
+        "actualValue": "600",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (A #3, 200 — exhausts the cap)",
+        "predictedNonce": "cdb3690a4390086c9d3f6107291241bad82ec1847a8387792b2d38b4f55f8c00",
+        "predictedValue": "400",
+        "actualNonce": "cdb3690a4390086c9d3f6107291241bad82ec1847a8387792b2d38b4f55f8c00",
+        "actualValue": "400",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (L #1, 100 — between owner signing and submission)",
+        "predictedNonce": "acca3d0d0ebb2bd20de72db4cee8ed73d2f42e9ab7074f6370182eefba2b3300",
+        "predictedValue": "300",
+        "actualNonce": "acca3d0d0ebb2bd20de72db4cee8ed73d2f42e9ab7074f6370182eefba2b3300",
+        "actualValue": "300",
+        "matched": true
+      },
+      {
+        "label": "L #2 (pre-signed across a deposit)",
+        "predictedNonce": "206c6e4626361442bbd360e165e6fe3ab23a542285e4a89713c7bb67c598b000",
+        "predictedValue": "200",
+        "actualNonce": "206c6e4626361442bbd360e165e6fe3ab23a542285e4a89713c7bb67c598b000",
+        "actualValue": "200",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (re-issued A, 25)",
+        "predictedNonce": "ea7bacf669dd4692c47e8a6e66b215f3bacfb2a8a411b17fc57d0cfacaa0d500",
+        "predictedValue": "25",
+        "actualNonce": "ea7bacf669dd4692c47e8a6e66b215f3bacfb2a8a411b17fc57d0cfacaa0d500",
+        "actualValue": "25",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_k256 (a DEVICE key acting as a grantee)",
+        "predictedNonce": "28c5402e8635b500c325ea89db436117043dffc419f7f5f1578dfeff5bab5700",
+        "predictedValue": "980",
+        "actualNonce": "28c5402e8635b500c325ea89db436117043dffc419f7f5f1578dfeff5bab5700",
+        "actualValue": "980",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z0, expires_at = 0)",
+        "predictedNonce": "e497c41613873fe69238f675af468866bb5684a676244a1bc62cac57aff7f600",
+        "predictedValue": "950",
+        "actualNonce": "e497c41613873fe69238f675af468866bb5684a676244a1bc62cac57aff7f600",
+        "actualValue": "950",
+        "matched": true
+      },
+      {
+        "label": "withdraw_shielded_with_grant_jubjub (Z1, expires_at = head + 3600)",
+        "predictedNonce": "ed022d16464e9362c6a4ee9ee9313ac184a9cdebd9479103aef4d46c39cdfd00",
+        "predictedValue": "920",
+        "actualNonce": "ed022d16464e9362c6a4ee9ee9313ac184a9cdebd9479103aef4d46c39cdfd00",
+        "actualValue": "920",
+        "matched": true
+      }
+    ],
+    "heldCoinAfterS5": {
+      "value": "600",
+      "nonce": "077540d22619b8749dbe2f21358b3fa789781b14a3e38eacf52934f2dfc2d600"
+    },
+    "spendA3": {
+      "txId": "007650cf3bfebe13fee0f9632ecfaecf64db00a4edd15d93a862ac278d914a4504",
+      "attempts": [
+        {
+          "mtIndex": "429",
+          "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server"
+        },
+        {
+          "mtIndex": "428",
+          "outcome": "accepted: 007650cf3bfebe13fee0f9632ecfaecf64db00a4edd15d93a862ac278d914a4504"
+        }
+      ],
+      "record": {
+        "epoch": "0",
+        "gen": "0",
+        "issued_at": "2",
+        "nonce": "3",
+        "active": true,
+        "spent_commit": "f8d638893cdc0d27da4f70fafcaa61de12e7e452d1ae873f5aaa3063efbd3985",
+        "per_call_cap": "200",
+        "cap": "500",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      }
+    }
+  },
+  "ranAt": "2026-09-11T16:52:10.796Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

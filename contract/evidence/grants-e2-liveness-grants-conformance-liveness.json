@@ -1,0 +1,73 @@
+{
+  "testId": "grants-e2-liveness",
+  "name": "grants-conformance-liveness",
+  "description": "Scoped grants Testing 3: a pending owner signature survives a grant call, and a permissionless deposit does not invalidate a pending grantee call",
+  "verdict": "PASS",
+  "note": "An owner signature pending across a grant call still verifies and lands, because a grant call writes neither auth_nonce nor the device set. A permissionless deposit_shielded landing between the grantee signing and the grantee submitting does not invalidate the grantee call.",
+  "details": {
+    "pendingOwnerSignatureAt": {
+      "authNonce": "10",
+      "useCounter": "7"
+    },
+    "interveningGrantCallTx": "00043100eb4a1539e9f46046b0e2cbff77f717daa35aa22875aefbf3ba9875f3f0",
+    "pendingOwnerCallTx": "0089673a447987765b4ae606c1e557c8e4e61c1a5b76972074520e83d3dc37c5c5",
+    "ledgerAfterPendingOwnerCall": {
+      "round": "18",
+      "authNonce": "11",
+      "inboxCount": "7",
+      "deviceCount": "2",
+      "grantGeneration": "0",
+      "grantCount": "7"
+    },
+    "preSignedCoinResolution": {
+      "resolved": "432",
+      "attempts": [
+        {
+          "mtIndex": "433",
+          "outcome": "unsatisfiable: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"B"
+        },
+        {
+          "mtIndex": "432",
+          "outcome": "proved (nothing submitted)"
+        }
+      ]
+    },
+    "granteeSignedAt": {
+      "grantNonce": "1",
+      "issuedAt": "7"
+    },
+    "interveningDepositTx": "00d8c65d00147296c7031ecc1822dd8bd908eab5de508ffa9cee25a5a6f0c5f540",
+    "roundBeforeGranteeCall": "19",
+    "preSignedCallLandedAsSigned": true,
+    "granteeCallAfterDepositTx": "0062974d07f8d8da1009f1a9485b101bd6c021ab7fd51c0939984cb3e1831117ed",
+    "roundAfterGranteeCall": "20",
+    "grantLRecordAfter": {
+      "epoch": "0",
+      "gen": "0",
+      "issued_at": "7",
+      "nonce": "2",
+      "active": true,
+      "spent_commit": "ab6839053a7292309cbc68045ea7c74522ffc36e60f30f63c28ef91fc436471c",
+      "per_call_cap": "100",
+      "cap": "300",
+      "expires_at": "0",
+      "read": true,
+      "op_withdraw_shielded": true,
+      "op_withdraw_shielded_to_contract": false
+    },
+    "ledgerAfterGranteeCall": {
+      "round": "20",
+      "authNonce": "11",
+      "inboxCount": "9",
+      "deviceCount": "2",
+      "grantGeneration": "0",
+      "grantCount": "7"
+    }
+  },
+  "ranAt": "2026-09-11T16:52:10.796Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

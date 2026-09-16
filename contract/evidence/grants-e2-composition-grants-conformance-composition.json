@@ -1,0 +1,288 @@
+{
+  "testId": "grants-e2-composition",
+  "name": "grants-conformance-composition",
+  "description": "Scoped grants Testing 9, GR-5, GR-11, GR-13: revoke plus issue over one id, batch issuance, and two grant calls under one grant, each in ONE transaction",
+  "verdict": "PASS",
+  "note": "Composition of two calls on the SAME contract in one transaction, built by chaining the contract state: the second call is built against the state value the first produced, so it records the successor reads (auth_nonce + 1, grant nonce + 1) rather than repeating the first call's. Revoke plus issue over one grant id, batch issuance of two grants, and two grant calls under one grant with consecutive nonces are each one transaction; the same two grant calls grafted in the opposite segment order are submitted as the negative control.",
+  "details": {
+    "revokeThenIssue": {
+      "grantId": "8d385dda77b7782f9d65f6c9d5c254ab566d549935767e8c7aa9b17968147954",
+      "firstIssueTx": "00b671d67750555322dad34fd8cede4e62f38cdbcb8f44f5cc92939f244d92fe39",
+      "segments": [
+        55658,
+        55659
+      ],
+      "accepted": true,
+      "stage": "submitted",
+      "txId": "005e74a2b8289c832d097b9946cd1f43e4cf08989d8f051b6d32bf189abe415000",
+      "error": null,
+      "rpcLog": [],
+      "nodeLog": [],
+      "authNonceBefore": "26",
+      "authNonceAfter": "28",
+      "roundBefore": "44",
+      "roundAfter": "46",
+      "firstIncarnation": {
+        "epoch": "0",
+        "gen": "1",
+        "issued_at": "26",
+        "nonce": "0",
+        "active": true,
+        "spent_commit": "4c8cedc0e640bafcce077b08287fac5fd24270454fec98a0500b7b0f03313554",
+        "per_call_cap": "20",
+        "cap": "40",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      },
+      "secondIncarnation": {
+        "epoch": "0",
+        "gen": "1",
+        "issued_at": "28",
+        "nonce": "0",
+        "active": true,
+        "spent_commit": "d430fd81f270e6738e8c875bfc9b47fe2ed45e9c31f578f4b3cd336127d97a41",
+        "per_call_cap": "15",
+        "cap": "30",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      },
+      "freshIncarnation": true
+    },
+    "batchIssuance": {
+      "segments": [
+        28169,
+        28170
+      ],
+      "accepted": true,
+      "stage": "submitted",
+      "txId": "00482117f8ac341905526a1f085a6a0cd17d961f43dbde5701b4b3cd3684a6c783",
+      "error": null,
+      "rpcLog": [],
+      "nodeLog": [],
+      "authNonceBefore": "28",
+      "authNonceAfter": "30",
+      "roundBefore": "46",
+      "roundAfter": "48",
+      "bothRecorded": true,
+      "recordP": {
+        "epoch": "0",
+        "gen": "1",
+        "issued_at": "29",
+        "nonce": "0",
+        "active": true,
+        "spent_commit": "90df6beaf0a21c6660974835c64419620663d5b28c072b778a534000d8251d9d",
+        "per_call_cap": "10",
+        "cap": "20",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      },
+      "recordQ": {
+        "epoch": "0",
+        "gen": "1",
+        "issued_at": "30",
+        "nonce": "0",
+        "active": true,
+        "spent_commit": "c4461f3840588b104413182bcae963110e3337a8104f24627c915f462479d8ca",
+        "per_call_cap": "0",
+        "cap": "0",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": false,
+        "op_withdraw_shielded_to_contract": false
+      }
+    },
+    "coinIndexResolution": {
+      "coinA": {
+        "value": "920",
+        "resolved": "458",
+        "attempts": [
+          {
+            "mtIndex": "459",
+            "outcome": "unsatisfiable: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"B"
+          },
+          {
+            "mtIndex": "458",
+            "outcome": "proved (nothing submitted)"
+          }
+        ]
+      },
+      "coinB": {
+        "value": "1000",
+        "resolved": "446",
+        "attempts": [
+          {
+            "mtIndex": "446",
+            "outcome": "proved (nothing submitted)"
+          }
+        ]
+      },
+      "controlCoinC": {
+        "value": "1000",
+        "resolved": "450",
+        "attempts": [
+          {
+            "mtIndex": "449",
+            "outcome": "unsatisfiable: unreachable"
+          },
+          {
+            "mtIndex": "450",
+            "outcome": "proved (nothing submitted)"
+          }
+        ]
+      },
+      "controlCoinD": {
+        "value": "1000",
+        "resolved": "452",
+        "attempts": [
+          {
+            "mtIndex": "452",
+            "outcome": "proved (nothing submitted)"
+          }
+        ]
+      }
+    },
+    "reorderedPairOffer": {
+      "merged": true,
+      "shapes": {
+        "before": {
+          "ownGuaranteed": {
+            "inputs": 1,
+            "outputs": 2
+          },
+          "theirGuaranteed": {
+            "inputs": 1,
+            "outputs": 2
+          },
+          "ownFallible": null,
+          "theirFallible": null,
+          "firstSegment": 24811,
+          "secondSegment": 8069
+        },
+        "pinnedToItsOwnSegment": false,
+        "after": {
+          "guaranteed": {
+            "inputs": 2,
+            "outputs": 4
+          },
+          "fallible": null
+        }
+      }
+    },
+    "reorderedPair": {
+      "segments": [
+        24810,
+        24811
+      ],
+      "graftError": null,
+      "note": "the call carrying grant nonce n + 1 sits in the LOWER segment",
+      "verdict": "refused at admission: the whole transaction was rejected",
+      "accepted": false,
+      "stage": "submit",
+      "txId": null,
+      "transactionStatus": null,
+      "error": "Transaction submission error",
+      "rpcLog": [
+        "RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 104"
+      ],
+      "nodeLog": [
+        "🚫 Rejected transaction 397cce41f4863570fbf5dfbcbbc334523dff52afeca25caf30a2ed68e9c2f0c6 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[-, 01, 1f, 01, 8a2d9e377695e4af82d7101197318c2eca08c61cfd237331b218fee647f17335, -, -, 01, -, 01, -, 01, 6d81b917ceb7129b66da39eaf7a9396467523a34a2429781ae063591849d621a, 32, 64, -, 0d9da29cd2bdc78baf2ed8a944af8ae5d8fce11b1e14e72302ab8f5e3dc2c48f, 5bdcae42c0ae8489d0b43adc5ed0abd3caa525955c24b2d08387779456e6db35, -, -]: b4b4b8b8b32b8b16b1b1b1b1b1b32b16b16b8b32b32b8b16>, actual: <[-, 01, 1f, -, 5a0ee58e02867075aaf1cd686f772aba43429dd511792606c277e177eabffc90, -, -, 01, -, 01, -, 01, 6d81b917ceb7129b66da39eaf7a9396467523a34a2429781ae063591849d621a, 32, 64, -, 0d9da29cd2bdc78baf2ed8a944af8ae5d8fce11b1e14e72302ab8f5e3dc2c48f, 5bdcae42c0ae8489d0b43adc5ed0abd3caa525955c24b2d08387779456e6db35, -, -]: b4b4b8b8b32b8b16b1b1b1b1b1b32b16b16b8b32b32b8b16> }))"
+      ],
+      "grantNonceAtBuild": "0",
+      "grantNonceAfter": "0",
+      "callsApplied": "0",
+      "ledgerBefore": {
+        "round": "49",
+        "authNonce": "31",
+        "inboxCount": "18",
+        "deviceCount": "2",
+        "grantGeneration": "1",
+        "grantCount": "16"
+      },
+      "ledgerAfter": {
+        "round": "49",
+        "authNonce": "31",
+        "inboxCount": "18",
+        "deviceCount": "2",
+        "grantGeneration": "1",
+        "grantCount": "16"
+      },
+      "stateUnchanged": true
+    },
+    "twoGrantCallsOffer": {
+      "merged": true,
+      "shapes": {
+        "before": {
+          "ownGuaranteed": {
+            "inputs": 1,
+            "outputs": 2
+          },
+          "theirGuaranteed": {
+            "inputs": 1,
+            "outputs": 2
+          },
+          "ownFallible": null,
+          "theirFallible": null,
+          "firstSegment": 3762,
+          "secondSegment": 57618
+        },
+        "pinnedToItsOwnSegment": false,
+        "after": {
+          "guaranteed": {
+            "inputs": 2,
+            "outputs": 4
+          },
+          "fallible": null
+        }
+      }
+    },
+    "twoGrantCalls": {
+      "segments": [
+        3762,
+        3763
+      ],
+      "grantNonceAtBuild": "0",
+      "accepted": true,
+      "stage": "submitted",
+      "txId": "007bfe4fd7ea93f0d809f7997f5875b037774ab18f8697cedca8972b3769074144",
+      "transactionStatus": "unavailable (invalid transaction hash: cannot convert to indexer_common::domain::bytes::ByteA)",
+      "error": null,
+      "rpcLog": [],
+      "nodeLog": [],
+      "roundBefore": "49",
+      "roundAfter": "51",
+      "inboxBefore": "18",
+      "inboxAfter": "20",
+      "authNonceBefore": "31",
+      "authNonceAfter": "31",
+      "recordAfter": {
+        "epoch": "0",
+        "gen": "1",
+        "issued_at": "31",
+        "nonce": "2",
+        "active": true,
+        "spent_commit": "78ebdc41b30a9778dd4415f69f6b1bae676164ec13bf0d476f7733e571f8e887",
+        "per_call_cap": "50",
+        "cap": "100",
+        "expires_at": "0",
+        "read": true,
+        "op_withdraw_shielded": true,
+        "op_withdraw_shielded_to_contract": false
+      },
+      "callsApplied": "2",
+      "nonceAdvancedByTwo": true,
+      "spentCommitMatches": true
+    }
+  },
+  "ranAt": "2026-09-11T16:52:10.798Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

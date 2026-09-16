@@ -26,3 +26,7 @@ export interface ShieldedCoin {
 export interface QualifiedCoin extends ShieldedCoin {
   mt_index: bigint;
 }
+
+/** The generated shapes of a grant record and its immutable scope
+ *  (scoped-grants MIP section 4.1), as `ledger(...).grants.lookup` returns them. */
+export type { GrantRecord, GrantScope } from '../../contracts/managed/account/contract/index.js';
