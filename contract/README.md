@@ -397,7 +397,7 @@ by `test:grants-unshielded` at a priced headroom of at least 8.7 and
 suites below seed the account, they stay blocked end-to-end; a suite that
 funds with a non-native color is not. The limitation is independent of the
 signature scheme (the JubJub trunk's transactions have the same shape); it
-is upstream ledger issue #761, the client under-reserving the NIGHT change
+is upstream ledger issue [#761](https://github.com/midnightntwrk/midnight-ledger/issues/761), the client under-reserving the NIGHT change
 output balancing adds, not an arm defect. The wallet SDK cannot predict the
 rejection: it prices fees against hard-coded default parameters with
 enforcement off, while the chain's actual parameters arrive per block from
