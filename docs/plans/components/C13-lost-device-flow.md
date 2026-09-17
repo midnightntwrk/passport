@@ -19,6 +19,20 @@ the contract surface is published upstream (MIP-0013) and exercised by
 the reference implementation's lifecycle suite, so what remains here
 is client-flow polish, not decisions of substance.
 
+**Status 2026/09 — a measured gap.** `remove_device` retires one set
+element, not a device: a device that enrolled a second entry for its
+own key holds two live entries and survives its own revocation.
+Demonstrated on node against both enrolment shapes and on both
+authorisation arms; deriving the entry in-circuit does not prevent it
+(MIP-0013 erratum 8, `npm run probe:revocation` in the reference
+implementation). Today only the epoch bump is a complete revocation.
+The remedy is a contract-maintained device identity in MIP-0013 §3, a
+state-schema change and so a redeploy, proposed to ride the
+scoped-grants `spec_version = 2` redeploy. The decision of substance
+here is therefore upstream's, not this canvas's: until it lands, the
+lost-device flow must fall back to the epoch bump when the lost
+device's entry count is unknown.
+
 ## Dependencies
 
 - **C1** — device set is in account-custody contract state.
@@ -50,6 +64,12 @@ loss.
 
 **Revoked device retains usable key material.** Chain state propagation
 lag or cache. *Detection:* timed test of post-revocation operations.
+
+**Revocation does not revoke.** A device that enrolled a second entry
+for its own key survives `remove_device` (erratum 8, measured on both
+arms). Mitigated today by the epoch bump; fixed only by a
+contract-maintained device identity. *Detection:* the revocation probe
+in the reference implementation.
 
 **Phishing-induced revocation.** Attacker convinces user to revoke their
 working device, locking themselves out. *Detection:* unusual-revocation

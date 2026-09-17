@@ -9,7 +9,35 @@ The protocol surface that lets third-party dApps request scoped grants
 half of the same surface. **Open Wallet Standard (OWS)** is the chosen
 direction for the Cardano + Midnight workflow (approved 2026/05/13);
 underlying transport / discovery layers (CAIP-25, EIP-6963,
-WalletConnect v2) sit beneath it. Maps to MIP-5 / MIP-7.
+WalletConnect v2) sit beneath it. Maps to MIP-5 / MIP-7, and the
+issuance half to the scoped-grants MIP (MIP-10).
+
+**Status 2026/09 — issuance half specified.** The scoped-grants and
+dApp-connection MIP (see C10), co-authored with the Midnight
+Foundation, fixes the connection ceremony: the dApp navigates the user
+to an authoriser page with a canonical `GrantRequest` and a detached
+possession proof in the URL fragment, signed as the transmitted bytes
+(no canonicalisation; a JWS container was considered and rejected);
+the proof is a WebAuthn assertion made on the dApp origin, so the
+consent screen names an origin the browser attested rather than one
+the page typed; the user approves with the account passkey; the
+authoriser submits one device-gated `issue_grant`; the dApp verifies
+its grant by reading chain state and thereafter signs in with the
+passkey registered for its origin. Read access is the MIP-0012 viewing
+capability sealed to a dApp-supplied key. Account-linked sign-in is in
+scope; unlinkable sign-in stays with the DecentralisedAuth MIP
+(MIP-7). The MIP carries a scope mapping table to Open Wallet Standard
+connection scope strings and declares the OWS handshake flag and
+CAIP-10 for Midnight as upstream dependencies.
+
+Two findings about wallets as counterparties: a regular Midnight
+wallet key already signs an account challenge (BIP-340) on every
+shipped surface and verifies in-circuit at k=15 to k=16, so a plain
+wallet can operate a Passport account once the seam grows that arm
+(blocked in Compact on secp256k1 point operations); and keys behind
+the dApp-connector `signData` ECDSA scheme are admitted today through
+the k256 signing envelope, though as read-only grantees, since spend
+through the connector needs an upstream structured-display surface.
 
 ## Dependencies
 
@@ -34,20 +62,23 @@ extension surface inside it?
 on top, or coexist? The mockup currently treats OWS as the umbrella —
 this needs upstream confirmation.
 
-**Transport choice.** Provider injection, WalletConnect v2 relay,
-deeplinks? Design doc § 5.9 references all three; OWS may pin one.
+**Transport choice.** For issuance, resolved: an https redirect with
+the request and proof in the URL fragment, `redirect_uri` same-origin
+with the proven origin. Provider injection and WalletConnect remain
+questions for the OWS session layer.
 
-**Privacy scopes.** What scopes are pre-defined vs custom? OWS will
-have a scope vocabulary; we need a Passport vocabulary mapped to it.
+**Privacy scopes.** The MIP defines the Passport scope vocabulary and
+a mapping table to OWS connection scope strings; OWS acceptance of the
+table and of the handshake flag is the open item.
 
 **Cross-chain dApp integration.** A dApp with cross-chain UX (per P10) —
 does the connection protocol expose chain agnosticism, or does the dApp
 specify chains explicitly?
 
-**MIP co-author.** Per MIPS.md, every MIP needs a named external
-co-author. Who co-authors MIP-5 (connection protocol) — the Midnight
-Foundation, a wallet provider, or both? OWS upstream contributors are
-a candidate.
+**MIP co-author.** Resolved for the issuance half: the Midnight
+Foundation co-authors the scoped-grants MIP. The OWS mapping (MIP-5)
+and sign-in (MIP-7) still want a wallet-provider or OWS upstream
+co-author.
 
 ## Failure modes
 
@@ -70,7 +101,9 @@ wallet. *Detection:* fallback transport not configured.
 
 **A — Open Wallet Standard (OWS)** *(chosen 2026/05/13, in progress
 upstream)*. Cardano + Midnight workflow target; common wallet-handshake
-surface across both ecosystems.
+surface across both ecosystems. The grant-issuance ceremony is
+specified independently of the OWS session layer and maps into it
+through the scope table.
 
 **B — CAIP-25 + EIP-6963 + WalletConnect v2** (original design doc
 default; now framed as the underlying-transport layer beneath OWS

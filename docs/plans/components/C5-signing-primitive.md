@@ -57,6 +57,43 @@ MIP-0013 conformance test 7: an independent Rust signer built on the
 published ledger crates produces bit-exact challenges and accepted
 signatures against the deployed standard contract.
 
+**Status 2026/09 — the trunk has arms.** The signature-schemes MIP is
+drafted (`docs/mps-mip/mips/mip-xxxx-signature-schemes.md`), the
+successor document MIP-0013's Versioning section anticipates. It
+defines the scheme registry (schemes named by arm marker `v1`, `k1`,
+`r1`, identified by their domain-separation tag families), per-scheme
+dedicated circuits over one challenge core with the ECDSA deltas made
+structural (no `sig_r` element, no grinding tail, keys bound as
+coordinate bytes), the **r1 arm** (WebAuthn ECDSA over secp256r1, the
+circuit verifying the assertion together with the signing envelope
+that produced it), the **k1 arm** (ECDSA over secp256k1) registered as
+Interim with a named sunset, the SIG-1 to SIG-5 invariant family, and
+**BIP-340 over secp256k1** as a named candidate. Evidence behind it:
+
+- The reference contract carries JubJub Schnorr and k256 as
+  **co-resident arms** over shared chips, both suites green on node.
+  The k256 arm's per-device signing envelope (id 0 none, id 1 the
+  dApp-connector `midnight_signed_message:32:` prefix), bound into the
+  entry and boot derivations (`…:k1:v2`), admits connector, MPC, and
+  HSM ECDSA signers; `persistentHash` is byte-exact SHA-256, so the
+  envelope digest is recomputable in-circuit today.
+- **P-256 in-circuit**: k=15, sub-second proving, a real platform
+  passkey assertion verified, including the WebAuthn envelope hashed
+  in-circuit; direct verification beats a recursion wrapper on every
+  axis.
+- **Wallet gate**: every Midnight wallet signing surface (ledger WASM,
+  SDK keystore, dApp connector) signs BIP-340 with an untagged SHA-256
+  pre-hash, characterised bit-exactly and cross-verified by two
+  implementations; verification on real wallet vectors is measured at
+  k=15 (SDK path) and k=16 (connector envelope). The arm is blocked in
+  Compact only on secp256k1 point operations.
+
+Gates to submission: a cryptographer pass on the envelope binding and
+the accept-both-s policy, the secp256r1 Compact language surface (a
+declared dependency), and the Interim-status ruling. Both ECDSA arms
+reject the curve identity at the seam and the bootstrap ahead of the
+MIP-0013 text (see C1, weak keys).
+
 ## Dependencies
 
 - **C4** — resolved to stateless contract custody; the custody MIP's
@@ -112,7 +149,15 @@ the next ledger line adds native ECDSA-secp256k1 ledger keys, which
 together with the verified maintenance-authority upgrade path meets
 both preconditions of the earlier "ECDSA deferred until upgradability
 and native ECDSA" ruling — worth a deliberate re-visit, not an
-automatic switch.
+automatic switch. **Revisited:** ECDSA enters as registered arms
+beside the JubJub trunk, not as a switch. The k1 arm is Interim with a
+sunset, the r1 arm is the passkey shape, and each verifies in its own
+dedicated circuit, so the trunk pays nothing for their presence.
+
+**ECDSA-arm review.** The WebAuthn envelope binding relation, the
+accept-both-s policy (platform authenticators emit high-s), and the
+weak-key rejections want a cryptographer pass before the schemes draft
+leaves Draft.
 
 ## Failure modes
 
@@ -166,3 +211,24 @@ provider. DKG ensures no node ever reconstructs the user's private key.
 Same verification equation as A — the contract cannot tell the
 difference — but **violates P8** (the MPC operator is a required
 service). The v1.0 deliverable retires this in favour of A.
+
+**E — Threshold ECDSA.** Rejected: ECDSA nonce generation has no
+non-interactive threshold analogue, and interactive nonce protocols
+are the failure class behind the published MPC-wallet key-extraction
+attacks.
+
+**F — ECDSA over secp256r1 (WebAuthn passkey assertion).** **Registered
+as the r1 arm** in the schemes draft. Measured in-circuit at k=15 with
+sub-second proving against a real platform passkey; the credential
+never exists outside the authenticator. Gated on the secp256r1 Compact
+language surface.
+
+**G — ECDSA over secp256k1 (interim k1 arm).** **Co-resident with A**
+in the reference contract; Interim status with a named sunset; the
+per-device signing envelope admits dApp-connector, MPC, and HSM
+signers today.
+
+**H — BIP-340 Schnorr over secp256k1 (Midnight wallet key).** Named
+candidate. Every wallet key already signs an account challenge on
+every shipped surface; verification is measured in-circuit at k=15 to
+k=16. Blocked in Compact only on secp256k1 point operations.

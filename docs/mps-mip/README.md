@@ -63,7 +63,10 @@ together; the upstream copies are canonical.
   through four lenses; the open items for editors and the Foundation
   (co-author, companion erratum wording, salt and commitment rulings)
   are collected in an editors' note at the head of the file. Co-authored
-  with the Midnight Foundation.
+  with the Midnight Foundation. Evidence is on `main`: the reference
+  contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
+  `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
+  is exercised on node.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract
