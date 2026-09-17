@@ -15,6 +15,25 @@ new way to satisfy `require_authorised()`, not a parallel mechanism.
 What this canvas owns is the grant schema and semantics that extension
 will carry.
 
+**Status 2026/09 — specified.** The scoped-grants and dApp-connection
+MIP is drafted (`docs/mps-mip/mips/mip-xxxx-scoped-grants.md`),
+co-authored with the Midnight Foundation. A grant is a
+contract-maintained record admitting one grantee key of a registered
+signature scheme (C5) to a bounded subset of the asset-facing
+circuits: three spend operations, one token color, a per-call and a
+cumulative cap, a bound on the value of any coin touched, an optional
+recipient pin, and an explicit expiry. The record is keyed by a
+contract-recomputable identity over the account, the grantee key, its
+origin, and a slot; color, recipient, coin bound, relying-party host,
+and the running spent total are salted commitments opened in-circuit,
+so the MIP-0012 custody invariants hold unchanged and observers learn
+neither which dApps an account uses nor what it spends. Implemented on
+the reference contract at `spec_version = 2` and exercised on node
+(`contract/GRANTS-E1.md`, `GRANTS-E2.md`); the byte recipes agree
+three ways (TypeScript, Rust, and the circuit). Outstanding: editors'
+rulings collected at the head of the draft, and the companion
+MIP-0013 erratum.
+
 ## Dependencies
 
 - **C1** — grants live in account-custody contract state.
@@ -26,14 +45,14 @@ will carry.
 
 ## Open questions
 
-**Grant scope schema.** Operation type (R / W / X) is fixed; object
-scope (which assets, contracts, attestations) and quantitative bounds
-(value cap, rate limit, expiry) need a concrete schema. Inherit NEAR
-function-call key shape, or define Passport-specific?
+**Grant scope schema.** Resolved by the MIP: a Passport-specific
+schema (operations, one color, caps, coin bound, recipient pin,
+expiry), NEAR-shaped in spirit. Window-bounded rate limits have their
+schema reserved and their semantics deferred to a circuit revision.
 
-**Compose with chain abstraction.** Per P10's I-10.3, trade intents
-do not pin specific settlement chains. Are grants chain-agnostic by
-default, or chain-scoped with an "all chains" option?
+**Compose with chain abstraction.** Chain-scoped by construction in
+this MIP; chain-agnostic grants (P10's I-10.3) wait on the cross-chain
+interface (C25).
 
 **Composition with selective disclosure.** When a dApp grant requires a
 credential proof (P9), is the proof attached to the grant or supplied
@@ -55,9 +74,15 @@ operations.
 
 ## Alternatives
 
-**A — NEAR function-call key model** (battle-tested, well-understood).
+**A — NEAR function-call key model.** **Chosen as the shape:** a
+contract-maintained record with a Passport-specific scope schema. The
+NEAR access-key login flow is the closest deployed analogue of the
+connection ceremony, and the MIP closes its known defects one by one.
 
-**B — Capability-token model** (each grant is a signed capability).
+**B — Capability-token model.** Not adopted: a signed capability
+cannot be revoked from chain state, which I-7.6 requires; the record
+model gives that for free.
 
-**C — ZK-attested grants** (grant existence proven without revealing
-details; tightest privacy).
+**C — ZK-attested grants.** Partially adopted: the record is on chain,
+but its scope fields are salted commitments opened in-circuit, so an
+observer learns neither the dApp nor the spend.
