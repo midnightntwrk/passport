@@ -3,7 +3,7 @@ MIP: X
 Title: Recovery Paths for Custody Accounts
 Authors:
   - Nicolas Di Prima (NicolasDP)
-  - Raphael Toledo (rrtoledo)
+  - Co-author to be confirmed (the cryptographic review of the sharing layer)
 Status: Draft
 Category: Standards
 Created: 2026-08-24
@@ -244,6 +244,20 @@ MPS-0027 once it ratifies. This proposal registers:
 A conforming implementation MUST use these tags and MUST NOT reuse a
 tag from another family for these purposes.
 
+The two seam-gated operations this proposal adds are circuits on the
+MIP-0013 seam and take their per-circuit tags from MIP-0013 section
+5.1, which derives the tag from the circuit name. So that independent
+implementations derive the same tags, the circuits are named
+`publish_recovery_session` (section 5) and `recover_cancel` (section
+6 step 5), and their tags are therefore
+`midnight:account:auth:v1:publish_recovery_session` and
+`midnight:account:auth:v1:recover_cancel` on the JubJub Schnorr arm,
+with the corresponding `midnight:account:auth:k1:v1:` forms on the
+interim secp256k1 arm the reference implementation also carries. The
+recover gate itself (`recover_submit`, section 6 step 4) and the
+permissionless finalisation (`recover_finalise`, step 6) are not seam
+operations; the gate uses the `submit` tag above.
+
 The exact key-derivation construction (an extract-then-expand
 function), the uniform sampling procedure for `s`, and the mapping of a
 32-byte authenticator PRF output to a field element without modulo bias
@@ -380,9 +394,16 @@ Variants:
 Ordering: a session MUST complete before any churn that depends on it.
 
 The contract MUST reject a session whose identifier equals the
-currently stored one, and MUST reject a recovery commitment equal to
-the currently stored one (defence in depth against accidental reuse).
-A session MUST also be rejected while a recovery is pending
+currently stored one, MUST reject an all-zero session identifier
+regardless of the stored value (it is what a broken generator
+produces, and the stored value catches it on the first session only),
+and MUST reject a recovery commitment equal to the currently stored
+one (defence in depth against accidental reuse). The contract MUST
+also reject a recovery commitment `P` that is the curve identity or
+has small order, with the check of section 6 step 4: a signature under
+a small-order key is forgeable, and a session that installed one would
+hand the next recovery to anyone. A session MUST also be rejected
+while a recovery is pending
 (section 6): a session rotates the commitment, and a pending record
 enacted after that rotation would enrol a successor the rotated
 commitment never authorised. The owner cancels first, then publishes.
@@ -443,33 +464,87 @@ nonce and the round counter (d).
    as witnesses:
    - a signature by `s` over the submission challenge, verified
      against the stored `P`. The challenge is domain-separated under
-     `midnight:account:recovery:submit:v1` and binds the successor
-     key `Q`, the successor commitment `P'`, the post-bump device
-     epoch, and the current authorisation nonce, so that the
-     signature can neither be replayed to enrol a different successor
-     nor resubmitted after a cancel (a cancel is seam-gated and
-     advances the nonce).
+     `midnight:account:recovery:submit:v1` and MUST bind the account
+     address, the stored key `P`, both signatures' nonce points, the
+     successor key `Q`, the successor commitment `P'`, the post-bump
+     device epoch, the current authorisation nonce, and the
+     finalisation-time bound, so that the signature can neither be
+     replayed to enrol a different successor nor resubmitted after a
+     cancel (a cancel is seam-gated and advances the nonce). Binding
+     the time bound is what makes the submission exactly what the
+     recovering party authorised: without it, a delegated prover
+     could set the bound decades ahead, and in the total-loss case,
+     where no device can cancel, the pending slot would then be held
+     indefinitely by the prover.
    - a signature by the successor key `Q` over the same challenge,
      verified against `Q`. This is a proof of possession that reveals
      no successor private material, so the successor scalar, like `s`,
      never enters the proof.
 
+   The challenge preimage is normative, so that independent signers
+   and contracts interoperate. With `DST = persistentHash(pad(64,
+   "midnight:account:recovery:submit:v1"))`, the challenge is
+
+   ```
+   persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint,
+                   JubjubPoint, JubjubPoint, JubjubPoint,
+                   Uint<32>, Uint<64>, Uint<64>, Uint<64>]>(
+     [DST, kernel.self(), P, R_P, Q, R_Q, P', post_epoch, auth_nonce,
+      now_upper, grind_nonce])
+   ```
+
+   where `R_P` and `R_Q` are the two signatures' nonce points, in that
+   order, `post_epoch` is the device epoch plus one, `auth_nonce` is
+   the current authorisation nonce, and `now_upper` is the
+   finalisation-time bound (step 5). The grinding rule of MIP-0013
+   section 5.2 applies: `grind_nonce` is incremented until the hash
+   reads below the JubJub subgroup order, and one grind serves both
+   signatures, because both are over the same challenge. Both nonce
+   points are fixed before the grind. The reference implementation
+   exports this hash as a pure circuit so that a wallet computes it
+   with the contract's own arithmetic, and pins a test vector (see
+   Testing).
+
+   The gate MUST check, before any signature is examined, that the
+   stored `P`, the successor key `Q`, and the successor commitment
+   `P'` are each neither the curve identity nor of small order, and
+   MUST reject `P'` equal to the stored `P` (the section 5 reuse
+   rule, applied on the one other path that writes the commitment).
+   Checking the stored `P` at the gate is what makes a weak birth key
+   harmless (Backwards Compatibility): such an account is
+   unrecoverable, not forgeable.
+
    The successor key `Q` MUST be validated, because this is the one
    enrolment path with no active device to answer for the key. The
    circuit asserts that `Q` is not the curve identity and that `[8]Q`
    is not the identity (a cofactor check rejecting the small-order
-   points), and the co-signature establishes possession of the
-   prime-order component. Verifying full prime-order subgroup
-   membership (the `[r] Q = O` check for the subgroup order `r`) is
-   not expressible in the circuit, because `r` exceeds the embedded
-   scalar bound; the identity assertion, the cofactor check, and the
-   co-signature together bound the residual, which is the same
-   residual the ordinary device-addition path carries, and
-   [CRYPTO-MEMO Q7] is asked to confirm the bound is adequate. Unlike
-   a gate that derives the key from a witnessed scalar, the
-   signature gate admits a threshold committee's joint key as the
-   successor directly, since a committee can co-sign the challenge;
-   the cost is an interactive co-signing ceremony at recovery time.
+   points), and the co-signature establishes possession. What each
+   check buys depends on the proving platform, and an implementation
+   MUST know which case it is in. On the reference toolchain the proof
+   system constrains every JubJub point that enters a circuit to the
+   prime-order subgroup when it assigns it (the point assignment
+   witnesses the cofactor root under the curve equation and multiplies
+   by the cofactor in-circuit), so a point outside the subgroup is
+   unprovable and the client runtime refuses to construct one; the
+   identity is a subgroup point and passes that assignment, so the
+   identity assertion is the load-bearing in-circuit check and the
+   cofactor check is defence in depth. On a platform that assigns
+   points as bare coordinates, the cofactor check is what rejects the
+   small-order points, and full prime-order membership (the `[r] Q =
+   O` check for the subgroup order `r`) is not expressible by the
+   circuit author because `r` exceeds the embedded scalar bound; such
+   a platform MUST add the membership check itself. In both cases a
+   point the circuit only stores (a published `P`, a successor `P'`)
+   MUST pass through at least one curve operation before it is
+   written, because that operation is what subjects it to the
+   platform's constraint. [CRYPTO-MEMO Q7] is asked to confirm that
+   the platform guarantee, the identity assertion, and the
+   co-signature suffice on the reference toolchain, and to state what
+   a platform without the guarantee must add. Unlike a gate that
+   derives the key from a witnessed scalar, the signature gate admits
+   a threshold committee's joint key as the successor directly, since
+   a committee can co-sign the challenge; the cost is an interactive
+   co-signing ceremony at recovery time.
    Following MIP-0013, the gate is a dedicated circuit per successor
    device key scheme rather than an in-circuit conditional over
    schemes; the reference arm is Schnorr over JubJub, reusing the
@@ -502,18 +577,22 @@ nonce and the round counter (d).
    pending recovery and act, and wallets SHOULD default to a window
    measured in days rather than hours. A cancel MUST invalidate the
    pending recovery immediately and MUST NOT itself be subject to the
-   window. A cancel is a seam-gated operation available to any
-   enrolled device, not only to the device that most recently
-   authorised; it carries its own per-circuit tag, advances the
-   authorisation nonce and the round counter, clears the pending
-   record, and leaves the device epoch unchanged.
+   window. A cancel (`recover_cancel`) is a seam-gated operation
+   available to any enrolled device, not only to the device that most
+   recently authorised; it carries its own per-circuit tag (section
+   2), advances the authorisation nonce and the round counter, clears
+   the pending record, and leaves the device epoch unchanged. A cancel
+   MUST NOT assert anything about the pending record's content: it
+   must always be able to clear whatever a submission wrote.
 6. **Finalisation**: once the window has elapsed, a finalising call
-   enacts the pending record. It enrols the successor device key at
-   the new epoch, increments the device epoch, sets the device count
-   to one, advances the authorisation nonce and the round counter,
-   rotates the stored commitment to the successor recovery
-   commitment, clears the published `phi`, and clears the pending
-   record. Finalisation requires no authorisation beyond the elapsed
+   (`recover_finalise`) enacts the pending record. It re-checks the
+   successor recovery commitment for the identity and small order
+   (defence in depth over the check at submission), enrols the
+   successor device key at the new epoch, increments the device
+   epoch, sets the device count to one, advances the authorisation
+   nonce and the round counter, rotates the stored commitment to the
+   successor recovery commitment, clears the published `phi`, and
+   clears the pending record. Finalisation requires no authorisation beyond the elapsed
    window and the pending record itself: the authorisation was
    verified at submission, and the pending record fixes everything
    finalisation does, so a permissionless finalising call can enact
@@ -779,9 +858,12 @@ derive-in-circuit to a co-signature by the successor key for the same
 reason, so the successor scalar is not disclosed either. The cost is a
 public key that is a discrete-logarithm commitment rather than a hash
 commitment (Security Considerations shows the offline-search hardness
-is unchanged), and a successor-key validation that the circuit can no
-longer guarantee by construction and must instead approximate with an
-identity assertion, a cofactor check, and the co-signature. The gate is
+is unchanged), and a successor-key validation that the circuit no
+longer guarantees by construction: on the reference toolchain the
+proof system constrains every point it assigns to the prime-order
+subgroup, so what is left to the circuit is the identity assertion,
+with a cofactor check as defence in depth and the co-signature for
+possession (section 6 step 4 states the two platform cases). The gate is
 specified scheme-agnostically, with per-scheme circuits as in the
 signature-schemes work; the reference arm is Schnorr over JubJub,
 which reuses the seam's existing verification and re-proves on the
@@ -828,29 +910,32 @@ client obligation is load-bearing.
       covering the multi-session security statement, the
       public-share-update verdict, the sampling, mapping, commitment,
       and AEAD constructions, and the delegation-safe gate's
-      successor-key validation ([CRYPTO-MEMO Q7]: the point commitment
-      and the identity, cofactor, and co-signature bound on a
-      public-key input), with its conclusions folded into sections 2,
+      successor-key validation ([CRYPTO-MEMO Q7]: the point commitment,
+      and whether the platform's subgroup constraint, the identity
+      assertion, and the co-signature suffice for a public-key input),
+      with its conclusions folded into sections 2,
       4, 5, 6, 8, and 10, Security Considerations, and Implementation.
 - [ ] Domain-separation tags (`midnight:account:recovery:*:v1`)
       registered under the MPS-0027 registry once it ratifies.
 - [x] Reference implementation of the session and recovery lifecycle
       in the custody reference contract, with conformance suites
-      passing on a devnet-matching network. [EXP: met for the
-      lifecycle: session publish, on-chain freshness rejection,
-      reconstruction from chain data, wrap round-trip, veto window,
+      passing on a devnet-matching network. [EXP: met: session
+      publish, on-chain freshness rejection, reconstruction from
+      chain data, wrap round-trip, the signature gate, veto window,
       cancel, finalisation, and epoch-bump revocation ran end to end
-      on a local network; evidence recorded with the reference
-      implementation. See Implementation.]
-- [ ] Signature (delegation-safe) recover gate of section 6
+      on a ledger 9 local network; evidence recorded with the
+      reference implementation. See Implementation.]
+- [x] Signature (delegation-safe) recover gate of section 6
       implemented on the reference contract and re-proven on a local
-      network. The gate is specified and its circuit operations are
-      demonstrated expressible against the toolchain (the stored
-      public key, the signature verified under it, the successor
-      co-signature, and the identity and cofactor checks all compile);
-      the reference contract currently carries the superseded
-      possession gate (see Implementation), and the on-node re-prove
-      is the outstanding tranche.
+      network. [EXP: met: the gate takes the stored public key, a
+      signature under it, and the successor co-signature, with the
+      identity and cofactor checks and the reuse and zero-identifier
+      guards; the full behaviour matrix, including every refusal of
+      section 6 step 4 and the delegation-safety and finalisation
+      rows of Testing, ran in the runtime simulator, and the lifecycle
+      ran end to end on a ledger 9 local network through real proofs
+      and a real veto window; the evidence record accompanies the
+      reference implementation. See Implementation.]
 - [x] Veto window and cancel path implemented and exercised end to end
       on a local network. [EXP: met: the window held against an
       early finalisation on real block time, a cancel cleared the
@@ -871,10 +956,11 @@ implementation, which now carries the whole contract tranche (see
 Implementation). Remaining work divides into three independent
 tranches that can proceed in parallel:
 
-1. **Contract**: landed and evidenced (the session operation and
-   two-phase gate on the MIP-0013 seam, the pending record, veto
+1. **Contract**: landed and evidenced (the session operation and the
+   two-phase signature gate on the MIP-0013 seam, on both of the
+   reference contract's authorisation arms, the pending record, veto
    window, and cancel path, the wrap cell, and the version tag, with
-   the conformance suite passing on a local network).
+   the simulator matrix and the on-node conformance suite passing).
 2. **Cryptographic**: the commissioned memo, and the normative
    constructions it fixes in sections 2 and 4.
 3. **Wallet**: transport messages, liveness attestation, the roster
@@ -898,7 +984,11 @@ version and migrating its custodied assets; an account deployed under
 a recovery-carrying version adopts by running a first session; and an
 account that never runs a session is unaffected and behaves exactly
 as it does today. Recovery at birth applies to new deployments, which
-accept an initial artefact set at deployment.
+accept an initial artefact set at deployment. The birth commitment is
+not validated by the constructor but by the gate: a deploying client
+that publishes the identity or a small-order key produces an account
+that cannot be recovered through that key, never one that anyone can
+recover (section 6 step 4).
 
 The veto window relies on block-time comparators that are present in
 current toolchains, including the line the reference implementation
@@ -1000,21 +1090,27 @@ population that has not been running sessions.
   and a co-signature under the successor key, never the scalars, so a
   hostile prover learns only two single-use signatures and the public
   inputs, and can at most submit the exact recovery the recovering
-  party authorised. The residual is the successor-key validation. A
-  gate that derived the successor key from a witnessed scalar would
-  guarantee subgroup membership by construction but would disclose the
-  successor scalar to the prover, defeating REC-11; the gate therefore
-  takes the successor key as a public input and validates it with an
-  identity assertion, a cofactor check that rejects the small-order
-  points, and the co-signature that proves possession of the
-  prime-order component. Full prime-order subgroup membership (the
-  `[r] Q = O` check) is not expressible, because the subgroup order
-  exceeds the embedded scalar bound; this is the same limitation the
-  ordinary device-addition path carries, and it is the reason a
-  platform subgroup-check primitive would benefit the whole account
+  party authorised. What the prover can do with the public inputs is
+  also bounded: every value the submission fixes, including the
+  finalisation-time bound, is signed, so the prover cannot stretch the
+  veto window or redirect the successor. The residual is the
+  successor-key validation. A gate that derived the successor key from
+  a witnessed scalar would guarantee subgroup membership by
+  construction but would disclose the successor scalar to the prover,
+  defeating REC-11; the gate therefore takes the successor key as a
+  public input. On the reference toolchain the proof system constrains
+  every assigned JubJub point to the prime-order subgroup, so the
+  identity assertion is the load-bearing check and the cofactor check
+  is defence in depth; on a platform without that guarantee the
+  cofactor check rejects the small-order points and full membership
+  must be added by the platform, since the `[r] Q = O` check is not
+  expressible by the circuit author (section 6 step 4). The same
+  analysis applies to the ordinary device-addition path, which is why
+  a platform subgroup-check primitive would benefit the whole account
   family, not this gate alone. [CRYPTO-MEMO Q7] is asked to confirm
-  that the identity assertion, the cofactor check, and the
-  co-signature bound the residual adequately for a public-key input.
+  that the platform guarantee, the identity assertion, and the
+  co-signature suffice on the reference toolchain, and to state what a
+  platform without the guarantee must add.
 - **Local leakage during reconstruction**: published results on
   linear-reconstruction secret sharing show that a few bits of local
   leakage per share can defeat the sharing (References). Under this
@@ -1075,44 +1171,55 @@ because the gap between them is what Path to Active tracks.
 
 **The reference implementation** (`contract/` in the authoring
 repository) implements MIP-0012 and MIP-0013 and carries this
-specification's contract tranche: the artefact-set ledger cells and
-version tag, the seam-gated session operation with the freshness
-backstops, the unused-slot asserts, and the pending-recovery
-rejection, the two-phase gate with the explicit epoch and nonce
-binding, the seam-gated cancel, the permissionless finalisation behind
-the block-time window, and the wrap cell. The whole lifecycle is
+specification's contract tranche: the artefact-set ledger cells (the
+recovery public key as a curve-point cell) and version tag, the
+seam-gated session operation with the freshness backstops, the
+zero-identifier and small-order guards, the unused-slot asserts, and
+the pending-recovery rejection, the signature gate of section 6 step
+4 with the explicit epoch, nonce, and time-bound binding and the
+successor co-signature, the seam-gated cancel, the permissionless
+finalisation behind the block-time window, and the wrap cell. The
+seam-gated operations exist on both of the contract's co-resident
+authorisation arms (`publish_recovery_session_with_jubjub` and
+`_with_k256`, `recover_cancel_with_jubjub` and `_with_k256`); the
+gate and the finalisation are arm-independent. The whole lifecycle is
 exercised twice: in the toolchain's runtime simulator under explicit
-wall-clock control, and end to end on a local network (node, indexer,
-and proof server), where it ran through real proofs and real block
-time: deploy with birth artefacts, session publish through the seam,
-on-node freshness rejection, reconstruction from chain data, the wrap
-round-trip, an early finalisation held by the window, cancel,
+wall-clock control, where the behaviour matrix covers every refusal
+of section 6 step 4 (identity and small-order keys, a missing
+co-signature, a wrong recovery signature, each signed binding
+tampered after signing, a reused successor commitment, a forgery
+against an identity birth key) and the delegation-safety and
+finalisation rows of Testing; and end to end on a ledger 9 local
+network (node, indexer, and proof server), where it ran through real
+proofs and real block time: a four-wave deploy with birth artefacts,
+session publish through the seam, on-node freshness rejection,
+reconstruction from chain data, the wrap round-trip, the gate
+submission, an early finalisation held by the window, cancel,
 resubmission, finalisation after the window, and a post-recovery
 session from the successor device. The evidence record accompanies
 the reference implementation.
 
-One known divergence remains between the reference implementation and
-this specification, and it is the current tranche of work. The
-reference gate is still the possession construction of an earlier
-draft: it witnesses `s` and derives the successor key in-circuit from
-a witnessed scalar. This specification supersedes that with the
-signature gate of section 6, which keeps `s` and the successor scalar
-off the proof so the proof may be delegated (REC-11). The signature
-gate's circuit operations are demonstrated expressible against the
-toolchain (the recovery public key stored as a curve point, the
-signature verified under it, the successor co-signature, and the
-identity and cofactor checks all compile); porting the reference gate
-to it, and re-proving the lifecycle on a local network under the new
-gate, is the outstanding tranche that Path to Active tracks. The
-lifecycle evidence above is unaffected by the port, because the
-session, window, cancel, finalisation, and revocation mechanisms are
-independent of how submission proves knowledge of `s`.
+The gate the reference contract carried before this tranche was the
+possession construction of an earlier draft, which witnessed `s` and
+derived the successor key in-circuit from a witnessed scalar; it was
+replaced by the signature gate so that neither scalar enters a proof
+(REC-11). Two toolchain observations from the port are recorded with
+the reference implementation. The proving toolchain constrains every
+JubJub point it assigns to the prime-order subgroup and refuses to
+construct one outside it, which is the platform case section 6 step 4
+describes. And key generation enables a circuit's curve gadget only
+when the circuit performs a curve operation on a runtime value, so a
+circuit whose only JubJub use is writing a point literal type-checks
+but cannot be proven; the reference contract clears its pending key
+slot with a curve multiplication by zero for that reason, and a keyed
+compile is the only build that shows a contract builds.
 The client side ships the second independent share-derivation
 implementation (pure TypeScript over the field), the wrap container
-v1, the roster record with trial-assignment fallback, and an
-ephemeral witness holder under which the recovery secret is armed for
-the ceremony and zeroised after, so REC-6 is exercised rather than
-asserted.
+v1, the roster record with trial-assignment fallback verified against
+the stored recovery key, a version-checked reader for the artefact
+set, and the gate's signing ceremony, which consumes `s` to produce
+the recovery signature and holds it nowhere afterwards, so REC-6 is
+exercised rather than asserted.
 
 **The prototype** (`experiments/account-custody-prototype/` in the
 authoring repository) is the evidence base. It predates this
@@ -1148,17 +1255,23 @@ implementation parameter rather than a property of the scheme, and
 section 8 specifies it as a profile parameter for that reason.
 
 **Deployment note**: with the recovery circuits the reference contract
-carries fourteen operations, and a deploy carrying all fourteen
-verifier keys exceeds the node's per-block limits and can never be
-included in a block. The reference implementation deploys in two
-waves: the custody surface with the constructor's full ledger state,
-then the four recovery verifier keys in one batched contract
-maintenance update whose final action retires the maintenance
-authority, because a live authority can replace an asset-releasing
-circuit's verifier key and is therefore a path around the
-authorisation seam. The block-limit constraint is a platform finding
-worth reporting upstream in its own right: it binds any contract with
-this many entry points, not this design specifically.
+carries thirty-six operations across its two authorisation arms and
+the scoped-grant surface, and a deploy carrying all their verifier
+keys exceeds the node's per-block limits and can never be included in
+a block. The reference implementation deploys in waves: the deposits
+and the initial device's arm with the constructor's full ledger state,
+then the remaining verifier keys packed under a measured
+per-maintenance-update budget into batched contract maintenance
+updates (four waves in the on-node run), the six recovery keys riding
+last, and the final update retiring the maintenance authority, because
+a live authority can replace an asset-releasing circuit's verifier key
+and is therefore a path around the authorisation seam. A retired
+authority also closes the account's upgrade path, and a recovered
+account cannot reopen it, so a deployment that keeps the authority for
+later circuit fixes must hold it as a committee whose members are no
+weaker than the device set. The block-limit constraint is a platform
+finding worth reporting upstream in its own right: it binds any
+contract with this many entry points, not this design specifically.
 
 **The scheme library**: a proof-of-concept library implementing the
 underlying scheme validated the approach. It is unaudited, declares
@@ -1197,14 +1310,31 @@ A conforming implementation SHOULD provide:
   with one wrong share fails the commitment check and succeeds after
   substituting the correct share.
 - **Successor validation**: a submission whose successor key is the
-  curve identity is rejected; a submission whose successor key is a
-  small-order point is rejected by the cofactor check; a submission
-  carrying a valid successor key but no valid co-signature under it is
-  rejected, so possession is actually tested; and a submission whose
-  recovery signature does not verify under the stored public key is
-  rejected. A gate arm that instead derives the successor key from a
-  witnessed scalar needs the zero-scalar case in place of the
-  identity and cofactor cases.
+  curve identity is rejected; a submission whose successor key or
+  successor commitment is a small-order point is refused (on the
+  reference toolchain the platform refuses to construct the point; on
+  a platform without that guarantee the cofactor check rejects it, and
+  the test records which); a submission carrying a valid successor
+  key but no valid co-signature under it is rejected, so possession is
+  actually tested; a submission whose recovery signature does not
+  verify under the stored public key is rejected; a submission whose
+  successor commitment equals the stored one is rejected; and a
+  forgery against a stored key that is the identity (a weak birth key)
+  is refused at the gate before any signature is examined. A gate arm
+  that instead derives the successor key from a witnessed scalar
+  needs the zero-scalar case in place of the identity and cofactor
+  cases.
+- **Delegation safety**: the submission's circuit arguments contain
+  neither the recovery secret nor the successor scalar; altering any
+  signed binding after signing (the finalisation-time bound, the
+  successor key, the successor commitment) is rejected with no state
+  change, whether at the canonical cast of the challenge or at the
+  verification; a cancelled submission replayed verbatim is rejected,
+  and so is a fresh signature over the pre-cancel nonce.
+- **Finalisation effects**: finalisation advances the authorisation
+  nonce and the round counter by one each, as well as bumping the
+  epoch, setting the device count to one, rotating the commitment,
+  and clearing the vector and the pending record.
 - **Veto and cancel**: finalisation blocked before the window elapses;
   cancel invalidates a pending recovery; cancel is itself not subject
   to the window; a cancelled attempt leaves the epoch unchanged; a
@@ -1213,9 +1343,12 @@ A conforming implementation SHOULD provide:
 - **Wrap round-trip**: `vk` published under a session, recovered
   through that session's secret, and shown to decrypt current shielded
   state (REC-7).
-- **Malformed artefacts**: non-zero unused slots rejected; length field
-  inconsistent with the vector rejected; unknown version rejected
-  rather than best-effort parsed.
+- **Malformed artefacts**: non-zero unused slots rejected; a length
+  field of zero and a length field beyond the slot bound rejected;
+  an all-zero session identifier rejected after a real session has
+  been published, not only against the constructor sentinel; an
+  artefact set of an unknown version refused by the reader rather
+  than best-effort parsed.
 - **Liveness attestation**: a guardian able to recompute attests
   successfully; a guardian whose credential is gone fails, and the
   failure is visible to the owner before recovery is needed.
@@ -1224,7 +1357,12 @@ A conforming implementation SHOULD provide:
   session, account, and guardian secret; for Profile B, vectors
   covering the deterministic-signature layer as well, so that two
   independent signers derive identical guardian secrets for the same
-  signer key and session binding.
+  signer key and session binding; and a recover-gate challenge
+  vector. The reference implementation pins, for the account address
+  `0x22` repeated, `P = 1·G`, `R_P = 2·G`, `Q = 3·G`, `R_Q = 4·G`,
+  `P' = 5·G`, post-bump epoch 1, authorisation nonce 7, time bound
+  1800000000, and grind nonce 0, the challenge
+  `16ebd49d1f2b69139f06c46587eacd4f0bbdb7fb203113503143f624b65afae2`.
 
 ## References
 
