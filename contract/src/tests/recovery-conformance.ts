@@ -16,7 +16,7 @@ import { setupWallet, compiledAccountContract } from '../node/setup.js';
 import { CustodyAccount } from '../wallet/account.js';
 import { JubjubDevice } from '../wallet/signer.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
-import { pureCircuits } from '../wallet/contract.js';
+import { recoveryKey, matchesRecoveryPk, eqPoint, readArtefactSet } from '../wallet/recovery-gate.js';
 import {
   deriveShare,
   split,
@@ -57,7 +57,7 @@ await runScenario('recovery-conformance', async () => {
     encKeys,
     {
       recovery: {
-        commitment: pureCircuits.derive_recovery_commitment(birth.bytes),
+        recoveryPk: recoveryKey(birth.field).pk,
         wrap: new Uint8Array(64), // birth wrap sealed post-deploy sessions only
         vetoWindowSeconds: WINDOW_SECONDS,
       },
@@ -80,7 +80,7 @@ await runScenario('recovery-conformance', async () => {
   }));
   const phi = split(s.field, shares, t);
   const sessionTx = await account.publishRecoverySession(device, {
-    commitment: pureCircuits.derive_recovery_commitment(s.bytes),
+    recoveryPk: recoveryKey(s.field).pk,
     sessionNonce: sid,
     phi,
     wrap: sealWrap(s.bytes, account.addressBytes, encKeys.secretKey),
@@ -96,7 +96,7 @@ await runScenario('recovery-conformance', async () => {
   const s2 = newRecoverySecret();
   await expectAbort('publishing under the stored session identifier', () =>
     account.publishRecoverySession(device, {
-      commitment: pureCircuits.derive_recovery_commitment(s2.bytes),
+      recoveryPk: recoveryKey(s2.field).pk,
       sessionNonce: sid,
       phi: [1n, 2n],
       wrap: sealWrap(s2.bytes, account.addressBytes, encKeys.secretKey),
@@ -104,22 +104,18 @@ await runScenario('recovery-conformance', async () => {
 
   step('total loss: reconstruct from t+1 shares and the on-chain vector');
   l = await account.ledgerState();
-  const phiOnChain: bigint[] = [];
-  for (let k = 1n; k <= l.recovery_phi_len; k++) phiOnChain.push(l.recovery_phi.lookup(k));
-  const sRec = reconstruct(phiOnChain, [shares[0], shares[2]], t);
-  assert(
-    eqBytes(pureCircuits.derive_recovery_commitment(fieldToBytes(sRec)), l.recovery),
-    'reconstructed secret matches the stored commitment',
-  );
-  const vk = openWrap(fieldToBytes(sRec), account.addressBytes, l.recovery_wrap);
+  const set = readArtefactSet(l);
+  const sRec = reconstruct(set.phi, [shares[0], shares[2]], t);
+  assert(matchesRecoveryPk(sRec, set.recoveryPk), 'reconstructed secret opens the stored recovery key');
+  const vk = openWrap(fieldToBytes(sRec), account.addressBytes, set.wrap);
   assert(vk !== null && eqBytes(vk, encKeys.secretKey), 'the on-chain wrap restores the encryption secret (REC-7)');
 
   step('submission records the pending recovery');
   const successor = JubjubDevice.generate();
   const successorSecret = newRecoverySecret();
-  const successorCommitment = pureCircuits.derive_recovery_commitment(successorSecret.bytes);
+  const successorRecoveryPk = recoveryKey(successorSecret.field).pk;
   const nowUpper = BigInt(Math.floor(Date.now() / 1000) + 60);
-  const submitTx = await account.recoverSubmit(fieldToBytes(sRec), successor, successorCommitment, nowUpper);
+  const submitTx = await account.recoverSubmit(sRec, successor, successorRecoveryPk, nowUpper);
   details.submitTx = submitTx.txId;
   await waitForLedger(
     () => account.ledgerState(),
@@ -142,7 +138,7 @@ await runScenario('recovery-conformance', async () => {
 
   step('resubmission after the cancel, then finalisation after the window');
   const nowUpper2 = BigInt(Math.floor(Date.now() / 1000) + 60);
-  const submit2 = await account.recoverSubmit(fieldToBytes(sRec), successor, successorCommitment, nowUpper2);
+  const submit2 = await account.recoverSubmit(sRec, successor, successorRecoveryPk, nowUpper2);
   details.resubmitTx = submit2.txId;
   await waitForLedger(
     () => account.ledgerState(),
@@ -152,6 +148,7 @@ await runScenario('recovery-conformance', async () => {
   const waitSeconds = Number(WINDOW_SECONDS) + 75; // window + submission headroom + timestamp tolerance
   console.log(`  waiting ${waitSeconds}s for the veto window to elapse...`);
   await sleep(waitSeconds * 1000);
+  const beforeFinalise = await account.ledgerState();
   const finaliseTx = await account.recoverFinalise();
   details.finaliseTx = finaliseTx.txId;
   await waitForLedger(
@@ -162,7 +159,9 @@ await runScenario('recovery-conformance', async () => {
       led.device_count === 1n &&
       led.pending_recovery === false &&
       led.recovery_phi_len === 0n &&
-      eqBytes(led.recovery, successorCommitment),
+      eqPoint(led.recovery_pk, successorRecoveryPk) &&
+      led.auth_nonce === beforeFinalise.auth_nonce + 1n &&
+      led.round === beforeFinalise.round + 1n,
   );
 
   step('the successor controls the account; the old device is dead (REC-8, AUTH-6)');
@@ -176,7 +175,7 @@ await runScenario('recovery-conformance', async () => {
     sigma: deriveShare(sid3, account.addressBytes, g),
   }));
   const reSession = await account.publishRecoverySession(successor, {
-    commitment: pureCircuits.derive_recovery_commitment(s3.bytes),
+    recoveryPk: recoveryKey(s3.field).pk,
     sessionNonce: sid3,
     phi: split(s3.field, shares3, t),
     wrap: sealWrap(s3.bytes, account.addressBytes, encKeys.secretKey),
@@ -193,8 +192,9 @@ await runScenario('recovery-conformance', async () => {
     name: 'recovery-conformance',
     description:
       'Recovery MIP on-node conformance: session publish through the seam, ' +
-      'freshness backstop, reconstruction and wrap round-trip, two-phase ' +
-      'gate with veto window and cancel, epoch bump, successor control.',
+      'freshness backstop, reconstruction and wrap round-trip, the signature ' +
+      'gate (recovery key plus successor co-signature, no secret in the ' +
+      'proof), veto window and cancel, epoch bump, successor control.',
     verdict: 'PASS',
     txHash: String(details.finaliseTx ?? ''),
     note:

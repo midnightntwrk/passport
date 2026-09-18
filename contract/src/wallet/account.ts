@@ -23,7 +23,7 @@ import { deployAccountInWaves } from './wave-deploy.js';
 
 import {
   ledger,
-  pureCircuits,
+  type JubjubPoint,
   type Ledger,
   type ShieldedCoin,
   type QualifiedCoin,
@@ -33,12 +33,17 @@ import {
   emptyCoinStore,
   withCoin,
   withoutCoin,
-  armRecoverySecret,
-  disarmRecoverySecret,
   type CoinStorePrivateState,
 } from './witnesses.js';
+import {
+  recoveryKey,
+  signRecoverSubmit,
+  recoverSubmitArgs,
+  recoverSubmitChallenge,
+} from './recovery-gate.js';
 import { bytesToHex, hexToBytes } from './hex.js';
 import {
+  JubjubDevice,
   jubjubChallenges,
   k256Challenges,
   authArgs,
@@ -59,9 +64,10 @@ import {
 } from './signer.js';
 import type { EncKeyPair } from './inbox.js';
 
-/** The recovery artefacts an account is born with (recovery MIP section 8). */
+/** The recovery artefacts an account is born with (recovery MIP section 8):
+ *  the recovery public key P = s·G, the wrap, and the veto window. */
 export interface RecoveryBirth {
-  commitment: Uint8Array;
+  recoveryPk: JubjubPoint;
   wrap: Uint8Array;
   vetoWindowSeconds: bigint;
 }
@@ -205,25 +211,22 @@ export class CustodyAccount {
     globalThis.crypto.getRandomValues(salt);
     const boot = initialDevice.bootCommitment(salt);
     // Recovery at birth (recovery MIP, Backwards Compatibility): with no
-    // artefacts supplied, a fresh birth secret is sampled, committed, and
-    // discarded here, so the account is recoverable only by a party that
-    // was handed the secret, which nobody was. Deployers that want a
-    // recoverable account pass their own commitment and wrap.
-    const birth = opts?.recovery ?? (() => {
-      const material = new Uint8Array(32);
-      globalThis.crypto.getRandomValues(material);
-      return {
-        commitment: pureCircuits.derive_recovery_commitment(material),
-        wrap: new Uint8Array(64),
-        vetoWindowSeconds: 3n * 24n * 3600n,
-      };
-    })();
+    // artefacts supplied, a fresh birth secret is sampled, its public key
+    // published, and the secret discarded here, so the account is
+    // recoverable only by a party that was handed the secret, which nobody
+    // was. Deployers that want a recoverable account pass their own key
+    // and wrap.
+    const birth = opts?.recovery ?? {
+      recoveryPk: JubjubDevice.generate().pk,
+      wrap: new Uint8Array(64),
+      vetoWindowSeconds: 3n * 24n * 3600n,
+    };
     // The full deploy exceeds per-block limits, so the account deploys in
     // waves: the initial device's arm first, the other arm's verifier keys
     // by maintenance update (see wave-deploy.ts).
     const address = await deployAccountInWaves(providers, compiledContract, {
       firstArm: initialDevice.arm,
-      args: [boot, encKeys.publicKey, birth.commitment, birth.wrap, birth.vetoWindowSeconds],
+      args: [boot, encKeys.publicKey, birth.recoveryPk, birth.wrap, birth.vetoWindowSeconds],
       privateStateId,
       initialPrivateState,
       retireAuthority: opts?.retireAuthority,
@@ -568,11 +571,12 @@ export class CustodyAccount {
   // ── Recovery (recovery MIP): the session, the gate, the veto ─────────────
 
   /** Publish one artefact set (recovery MIP section 5), device-gated on
-   *  either arm. `phi` carries 1..4 public shares; unused slots are zero. */
+   *  either arm. `phi` carries 1..4 public shares; unused slots are zero.
+   *  `recoveryPk` is P = s·G for the session's fresh secret. */
   async publishRecoverySession(
     device: AnyDevice,
     artefacts: {
-      commitment: Uint8Array;
+      recoveryPk: JubjubPoint;
       sessionNonce: Uint8Array;
       phi: bigint[];
       wrap: Uint8Array;
@@ -580,6 +584,9 @@ export class CustodyAccount {
   ): Promise<TxResult> {
     if (artefacts.phi.length < 1 || artefacts.phi.length > 4) {
       throw new Error(`phi carries ${artefacts.phi.length} entries; the slot bound admits 1..4`);
+    }
+    if (artefacts.sessionNonce.length !== 32 || artefacts.sessionNonce.every((b) => b === 0)) {
+      throw new Error('session identifier must be 32 non-zero bytes; an all-zero identifier is a broken generator (REC-4)');
     }
     const slots: [bigint, bigint, bigint, bigint] = [0n, 0n, 0n, 0n];
     artefacts.phi.forEach((p, i) => {
@@ -590,15 +597,15 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.publishRecoverySession(
-          ctx, device.pk, artefacts.commitment, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
+          ctx, device.pk, artefacts.recoveryPk, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
         ), counter)
       : device.sign(k256Challenges.publishRecoverySession(
-          ctx, device.pk, artefacts.commitment, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
+          ctx, device.pk, artefacts.recoveryPk, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
         ), counter);
     const name = `publish_recovery_session_with_${auth.arm}`;
     const r = await submitWithDustRetry(name, () =>
       this.handle.callTx[name](
-        artefacts.commitment, artefacts.sessionNonce,
+        artefacts.recoveryPk, artefacts.sessionNonce,
         slots[0], slots[1], slots[2], slots[3], phiLen, artefacts.wrap,
         ...authArgs(auth),
       ));
@@ -606,27 +613,39 @@ export class CustodyAccount {
     return { txId: txId(r) };
   }
 
-  /** Submit a recovery (recovery MIP section 6 steps 1 to 4). The recovery
-   *  secret is armed as an ephemeral witness for this one call and wiped
-   *  afterwards (REC-6). The successor is a JubJub device: the contract
-   *  derives its key from the scalar and precomputes its entry. */
+  /** Submit a recovery (recovery MIP section 6 steps 1 to 4) through the
+   *  signature gate. The recovery secret signs the submission challenge
+   *  here and is not retained (REC-6); the successor device co-signs it.
+   *  Neither scalar reaches the proof (REC-11), so the call may be proved
+   *  by a delegated prover. The successor is a JubJub device; the contract
+   *  precomputes its entry at the post-bump epoch. */
   async recoverSubmit(
-    recoverySecret: Uint8Array,
-    successor: { sk: bigint },
-    successorCommitment: Uint8Array,
+    recoverySecret: bigint | Uint8Array,
+    successor: JubjubDevice,
+    successorRecoveryPk: JubjubPoint,
     nowUpperSeconds: bigint,
   ): Promise<TxResult> {
     const l = await this.ledgerState();
-    armRecoverySecret(recoverySecret);
-    try {
-      const r = await submitWithDustRetry('recover_submit', () =>
-        this.handle.callTx.recover_submit(
-          successor.sk, successorCommitment, l.device_epoch, l.auth_nonce, nowUpperSeconds,
-        ));
-      return { txId: txId(r) };
-    } finally {
-      disarmRecoverySecret();
+    if (successorRecoveryPk.x === l.recovery_pk.x && successorRecoveryPk.y === l.recovery_pk.y) {
+      throw new Error('successor recovery key equals the key being consumed; sample a fresh recovery secret (recovery MIP section 5)');
     }
+    const ctx = await this.callContext();
+    const auth = signRecoverSubmit(
+      recoveryKey(recoverySecret),
+      successor,
+      recoverSubmitChallenge(
+        ctx, l.recovery_pk, successor.pk, successorRecoveryPk, l.device_epoch + 1n, nowUpperSeconds,
+      ),
+      {
+        successorRecoveryPk,
+        expectedEpoch: l.device_epoch,
+        expectedNonce: l.auth_nonce,
+        nowUpper: nowUpperSeconds,
+      },
+    );
+    const r = await submitWithDustRetry('recover_submit', () =>
+      this.handle.callTx.recover_submit(...recoverSubmitArgs(auth)));
+    return { txId: txId(r) };
   }
 
   /** Veto a pending recovery (recovery MIP section 6 step 5), device-gated

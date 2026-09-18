@@ -12,7 +12,17 @@ import { randomBytes } from 'node:crypto';
 
 import { runScenario, step } from './runner.js';
 import { pureCircuits } from '../wallet/contract.js';
-import { JubjubDevice, jubjubChallenges, type CallContext } from '../wallet/signer.js';
+import { JubjubDevice, jubjubChallenges, JUBJUB_R, type CallContext } from '../wallet/signer.js';
+import {
+  recoveryKey,
+  recoveryScalar,
+  matchesRecoveryPk,
+  eqPoint,
+  recoverSubmitChallenge,
+  signRecoverSubmit,
+  recoverSubmitArgs,
+  readArtefactSet,
+} from '../wallet/recovery-gate.js';
 import {
   FQ,
   fieldToBytes,
@@ -118,29 +128,51 @@ await runScenario('recovery-offline', async () => {
   );
 
   step('trial assignment when the roster record is lost (§6 step 1)');
-  const commitment = pureCircuits.derive_recovery_commitment(s.bytes);
+  const commitment = recoveryKey(s.field).pk;
   const bare = [shares[4].sigma, shares[0].sigma, shares[2].sigma]; // shuffled, unindexed
   const hit = reconstructByTrial(phi, bare, t, guardians.length, (candidate) =>
-    eqBytes(pureCircuits.derive_recovery_commitment(fieldToBytes(candidate)), commitment),
+    matchesRecoveryPk(candidate, commitment),
   );
-  assert(hit !== null && hit.secret === s.field, 'indices recovered by trial against the commitment');
+  assert(hit !== null && hit.secret === s.field, 'indices recovered by trial against the recovery key');
   const junk = [1n, 2n, 3n];
   assert(
-    reconstructByTrial(phi, junk, t, guardians.length, (candidate) =>
-      eqBytes(pureCircuits.derive_recovery_commitment(fieldToBytes(candidate)), commitment),
-    ) === null,
+    reconstructByTrial(phi, junk, t, guardians.length, (candidate) => matchesRecoveryPk(candidate, commitment)) === null,
     'trial assignment fails cleanly on garbage shares',
   );
 
-  step('gate commitment (§2): tagged, binding, witness-form stable');
-  assert(
-    eqBytes(commitment, pureCircuits.derive_recovery_commitment(s.bytes)),
-    'commitment deterministic over the canonical repr',
-  );
-  assert(
-    !eqBytes(commitment, pureCircuits.derive_recovery_commitment(newRecoverySecret().bytes)),
-    'distinct secrets give distinct commitments',
-  );
+  step('gate key (§2): P = s·G, deterministic, binding, reduced into r_J');
+  assert(eqPoint(commitment, recoveryKey(s.bytes).pk), 'the key is the same from the field element and its canonical bytes');
+  assert(!eqPoint(commitment, recoveryKey(newRecoverySecret().field).pk), 'distinct secrets give distinct keys');
+  assert(recoveryScalar(FQ - 1n) < JUBJUB_R, 'a secret above r_J is reduced into the scalar field');
+  assert(eqPoint(recoveryKey(FQ - 1n).pk, recoveryKey(recoveryScalar(FQ - 1n)).pk), 'the reduction is what the key is computed over');
+  let zero = false;
+  try {
+    recoveryScalar(JUBJUB_R);
+  } catch {
+    zero = true;
+  }
+  assert(zero, 'a secret reducing to zero is refused (its key would be the identity)');
+
+  step('artefact-set reader refuses an unknown version (§10)');
+  {
+    const fakeLedger = {
+      recovery_version: 2n,
+      recovery_pk: commitment,
+      recovery_session: sid,
+      recovery_phi_len: 3n,
+      recovery_phi: { lookup: (k: bigint) => phi[Number(k) - 1] },
+      recovery_wrap: new Uint8Array(64),
+    };
+    let refused = '';
+    try {
+      readArtefactSet(fakeLedger);
+    } catch (e) {
+      refused = String(e);
+    }
+    assert(refused.includes('not implemented'), 'a v2 artefact set is refused rather than best-effort parsed');
+    const v1 = readArtefactSet({ ...fakeLedger, recovery_version: 1n });
+    assert(v1.phi.length === 3 && v1.phi[0] === phi[0] && v1.phi[2] === phi[2], 'the v1 reader returns the shares in slot order');
+  }
 
   step('wrap container v1 (§8)');
   const encSecret = new Uint8Array(randomBytes(32));
@@ -179,6 +211,26 @@ await runScenario('recovery-offline', async () => {
         '3ca7810ce096e24ff66e0e0bdd1389a8a9a837b4fa0a21f3720e4eb71e366c07',
       'v1 share derivation matches the Rust fork',
     );
+
+    // The recover-gate challenge over fixed fixtures: the vector the MIP
+    // quotes (section 6 step 4), so an independent contract or signer can
+    // check its preimage layout without a node. Points are small multiples
+    // of the generator; the address is 0x22 repeated.
+    const G = (k: bigint) => pureCircuits.compute_public_point_with_jubjub(k);
+    const vecAddr = { bytes: new Uint8Array(32).fill(0x22) };
+    const vecChallenge = pureCircuits.challenge_recover_submit(
+      vecAddr, G(1n), G(2n), G(3n), G(4n), G(5n), 1n, 7n, 1_800_000_000n, 0n,
+    );
+    assert(
+      Buffer.from(vecChallenge).toString('hex') ===
+        '16ebd49d1f2b69139f06c46587eacd4f0bbdb7fb203113503143f624b65afae2',
+      'recover-gate challenge vector (P=1G, R_P=2G, Q=3G, R_Q=4G, P\'=5G, epoch 1, nonce 7, bound 1800000000, grind 0)',
+    );
+    assert(
+      Buffer.from(pureCircuits.challenge_recover_cancel_with_jubjub(vecAddr, G(2n), G(1n), 7n, 0n)).toString('hex') ===
+        'b44a176275e796dc11313d2d6c7ce80859e5cda5f5e37c738ae97b46745be14b',
+      'recover_cancel jubjub challenge vector (R=2G, pk=1G, nonce 7, grind 0)',
+    );
   }
 
   step('challenge domain separation for the new operations (AUTH-3)');
@@ -213,4 +265,38 @@ await runScenario('recovery-offline', async () => {
     ),
     'every phi slot is bound into the session challenge',
   );
+
+  step('the recover-gate challenge (§6 step 4): its own tag, every binding live');
+  {
+    const successor = JubjubDevice.generate();
+    const nextPk = recoveryKey(newRecoverySecret().field).pk;
+    const build = recoverSubmitChallenge(ctx, commitment, successor.pk, nextPk, 1n, 1_800_000_000n);
+    const r1 = JubjubDevice.generate().pk;
+    const r2 = JubjubDevice.generate().pk;
+    const base = build(r1, r2, 0n);
+    assert(!eqBytes(base, publishBuilder(r1, 0n)) && !eqBytes(base, cancelBuilder(r1, 0n)), 'submit tag separates from publish and cancel');
+    assert(!eqBytes(base, build(r2, r1, 0n)), 'the two nonce points are bound in order');
+    assert(!eqBytes(base, recoverSubmitChallenge(ctx, commitment, successor.pk, nextPk, 1n, 1_800_000_001n)(r1, r2, 0n)), 'the wall-clock bound is bound');
+    assert(!eqBytes(base, recoverSubmitChallenge(ctx, commitment, successor.pk, nextPk, 2n, 1_800_000_000n)(r1, r2, 0n)), 'the post-bump epoch is bound');
+    assert(!eqBytes(base, recoverSubmitChallenge({ ...ctx, authNonce: 1n }, commitment, successor.pk, nextPk, 1n, 1_800_000_000n)(r1, r2, 0n)), 'the authorisation nonce is bound');
+    assert(!eqBytes(base, recoverSubmitChallenge(ctx, commitment, JubjubDevice.generate().pk, nextPk, 1n, 1_800_000_000n)(r1, r2, 0n)), 'the successor key is bound');
+    assert(!eqBytes(base, recoverSubmitChallenge(ctx, commitment, successor.pk, recoveryKey(newRecoverySecret().field).pk, 1n, 1_800_000_000n)(r1, r2, 0n)), "the successor recovery key P' is bound");
+    assert(!eqBytes(base, recoverSubmitChallenge(ctx, nextPk, successor.pk, nextPk, 1n, 1_800_000_000n)(r1, r2, 0n)), 'the stored recovery key is bound');
+
+    step('signing a submission discloses signatures only (REC-6, REC-11)');
+    const auth2 = signRecoverSubmit(recoveryKey(s.field), successor, build, {
+      successorRecoveryPk: nextPk, expectedEpoch: 0n, expectedNonce: 0n, nowUpper: 1_800_000_000n,
+    });
+    const args = recoverSubmitArgs(auth2);
+    assert(args.length === 10, 'ten circuit arguments');
+    assert(!args.includes(s.field) && !args.includes(recoveryScalar(s.field)) && !args.includes(successor.sk), 'no scalar secret among the arguments');
+    assert(auth2.sig_s_recovery < JUBJUB_R && auth2.sig_s_successor < JUBJUB_R, 'both response scalars are canonical');
+    assert(bytesBelowOrder(build(auth2.sig_r_recovery, auth2.sig_r_successor, auth2.grind_nonce)), 'the ground challenge reads below r_J');
+  }
 });
+
+function bytesBelowOrder(h: Uint8Array): boolean {
+  let v = 0n;
+  for (let i = h.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(h[i]);
+  return v < JUBJUB_R;
+}
