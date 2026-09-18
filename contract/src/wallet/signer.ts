@@ -220,7 +220,7 @@ export const jubjubChallenges = {
     (
       ctx: CallContext,
       pk: JubjubPoint,
-      newCommitment: Uint8Array,
+      newRecoveryPk: JubjubPoint,
       sessionNonce: Uint8Array,
       phi: readonly [bigint, bigint, bigint, bigint],
       phiLen: bigint,
@@ -228,7 +228,7 @@ export const jubjubChallenges = {
     ): ChallengeBuilder =>
     (sigR, grind) =>
       pureCircuits.challenge_publish_recovery_session_with_jubjub(
-        addr(ctx), sigR, pk, newCommitment, sessionNonce,
+        addr(ctx), sigR, pk, newRecoveryPk, sessionNonce,
         phi[0], phi[1], phi[2], phi[3], phiLen, wrap, ctx.authNonce, grind,
       ),
 
@@ -397,14 +397,14 @@ export const k256Challenges = {
   publishRecoverySession: (
     ctx: CallContext,
     pk: Secp256k1Point,
-    newCommitment: Uint8Array,
+    newRecoveryPk: JubjubPoint,
     sessionNonce: Uint8Array,
     phi: readonly [bigint, bigint, bigint, bigint],
     phiLen: bigint,
     wrap: Uint8Array,
   ): Uint8Array =>
     pureCircuits.challenge_publish_recovery_session_with_k256(
-      addr(ctx), pk, newCommitment, sessionNonce,
+      addr(ctx), pk, newRecoveryPk, sessionNonce,
       phi[0], phi[1], phi[2], phi[3], phiLen, wrap, ctx.authNonce,
     ),
 

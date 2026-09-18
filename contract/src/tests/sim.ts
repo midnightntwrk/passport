@@ -18,7 +18,13 @@ import {
   sampleContractAddress,
 } from '@midnight-ntwrk/compact-runtime';
 
-import { Contract, ledger, type Ledger } from '../wallet/contract.js';
+import { Contract, ledger, type Ledger, type JubjubPoint } from '../wallet/contract.js';
+import {
+  recoveryKey,
+  signRecoverSubmit,
+  recoverSubmitArgs,
+  recoverSubmitChallenge,
+} from '../wallet/recovery-gate.js';
 import {
   makeWitnesses,
   emptyCoinStore,
@@ -29,7 +35,7 @@ import { hexToBytes } from '../wallet/hex.js';
 
 export interface SimOptions {
   vetoWindowSeconds: bigint;
-  initialRecoveryCommitment: Uint8Array;
+  initialRecoveryPk: JubjubPoint;
   initialWrap: Uint8Array;
   /** Simulated wall clock at deploy, seconds since epoch. */
   time?: number;
@@ -65,7 +71,7 @@ export class AccountSim {
       createConstructorContext(sim.privateState, sim.coinPk),
       boot,
       new Uint8Array(randomBytes(32)), // enc_key (X25519 pk; opaque here)
-      opts.initialRecoveryCommitment,
+      opts.initialRecoveryPk,
       opts.initialWrap,
       opts.vetoWindowSeconds,
     );
@@ -149,6 +155,44 @@ export class AccountSim {
     );
     this.counters.set(fresh, 0n);
     return fresh;
+  }
+
+  /**
+   * The arguments of one recovery submission (recovery MIP §6 step 4): the
+   * recovery key signs the challenge, the successor co-signs it. `override`
+   * lets a drill build a submission against stale state; `mutate` lets it
+   * tamper with the signed arguments after signing.
+   */
+  recoverSubmitArgs(
+    recoverySecret: bigint | JubjubDevice,
+    successor: JubjubDevice,
+    successorRecoveryPk: JubjubPoint,
+    nowUpper: bigint,
+    override?: { epoch?: bigint; nonce?: bigint },
+  ): unknown[] {
+    const l = this.ledger();
+    const epoch = override?.epoch ?? l.device_epoch;
+    const nonce = override?.nonce ?? l.auth_nonce;
+    const ctx: CallContext = { contractAddress: this.address, authNonce: nonce };
+    const auth = signRecoverSubmit(
+      typeof recoverySecret === 'bigint' ? recoveryKey(recoverySecret) : recoverySecret,
+      successor,
+      recoverSubmitChallenge(ctx, l.recovery_pk, successor.pk, successorRecoveryPk, epoch + 1n, nowUpper),
+      { successorRecoveryPk, expectedEpoch: epoch, expectedNonce: nonce, nowUpper },
+    );
+    return recoverSubmitArgs(auth);
+  }
+
+  async recoverSubmit(
+    recoverySecret: bigint | JubjubDevice,
+    successor: JubjubDevice,
+    successorRecoveryPk: JubjubPoint,
+    nowUpper: bigint,
+    mutate?: (args: unknown[]) => unknown[],
+  ): Promise<unknown> {
+    let args = this.recoverSubmitArgs(recoverySecret, successor, successorRecoveryPk, nowUpper);
+    if (mutate) args = mutate(args);
+    return this.call('recover_submit', ...args);
   }
 
   /** Register a device that recover_finalise enrolled (counter starts at 0). */

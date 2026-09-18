@@ -1,23 +1,23 @@
 {
   "testId": "rec-1-9",
   "name": "recovery-conformance",
-  "description": "Recovery MIP on-node conformance: session publish through the seam, freshness backstop, reconstruction and wrap round-trip, two-phase gate with veto window and cancel, epoch bump, successor control.",
+  "description": "Recovery MIP on-node conformance: session publish through the seam, freshness backstop, reconstruction and wrap round-trip, the signature gate (recovery key plus successor co-signature, no secret in the proof), veto window and cancel, epoch bump, successor control.",
   "verdict": "PASS",
-  "txHash": "005550ddb054e408034a9f61e73d333158d7ca5f49f9bd967c1b03f270f796c64b",
+  "txHash": "00ba25136c5f36d61453c38c7e0e291544e2063128f19ada3fac106d3db5552e81",
   "note": "Deployed with birth artefacts and a 60 s veto window; the full lifecycle including a real window wait ran against the localnet.",
   "details": {
-    "account": "e4d420d509f0838135b62f684931df66ac07a57d83fb6197ff5003a23dcefcf3",
-    "sessionTx": "0098eef38bf46978ee6df1045596f5f68da88b42388b94349a17f3d8a8d02f5194",
-    "submitTx": "00a23f7874b4966c2f2db1381c0df6fcc56eab1076c74226ada9f7c139d03e0706",
-    "cancelTx": "0072e6ef37a31af21e031870a4f909263c48e2e46924e2a1752385f38cf21887e2",
-    "resubmitTx": "0097c21b7b541afdff2e57a7d6fcabccf46575e9aa8e3fb7e4902427880d66b2f3",
-    "finaliseTx": "005550ddb054e408034a9f61e73d333158d7ca5f49f9bd967c1b03f270f796c64b",
-    "postRecoverySessionTx": "0034bbe94b73c4b17d933476ac6e1486cc434ed25f8e1643c1129794de9f60b62d"
+    "account": "e2e7c04e6ac9cc0988eb61c5434792b12128192518f4b7ac40dcd112703d2b97",
+    "sessionTx": "000914052ab4b006a54837cf3120af20c788d21be2c7f5594540a0c0ca0647c06f",
+    "submitTx": "00583ab26b2fcc1d53d0e4f8add0559173dbfdfdaaec26b7239f42764959dec85e",
+    "cancelTx": "008f240269942c1ab8686f07db8c83666f08ba6ef767d5fe09c6f1803826caca0b",
+    "resubmitTx": "003d32f96db7b6ec9cb4ff5bcb269aeae76832434729bc71e6b2964ec7162a833e",
+    "finaliseTx": "00ba25136c5f36d61453c38c7e0e291544e2063128f19ada3fac106d3db5552e81",
+    "postRecoverySessionTx": "0001431739a4c8f2bcc9a1b383936a81c75bdca1be0607aaa78cee1189ba9f862b"
   },
-  "ranAt": "2026-09-01T14:41:50.870Z",
+  "ranAt": "2026-09-18T19:22:20.293Z",
   "stack": {
-    "node": "midnightntwrk/midnight-node:1.0.0",
-    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
-    "proofServer": "midnightntwrk/proof-server:8.1.0"
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
   }
 }

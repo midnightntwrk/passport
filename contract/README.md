@@ -205,6 +205,15 @@ export WALLET_SEED_SECONDARY=000000000000000000000000000000000000000000000000000
 npm run test:unit                    # signer pipelines, codec, domain separation
 npm run test:grants-offline          # scoped grants: lifecycle and the unshielded
                                      # grant twin on both arms, in the simulator
+npm run test:recovery-offline        # recovery MIP client halves: BUSS split and
+                                     # reconstruct, share derivation, trial
+                                     # assignment, wrap, the gate key, and the
+                                     # challenge vectors
+npm run test:recovery-sim            # recovery MIP circuit matrix in the simulator
+                                     # under explicit wall-clock control: session
+                                     # freshness, the signature gate and its
+                                     # refusals, veto window, cancel, finalisation,
+                                     # epoch-bump revocation
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
@@ -214,6 +223,9 @@ npm run test:custody-discovery      # MIP-0012 test 4
 npm run test:custody-payments        # MIP-0012 tests 7, 8
 npm run test:leak-audit              # MIP-0012 test 5
 npm run test:grants-conformance      # scoped grants Testing 1, 2, 3, 6, 9, 10, 11
+npm run test:recovery                # recovery MIP lifecycle end to end: session
+                                     # through the seam, signature gate, a real
+                                     # 60 s veto window, cancel, finalisation
                                      # GRANTS_E2_GROUPS=<group> truncates the
                                      # scenario after a group (it is one
                                      # sequence, so a subset is a prefix):
@@ -429,6 +441,9 @@ two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
 | `custody-payments` | 7, 8 | — | INV-6 (one-hop); direct-transfer mode |
 | `grants-offline` | n/a | n/a | MIP-scoped-grants Testing 1 and 2, the off-node halves: lifecycle, the unshielded grant twin, and the rejection matrix on **both grantee arms** in the circuit simulator; GR-1, GR-3, GR-5, GR-6, GR-7, GR-12, GR-13, GR-14 |
 | `grants-conformance` | n/a | n/a | MIP-scoped-grants Testing 1, 3, and 9 green on node; 6, 10, and 11 partial; 2 partial, so the Path to Active checkbox for E2 cannot close (see `GRANTS-E2.md` for what each is missing). Twelve scenario groups, each its own evidence file and each selectable as a `GRANTS_E2_GROUPS` prefix: deploy (the three-wave deploy at the measured 25,000-byte budget), issue, spend, rejections, liveness, direct, kill, keys, expiry, composition, concurrency, proving; GR-1 to GR-9, GR-11 to GR-14, AUTH-5, AUTH-8, AUTH-9, INV-4, INV-5, INV-6 |
+| `recovery-offline` | n/a | n/a | Recovery MIP Testing, the off-node halves: field encoding, three guardian profiles, tagged share derivation, split and reconstruct with `|phi| = n - t`, threshold behaviour and REC-5, trial assignment against the recovery key, the gate key reduced into `r_J`, the artefact-set version reader, the wrap container, cross-implementation vectors (shares against the Rust fork; the recover-gate and cancel challenges), and the challenge bindings of the three recovery operations |
+| `recovery-sim` | n/a | n/a | Recovery MIP Testing in the circuit simulator under explicit wall-clock control: session freshness (reused identifier and commitment, all-zero identifier after a real session), slot gating and the length bound, unauthorised publish, the signature gate's refusals (identity and small-order keys, missing co-signature, wrong secret, every signed binding tampered, reused successor commitment, a forgery against an identity birth key), delegation safety (no scalar among the arguments), pending exclusivity, the veto window, cancel and verbatim replay, finalisation effects (epoch, count, nonce, round, key rotation, vector cleared), epoch-bump revocation, and a post-recovery session; REC-1, REC-4, REC-6, REC-7, REC-8, REC-9, REC-11, AUTH-6 |
+| `recovery-conformance` | n/a | n/a | Recovery MIP lifecycle on node: four-wave deploy with birth artefacts, session publish through the jubjub seam, on-node freshness rejection, reconstruction from chain data and the wrap round-trip, the signature-gate submission proved on the proof server, an early finalisation held by a real 60 s window, cancel, resubmission, finalisation after the window with nonce and round advanced, successor control and the old device dead, a post-recovery session (`evidence/rec-1-9-recovery-conformance.json`) |
 | `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
 
 Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
@@ -443,10 +458,13 @@ Not covered here, by design:
 - **FROST threshold signature** (MIP-0013 test 8): committee-side; the
   ciphersuite specification is an acceptance criterion under Path to
   Active, and the contract is unchanged under the threshold profile.
-- **Epoch bump / stale-epoch rejection** (parts of MIP-0013 tests 2 and
-  6, AUTH-6): the only epoch-bump site is the §8 recovery seam, which
-  awaits the recovery-paths MIP. The epoch state and per-entry epoch
-  checks are implemented and exercised at epoch 0.
+- **Stale-epoch rejection through a device call** (parts of MIP-0013
+  tests 2 and 6, AUTH-6): the only epoch-bump site is the §8 recovery
+  seam, which the recovery-paths MIP instantiates here as
+  `recover_finalise`. The bump and the death of every pre-bump entry are
+  exercised by `recovery-sim` and `recovery-conformance`; a device-call
+  matrix at epoch 1 is not run separately, since the same assertion
+  (`unknown device entry`) is what those suites observe.
 - **Complete revocation** (MIP-0013 §6): removal retires one set element,
   and a device that enrolled a second entry for its own key survives it.
   That is a defect in the standard's device-set shape rather than a gap in
@@ -651,6 +669,23 @@ To be folded back into the MIP texts:
   it can add an operation but never replace one. **Upstream-report
   candidate**, and a second defect in the same helper as the version
   hardcode above.
+- **Key generation needs a curve operation on a runtime value, not a
+  point literal**: with compactc 0.33.0-rc.2 and `--feature-zkir-v3`, a
+  circuit whose only JubJub use is writing a point constant to a ledger
+  cell (`default<JubjubPoint>`, or `ecMulGenerator` of a constant, which
+  folds to the same literal) type-checks and passes `--skip-zk`, but key
+  generation panics in the ZK standard library with `ZkStdLibArch must
+  enable jubjub`: the gadget architecture is derived from the operations
+  the IR performs, and a literal registers none. Found on the k256 twin
+  of the recovery cancel, whose seam is secp256k1 and whose only JubJub
+  touch was clearing the pending key slot; the contract now clears it
+  with `ecMul(pending_recovery_pk, 0)`, a real operation with the same
+  value. Two consequences for anyone building on this line: a keyed
+  compile is the only build that proves a contract builds, and when it
+  panics, bisect with single-circuit probes rather than by the emitted
+  IR files, because IR emission and key generation overlap and the
+  emitted set does not identify the failing circuit. **Upstream-report
+  candidate.**
 - **`ContractOperation` does not expose its verifier key's version**: only
   `verifierKey: Uint8Array`, with the ledger documenting that "only the
   latest available version is exposed to this API". A caller building a
