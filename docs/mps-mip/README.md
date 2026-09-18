@@ -72,22 +72,23 @@ together; the upstream copies are canonical.
   MIP-0013 seam, anchored on bottom-up secret sharing (ANARKey/BUSS).
   Guardians are authenticator credentials, cold signers, or paper
   keys that persist no per-account state; the account publishes one
-  artefact set per session (public shares, a recovery commitment, and
+  artefact set per session (public shares, a recovery public key, and
   a wrap of the viewing key), so recovery restores both control and
   visibility. Covers the guardian model and its three profiles, share
   derivation, the single session operation, the two-phase recovery
   gate with its pending record and veto window, the off-ledger
-  transport and roster record, and the REC invariant family.
-  Remaining tag: [CRYPTO-MEMO] the commissioned multi-session review
-  (sent, response pending; the published scheme's model is
-  single-session, so the freshness rules are our own normative
-  addition). The contract tranche is implemented on the reference
-  implementation (`contract/`) and evidenced twice: the full
-  behaviour matrix in the runtime simulator, and the lifecycle end to
-  end on a local network (two-wave deploy, session, veto window on
-  real block time, cancel, finalisation, successor control). The
-  upstream recovery slot remains unclaimed.
-
+  transport and roster record, and the REC invariant family. The
+  gate is a signature gate: the recovering party presents a Schnorr
+  signature under the stored recovery key and the successor co-signs
+  the same challenge, so neither secret enters the proof and the proof
+  may be delegated (REC-11). Remaining tag: [CRYPTO-MEMO] the
+  commissioned multi-session review (sent, response pending; the
+  published scheme's model is single-session, so the freshness rules
+  are our own normative addition). The contract tranche, in the
+  signature-gate form, is implemented on the reference implementation
+  (`contract/`) on both authorisation arms and evidenced in the
+  runtime simulator (the full behaviour matrix) and on a local
+  network (the lifecycle end to end).
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on
