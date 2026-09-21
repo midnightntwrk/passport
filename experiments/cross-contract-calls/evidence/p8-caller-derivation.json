@@ -1,0 +1,1101 @@
+{
+  "testId": "P8",
+  "name": "caller-derivation",
+  "description": "Run the ledger's own ContractCall::context derivation over the real composed bytes of the write_then_read call transaction, captured at every stage and submitted, and record what caller resolves to per call frame",
+  "verdict": "PASS",
+  "txHash": "0016a72ceb30914e194f1cc65265a0cc8606ac4c3f3a2f98946258ec1a3fef77c8",
+  "note": "Observed: the ledger's own ContractCall::context, at tag ledger-9.1.0.0-rc.3, run off-node over real composed bytes, resolves Tally set and get to Contract(<Caller address>) and the root write_then_read to None. NOT observed: a node evaluating a slot-6 read, because Compact has no reader for context slot 6 and no circuit in this experiment reads it, so these are the values the ledger computes and marshals into that slot rather than values a contract was seen to receive. That holds on all 4 captures [offline-unproven 2872 B, unproven 2878 B, proven 10285 B, balanced 13560 B]: 8 sub-call frames resolve to Contract(<the address of the root call in the same intent>) and 4 root frames to None, across 4 call-carrying intents whose unshielded offers are all absent, so the User arm could not fire; the Caller addresses observed were 7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502 and d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f (the offline arm derives its own pair). The Rust and TypeScript views of the same bytes agree on every address, entry point, communication commitment, and claim; offline construction POSSIBLE (no node, no indexer); submitted as 0016a72ceb30914e… (SucceedEntirely).",
+  "details": {
+    "hexFiles": [
+      {
+        "stage": "offline-unproven",
+        "file": "evidence/p8-tx-offline-unproven.hex",
+        "bytes": 2872,
+        "sha256": "a6d672e45d098abbe158374152521cb0078e4e99a39a1bb523c44f71aee3b331"
+      },
+      {
+        "stage": "unproven",
+        "file": "evidence/p8-tx-unproven.hex",
+        "bytes": 2878,
+        "sha256": "4d460f4243c0dd5a55f9f107265fb8a0baacb549cc8e363f185741517deafd74"
+      },
+      {
+        "stage": "proven",
+        "file": "evidence/p8-tx-proven.hex",
+        "bytes": 10285,
+        "sha256": "d2d7394a455ada7bf7adb31cf8eab0226a63544da39b04d936fafa5124c640b0"
+      },
+      {
+        "stage": "balanced",
+        "file": "evidence/p8-tx-balanced.hex",
+        "bytes": 13560,
+        "sha256": "2958600d9f21fcb6447240e74177b1edaaa58abf34e8fc2126cc83a2ebed83cb"
+      }
+    ],
+    "offline": {
+      "addressesFrom": "offline deploy (ContractDeploy.address of locally built deploy transactions; NOT the live pair)",
+      "tallyAddress": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+      "callerAddress": "7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502",
+      "stateClass": "ContractState",
+      "deployTxBytes": {
+        "tally": 4574,
+        "caller": 3376
+      },
+      "stubOffsetSeen": {
+        "type": "blockHash",
+        "blockHash": "dededededededededededededededededededededededededededededededede"
+      },
+      "buildMs": 33,
+      "stubQueries": 1,
+      "calls": [
+        "set@384d9d7593ee…",
+        "get@384d9d7593ee…",
+        "write_then_read@7c746d8429c1…"
+      ],
+      "possible": true,
+      "view": {
+        "calls": [
+          {
+            "intentSegment": 32040,
+            "index": 0,
+            "address": "7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502",
+            "entryPoint": "write_then_read",
+            "entryPointHash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+            "communicationCommitment": "73f706a9e28a75b467dc7381bf6852230953e8e22e6edc9a9a2c58517a2503ce0b",
+            "claims": [
+              {
+                "section": "guaranteed",
+                "seq": "1",
+                "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+                "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                "commitment": "7372c2afe4776ebcf24da28d9a3eb32bcca64cbacabb98e33d7585ec259b327609"
+              },
+              {
+                "section": "guaranteed",
+                "seq": "0",
+                "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+                "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                "commitment": "739af3831e464812a22af171a37da759b98370eefabf3b1aca3a484576c29f9d47"
+              }
+            ],
+            "hasGuaranteed": true,
+            "hasFallible": false,
+            "unshieldedInputsInIntent": 0
+          },
+          {
+            "intentSegment": 32040,
+            "index": 1,
+            "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+            "entryPoint": "set",
+            "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+            "communicationCommitment": "739af3831e464812a22af171a37da759b98370eefabf3b1aca3a484576c29f9d47",
+            "claims": [],
+            "hasGuaranteed": true,
+            "hasFallible": false,
+            "unshieldedInputsInIntent": 0
+          },
+          {
+            "intentSegment": 32040,
+            "index": 2,
+            "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+            "entryPoint": "get",
+            "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+            "communicationCommitment": "7372c2afe4776ebcf24da28d9a3eb32bcca64cbacabb98e33d7585ec259b327609",
+            "claims": [],
+            "hasGuaranteed": true,
+            "hasFallible": false,
+            "unshieldedInputsInIntent": 0
+          }
+        ],
+        "intents": [
+          {
+            "segment": 32040,
+            "actions": [
+              "call",
+              "call",
+              "call"
+            ],
+            "unshieldedInputs": 0,
+            "unshieldedOutputs": 0,
+            "dustActions": "absent",
+            "ttl": "2026-09-14T13:02:51.000Z"
+          }
+        ]
+      },
+      "ladder": {
+        "markers": [
+          "signature",
+          "pre-proof",
+          "pre-binding"
+        ],
+        "tried": [
+          "signature/pre-proof/pre-binding"
+        ]
+      }
+    },
+    "tallyAddress": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+    "callerAddress": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+    "expectedEntryPointHashes": {
+      "set": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+      "get": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+      "write_then_read": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247"
+    },
+    "before": {
+      "tally": {
+        "total": "42",
+        "writes": "5"
+      },
+      "caller": {
+        "calls": "5",
+        "last_observed": "42"
+      }
+    },
+    "callsInTrace": [
+      "set@4f8fc4f7c525…",
+      "get@4f8fc4f7c525…",
+      "write_then_read@d2938fa034b5…"
+    ],
+    "unprovenView": {
+      "calls": [
+        {
+          "intentSegment": 6329,
+          "index": 0,
+          "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+          "entryPoint": "write_then_read",
+          "entryPointHash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+          "communicationCommitment": "733a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04",
+          "claims": [
+            {
+              "section": "guaranteed",
+              "seq": "0",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+              "commitment": "734389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25"
+            },
+            {
+              "section": "guaranteed",
+              "seq": "1",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+              "commitment": "7347edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a"
+            }
+          ],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        },
+        {
+          "intentSegment": 6329,
+          "index": 1,
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "entryPoint": "set",
+          "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+          "communicationCommitment": "734389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+          "claims": [],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        },
+        {
+          "intentSegment": 6329,
+          "index": 2,
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "entryPoint": "get",
+          "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+          "communicationCommitment": "7347edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+          "claims": [],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        }
+      ],
+      "intents": [
+        {
+          "segment": 6329,
+          "actions": [
+            "call",
+            "call",
+            "call"
+          ],
+          "unshieldedInputs": 0,
+          "unshieldedOutputs": 0,
+          "dustActions": "absent",
+          "ttl": "2026-09-14T13:03:25.000Z"
+        }
+      ]
+    },
+    "unprovenLadder": {
+      "markers": [
+        "signature",
+        "pre-proof",
+        "pre-binding"
+      ],
+      "tried": [
+        "signature/pre-proof/pre-binding"
+      ]
+    },
+    "provenLadder": {
+      "markers": [
+        "signature",
+        "proof",
+        "pre-binding"
+      ],
+      "tried": [
+        "signature/pre-proof/pre-binding",
+        "signature/proof/pre-binding"
+      ]
+    },
+    "provenView": {
+      "calls": [
+        {
+          "intentSegment": 6329,
+          "index": 0,
+          "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+          "entryPoint": "write_then_read",
+          "entryPointHash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+          "communicationCommitment": "733a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04",
+          "claims": [
+            {
+              "section": "guaranteed",
+              "seq": "0",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+              "commitment": "734389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25"
+            },
+            {
+              "section": "guaranteed",
+              "seq": "1",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+              "commitment": "7347edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a"
+            }
+          ],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        },
+        {
+          "intentSegment": 6329,
+          "index": 1,
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "entryPoint": "set",
+          "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+          "communicationCommitment": "734389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+          "claims": [],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        },
+        {
+          "intentSegment": 6329,
+          "index": 2,
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "entryPoint": "get",
+          "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+          "communicationCommitment": "7347edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+          "claims": [],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        }
+      ],
+      "intents": [
+        {
+          "segment": 6329,
+          "actions": [
+            "call",
+            "call",
+            "call"
+          ],
+          "unshieldedInputs": 0,
+          "unshieldedOutputs": 0,
+          "dustActions": "absent",
+          "ttl": "2026-09-14T13:03:25.000Z"
+        }
+      ]
+    },
+    "balancedLadder": {
+      "markers": [
+        "signature",
+        "proof",
+        "binding"
+      ],
+      "tried": [
+        "signature/pre-proof/pre-binding",
+        "signature/proof/pre-binding",
+        "signature/proof/binding"
+      ]
+    },
+    "balancedView": {
+      "calls": [
+        {
+          "intentSegment": 6329,
+          "index": 0,
+          "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+          "entryPoint": "write_then_read",
+          "entryPointHash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+          "communicationCommitment": "733a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04",
+          "claims": [
+            {
+              "section": "guaranteed",
+              "seq": "1",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+              "commitment": "7347edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a"
+            },
+            {
+              "section": "guaranteed",
+              "seq": "0",
+              "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+              "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+              "commitment": "734389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25"
+            }
+          ],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        },
+        {
+          "intentSegment": 6329,
+          "index": 1,
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "entryPoint": "set",
+          "entryPointHash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+          "communicationCommitment": "734389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+          "claims": [],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        },
+        {
+          "intentSegment": 6329,
+          "index": 2,
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "entryPoint": "get",
+          "entryPointHash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+          "communicationCommitment": "7347edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+          "claims": [],
+          "hasGuaranteed": true,
+          "hasFallible": false,
+          "unshieldedInputsInIntent": 0
+        }
+      ],
+      "intents": [
+        {
+          "segment": 1,
+          "actions": [],
+          "unshieldedInputs": 0,
+          "unshieldedOutputs": 0,
+          "dustActions": "present",
+          "ttl": "2026-09-14T12:04:25.000Z"
+        },
+        {
+          "segment": 6329,
+          "actions": [
+            "call",
+            "call",
+            "call"
+          ],
+          "unshieldedInputs": 0,
+          "unshieldedOutputs": 0,
+          "dustActions": "absent",
+          "ttl": "2026-09-14T13:03:25.000Z"
+        }
+      ]
+    },
+    "submission": {
+      "accepted": true,
+      "txId": "0016a72ceb30914e194f1cc65265a0cc8606ac4c3f3a2f98946258ec1a3fef77c8",
+      "status": "SucceedEntirely",
+      "blockHeight": 963
+    },
+    "timings": {
+      "buildMs": 32,
+      "proveMs": 129,
+      "balanceSubmitFinaliseMs": 18271
+    },
+    "sizes": {
+      "offline-unproven": 2872,
+      "unproven": 2878,
+      "proven": 10285,
+      "balanced": 13560
+    },
+    "after": {
+      "tally": {
+        "total": "42",
+        "writes": "6"
+      },
+      "caller": {
+        "calls": "6",
+        "last_observed": "42"
+      }
+    },
+    "tsReimplementedCallerHint": [
+      {
+        "call": "write_then_read@d2938fa034b5…",
+        "claimants": [],
+        "claimantCount": 0,
+        "tsHint": "None"
+      },
+      {
+        "call": "set@4f8fc4f7c525…",
+        "claimants": [
+          "write_then_read@d2938fa034b5…"
+        ],
+        "claimantCount": 1,
+        "tsHint": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+      },
+      {
+        "call": "get@4f8fc4f7c525…",
+        "claimants": [
+          "write_then_read@d2938fa034b5…"
+        ],
+        "claimantCount": 1,
+        "tsHint": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+      }
+    ],
+    "structure": {
+      "rootClaimsCount": 2,
+      "rootCommitmentPresent": true,
+      "subCallsClaimedByRoot": [
+        true,
+        true
+      ],
+      "unshieldedInputsInCallIntent": 0
+    },
+    "rustCallerDerivation": {
+      "tool": "rust/caller-context @ midnight-ledger ledger-9.1.0.0-rc.3 (4823b5351b17cc49e30f19760dbd30a73cf95e22)",
+      "binary": "rust/caller-context/target/release/caller-context",
+      "available": true,
+      "expectation": "the Tally set and get calls resolve to Contract(<Caller address>); the root write_then_read call, in an intent with no unshielded inputs, resolves to None",
+      "expectationPerStage": [
+        {
+          "stage": "offline-unproven",
+          "met": true,
+          "deviations": []
+        },
+        {
+          "stage": "unproven",
+          "met": true,
+          "deviations": []
+        },
+        {
+          "stage": "proven",
+          "met": true,
+          "deviations": []
+        },
+        {
+          "stage": "balanced",
+          "met": true,
+          "deviations": []
+        }
+      ],
+      "perCall": [
+        {
+          "stage": "offline-unproven",
+          "segment": 32040,
+          "actionIndex": 0,
+          "entryPoint": "write_then_read",
+          "address": "7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502",
+          "caller": "None",
+          "selectedByActionIndex": null
+        },
+        {
+          "stage": "offline-unproven",
+          "segment": 32040,
+          "actionIndex": 1,
+          "entryPoint": "set",
+          "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+          "caller": "Contract(7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "offline-unproven",
+          "segment": 32040,
+          "actionIndex": 2,
+          "entryPoint": "get",
+          "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+          "caller": "Contract(7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "unproven",
+          "segment": 6329,
+          "actionIndex": 0,
+          "entryPoint": "write_then_read",
+          "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+          "caller": "None",
+          "selectedByActionIndex": null
+        },
+        {
+          "stage": "unproven",
+          "segment": 6329,
+          "actionIndex": 1,
+          "entryPoint": "set",
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "unproven",
+          "segment": 6329,
+          "actionIndex": 2,
+          "entryPoint": "get",
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "proven",
+          "segment": 6329,
+          "actionIndex": 0,
+          "entryPoint": "write_then_read",
+          "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+          "caller": "None",
+          "selectedByActionIndex": null
+        },
+        {
+          "stage": "proven",
+          "segment": 6329,
+          "actionIndex": 1,
+          "entryPoint": "set",
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "proven",
+          "segment": 6329,
+          "actionIndex": 2,
+          "entryPoint": "get",
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "balanced",
+          "segment": 6329,
+          "actionIndex": 0,
+          "entryPoint": "write_then_read",
+          "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+          "caller": "None",
+          "selectedByActionIndex": null
+        },
+        {
+          "stage": "balanced",
+          "segment": 6329,
+          "actionIndex": 1,
+          "entryPoint": "set",
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+          "selectedByActionIndex": 0
+        },
+        {
+          "stage": "balanced",
+          "segment": 6329,
+          "actionIndex": 2,
+          "entryPoint": "get",
+          "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+          "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)",
+          "selectedByActionIndex": 0
+        }
+      ],
+      "crossCheckAgainstTypeScript": [
+        {
+          "stage": "offline-unproven",
+          "compared": true,
+          "callsCompared": 3,
+          "agree": true,
+          "mismatches": [],
+          "frRenderingNote": "Communication commitments are compared as values, not renderings: the TypeScript API emits a one-byte tag followed by the minimal little-endian value bytes (33 bytes with tag 0x73 for a full-width value, shorter when the high bytes are zero, for example 32 bytes with tag 0x6f for a 31-byte value), while the Rust tool emits the padded 32 little-endian bytes. Addresses and entry-point hashes are raw 32-byte arrays in both views and are compared as they stand."
+        },
+        {
+          "stage": "unproven",
+          "compared": true,
+          "callsCompared": 3,
+          "agree": true,
+          "mismatches": [],
+          "frRenderingNote": "Communication commitments are compared as values, not renderings: the TypeScript API emits a one-byte tag followed by the minimal little-endian value bytes (33 bytes with tag 0x73 for a full-width value, shorter when the high bytes are zero, for example 32 bytes with tag 0x6f for a 31-byte value), while the Rust tool emits the padded 32 little-endian bytes. Addresses and entry-point hashes are raw 32-byte arrays in both views and are compared as they stand."
+        },
+        {
+          "stage": "proven",
+          "compared": true,
+          "callsCompared": 3,
+          "agree": true,
+          "mismatches": [],
+          "frRenderingNote": "Communication commitments are compared as values, not renderings: the TypeScript API emits a one-byte tag followed by the minimal little-endian value bytes (33 bytes with tag 0x73 for a full-width value, shorter when the high bytes are zero, for example 32 bytes with tag 0x6f for a 31-byte value), while the Rust tool emits the padded 32 little-endian bytes. Addresses and entry-point hashes are raw 32-byte arrays in both views and are compared as they stand."
+        },
+        {
+          "stage": "balanced",
+          "compared": true,
+          "callsCompared": 3,
+          "agree": true,
+          "mismatches": [],
+          "frRenderingNote": "Communication commitments are compared as values, not renderings: the TypeScript API emits a one-byte tag followed by the minimal little-endian value bytes (33 bytes with tag 0x73 for a full-width value, shorter when the high bytes are zero, for example 32 bytes with tag 0x6f for a 31-byte value), while the Rust tool emits the padded 32 little-endian bytes. Addresses and entry-point hashes are raw 32-byte arrays in both views and are compared as they stand."
+        }
+      ],
+      "runs": [
+        {
+          "stage": "offline-unproven",
+          "input": "evidence/p8-tx-offline-unproven.hex",
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p8-tx-offline-unproven.hex (hex-text, 2872 bytes)\nheader tag: transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\n  ok   Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 32040 — 3 action(s): 3 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502::write_then_read\n    ep_hash                  ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247\n    communication_commitment f706a9e28a75b467dc7381bf6852230953e8e22e6edc9a9a2c58517a2503ce0b\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=0 addr=384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=9af3831e464812a22af171a37da759b98370eefabf3b1aca3a484576c29f9d47 -> matches call #1\n      [guaranteed] seq=1 addr=384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b ep_hash=d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1 comm=72c2afe4776ebcf24da28d9a3eb32bcca64cbacabb98e33d7585ec259b327609 -> matches call #2\n    claimed by               none\n    context().caller         None\n\n  call #1 384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 9af3831e464812a22af171a37da759b98370eefabf3b1aca3a484576c29f9d47\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502::write_then_read (guaranteed transcript, seq 0)\n    context().caller         Contract(7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502) (selected by call #0)\n\n  call #2 384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b::get\n    ep_hash                  d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1\n    communication_commitment 72c2afe4776ebcf24da28d9a3eb32bcca64cbacabb98e33d7585ec259b327609\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502::write_then_read (guaranteed transcript, seq 1)\n    context().caller         Contract(7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502) (selected by call #0)\n",
+          "json": {
+            "input_file": "evidence/p8-tx-offline-unproven.hex",
+            "input_encoding": "hex-text",
+            "input_bytes": 2872,
+            "header_tag": "transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+            "deserialised_as": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+            "attempts": [
+              {
+                "candidate": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+                "ok": true,
+                "error": null
+              }
+            ],
+            "transaction_kind": "standard",
+            "network_id": "undeployed",
+            "intents": [
+              {
+                "segment": 32040,
+                "actions": 3,
+                "deploys": 0,
+                "maintenance_updates": 0,
+                "guaranteed_unshielded_offer": null,
+                "fallible_unshielded_offer": null,
+                "calls": [
+                  {
+                    "action_index": 0,
+                    "address": "7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502",
+                    "entry_point": "write_then_read",
+                    "ep_hash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+                    "communication_commitment": "f706a9e28a75b467dc7381bf6852230953e8e22e6edc9a9a2c58517a2503ce0b",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 0,
+                        "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+                        "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                        "communication_commitment": "9af3831e464812a22af171a37da759b98370eefabf3b1aca3a484576c29f9d47",
+                        "matches_action_index": 1
+                      },
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 1,
+                        "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+                        "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                        "communication_commitment": "72c2afe4776ebcf24da28d9a3eb32bcca64cbacabb98e33d7585ec259b327609",
+                        "matches_action_index": 2
+                      }
+                    ],
+                    "claimed_by": [],
+                    "caller_selected_by_action_index": null,
+                    "caller": "None"
+                  },
+                  {
+                    "action_index": 1,
+                    "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+                    "entry_point": "set",
+                    "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "communication_commitment": "9af3831e464812a22af171a37da759b98370eefabf3b1aca3a484576c29f9d47",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 0
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502)"
+                  },
+                  {
+                    "action_index": 2,
+                    "address": "384d9d7593eead9e45b67a366c71ab485c4ac0d03d5c0bf006884a78fa901c2b",
+                    "entry_point": "get",
+                    "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                    "communication_commitment": "72c2afe4776ebcf24da28d9a3eb32bcca64cbacabb98e33d7585ec259b327609",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 1
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(7c746d8429c1a5266774bdc3d88ab5e48c4f0d97b6aabd290192b980d33e5502)"
+                  }
+                ],
+                "anomalies": []
+              }
+            ]
+          }
+        },
+        {
+          "stage": "unproven",
+          "input": "evidence/p8-tx-unproven.hex",
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p8-tx-unproven.hex (hex-text, 2878 bytes)\nheader tag: transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\n  ok   Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 6329 — 3 action(s): 3 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read\n    ep_hash                  ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247\n    communication_commitment 3a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=1 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1 comm=47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a -> matches call #2\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25 -> matches call #1\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 0)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #0)\n\n  call #2 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::get\n    ep_hash                  d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1\n    communication_commitment 47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 1)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #0)\n",
+          "json": {
+            "input_file": "evidence/p8-tx-unproven.hex",
+            "input_encoding": "hex-text",
+            "input_bytes": 2878,
+            "header_tag": "transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+            "deserialised_as": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+            "attempts": [
+              {
+                "candidate": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+                "ok": true,
+                "error": null
+              }
+            ],
+            "transaction_kind": "standard",
+            "network_id": "undeployed",
+            "intents": [
+              {
+                "segment": 6329,
+                "actions": 3,
+                "deploys": 0,
+                "maintenance_updates": 0,
+                "guaranteed_unshielded_offer": null,
+                "fallible_unshielded_offer": null,
+                "calls": [
+                  {
+                    "action_index": 0,
+                    "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                    "entry_point": "write_then_read",
+                    "ep_hash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+                    "communication_commitment": "3a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 1,
+                        "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                        "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                        "communication_commitment": "47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+                        "matches_action_index": 2
+                      },
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 0,
+                        "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                        "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                        "communication_commitment": "4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+                        "matches_action_index": 1
+                      }
+                    ],
+                    "claimed_by": [],
+                    "caller_selected_by_action_index": null,
+                    "caller": "None"
+                  },
+                  {
+                    "action_index": 1,
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entry_point": "set",
+                    "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "communication_commitment": "4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 0
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+                  },
+                  {
+                    "action_index": 2,
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entry_point": "get",
+                    "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                    "communication_commitment": "47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 1
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+                  }
+                ],
+                "anomalies": []
+              }
+            ]
+          }
+        },
+        {
+          "stage": "proven",
+          "input": "evidence/p8-tx-proven.hex",
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p8-tx-proven.hex (hex-text, 10285 bytes)\nheader tag: transaction[v12](signature[v2],proof,embedded-fr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):i��������'\n  ok   Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 6329 — 3 action(s): 3 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read\n    ep_hash                  ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247\n    communication_commitment 3a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=1 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1 comm=47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a -> matches call #2\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25 -> matches call #1\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 0)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #0)\n\n  call #2 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::get\n    ep_hash                  d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1\n    communication_commitment 47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 1)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #0)\n",
+          "json": {
+            "input_file": "evidence/p8-tx-proven.hex",
+            "input_encoding": "hex-text",
+            "input_bytes": 10285,
+            "header_tag": "transaction[v12](signature[v2],proof,embedded-fr[v1])",
+            "deserialised_as": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+            "attempts": [
+              {
+                "candidate": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+                "ok": false,
+                "error": "expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):i��������'"
+              },
+              {
+                "candidate": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+                "ok": true,
+                "error": null
+              }
+            ],
+            "transaction_kind": "standard",
+            "network_id": "undeployed",
+            "intents": [
+              {
+                "segment": 6329,
+                "actions": 3,
+                "deploys": 0,
+                "maintenance_updates": 0,
+                "guaranteed_unshielded_offer": null,
+                "fallible_unshielded_offer": null,
+                "calls": [
+                  {
+                    "action_index": 0,
+                    "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                    "entry_point": "write_then_read",
+                    "ep_hash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+                    "communication_commitment": "3a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 1,
+                        "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                        "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                        "communication_commitment": "47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+                        "matches_action_index": 2
+                      },
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 0,
+                        "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                        "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                        "communication_commitment": "4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+                        "matches_action_index": 1
+                      }
+                    ],
+                    "claimed_by": [],
+                    "caller_selected_by_action_index": null,
+                    "caller": "None"
+                  },
+                  {
+                    "action_index": 1,
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entry_point": "set",
+                    "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "communication_commitment": "4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 0
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+                  },
+                  {
+                    "action_index": 2,
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entry_point": "get",
+                    "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                    "communication_commitment": "47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 1
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+                  }
+                ],
+                "anomalies": []
+              }
+            ]
+          }
+        },
+        {
+          "stage": "balanced",
+          "input": "evidence/p8-tx-balanced.hex",
+          "verbatimOutput": "caller-context: ledger-9.1.0.0-rc.3 ContractCall::context(...).caller, off-node\ninput: evidence/p8-tx-balanced.hex (hex-text, 13560 bytes)\nheader tag: transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ndeserialised as: Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\n  fail Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr[v1]):����'\n  fail Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1]) :: expected header tag 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr['\n  ok   Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])\ntransaction kind: standard (network undeployed)\n\nintent segment 1 — 0 action(s): 0 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\nintent segment 6329 — 3 action(s): 3 call(s), 0 deploy(s), 0 maintenance update(s)\n  guaranteed unshielded offer: none\n  fallible unshielded offer: none\n\n  call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read\n    ep_hash                  ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247\n    communication_commitment 3a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04\n    transcripts              guaranteed=true fallible=false\n    claims (emits)\n      [guaranteed] seq=1 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1 comm=47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a -> matches call #2\n      [guaranteed] seq=0 addr=4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f ep_hash=29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01 comm=4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25 -> matches call #1\n    claimed by               none\n    context().caller         None\n\n  call #1 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::set\n    ep_hash                  29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01\n    communication_commitment 4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 0)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #0)\n\n  call #2 4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f::get\n    ep_hash                  d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1\n    communication_commitment 47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a\n    transcripts              guaranteed=true fallible=false\n    claims (emits)           none\n    claimed by               call #0 d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f::write_then_read (guaranteed transcript, seq 1)\n    context().caller         Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f) (selected by call #0)\n",
+          "json": {
+            "input_file": "evidence/p8-tx-balanced.hex",
+            "input_encoding": "hex-text",
+            "input_bytes": 13560,
+            "header_tag": "transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+            "deserialised_as": "Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+            "attempts": [
+              {
+                "candidate": "Transaction<Signature, ProofPreimageMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof-preimage,embedded-fr[v1])",
+                "ok": false,
+                "error": "expected header tag 'midnight:transaction[v12](signature[v2],proof-preimage,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr[v1]):����'"
+              },
+              {
+                "candidate": "Transaction<Signature, ProofMarker, PedersenRandomness, InMemoryDB> = transaction[v12](signature[v2],proof,embedded-fr[v1])",
+                "ok": false,
+                "error": "expected header tag 'midnight:transaction[v12](signature[v2],proof,embedded-fr[v1]):', got 'midnight:transaction[v12](signature[v2],proof,pedersen-schnorr['"
+              },
+              {
+                "candidate": "Transaction<Signature, ProofMarker, PureGeneratorPedersen, InMemoryDB> = transaction[v12](signature[v2],proof,pedersen-schnorr[v1])",
+                "ok": true,
+                "error": null
+              }
+            ],
+            "transaction_kind": "standard",
+            "network_id": "undeployed",
+            "intents": [
+              {
+                "segment": 1,
+                "actions": 0,
+                "deploys": 0,
+                "maintenance_updates": 0,
+                "guaranteed_unshielded_offer": null,
+                "fallible_unshielded_offer": null,
+                "calls": [],
+                "anomalies": []
+              },
+              {
+                "segment": 6329,
+                "actions": 3,
+                "deploys": 0,
+                "maintenance_updates": 0,
+                "guaranteed_unshielded_offer": null,
+                "fallible_unshielded_offer": null,
+                "calls": [
+                  {
+                    "action_index": 0,
+                    "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                    "entry_point": "write_then_read",
+                    "ep_hash": "ab803ade8fe67e9ec1f238f893dcefda92f5227d72e1b872b040cf23c6519247",
+                    "communication_commitment": "3a6f0d4a22c7b430e004f4cdffcce061f3e3a847e6fb78d81d56cec1eb8f2d04",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 1,
+                        "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                        "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                        "communication_commitment": "47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+                        "matches_action_index": 2
+                      },
+                      {
+                        "transcript": "guaranteed",
+                        "seq": 0,
+                        "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                        "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                        "communication_commitment": "4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+                        "matches_action_index": 1
+                      }
+                    ],
+                    "claimed_by": [],
+                    "caller_selected_by_action_index": null,
+                    "caller": "None"
+                  },
+                  {
+                    "action_index": 1,
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entry_point": "set",
+                    "ep_hash": "29b07fa866eaac9007f0f65bba20c99b663329724bebf19bb2aadce4a8bebc01",
+                    "communication_commitment": "4389d618008827caac9d5761620cc71530935e74f8ee9d066e861bea67885e25",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 0
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+                  },
+                  {
+                    "action_index": 2,
+                    "address": "4f8fc4f7c52534a768ec0b91cce76e94dab2406033262e9eeaf6fb8f8b5be66f",
+                    "entry_point": "get",
+                    "ep_hash": "d9482b6fb2d785d7e15c5369451091cb8a8a822094cfbea939705424b82004c1",
+                    "communication_commitment": "47edfb4c231b1c869fd7569d03deb621b07266b2aab85e65574368f5b6cd294a",
+                    "has_guaranteed_transcript": true,
+                    "has_fallible_transcript": false,
+                    "claims": [],
+                    "claimed_by": [
+                      {
+                        "action_index": 0,
+                        "address": "d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f",
+                        "entry_point": "write_then_read",
+                        "guaranteed": true,
+                        "seq": 1
+                      }
+                    ],
+                    "caller_selected_by_action_index": 0,
+                    "caller": "Contract(d2938fa034b5843667cd7609f85042cd417585f229d1ac31113da68b532f675f)"
+                  }
+                ],
+                "anomalies": []
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "ranAt": "2026-09-14T12:03:43.986Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}
