@@ -3,9 +3,10 @@
 The Passport account-recovery v1 profile over
 [arc-pleiades](https://github.com/input-output-hk/arc-pleiades), the
 upstream BUSS / ANARKey secret-sharing library over BLS12-381. The
-upstream crate is a git dependency pinned to commit `885254fe`, the
+upstream crate is a git dependency pinned to commit `ae179e7e`: the
 revision the recovery MIP (Recovery Paths for Custody Accounts) was
-validated against; it is not forked or vendored here.
+validated against (`885254fe`) plus the manifest licence fix we
+contributed upstream. It is not forked or vendored here.
 
 The recovery specification is implementable from its own text and does
 not normatively depend on this crate or on upstream; the ANARKey and
@@ -41,8 +42,6 @@ cargo test
   share and secret values cannot be reliably zeroised; the `v1` module
   zeroises the byte forms it owns, and deeper coverage needs `zeroize`
   support in `midnight-curves`.
-- Upstream's `Cargo.toml` still declares MIT while its README and LICENSE
-  declare Apache-2.0; the metadata fix belongs upstream, not here.
 - Upstream is unaudited and has been dormant since shortly after the
   pinned commit. The recovery MIP's Path to Active gates the standard on
   a commissioned cryptographic review, not on this code.

@@ -7,10 +7,11 @@ description = "The Passport account-recovery v1 profile over arc-pleiades (BUSS 
 license = "Apache-2.0"
 
 [dependencies]
-# Upstream scheme library, pinned to the commit the recovery MIP was
-# validated against. Not published on crates.io; the repository is in our
-# organisation and this revision never moves.
-arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "885254fee527b06838f5e7cbc1517350d6277d10" }
+# Upstream scheme library, pinned to a fixed revision: the commit the
+# recovery MIP was validated against (885254fe) plus the manifest licence
+# fix we contributed (#1). Not published on crates.io; the repository is
+# in our organisation and a pinned revision never moves.
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "ae179e7e6dde546409c37f3de2c69d077e4d6e84" }
 midnight-curves = "0.3"
 ff = "0.13"
 sha2 = "0.10"
