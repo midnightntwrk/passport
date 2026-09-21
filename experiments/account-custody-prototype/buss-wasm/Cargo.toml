@@ -10,7 +10,7 @@ license = "Apache-2.0"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "885254fee527b06838f5e7cbc1517350d6277d10" }
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "ae179e7e6dde546409c37f3de2c69d077e4d6e84" }
 midnight-curves = "0.3"
 ff = "0.13"
 sha2 = "0.10"
