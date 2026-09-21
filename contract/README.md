@@ -220,6 +220,12 @@ npm run test:grants-conformance      # scoped grants Testing 1, 2, 3, 6, 9, 10, 
                                      # deploy, issue, spend, rejections,
                                      # liveness, direct, kill, keys, expiry,
                                      # composition, concurrency, proving
+npm run test:grants-unshielded       # scoped grants: the UNSHIELDED grant twins on
+                                     # node, on a non-native color
+                                     # (evidence/grants-e4-*.json).
+                                     # GRANTS_E4_GROUPS=<group> truncates the
+                                     # scenario after a group, as above:
+                                     # funding, issue, spend, rejections, proving
 
 # On-node probes (each deploys its own throwaway accounts; none is a suite)
 npm run probe:wave-ceiling           # the per-maintenance-update verifier-byte
@@ -227,9 +233,20 @@ npm run probe:wave-ceiling           # the per-maintenance-update verifier-byte
 npm run probe:block-time             # the unit and enforcement point of
                                      # kernel.blockTimeLessThan (GRANTS-E3.md)
 npm run probe:revocation             # remove_device retires an entry, not a device
+npm run probe:dismiss-cost           # what every unshielded shape of this contract
+                                     # costs against the node's time-to-dismiss
+                                     # budget, priced off-node with the node's own
+                                     # check and WITHOUT submitting
+                                     # (evidence/dismiss-cost.json)
 
 # On-node, currently BLOCKED by the localnet fee limit (see below):
-# every flow that carries an unshielded offer in a contract call.
+# a SMALL contract call carrying a NIGHT unshielded input that balancing
+# pairs with a NIGHT change output. Measured by probe:dismiss-cost: the
+# NIGHT deposit prices at 16.504 ms of dismissal against a 16.266 ms budget,
+# while the same call for a NON-NATIVE color and both unshielded grant twins
+# are admitted with milliseconds of headroom. test:grants-unshielded
+# therefore runs the whole unshielded grant arm on a non-native color; the
+# suites below still fund with NIGHT.
 npm run test:auth                    # MIP-0013 tests 1, 2, 5 (funds via deposit_unshielded)
 npm run test:auth-lifecycle          # MIP-0013 tests 6, 9
 npm run test:auth-replay             # MIP-0013 tests 3, 4
@@ -355,24 +372,36 @@ account can never receive a future arm's circuits, so the secp256r1 arm
 reaches it only by migrating to a new account. `retireAuthority: false`
 keeps that door open for a deployer who has weighed the custody risk.
 
-## Known localnet limitation: small coin-carrying calls are mempool-rejected
+## Known localnet limitation: the NIGHT funding leg is mempool-rejected
 
 The v9 node's genesis parameters cap a transaction's dismissal cost at
-`max(2 us x size_bytes, 15 ms)`. A contract call paired with an
-**unshielded** offer prices at 16.313 ms against a 16.26 ms budget for its
-~8.1 KB size, so the node rejects it
-(`Malformed(FeeCalculation(OutsideTimeToDismiss))`): a 0.3 % miss,
-invariant under TTL, identical on node 2.1.0 and 2.0.0-rc.4. Proof-only
-calls pass (the coinless suite), plain wallet transfers pass, and shielded
-flows pass (zswap proofs make the transaction large enough to buy budget);
-the failing class is exactly call + unshielded offer in one small
-transaction. Since `deposit_unshielded` is how the funded suites seed the
-account, they are blocked end-to-end. The limitation is independent of the
+`max(2 us x size_bytes, 15 ms)`. The failing class is narrower than this
+README first recorded, and `probe:dismiss-cost` prices every shape of this
+contract against that budget with the node's own check
+(`evidence/dismiss-cost.json`): what is refused is the funding leg, a small
+contract call carrying a NIGHT unshielded input that balancing pairs with a
+NIGHT change output, which prices at 16.504 ms of dismissal against a
+16.266 ms budget for its 8,133-byte `est_size`
+(`Malformed(FeeCalculation(OutsideTimeToDismiss))`): a 1.5 % miss on this
+probe's figures, and 16.313 ms against 16.26 ms when the same shape was
+first recorded here. The refusal is invariant under TTL and identical on
+node 2.1.0 and 2.0.0-rc.4. The same call for a NON-NATIVE color is admitted
+with at least 4.975 ms of headroom at the same size, because a NIGHT input
+and a NIGHT change output cost about 3.447 ms and 2.491 ms of dismissal time
+each against about 680 us for a plain input and 0 for a plain output.
+Proof-only calls pass (the coinless suite), plain wallet transfers pass,
+shielded flows pass (zswap proofs make the transaction large enough to buy
+budget), and so do both unshielded grant twins, which are included on node
+by `test:grants-unshielded` at a priced headroom of at least 8.7 and
+9.9 ms. Since `deposit_unshielded` of NIGHT is how the funded
+suites below seed the account, they stay blocked end-to-end; a suite that
+funds with a non-native color is not. The limitation is independent of the
 signature scheme (the JubJub trunk's transactions have the same shape); it
-is a toolchain-tuning issue to raise upstream, not an arm defect. The
-wallet SDK cannot predict the rejection: it prices fees against hard-coded
-default parameters with enforcement off, while the chain's actual
-parameters arrive per block from the indexer (`{ block { ledgerParameters } }`).
+is upstream ledger issue [#761](https://github.com/midnightntwrk/midnight-ledger/issues/761), the client under-reserving the NIGHT change
+output balancing adds, not an arm defect. The wallet SDK cannot predict the
+rejection: it prices fees against hard-coded default parameters with
+enforcement off, while the chain's actual parameters arrive per block from
+the indexer (`{ block { ledgerParameters } }`), which is what the probe reads.
 
 Two client-side consequences are already handled in `src/node/wallet.ts`:
 the balancing TTL defaults to 60 s (`TX_TTL_MS` to override) because
@@ -429,6 +458,7 @@ two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
 | `custody-payments` | 7, 8 | — | INV-6 (one-hop); direct-transfer mode |
 | `grants-offline` | n/a | n/a | MIP-scoped-grants Testing 1 and 2, the off-node halves: lifecycle, the unshielded grant twin, and the rejection matrix on **both grantee arms** in the circuit simulator; GR-1, GR-3, GR-5, GR-6, GR-7, GR-12, GR-13, GR-14 |
 | `grants-conformance` | n/a | n/a | MIP-scoped-grants Testing 1, 3, and 9 green on node; 6, 10, and 11 partial; 2 partial, so the Path to Active checkbox for E2 cannot close (see `GRANTS-E2.md` for what each is missing). Twelve scenario groups, each its own evidence file and each selectable as a `GRANTS_E2_GROUPS` prefix: deploy (the three-wave deploy at the measured 25,000-byte budget), issue, spend, rejections, liveness, direct, kill, keys, expiry, composition, concurrency, proving; GR-1 to GR-9, GR-11 to GR-14, AUTH-5, AUTH-8, AUTH-9, INV-4, INV-5, INV-6 |
+| `grants-unshielded` | 6 (the mirror, under a GRANT rather than a device) | n/a | MIP-scoped-grants: the UNSHIELDED grant twins included on node, which GRANTS-E2 could not run. Five groups, each its own evidence file and each selectable as a `GRANTS_E4_GROUPS` prefix: funding (a non-native color minted and deposited through `deposit_unshielded`, with the NIGHT arm skipped and priced), issue (ten `op_withdraw_unshielded` scopes across both device arms and both grantee arms, `object_commit` recomputed from each opening), spend (`withdraw_unshielded_with_grant_jubjub` and `withdraw_unshielded_with_grant_k256` included on node, the mirror debit, the per-grant nonce settle, the cumulative `spent_commit`, and a recipient pin honoured), rejections (fourteen rows labelled by class: twelve pre-custody, which abort before `do_withdraw_unshielded` is entered, and two in-custody, which reach it and are refused by the mirror gate; neither class emits an unshielded offer, because `debit_unshielded` runs before `sendUnshielded`), proving (the first proving times either unshielded twin has had); GR-2, GR-5, GR-7, GR-12, GR-13, GR-14, INV-8 |
 | `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
 
 Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`

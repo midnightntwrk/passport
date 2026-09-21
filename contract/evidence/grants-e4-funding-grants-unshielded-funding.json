@@ -1,0 +1,178 @@
+{
+  "testId": "grants-e4-funding",
+  "name": "grants-unshielded-funding",
+  "description": "GRANTS-E4: the unshielded arm funded on node. A spec_version = 2 account deployed in waves, both device arms live, a non-native color faucet-minted to the funding wallet and deposited into the account through deposit_unshielded, and the NIGHT arm skipped with its price",
+  "verdict": "PASS",
+  "note": "The mirror is funded on node with a NON-NATIVE unshielded color: faucet.mint_unshielded to the funding wallet, then a real user-funded deposit_unshielded of the whole minted amount into the account, and the mirror credit read back from the ledger. The NIGHT arm is deliberately NOT run: probe:dismiss-cost priced deposit_unshielded of NIGHT at 16.504 ms of dismissal time against a 16.266 ms budget for its 8,133-byte est_size, a 0.238 ms (1.46 per cent) overrun, and the entire difference from the admitted non-native deposit at essentially the same size is the offer's per-element cost (a NIGHT input plus the NIGHT change output balancing adds). See details.nightArmSkipped for the verbatim ledger message and the citation to upstream ledger issue #761.",
+  "details": {
+    "clientId": "https://grants-e4.example",
+    "originHash": "4a01e504bf3e6fbe60cee8139ab979aa5867c655b427a173186ac7b38cb1071d",
+    "recipientUserAddress": "bc610dd07c52f59012a88c2f9f1c5f34cbacc75b868202975d6f19beaf37284b",
+    "faucet": "f4ff25059017e8a4ce39943b0da54a0a6dffc44f1c70688cc8b21c0a48ea586a",
+    "color": "47c510ac90ff49691e820282602fb802848dc0d2e4d192fbbfa386bcfbf7ca8d",
+    "colorOther": "5dcd7a9b560d368cf6edc0d2fbd40e03daaeab2371662825ec04b73dd256a907",
+    "verifierByteBudget": 25000,
+    "rosterSize": 30,
+    "wavePlan": [
+      {
+        "index": 1,
+        "kind": "deploy",
+        "circuitCount": 10,
+        "verifierBytes": 25434,
+        "retiresAuthority": false
+      },
+      {
+        "index": 2,
+        "kind": "maintenance",
+        "circuitCount": 10,
+        "verifierBytes": 23994,
+        "retiresAuthority": false
+      },
+      {
+        "index": 3,
+        "kind": "maintenance",
+        "circuitCount": 10,
+        "verifierBytes": 24858,
+        "retiresAuthority": true
+      }
+    ],
+    "account": "d16e893de9b868c896e3a39b97c67840c18cdca24e3ec6a231dbb632b8f738e7",
+    "maintenanceAuthorityAfterWaves": {
+      "committee": 0,
+      "threshold": 1,
+      "counter": "2"
+    },
+    "specVersion": "2",
+    "initialLedger": {
+      "round": "1",
+      "authNonce": "0",
+      "inboxCount": "0",
+      "deviceCount": "1",
+      "grantGeneration": "0",
+      "grantCount": "0",
+      "mirror": "(absent)"
+    },
+    "deployActions": [
+      {
+        "kind": "ContractDeploy",
+        "entryPoint": null,
+        "txHash": "82c1a29cbe5eea19fa5d6a6c144d1eeee49e2d00c1fe84ec0312e98b0c2bc7be",
+        "blockHeight": 629
+      },
+      {
+        "kind": "ContractUpdate",
+        "entryPoint": null,
+        "txHash": "8be753458a7989af7df0efd70019e7d04508309dbb0f32f930722b8d9caa6d18",
+        "blockHeight": 632
+      },
+      {
+        "kind": "ContractUpdate",
+        "entryPoint": null,
+        "txHash": "d9fceaeea92256ea026fad51dc5bbfb4ed2744e9048b5790739f95e2d70c735b",
+        "blockHeight": 635
+      },
+      {
+        "kind": "ContractCall",
+        "entryPoint": "activate_initial_device_with_k256",
+        "txHash": "21ae0c6e1ba1856bf7a0444f7cd47a7df07c8cfc7611248bbee4c9549a71091a",
+        "blockHeight": 639
+      }
+    ],
+    "crossArmEnrolmentTx": "00c3c8e1377a1dee5464a5940b68917fbb5bf1d042d56e7e8926ca08e00c24fbc1",
+    "afterEnrolment": {
+      "round": "2",
+      "authNonce": "1",
+      "inboxCount": "0",
+      "deviceCount": "2",
+      "grantGeneration": "0",
+      "grantCount": "0",
+      "mirror": "(absent)"
+    },
+    "toContractTwin": {
+      "unshieldedToContractCircuits": [],
+      "shieldedToContractGrantTwins": [
+        "withdraw_shielded_to_contract_with_grant_k256",
+        "withdraw_shielded_to_contract_with_grant_jubjub"
+      ],
+      "finding": "There is no unshielded to-contract twin in the compiled roster: the contract exports withdraw_shielded_to_contract_with_grant_k256 and withdraw_shielded_to_contract_with_grant_jubjub and no withdraw_unshielded_to_contract counterpart. The pricing table's shape (h) is therefore a SHIELDED shape, already built, proved, and submitted on node by GRANTS-E2, and this suite has no unshielded to-contract call to make."
+    },
+    "nightArmSkipped": {
+      "arm": "deposit_unshielded of NIGHT (the all-zero color)",
+      "color": "0000000000000000000000000000000000000000000000000000000000000000",
+      "run": false,
+      "decision": "SKIPPED DELIBERATELY, not dropped. The funding leg for NIGHT is what this localnet refuses, and the refusal is a transaction-shape limit rather than anything about the grant seam: a deposit of NIGHT is a SMALL contract call carrying a NIGHT unshielded input, and the wallet's balancing adds a NIGHT change output. Both are priced per element in dismissal time (a NIGHT input ~3.447 ms, a NIGHT change output ~2.491 ms, against a plain input ~680 us and a plain output 0), while the budget is max(time_to_dismiss_per_byte x est_size, min_time_to_dismiss) = max(2 us x est_size, 15 ms), which a small transaction cannot grow into. Since the unshielded grant twins are reached only through a funded mirror, and the mirror can be funded with a non-native color at the same transaction size with 4.975 ms of headroom, the whole unshielded arm runs on the non-native color instead and the NIGHT arm stays unproven on node.",
+      "upstream": "Upstream ledger issue #761 (OPEN): the client under-reserves the NIGHT change output that balancing adds. Ledger issue #222 (CLOSED) records a Foundation datapoint that the same shape works for a non-native color and fails only for NIGHT, which is exactly the split measured here.",
+      "ledgerSource": "ledger/src/structure.rs: Transaction::cost (the allowed/actual pair), INITIAL_LIMITS (2 us per byte, 15 ms floor), and application_cost (the per-element offer costs). The node enforces with the identical call, ledger/src/ledger_9/mod.rs.",
+      "pricingEvidence": "evidence/dismiss-cost.json (testId DISMISS-COST)",
+      "pricedNightDeposit": {
+        "id": "(c)",
+        "label": "deposit_unshielded (NIGHT)",
+        "circuit": "deposit_unshielded",
+        "offer": "unshielded: 1 NIGHT input (+ balancing change output)",
+        "serialisedBytes": 8201,
+        "estSizeBytes": 8133,
+        "timeToDismiss": "16.504ms",
+        "allowed": "16.266ms",
+        "verdict": "REFUSE",
+        "ledgerMessage": "Error: exceeded the maximum time to dismiss for transaction size; this transaction would take 16.504ms to dismiss, but given its size of 8133 bytes, it may take at most 16.266ms"
+      },
+      "pricedNonNativeDeposit": {
+        "id": "(d)",
+        "label": "deposit_unshielded (non-native)",
+        "circuit": "deposit_unshielded",
+        "offer": "unshielded: 1 non-native input (+ balancing change output)",
+        "serialisedBytes": 8180,
+        "estSizeBytes": 8112,
+        "timeToDismiss": "11248852644 ps",
+        "allowed": "16224000000 ps",
+        "verdict": "ADMIT",
+        "ledgerMessage": null
+      },
+      "pricedTwinJubjub": {
+        "id": "(f)",
+        "label": "withdraw_unshielded_with_grant_jubjub (grantee)",
+        "circuit": "withdraw_unshielded_with_grant_jubjub",
+        "offer": "unshielded: 0 inputs, 1 output (to a UserAddress)",
+        "serialisedBytes": 11028,
+        "estSizeBytes": 10960,
+        "timeToDismiss": "13180274164 ps",
+        "allowed": "21920000000 ps",
+        "verdict": "ADMIT",
+        "ledgerMessage": null
+      },
+      "pricedTwinK256": {
+        "id": "(g)",
+        "label": "withdraw_unshielded_with_grant_k256 (grantee)",
+        "circuit": "withdraw_unshielded_with_grant_k256",
+        "offer": "unshielded: 0 inputs, 1 output (to a UserAddress)",
+        "serialisedBytes": 11614,
+        "estSizeBytes": 11546,
+        "timeToDismiss": "13180274164 ps",
+        "allowed": "23092000000 ps",
+        "verdict": "ADMIT",
+        "ledgerMessage": null
+      },
+      "nightVerbatimRefusal": "Error: exceeded the maximum time to dismiss for transaction size; this transaction would take 16.504ms to dismiss, but given its size of 8133 bytes, it may take at most 16.266ms"
+    },
+    "mintTx": "0004000bf8ebe9237c561566c7e272bfb3f2f5e1509ec054b8bf386688f345dd55",
+    "mintAmount": "3000",
+    "depositTx": "00a241ce2d9af9ee550b78742343bd35994291118db3e49cbf9748d3be0cc96268",
+    "depositAmount": "3000",
+    "ledgerAfterDeposit": {
+      "round": "3",
+      "authNonce": "1",
+      "inboxCount": "0",
+      "deviceCount": "2",
+      "grantGeneration": "0",
+      "grantCount": "0",
+      "mirror": "3000"
+    },
+    "mirrorAfterDeposit": "3000"
+  },
+  "ranAt": "2026-09-16T10:49:57.836Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

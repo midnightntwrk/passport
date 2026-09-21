@@ -1,0 +1,587 @@
+{
+  "testId": "grants-e4-rejections",
+  "name": "grants-unshielded-rejections",
+  "description": "GRANTS-E4: the unshielded twins' rejection rows in two classes: pre-custody faults that abort before do_withdraw_unshielded, and in-custody faults the mirror gate refuses inside it",
+  "verdict": "PASS",
+  "note": "The rejection rows of the unshielded grant twins on node, each labelled by the class its fault falls in and by the contract stage it aborts at. Class A (pre-custody) aborts inside authenticate_grant_with_<arm>, check_spend_scope, or settle_grant_with_<arm>, so do_withdraw_unshielded is never entered: the mirror is not read and no sendUnshielded is reached. Class B (in-custody) reaches do_withdraw_unshielded and is refused by debit_unshielded. The finding is that class B emits no offer either, because debit_unshielded runs BEFORE sendUnshielded inside the same chip, so no unshielded rejection row of these twins can put an unshielded offer on the wire. Every row is a build-time abort with no transaction and a byte-identical ledger snapshot either side, the mirror balance included in the snapshot.",
+  "details": {
+    "classes": {
+      "A": {
+        "name": "pre-custody",
+        "meaning": "The fault aborts before `do_withdraw_unshielded` is entered at all, in `authenticate_grant_with_<arm>` (steps 1 to 3), `check_spend_scope` (steps 4 and 5), or `settle_grant_with_<arm>` (steps 6 and 7). The mirror is never read and no `sendUnshielded` is reached, so no unshielded offer can exist.",
+        "contractOrder": "contracts/account.compact, withdraw_unshielded_with_grant_k256 and _jubjub: authenticate_grant_with_<arm> → check_spend_scope → challenge_withdraw_unshielded_with_grant_<arm> → settle_grant_with_<arm> → do_withdraw_unshielded.",
+        "settleChipHasTwoRefusals": "On the jubjub arm the settle chip can refuse in two places: the cast `const c = challenge as Field` (account.compact:1906), which needs the 32-byte challenge below the BLS12-381 scalar modulus, and the Schnorr assert after it. Rows A11 and A11b cover one each."
+      },
+      "B": {
+        "name": "in-custody (the mirror gate)",
+        "meaning": "The call passes the whole seam and the whole scope check, reaches `do_withdraw_unshielded`, and is refused there by `debit_unshielded`.",
+        "finding": "Class B emits no unshielded offer either. `do_withdraw_unshielded` runs `debit_unshielded(c, a)`, which asserts `unshielded_balances.member(color)` and then `bal >= amount`, BEFORE `sendUnshielded`, so a mirror refusal happens with the send still unreached. No rejection row of these twins can therefore put an unshielded offer on the wire, which is why the whole rejection matrix is unaffected by the node's time-to-dismiss limit."
+      }
+    },
+    "revokeU6Tx": "00867e54b89f77292500735c0611a30ee97025cddd4733ed4f912fa270078adfb7",
+    "replayRow": {
+      "signedAtGrantNonce": "2",
+      "recordNonceAtReplay": "3",
+      "openingSpentPrevAtReplay": "350",
+      "refusedBy": "the challenge cast to Field (account.compact:1906), a range error",
+      "reading": "The challenge binds the record's nonce, which the circuit reads in-circuit, so the same signature cannot be replayed once the record has advanced (GR-5). The opening was advanced to the live cumulative spend first, so the row could not be refused earlier by the spent_commit opening. Which predicate of the settle chip refuses it is a coin flip: `settle_grant_with_jubjub` casts the recomputed challenge to Field before it verifies, and a 32-byte hash is in the BLS12-381 scalar field only about 45.2 per cent of the time. The grantee's own signatures always clear that cast, because the jubjub signer grinds `grind_nonce` until the challenge it signs is in range; a replay recomputes the challenge from a different record nonce with the old grind nonce, so it is a fresh draw. Row A11b below removes the coin flip and lands on the signature assert itself."
+    },
+    "tamperedSignatureRow": {
+      "signedAtGrantNonce": "3",
+      "tamper": "sig_s + 1; sig_r, pk, and grind_nonce left exactly as signed",
+      "reading": "The jubjub challenge binds sig_r and grind_nonce but NOT sig_s, so altering sig_s leaves the challenge the grantee ground into range untouched and the cast at account.compact:1906 succeeds. The only predicate left is s.G == R + c.pk, which fails. This is the settle chip's signature assert reached deterministically, and together with A11 it shows both ways the settle chip refuses."
+    },
+    "staleEncPkRow": {
+      "id": "12",
+      "class": "A",
+      "item": "a stale enc_pk (signed against the pre-rotation encryption key)",
+      "verdict": "NOT APPLICABLE to the unshielded twins: no row exists to run",
+      "reason": "The stale-enc_pk predicate lives in `check_shielded_grant_bounds`, which asserts `coin.value <= max_coin_value` and `enc_pk == enc_key`. Only the SHIELDED grant twins call that chip, because only they consume a witness coin and only they append a grantee-sealed change entry. `withdraw_unshielded_with_grant_k256` and `withdraw_unshielded_with_grant_jubjub` take neither an `enc_pk` nor a `change_entry` argument at all: an unshielded send produces no change coin to seal, so there is nothing for a rotation to orphan. The same reasoning retires the `coin above max_coin_value` row: `max_coin_value` still enters the scope digest and the object commitment (and so is checked by row A6), but no coin-value bound is applied by the unshielded twins because they consume no coin.",
+      "citation": "contracts/account.compact: check_shielded_grant_bounds, and the argument lists of the two unshielded twins."
+    },
+    "colorOtherMirrorMember": false,
+    "mirrorAtRowB2": "2400",
+    "rows": [
+      {
+        "id": "1",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "authenticate_grant_with_k256, the envelope assert (before step 1)",
+        "item": "an envelope-1 (connector) grantee through withdraw_unshielded_with_grant_k256 (U9)",
+        "expected": [
+          "envelope not admitted for a spend grant"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "18",
+          "authNonce": "11",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "18",
+          "authNonce": "11",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: envelope not admitted for a spend grant",
+        "ms": 84
+      },
+      {
+        "id": "2",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "authenticate_grant_with_jubjub, step 2 (the membership assert)",
+        "item": "a foreign grantee key with no record (an unissued origin and slot)",
+        "expected": [
+          "unknown grant"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "18",
+          "authNonce": "11",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "18",
+          "authNonce": "11",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown grant",
+        "ms": 72
+      },
+      {
+        "id": "3",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "authenticate_grant_with_k256, step 3 (the active assert)",
+        "item": "a revoked grant (U6, after revoke_grant_with_k256)",
+        "expected": [
+          "grant revoked"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant revoked",
+        "ms": 85
+      },
+      {
+        "id": "4",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "authenticate_grant_with_jubjub, step 3 (the expiry assert)",
+        "item": "an expired grant (U5, expires_at 100 s in the past)",
+        "expected": [
+          "grant expired"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant expired",
+        "ms": 85
+      },
+      {
+        "id": "5",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "check_spend_scope, step 4 (op_admitted)",
+        "item": "an out-of-scope operation: a shielded-only scope (U4) through the unshielded twin",
+        "expected": [
+          "operation not in scope"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: operation not in scope",
+        "ms": 84
+      },
+      {
+        "id": "6",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "check_spend_scope, step 4 (object_commit)",
+        "item": "a wrong scope_salt in the opening (U1)",
+        "expected": [
+          "scope object mismatch"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: scope object mismatch",
+        "ms": 85
+      },
+      {
+        "id": "7",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "check_spend_scope, step 5 (per_call_cap)",
+        "item": "over per_call_cap (U1, 250 against a 200 per-call cap)",
+        "expected": [
+          "amount above per-call cap"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: amount above per-call cap",
+        "ms": 86
+      },
+      {
+        "id": "8",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "check_spend_scope, step 5 (spent_commit)",
+        "item": "a wrong spent_prev opening (U1, off by one)",
+        "expected": [
+          "spent opening mismatch"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: spent opening mismatch",
+        "ms": 85
+      },
+      {
+        "id": "9",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "check_spend_scope, step 5 (cap, on the widened sum)",
+        "item": "over the cumulative cap (U7 at 100 of 100, asks 100 within its per-call cap)",
+        "expected": [
+          "cumulative cap exceeded"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cumulative cap exceeded",
+        "ms": 86
+      },
+      {
+        "id": "10",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "check_spend_scope, step 5 (the recipient pin)",
+        "item": "a wrong recipient under a pin (U3 pins another UserAddress; the call pays the funding wallet)",
+        "expected": [
+          "recipient not admitted by pin"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: recipient not admitted by pin",
+        "ms": 85
+      },
+      {
+        "id": "11",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "settle_grant_with_jubjub, step 6: the challenge cast (account.compact:1906) or the signature assert",
+        "item": "a replayed authorisation: U1 #3 resubmitted byte-identically after the record nonce advanced",
+        "expected": [
+          "invalid grant signature",
+          "range error"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 1906 char 13: byte vector [199,192,73,105,236,1,179,2,179,240,171,122,241,84,218,227,112,100,35,60,211,198,30,138,64,101,201,56,5,7,186,169] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+        "ms": 71
+      },
+      {
+        "id": "11b",
+        "class": "A",
+        "className": "pre-custody",
+        "contractStage": "settle_grant_with_jubjub, step 6 (the signature assert itself)",
+        "item": "a tampered signature on the live context (sig_s off by one, so the challenge cast still succeeds)",
+        "expected": [
+          "invalid grant signature"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": false,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "ms": 73
+      },
+      {
+        "id": "1",
+        "class": "B",
+        "className": "in-custody (the mirror gate)",
+        "contractStage": "do_withdraw_unshielded → debit_unshielded, the member assert",
+        "item": "a color the mirror never held (U8 over 5dcd7a9b560d368c…)",
+        "expected": [
+          "no balance for color"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": true,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: no balance for color",
+        "ms": 90
+      },
+      {
+        "id": "2",
+        "class": "B",
+        "className": "in-custody (the mirror gate)",
+        "contractStage": "do_withdraw_unshielded → debit_unshielded, the balance assert",
+        "item": "an amount above the mirror (U10 asks 4000 against a mirror of 2400, both inside its 4000 caps)",
+        "expected": [
+          "insufficient balance"
+        ],
+        "matchedExpected": true,
+        "reachedDoWithdrawUnshielded": true,
+        "emittedUnshieldedOffer": false,
+        "transactionExisted": false,
+        "failedAtStage": "build (local circuit execution; nothing was submitted)",
+        "nodeErrorLine": "none: no transaction was submitted, so the node logged no refusal for this row",
+        "stateUnchanged": true,
+        "ledgerBefore": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "ledgerAfter": {
+          "round": "19",
+          "authNonce": "12",
+          "inboxCount": "0",
+          "deviceCount": "2",
+          "grantGeneration": "0",
+          "grantCount": "10",
+          "mirror": "2400"
+        },
+        "error": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: insufficient balance",
+        "ms": 88
+      }
+    ],
+    "rowCount": 14,
+    "classACount": 12,
+    "classBCount": 2,
+    "everyRowLeftTheLedgerUnchanged": true,
+    "everyRowMatchedItsExpectedMessage": true,
+    "noRowEmittedAnUnshieldedOffer": true,
+    "ledgerAfterRejections": {
+      "round": "19",
+      "authNonce": "12",
+      "inboxCount": "0",
+      "deviceCount": "2",
+      "grantGeneration": "0",
+      "grantCount": "10",
+      "mirror": "2400"
+    }
+  },
+  "ranAt": "2026-09-16T10:49:57.836Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

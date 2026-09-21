@@ -20,10 +20,12 @@
     "test:custody-unshielded": "tsx src/tests/custody-unshielded.ts",
     "test:custody-payments": "tsx src/tests/custody-payments.ts",
     "test:grants-conformance": "tsx src/tests/grants-conformance.ts",
+    "test:grants-unshielded": "tsx src/tests/grants-unshielded.ts",
     "test:leak-audit": "tsx src/tests/leak-audit.ts",
     "probe:revocation": "tsx src/tests/probe-revocation.ts",
     "probe:block-time": "tsx src/tests/probe-block-time.ts",
-    "probe:wave-ceiling": "tsx src/tests/probe-wave-ceiling.ts"
+    "probe:wave-ceiling": "tsx src/tests/probe-wave-ceiling.ts",
+    "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
