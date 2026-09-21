@@ -1,0 +1,21 @@
+[package]
+name = "passport-buss"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+description = "The Passport account-recovery v1 profile over arc-pleiades (BUSS / ANARKey secret sharing over BLS12-381), with the cross-implementation vectors that hold it to the TypeScript client"
+license = "Apache-2.0"
+
+[dependencies]
+# Upstream scheme library, pinned to a fixed revision: the commit the
+# recovery MIP was validated against (885254fe) plus the manifest licence
+# fix we contributed (#1). Not published on crates.io; the repository is
+# in our organisation and a pinned revision never moves.
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "ae179e7e6dde546409c37f3de2c69d077e4d6e84" }
+midnight-curves = "0.3"
+ff = "0.13"
+sha2 = "0.10"
+zeroize = "1"
+
+[dev-dependencies]
+rand = "0.8"

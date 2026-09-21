@@ -6,3 +6,4 @@ infra/.env
 deployment.json
 *.log
 signer-rs/target/
+buss-rs/target/

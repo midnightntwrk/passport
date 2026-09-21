@@ -67,17 +67,34 @@ together; the upstream copies are canonical.
   contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
   `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
   is exercised on node.
-- **Recovery paths (building block three; not yet drafted)**:
-  total-loss recovery behind the seam; the prototype realises this
-  with BUSS, and the standard stays scheme-agnostic at the contract
-  surface. The upstream recovery slot remains unclaimed.
-
+- `mips/mip-xxxx-account-recovery.md` — **Recovery Paths for Custody
+  Accounts (building block three)**: total-loss recovery behind the
+  MIP-0013 seam, anchored on bottom-up secret sharing (ANARKey/BUSS).
+  Guardians are authenticator credentials, cold signers, or paper
+  keys that persist no per-account state; the account publishes one
+  artefact set per session (public shares, a recovery public key, and
+  a wrap of the viewing key), so recovery restores both control and
+  visibility. Covers the guardian model and its three profiles, share
+  derivation, the single session operation, the two-phase recovery
+  gate with its pending record and veto window, the off-ledger
+  transport and roster record, and the REC invariant family. The
+  gate is a signature gate: the recovering party presents a Schnorr
+  signature under the stored recovery key and the successor co-signs
+  the same challenge, so neither secret enters the proof and the proof
+  may be delegated (REC-11). Remaining tag: [CRYPTO-MEMO] the
+  commissioned multi-session review (sent, response pending; the
+  published scheme's model is single-session, so the freshness rules
+  are our own normative addition). The contract tranche, in the
+  signature-gate form, is implemented on the reference implementation
+  (`contract/`) on both authorisation arms and evidenced in the
+  runtime simulator (the full behaviour matrix) and on a local
+  network (the lifecycle end to end).
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on
 entry, editor-assigned numbers, and a separate submission issue. A MIP
-addressing an MPS is listed in that MPS header's Proposed Solutions
-field rather than in the MIP's `Requires` line, which is reserved for
-MIP-on-MIP dependencies. Upstream draft PRs use the literal filename
+addressing an MPS is listed in that MPS's header `MIP` field rather
+than in the MIP's `Requires` line, which is reserved for MIP-on-MIP
+dependencies. Upstream draft PRs use the literal filename
 `mip-xxxx.md`; the descriptive filenames in this folder are local
 conveniences and are renamed on submission.

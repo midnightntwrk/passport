@@ -57,6 +57,8 @@ export function withoutCoin(state: CoinStorePrivateState, color: Uint8Array): Co
 
 type Ctx = WitnessContext<Ledger, CoinStorePrivateState>;
 
+// The recovery gate takes no witness (recovery MIP REC-6, REC-11): `s`
+// never enters a proof, so nothing here ever holds it.
 export function makeWitnesses() {
   return {
     held_coin(ctx: Ctx, color: Uint8Array): [CoinStorePrivateState, QualifiedCoin] {
