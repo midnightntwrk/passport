@@ -3,29 +3,18 @@ name = "passport-buss"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.87"
-description = "Maintained fork of arc-pleiades (BUSS / ANARKey secret sharing over BLS12-381) — the reference component of the Passport account-recovery scheme layer"
+description = "The Passport account-recovery v1 profile over arc-pleiades (BUSS / ANARKey secret sharing over BLS12-381), with the cross-implementation vectors that hold it to the TypeScript client"
 license = "Apache-2.0"
 
-# Fork of https://github.com/input-output-hk/arc-pleiades at 885254fe.
-# The upstream README and LICENSE declare Apache-2.0; the upstream
-# Cargo.toml still said MIT, corrected here. See README.md for the fork
-# rationale and the delta against upstream.
-
 [dependencies]
+# Upstream scheme library, pinned to the commit the recovery MIP was
+# validated against. Not published on crates.io; the repository is in our
+# organisation and this revision never moves.
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "885254fee527b06838f5e7cbc1517350d6277d10" }
 midnight-curves = "0.3"
 ff = "0.13"
-group = "0.13"
-rand_core = "0.6"
-thiserror = "2"
-digest = "0.10"
 sha2 = "0.10"
 zeroize = "1"
 
 [dev-dependencies]
 rand = "0.8"
-
-[[example]]
-name = "shamir"
-
-[[example]]
-name = "buss"

@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "arc-pleiades"
 version = "0.1.0"
-source = "git+https://github.com/input-output-hk/arc-pleiades.git?rev=26f19f7a527e79831edf5d202a301d2c7c1a601c#26f19f7a527e79831edf5d202a301d2c7c1a601c"
+source = "git+https://github.com/input-output-hk/arc-pleiades.git?rev=885254fee527b06838f5e7cbc1517350d6277d10#885254fee527b06838f5e7cbc1517350d6277d10"
 dependencies = [
  "digest",
  "ff",

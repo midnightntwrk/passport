@@ -1276,19 +1276,22 @@ contract with this many entry points, not this design specifically.
 **The scheme library**: a proof-of-concept library implementing the
 underlying scheme validated the approach. It is unaudited, declares
 itself unsuitable for production, and has been dormant since shortly
-after our adoption of it; the authoring workspace therefore maintains
-a fork as the reference component of the scheme layer, carrying the
-share serialisation, typed session identifiers, and secret
-zeroisation the upstream library lacks. This specification remains
-implementable from its own text and does not normatively depend on
-either the library or the fork: the papers cited in References are
-the normative basis for the scheme, and the code is evidence that the
-construction works, not a component of the standard. Capabilities
-present in the library but unused here (a traceable variant, a
-signature-derived guardian secret, and public-share update without
-re-share) informed section 3 and section 10, and the last of them is
-precisely what [CRYPTO-MEMO Q3] must rule on before it could be
-admitted.
+after our adoption of it. The authoring workspace does not fork it:
+the reference component of the scheme layer is a thin profile crate
+that depends on the library pinned to a fixed revision and adds only
+what this specification requires on top of it, namely the share
+serialisation, typed session identifiers, and secret zeroisation the
+upstream library lacks, held bit-exact against the client
+implementation by cross-implementation vectors. This specification
+remains implementable from its own text and does not normatively
+depend on either the library or the profile crate: the papers cited
+in References are the normative basis for the scheme, and the code is
+evidence that the construction works, not a component of the
+standard. Capabilities present in the library but unused here (a
+traceable variant, a signature-derived guardian secret, and
+public-share update without re-share) informed section 3 and section
+10, and the last of them is precisely what [CRYPTO-MEMO Q3] must rule
+on before it could be admitted.
 
 ## Testing
 
@@ -1418,8 +1421,8 @@ A conforming implementation SHOULD provide:
   comparison.
 - Midnight Passport workspace: the account-custody prototype
   (`experiments/account-custody-prototype/`), the reference
-  implementation (`contract/`), and the scheme-library fork; to be
-  linked at their public locations on submission.
+  implementation (`contract/`), and the scheme-library profile crate;
+  to be linked at their public locations on submission.
 
 ## Acknowledgements
 

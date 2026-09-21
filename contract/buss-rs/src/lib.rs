@@ -1,15 +1,7 @@
-pub mod bottom_up;
-pub mod error;
-pub(crate) mod math;
-pub use math::polynomial::Polynomial;
-pub mod secret_sharing;
-pub mod v1;
+//! The Passport account-recovery v1 profile over the upstream scheme
+//! library. The scheme itself (BUSS / ANARKey over BLS12-381) is
+//! `arc-pleiades`, re-exported here at the pinned revision; this crate adds
+//! only what the recovery MIP specifies on top of it.
 
-pub use bottom_up::buss::{
-    cold_wallet_message, guardian_share, guardian_share_from_sig, key_update_delta, BottomUpSSS,
-};
-pub use bottom_up::traceable_buss::TraceableBuss;
-pub use error::Error;
-pub use secret_sharing::feldman::FeldmanVSS;
-pub use secret_sharing::shamir::ShamirSecretSharing;
-pub use secret_sharing::traceable_shamir::TraceableShamir;
+pub use arc_pleiades;
+pub mod v1;

@@ -10,7 +10,7 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "26f19f7a527e79831edf5d202a301d2c7c1a601c" }
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "885254fee527b06838f5e7cbc1517350d6277d10" }
 midnight-curves = "0.3"
 ff = "0.13"
 sha2 = "0.10"

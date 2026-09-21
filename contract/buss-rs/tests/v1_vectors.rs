@@ -4,11 +4,11 @@
 // constants below were produced by the TypeScript side; recovery-offline
 // asserts the same values there.
 
-use passport_buss::bottom_up::BottumUpSS;
+use passport_buss::arc_pleiades::bottom_up::BottumUpSS;
 use passport_buss::v1::{
     guardian_share_v1, share_from_bytes, share_to_bytes, GuardianSecret, SessionId,
 };
-use passport_buss::BottomUpSSS;
+use passport_buss::arc_pleiades::BottomUpSSS;
 
 fn hex32(s: &str) -> [u8; 32] {
     let mut out = [0u8; 32];
@@ -68,10 +68,10 @@ fn v1_shares_reconstruct_through_upstream_buss() {
     let guardians: Vec<GuardianSecret> = (0u8..3)
         .map(|i| GuardianSecret::from_prf_output(&[i + 1; 32]))
         .collect();
-    let shares: Vec<passport_buss::bottom_up::buss::Share<Fq>> = guardians
+    let shares: Vec<passport_buss::arc_pleiades::bottom_up::buss::Share<Fq>> = guardians
         .iter()
         .enumerate()
-        .map(|(i, g)| passport_buss::bottom_up::buss::Share {
+        .map(|(i, g)| passport_buss::arc_pleiades::bottom_up::buss::Share {
             x: Fq::from((i + 1) as u64),
             y: guardian_share_v1(&sid, &ACCOUNT, g),
         })
