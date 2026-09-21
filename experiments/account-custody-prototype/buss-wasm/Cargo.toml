@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.87"
 description = "BUSS (ANARKey, EPRINT 2025/551) bindings for the Passport account-custody prototype — wraps arc-pleiades (Pleiades) for use from TypeScript"
-license = "MIT"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
