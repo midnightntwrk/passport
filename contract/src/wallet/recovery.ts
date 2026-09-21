@@ -5,7 +5,7 @@
 // and the wrap container v1. Pure TypeScript over bigint — no wasm, no
 // external dependency — so this file doubles as the second independent
 // implementation for the cross-implementation share vectors (the first is
-// the Rust scheme-library fork).
+// the Rust profile crate over the upstream scheme library).
 //
 // Scheme geometry (§8): a roster of n guardians at reconstruction
 // threshold t+1 puts guardian j's share at x = j (1-based), the secret at
