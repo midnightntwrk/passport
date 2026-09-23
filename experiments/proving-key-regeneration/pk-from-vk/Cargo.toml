@@ -1,0 +1,26 @@
+[package]
+name = "pk-from-vk"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Build a Compact circuit's prover key from its ZKIR and a verifier key alone (no SRS), and compare with the compactc output"
+
+[dependencies]
+# midnight-ledger at the ledger-9 head (zkir-v3 3.0.0). A zkir binary built
+# from this revision reproduces the compactc 0.33.0-rc.2 keys byte for byte
+# (see ../results-determinism-2026-09-23.txt); the earlier 3.0.0-rc.2
+# revision 57b0d0a does not, and cannot read the compactc prover keys. The
+# bundled rc.2 binary is therefore newer than that tag. transient-crypto and
+# serialize are path dependencies inside the repository, so they resolve to
+# the same revision.
+midnight-zkir-v3 = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "e5da67016d143db7822bbcd79eb1dd4ca198cb07" }
+midnight-transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "e5da67016d143db7822bbcd79eb1dd4ca198cb07" }
+midnight-serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "e5da67016d143db7822bbcd79eb1dd4ca198cb07" }
+# Pinned to the versions in that revision's Cargo.lock.
+midnight-zk-stdlib = "=2.3.5"
+midnight-proofs = "=0.8.2"
+anyhow = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3

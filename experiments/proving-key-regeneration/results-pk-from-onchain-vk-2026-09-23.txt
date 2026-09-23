@@ -1,0 +1,33 @@
+# pk-from-vk over every account-contract circuit, verifier key read from chain (account 3588f5d3..., localnet, 2026/09/23)
+# zkir-v3 3.0.0 @ e5da670, midnight-zk-stdlib 2.3.5, midnight-proofs 0.8.2, midnight-circuits 7.2.4; Apple M-series
+circuit                                            k setup_pk_s prover_MB match
+activate_initial_device_with_jubjub               14       0.09      23.5 IDENTICAL
+activate_initial_device_with_k256                 14       0.10      28.0 IDENTICAL
+add_device_with_jubjub                            15       0.18      47.0 IDENTICAL
+add_device_with_k256                              16       0.44     112.0 IDENTICAL
+append_inbox_with_jubjub                          16       0.35      94.0 IDENTICAL
+append_inbox_with_k256                            16       0.45     112.0 IDENTICAL
+deposit_shielded                                  13       0.04      10.8 IDENTICAL
+deposit_unshielded                                 9       0.01       0.4 IDENTICAL
+issue_grant_with_jubjub                           16       0.35      94.0 IDENTICAL
+issue_grant_with_k256                             17       1.35     224.0 IDENTICAL
+remove_device_with_jubjub                         15       0.20      47.0 IDENTICAL
+remove_device_with_k256                           16       0.47     112.0 IDENTICAL
+revoke_all_grants_with_jubjub                     15       0.19      47.0 IDENTICAL
+revoke_all_grants_with_k256                       16       0.45     112.0 IDENTICAL
+revoke_grant_with_jubjub                          15       0.18      47.0 IDENTICAL
+revoke_grant_with_k256                            16       0.43     112.0 IDENTICAL
+rotate_enc_key_with_jubjub                        15       0.19      47.0 IDENTICAL
+rotate_enc_key_with_k256                          16       0.44     112.0 IDENTICAL
+withdraw_shielded_to_contract_with_grant_jubjub   17       0.72     188.0 IDENTICAL
+withdraw_shielded_to_contract_with_grant_k256     17       0.86     224.0 IDENTICAL
+withdraw_shielded_to_contract_with_jubjub         16       0.35      94.0 IDENTICAL
+withdraw_shielded_to_contract_with_k256           17       0.88     224.0 IDENTICAL
+withdraw_shielded_with_grant_jubjub               17       0.75     188.0 IDENTICAL
+withdraw_shielded_with_grant_k256                 17       0.89     224.0 IDENTICAL
+withdraw_shielded_with_jubjub                     16       0.34      94.0 IDENTICAL
+withdraw_shielded_with_k256                       17       0.83     224.0 IDENTICAL
+withdraw_unshielded_with_grant_jubjub             16       0.33      94.0 IDENTICAL
+withdraw_unshielded_with_grant_k256               17       0.82     224.0 IDENTICAL
+withdraw_unshielded_with_jubjub                   15       0.19      47.0 IDENTICAL
+withdraw_unshielded_with_k256                     16       0.45     112.0 IDENTICAL
