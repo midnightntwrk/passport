@@ -1,0 +1,15 @@
+circuit                                  build            run file_sha         inner_sha        file   inner  vk      time_s
+deposit_shielded                         compactc         ref 66a428c61169773d raw              -      -      -       -
+deposit_shielded                         rc2-c0.33.0      1   66a428c61169773d raw              same   same   same    0.41
+deposit_shielded                         rc2-c0.33.0      2   66a428c61169773d raw              same   same   same    0.4
+deposit_shielded                         rc2-c0.33.0      3   66a428c61169773d raw              same   same   same    0.41
+deposit_shielded                         rc2-c0.34.0-rc.0 1   66a428c61169773d raw              same   same   same    0.41
+deposit_shielded                         rc2-c0.34.0      1   66a428c61169773d raw              same   same   same    0.41
+deposit_shielded                         v3.0.0-e5da670   1   66a428c61169773d raw              same   same   same    0.41
+withdraw_shielded_with_grant_k256        compactc         ref 91f6fe4aab60115c raw              -      -      -       -
+withdraw_shielded_with_grant_k256        rc2-c0.33.0      1   91f6fe4aab60115c raw              same   same   same    9.31
+withdraw_shielded_with_grant_k256        rc2-c0.33.0      2   91f6fe4aab60115c raw              same   same   same    9.37
+withdraw_shielded_with_grant_k256        rc2-c0.33.0      3   91f6fe4aab60115c raw              same   same   same    9.47
+withdraw_shielded_with_grant_k256        rc2-c0.34.0-rc.0 1   91f6fe4aab60115c raw              same   same   same    12.74
+withdraw_shielded_with_grant_k256        rc2-c0.34.0      1   91f6fe4aab60115c raw              same   same   same    10.42
+withdraw_shielded_with_grant_k256        v3.0.0-e5da670   1   91f6fe4aab60115c raw              same   same   same    9.9

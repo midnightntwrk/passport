@@ -1,0 +1,248 @@
+{
+  "address": "3588f5d31a313c31f52a46d715b34afb4219aa1bf1c158c8a7e2ce837977357d",
+  "readAt": "2026-09-23T15:18:45.000Z",
+  "onChain": 30,
+  "total": 30,
+  "rows": [
+    {
+      "circuit": "activate_initial_device_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "add_device_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "deposit_shielded",
+      "onChain": true,
+      "chainBytes": 2121,
+      "fileBytes": 2121,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "onChain": true,
+      "chainBytes": 1353,
+      "fileBytes": 1353,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "issue_grant_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "remove_device_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "revoke_all_grants_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "revoke_grant_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "rotate_enc_key_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "onChain": true,
+      "chainBytes": 2313,
+      "fileBytes": 2313,
+      "identical": true,
+      "chainIsTailOfFile": false
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "onChain": true,
+      "chainBytes": 2745,
+      "fileBytes": 2745,
+      "identical": true,
+      "chainIsTailOfFile": false
+    }
+  ]
+}
