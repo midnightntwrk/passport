@@ -103,6 +103,20 @@ together; the upstream copies are canonical.
   (`contract/`) on both authorisation arms and evidenced in the
   runtime simulator (the full behaviour matrix) and on a local
   network (the lifecycle end to end).
+- `mps/mps-circuit-artefact-reproducibility.md` — **Identity,
+  Provenance, and Reproducibility of Compact Circuit Artefacts**
+  (Standards): the companion to upstream MPS-0039. Midnight specifies
+  nothing about what determines a circuit's prover and verifier keys,
+  records no producer, offers no client or proof-server surface that
+  regenerates keys, and anchors SDK integrity to a co-shipped manifest
+  rather than the chain, so gigabytes of prover keys move where
+  kilobytes of ZKIR and a producer identifier would carry the same
+  information. Evidence is `experiments/proving-key-regeneration/`:
+  all 30 account-contract keys reproduce byte for byte from the ZKIR
+  and the on-chain verifier key, while a build carrying the same
+  version string produces different keys. Recommends four MIPs, two of
+  which narrow MPS-0039's.
+
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on
