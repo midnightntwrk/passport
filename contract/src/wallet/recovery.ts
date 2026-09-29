@@ -265,7 +265,7 @@ export function sealWrap(
   if (encSecretKey.length !== 32) throw new Error('encryption secret must be 32 bytes');
   const key = wrapKey(recoverySecret, accountAddress);
   const nonce = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
   const ct = Buffer.concat([cipher.update(encSecretKey), cipher.final()]);
   const tag = cipher.getAuthTag();
 
@@ -290,7 +290,9 @@ export function openWrap(
   const ct = wrap.subarray(14, 46);
   const tag = wrap.subarray(46, 62);
   try {
-    const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+    // authTagLength pins the full 16-byte tag; the fixed container layout
+    // already guarantees it, this makes the invariant explicit to the cipher.
+    const decipher = createDecipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
     decipher.setAuthTag(tag);
     return new Uint8Array(Buffer.concat([decipher.update(ct), decipher.final()]));
   } catch {
