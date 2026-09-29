@@ -3,7 +3,7 @@ MIP: X
 Title: Recovery Paths for Custody Accounts
 Authors:
   - Nicolas Di Prima (NicolasDP)
-  - Co-author to be confirmed (the cryptographic review of the sharing layer)
+  - Raphael Toledo (rrtoledo)
 Status: Draft
 Category: Standards
 Created: 2026-08-24
