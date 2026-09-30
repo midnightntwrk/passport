@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.87"
 description = "BUSS (ANARKey, EPRINT 2025/551) bindings for the Passport account-custody prototype — wraps arc-pleiades (Pleiades) for use from TypeScript"
-license = "MIT"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "26f19f7a527e79831edf5d202a301d2c7c1a601c" }
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git", rev = "ae179e7e6dde546409c37f3de2c69d077e4d6e84" }
 midnight-curves = "0.3"
 ff = "0.13"
 sha2 = "0.10"

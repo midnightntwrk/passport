@@ -277,6 +277,59 @@ export ledger grants: Map<Bytes<32>, GrantRecord>;
 // spent_commit). A record with active = false is a tombstone.
 
 export ledger grant_generation: Uint<32>;
+
+// ── Recovery (recovery MIP §8): the artefact set, the pending record, and
+// the window ─────────────────────────────────────────────────────────────────
+
+export ledger recovery_pk: JubjubPoint;
+// The gate commitment: the recovery public key P = s·G (recovery MIP §2).
+// The recover gate verifies a signature under it, so `s` never enters a
+// proof and the proof may be delegated (REC-11). Rotated by every session
+// and by every finalised recovery. Never small-order: every writer runs
+// require_live_jubjub_point over it, because a signature under a
+// small-order key is forgeable and this key alone opens the seam.
+
+export ledger recovery_phi: Map<Uint<8>, Field>;
+// The BUSS public vector, keyed 1..recovery_phi_len. |phi| = n - t for a
+// roster of n guardians at reconstruction threshold t+1; the four-slot
+// bound admits (n - t) <= 4, e.g. three guardians at threshold two or
+// five at threshold three. Interpreted only by clients; the Field type
+// makes a non-canonical encoding unrepresentable on-chain.
+
+export ledger recovery_phi_len: Uint<8>;
+// Live phi entries. 0 = no published backup (recovery then needs a party
+// already holding the recovery secret, e.g. the birth secret).
+
+export ledger recovery_session: Bytes<32>;
+// Session identifier of the current artefact set. Fresh per session
+// (REC-4); the all-zero constructor sentinel also rejects an all-zero
+// nonce from a broken client generator on the first session.
+
+export ledger recovery_wrap: Bytes<64>;
+// Wrap container v1: AEAD of the account encryption secret (the private
+// half of enc_key) under the wrap key derived from the recovery secret.
+// Opaque to the contract — all wrap cryptography is client-side, following
+// the InboxEntry pattern (MIP-0012 §6.4).
+
+export ledger recovery_version: Uint<32>;
+// Artefact-set version tag (recovery MIP §10). Readers MUST reject a
+// version they do not implement rather than best-effort parse.
+
+export ledger pending_recovery: Boolean;
+export ledger pending_entry: Bytes<32>;
+export ledger pending_recovery_pk: JubjubPoint;
+export ledger pending_not_before: Uint<64>;
+// The pending record (recovery MIP §8): the successor device entry
+// (precomputed at submission for epoch + 1, use counter 0), the successor
+// recovery public key P', and the earliest wall-clock finalisation time.
+// Present at most once; written by recover_submit, cleared by
+// recover_cancel or recover_finalise.
+
+export ledger veto_window: Uint<64>;
+// The veto window in seconds (deployment parameter, recovery MIP §6
+// step 5). Wall-clock: block-time comparators carry no error bound, so
+// deployments choose a window materially longer than their assumed
+// timestamp tolerance.
 // Bumped only by revoke_all_grants. A record whose gen differs from it is
 // inert (GR-9), as is one whose epoch differs from device_epoch.
 
@@ -288,7 +341,13 @@ export ledger grant_generation: Uint<32>;
 // activate_initial_device_with_<arm>(pk, salt) immediately after deploy to
 // insert the initial entry at epoch 0 and use counter 0.
 
-constructor(initial_device_boot: Bytes<32>, encryption_key: Bytes<32>) {
+constructor(
+  initial_device_boot: Bytes<32>,
+  encryption_key: Bytes<32>,
+  initial_recovery_pk: JubjubPoint,
+  initial_recovery_wrap: Bytes<64>,
+  veto_window_seconds: Uint<64>,
+) {
   round        = 0 as Uint<64>;
   enc_key      = disclose(encryption_key);
   inbox_count  = 0 as Uint<64>;
@@ -299,6 +358,22 @@ constructor(initial_device_boot: Bytes<32>, encryption_key: Bytes<32>) {
   device_count = 0 as Uint<8>;
   auth_nonce   = 0 as Uint<64>;
   grant_generation = 0 as Uint<32>;
+  // Recovery at birth (recovery MIP, Backwards Compatibility): the deploying
+  // client samples a birth secret, publishes its public key P = s·G and the
+  // wrap of the encryption secret, and discards or prints the secret. No phi
+  // exists until the first guardian session. The birth key is checked for
+  // small order at the gate (recover_submit) rather than here, so a weak
+  // birth key can never authorise anything.
+  recovery_pk         = disclose(initial_recovery_pk);
+  recovery_phi_len    = 0 as Uint<8>;
+  recovery_session    = pad(32, "");
+  recovery_wrap       = disclose(initial_recovery_wrap);
+  recovery_version    = 1 as Uint<32>;
+  pending_recovery    = false;
+  pending_entry       = pad(32, "");
+  pending_recovery_pk = default<JubjubPoint>; // the identity (0, 1); see do_recover_cancel
+  pending_not_before  = 0 as Uint<64>;
+  veto_window         = disclose(veto_window_seconds);
 }
 
 // ── Bootstrap (per arm) ─────────────────────────────────────────────────────
@@ -2402,4 +2477,402 @@ export circuit revoke_all_grants_with_jubjub(
   );
   require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
   do_revoke_all_grants();
+}
+
+// ── Recovery (recovery MIP §5, §6) ──────────────────────────────────────────
+//
+// One artefact-publishing operation (the session, seam-gated) and one seam
+// path that changes the device set without an active device (the recovery
+// gate, split into submission and finalisation around the veto window, with
+// a seam-gated cancel). The MIP-0013 §8 obligations are discharged across
+// the two phases: (a) at submission, (b) (c) (d) at finalisation.
+//
+// The two seam-gated operations follow the contract's per-arm convention:
+// `<op>_with_jubjub` / `<op>_with_k256` over a shared `do_<op>` chip, with
+// the challenge in the arm's own tag family. The recovery gate itself is
+// arm-independent: it is gated by the recovery secret, not by a device.
+
+// Liveness guard for the recovery keys (the stored P, a published P, a
+// successor P', a successor device key Q), the same guard the JubJub seam
+// applies to a device key: a Schnorr verification s·G == R + c·X collapses
+// at a small-order X and passes with no private key.
+//
+// What each assert buys, on the reference toolchain. The proof system
+// constrains every JubJub point that enters a circuit to the prime-order
+// subgroup at assignment (the point assignment witnesses the cofactor root
+// under the curve equation and multiplies by the cofactor in-circuit), so a
+// torsion operand is unprovable and the JS runtime refuses to construct one.
+// The IDENTITY is a subgroup point and passes that assignment, so the first
+// assert is the load-bearing check. The cofactor assert ([8]X == O exactly
+// when X has small order; O = ecMulGenerator(0) is the affine point (0, 1))
+// is defence in depth for a backend that assigns points as bare
+// coordinates. Full subgroup membership ([r]X == O) is not expressible by
+// the Compact author because r exceeds the embedded scalar bound, and on
+// this toolchain does not need to be (recovery MIP §6 step 4).
+//
+// A second job: routing a point through this guard forces it through an
+// ec operation, which is what constrains a value the circuit only STORES
+// (a published P, a successor P'). Every key written to recovery_pk or
+// pending_recovery_pk passes through here first.
+circuit require_live_jubjub_point(x: JubjubPoint): [] {
+  assert(x != ecMulGenerator(0 as JubjubScalar), "recovery key is the identity");
+  assert(ecMul(x, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
+         "recovery key has small order");
+}
+
+// Recover-gate challenge (recovery MIP §6 step 4), under the registered tag
+// `midnight:account:recovery:submit:v1`. One challenge, two signatures: the
+// recovery key P signs it and the successor device key Q co-signs it, and
+// BOTH nonce points are bound so neither signature can be lifted into a
+// different pairing. Binds everything the submission fixes — the stored
+// key it opens, the successor key and its derived entry's epoch, the
+// successor recovery key, the current authorisation nonce, and the
+// wall-clock bound the veto window is anchored on — so a delegated prover
+// can produce exactly the submission the recovering party authorised and
+// no other (REC-11). The authorisation nonce makes a cancelled submission
+// unreplayable: cancel is seam-gated and advances it.
+export pure circuit challenge_recover_submit(
+  self_addr:             ContractAddress,
+  recovery_key:          JubjubPoint,
+  sig_r_recovery:        JubjubPoint,
+  successor_pk:          JubjubPoint,
+  sig_r_successor:       JubjubPoint,
+  successor_recovery_pk: JubjubPoint,
+  post_epoch:            Uint<32>,
+  nonce_value:           Uint<64>,
+  now_upper:             Uint<64>,
+  grind_nonce:           Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:recovery:submit:v1")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, JubjubPoint, JubjubPoint, JubjubPoint, Uint<32>, Uint<64>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, recovery_key, sig_r_recovery, successor_pk, sig_r_successor,
+     successor_recovery_pk, post_epoch, nonce_value, now_upper, grind_nonce]
+  );
+}
+
+// Recovery session challenge (recovery MIP §5): binds the whole artefact
+// set, so the approving device signs over exactly the commitment, session
+// identifier, vector, and wrap that will be published.
+export pure circuit challenge_publish_recovery_session_with_jubjub(
+  self_addr:      ContractAddress,
+  sig_r:          JubjubPoint,
+  pk:             JubjubPoint,
+  new_recovery_pk: JubjubPoint,
+  session_nonce:  Bytes<32>,
+  phi_1:          Field,
+  phi_2:          Field,
+  phi_3:          Field,
+  phi_4:          Field,
+  phi_len:        Uint<8>,
+  wrap:           Bytes<64>,
+  nonce_value:    Uint<64>,
+  grind_nonce:    Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:publish_recovery_session")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, JubjubPoint, Bytes<32>, Field, Field, Field, Field, Uint<8>, Bytes<64>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, new_recovery_pk, session_nonce,
+     phi_1, phi_2, phi_3, phi_4, phi_len, wrap, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_publish_recovery_session_with_k256(
+  self_addr:      ContractAddress,
+  pk:             Secp256k1Point,
+  new_recovery_pk: JubjubPoint,
+  session_nonce:  Bytes<32>,
+  phi_1:          Field,
+  phi_2:          Field,
+  phi_3:          Field,
+  phi_4:          Field,
+  phi_len:        Uint<8>,
+  wrap:           Bytes<64>,
+  nonce_value:    Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:k1:v1:publish_recovery_session")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, JubjubPoint, Bytes<32>, Field, Field, Field, Field, Uint<8>, Bytes<64>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     new_recovery_pk, session_nonce,
+     phi_1, phi_2, phi_3, phi_4, phi_len, wrap, nonce_value]
+  );
+}
+
+// Cancel challenge (recovery MIP §6 step 5). No arguments beyond the
+// standard binding set: the cancel clears whatever recovery is pending,
+// and the nonce makes the authorisation single-use (AUTH-2).
+export pure circuit challenge_recover_cancel_with_jubjub(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:recover_cancel")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_recover_cancel_with_k256(
+  self_addr:   ContractAddress,
+  pk:          Secp256k1Point,
+  nonce_value: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:k1:v1:recover_cancel")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     nonce_value]
+  );
+}
+
+// Shared session-publish chip (recovery MIP §5). The client MUST use a fresh
+// session identifier and a freshly sampled secret per session — the
+// inequality asserts against the stored values are a tripwire against
+// accidental reuse, not the defence (the contract can only compare with
+// what it stores; independence of the client's randomness is a client
+// obligation). Rejected while a recovery is pending: a session rotates the
+// commitment, and a pending record enacted after that rotation would enrol
+// a successor the rotated commitment never authorised — cancel first.
+circuit do_publish_recovery_session(
+  new_recovery_pk: JubjubPoint,
+  session_nonce:  Bytes<32>,
+  phi_1:          Field,
+  phi_2:          Field,
+  phi_3:          Field,
+  phi_4:          Field,
+  phi_len:        Uint<8>,
+  wrap:           Bytes<64>,
+): [] {
+  assert(!pending_recovery, "recovery pending; cancel first");
+  assert(phi_len >= (1 as Uint<8>), "phi must not be empty");
+  assert(phi_len <= (4 as Uint<8>), "phi length out of range");
+  // Unused slots MUST be zero and are gated by the length field, so a
+  // reader can neither mistake padding for a share nor be handed a vector
+  // longer than the roster it was told about.
+  if (phi_len < (2 as Uint<8>)) {
+    assert(phi_2 == (0 as Field), "unused phi slot 2 not zero");
+  }
+  if (phi_len < (3 as Uint<8>)) {
+    assert(phi_3 == (0 as Field), "unused phi slot 3 not zero");
+  }
+  if (phi_len < (4 as Uint<8>)) {
+    assert(phi_4 == (0 as Field), "unused phi slot 4 not zero");
+  }
+  // An all-zero identifier is what a broken generator produces; the stored
+  // value catches it on the first session only, so it is refused outright.
+  assert(session_nonce != pad(32, ""), "session nonce is zero");
+  assert(session_nonce != recovery_session, "session nonce reused");
+  assert(new_recovery_pk != recovery_pk, "recovery commitment reused");
+  require_live_jubjub_point(new_recovery_pk);
+  recovery_pk      = disclose(new_recovery_pk);
+  recovery_session = disclose(session_nonce);
+  recovery_phi.insert(1 as Uint<8>, disclose(phi_1));
+  recovery_phi.insert(2 as Uint<8>, disclose(phi_2));
+  recovery_phi.insert(3 as Uint<8>, disclose(phi_3));
+  recovery_phi.insert(4 as Uint<8>, disclose(phi_4));
+  recovery_phi_len = disclose(phi_len);
+  recovery_wrap    = disclose(wrap);
+  recovery_version = 1 as Uint<32>;
+}
+
+export circuit publish_recovery_session_with_jubjub(
+  new_recovery_pk: JubjubPoint,
+  session_nonce:  Bytes<32>,
+  phi_1:          Field,
+  phi_2:          Field,
+  phi_3:          Field,
+  phi_4:          Field,
+  phi_len:        Uint<8>,
+  wrap:           Bytes<64>,
+  pk:             JubjubPoint,
+  use_counter:    Uint<64>,
+  sig_r:          JubjubPoint,
+  sig_s:          Field,
+  grind_nonce:    Uint<64>,
+): [] {
+  const challenge = challenge_publish_recovery_session_with_jubjub(
+    kernel.self(), sig_r, pk, new_recovery_pk, session_nonce,
+    phi_1, phi_2, phi_3, phi_4, phi_len, wrap, auth_nonce, grind_nonce
+  );
+  require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
+  do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+}
+
+export circuit publish_recovery_session_with_k256(
+  new_recovery_pk: JubjubPoint,
+  session_nonce:  Bytes<32>,
+  phi_1:          Field,
+  phi_2:          Field,
+  phi_3:          Field,
+  phi_4:          Field,
+  phi_len:        Uint<8>,
+  wrap:           Bytes<64>,
+  pk:             Secp256k1Point,
+  use_counter:    Uint<64>,
+  sig:            Secp256k1EcdsaSignature,
+  envelope:       Uint<8>,
+): [] {
+  const challenge = challenge_publish_recovery_session_with_k256(
+    kernel.self(), pk, new_recovery_pk, session_nonce,
+    phi_1, phi_2, phi_3, phi_4, phi_len, wrap, auth_nonce
+  );
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
+  do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+}
+
+// Recovery submission (recovery MIP §6 steps 1–4): the signature gate.
+//
+// Gated by the recovery key, not by a device. The submitting party proves
+// knowledge of `s` by presenting a Schnorr signature under the stored
+// recovery public key P, and the successor proves possession of its device
+// key Q by co-signing the same challenge. Neither `s` nor the successor
+// scalar enters the proof — the two signatures are the only private inputs
+// — so the proof may be produced by a delegated prover, who learns nothing
+// it could reuse (REC-11). The challenge binds the successor key, the
+// successor recovery key P', the post-bump epoch, the current nonce, and
+// the wall-clock bound, so the prover can produce exactly one submission.
+//
+// Q and P' are checked for small order (the co-signature then establishes
+// possession of Q's prime-order component). The stored P is checked here
+// too, so a weak birth key deployed by a careless client can never open the
+// gate. Binding the expected epoch and nonce rejects a submission built
+// against stale state (MIP-0013 §8 (a)). The wall-clock upper bound anchors
+// the veto window; the assert rejects a bound that has already passed, so
+// the window cannot be shortened by understating now, and because the bound
+// is signed, a prover cannot lengthen it either.
+export circuit recover_submit(
+  successor_pk:          JubjubPoint,
+  successor_recovery_pk: JubjubPoint,
+  expected_epoch:        Uint<32>,
+  expected_nonce:        Uint<64>,
+  now_upper:             Uint<64>,
+  sig_r_recovery:        JubjubPoint,
+  sig_s_recovery:        Field,
+  sig_r_successor:       JubjubPoint,
+  sig_s_successor:       Field,
+  grind_nonce:           Uint<64>,
+): [] {
+  assert(!pending_recovery, "recovery already pending");
+  assert(expected_epoch == device_epoch, "stale epoch");
+  assert(expected_nonce == auth_nonce, "stale authorisation nonce");
+  require_live_jubjub_point(recovery_pk);
+  require_live_jubjub_point(successor_pk);
+  require_live_jubjub_point(successor_recovery_pk);
+  // The same defence in depth the session applies (recovery MIP §5): the
+  // successor key must not be the key being consumed, or finalisation
+  // would re-install a secret a quorum has already reconstructed.
+  assert(successor_recovery_pk != recovery_pk, "recovery commitment reused");
+  const post_epoch = ((device_epoch + (1 as Uint<32>)) as Uint<32>);
+  const challenge = challenge_recover_submit(
+    kernel.self(), recovery_pk, sig_r_recovery, successor_pk, sig_r_successor,
+    successor_recovery_pk, post_epoch, auth_nonce, now_upper, grind_nonce
+  );
+  // The signers ground the challenge below the JubJub subgroup order
+  // (MIP-0013 §5.2), so the scalar image of the cast chain is canonical.
+  const c = challenge as Field;
+  assert(
+    ecMulGenerator(sig_s_recovery as JubjubScalar) == ecAdd(sig_r_recovery, ecMul(recovery_pk, c as JubjubScalar)),
+    "invalid recovery signature"
+  );
+  assert(
+    ecMulGenerator(sig_s_successor as JubjubScalar) == ecAdd(sig_r_successor, ecMul(successor_pk, c as JubjubScalar)),
+    "invalid successor co-signature"
+  );
+  // Block time <= now_upper: the kernel offers strict comparators only, so
+  // the inclusive bound is the negation of the strict one.
+  assert(!kernel.blockTimeGreaterThan(disclose(now_upper)), "now bound is in the past");
+  pending_recovery    = true;
+  pending_entry       = disclose(derive_device_entry_with_jubjub(
+    kernel.self(), successor_pk, post_epoch, 0 as Uint<64>,
+  ));
+  pending_recovery_pk = disclose(successor_recovery_pk);
+  pending_not_before  = ((disclose(now_upper) + veto_window) as Uint<64>);
+  bump_round();
+}
+
+// Seam-gated cancel (recovery MIP §6 step 5): any live device vetoes a
+// pending recovery inside the window. Clears the pending record only; the
+// artefact set is untouched, so a genuine recoverer simply resubmits.
+//
+// The cleared key slot holds the JubJub identity. It is written as
+// ecMul(pending_recovery_pk, 0) rather than as the literal
+// default<JubjubPoint>: the two denote the same point (0, 1), but the
+// proving toolchain enables a circuit's curve gadget only when it performs a
+// curve operation on a runtime value, and the k256 twin of this cancel
+// performs no other JubJub operation. A bare point literal (a constant
+// generator multiple folds to one) leaves the circuit without the gadget
+// its own ledger write needs, and key generation fails. Cancel deliberately
+// asserts nothing about the pending key: a cancel must always be able to
+// clear whatever submission wrote.
+circuit do_recover_cancel(): [] {
+  assert(pending_recovery, "no recovery pending");
+  pending_recovery    = false;
+  pending_entry       = pad(32, "");
+  pending_recovery_pk = ecMul(pending_recovery_pk, 0 as JubjubScalar);
+  pending_not_before  = 0 as Uint<64>;
+}
+
+export circuit recover_cancel_with_jubjub(
+  pk:          JubjubPoint,
+  use_counter: Uint<64>,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_recover_cancel_with_jubjub(
+    kernel.self(), sig_r, pk, auth_nonce, grind_nonce
+  );
+  require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
+  do_recover_cancel();
+}
+
+export circuit recover_cancel_with_k256(
+  pk:          Secp256k1Point,
+  use_counter: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
+): [] {
+  const challenge = challenge_recover_cancel_with_k256(kernel.self(), pk, auth_nonce);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
+  do_recover_cancel();
+}
+
+// Finalisation (recovery MIP §6 step 6; MIP-0013 §8 (b) (c) (d)).
+// Permissionless once the window has closed: the epoch bump retires every
+// pre-recovery entry, the successor's precomputed entry is the sole live
+// device, the successor recovery key replaces the consumed one, and the
+// published vector is invalidated (the secret it protected is spent).
+// auth_nonce advances so any authorisation cached against the old state is
+// dead on arrival.
+export circuit recover_finalise(): [] {
+  assert(pending_recovery, "no recovery pending");
+  // Block time >= pending_not_before, as the negation of the strict bound.
+  assert(!kernel.blockTimeLessThan(pending_not_before), "veto window still open");
+  // Re-asserted before the key is installed as the gate: defence in depth
+  // over the check at submission, and the ec operation that lets the
+  // proving toolchain build this circuit at all (a circuit that only
+  // stores a JubJub point, without operating on one, gets no curve gadget).
+  require_live_jubjub_point(pending_recovery_pk);
+  device_epoch = ((device_epoch + (1 as Uint<32>)) as Uint<32>);
+  devices.insert(pending_entry);
+  device_count = 1 as Uint<8>;
+  recovery_pk = pending_recovery_pk;
+  recovery_phi_len = 0 as Uint<8>;
+  pending_recovery    = false;
+  pending_entry       = pad(32, "");
+  pending_recovery_pk = ecMul(pending_recovery_pk, 0 as JubjubScalar); // the identity; see do_recover_cancel
+  pending_not_before  = 0 as Uint<64>;
+  auth_nonce = ((auth_nonce + (1 as Uint<64>)) as Uint<64>);
+  bump_round();
 }

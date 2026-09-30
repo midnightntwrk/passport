@@ -232,6 +232,9 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
     createConstructorContext<PrivateState>({} as PrivateState, coinPk),
     owner.bootCommitment(salt),
     rnd(32),
+    JubjubDevice.generate().pk, // birth recovery key (opaque here)
+    new Uint8Array(64),  // birth wrap
+    259_200n,            // veto window, seconds
   );
 
   let state: any = init.currentContractState;
