@@ -245,6 +245,8 @@ const proverRestarts: Array<{ label: string; at: string; reason: string }> = [];
 
 async function proverHealthy(): Promise<boolean> {
   try {
+    // Localnet loopback health check only; no credentials or proof inputs are sent.
+    // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
     const r = await fetch('http://127.0.0.1:6300/health', { signal: AbortSignal.timeout(3_000) });
     return r.ok;
   } catch {
