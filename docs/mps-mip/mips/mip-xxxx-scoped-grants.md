@@ -1076,10 +1076,16 @@ is dearer per proof than either twin alone. A grant spend and an
 issuance cost the same order on the same arm, and the jubjub arm is the
 cheaper one at every k the two share. The figures are one machine's,
 and the proof server was the run's least stable component at k=17.
-Three of the six grant twins carry no on-node timing at all: the two
-unshielded ones, because the reference localnet refuses a contract call
-paired with an unshielded offer, and the jubjub contract-recipient
-twin, which the run never called.
+One of the six grant twins carries no on-node timing at all, the jubjub
+contract-recipient twin, which the run never called. The two unshielded
+twins were timed in a later run on the same stack, on a non-native
+color, at 5.6 to 6.8 s for the jubjub twin at k=16 over four proofs and
+17.2 s for the k256 twin at k=17 over one: what the reference localnet
+refuses is the funding leg, a small contract call carrying a NIGHT
+unshielded input that balancing pairs with a NIGHT change output, and
+not a contract call paired with an unshielded offer as such
+(`evidence/grants-e4-proving-*.json` and `evidence/dismiss-cost.json` of
+the reference implementation).
 
 Verifier keys depend on the circuit's shape and not on k: 2,745 bytes
 for every k256 circuit and 2,313 for every jubjub circuit (the deposits
@@ -2106,11 +2112,14 @@ measured rather than specified here, which is why section 5.1 states
       roster and proving times measured for every circuit the
       conformance run exercised; the layout, arity, and change-append
       questions settled with no fallback taken; Testing item 1 green.
-      Residue, carried by other criteria and not by this one: three of
-      the six grant twins have no on-node timing, the two unshielded
-      ones because the reference localnet refuses a contract call
-      paired with an unshielded offer and the jubjub contract-recipient
-      twin because the run never called it, and the p256 twins wait on
+      Residue, carried by other criteria and not by this one: one of
+      the six grant twins has no on-node timing, the jubjub
+      contract-recipient twin, because the run never called it; the two
+      unshielded twins were timed in a later run on a non-native color,
+      since what the reference localnet refuses is the funding leg, a
+      small contract call carrying a NIGHT unshielded input that
+      balancing pairs with a NIGHT change output
+      (`evidence/grants-e4-proving-*.json`); and the p256 twins wait on
       the secp256r1 surface.
 - [ ] E2: Testing item 2 green on a node, each case ending with the
       invariants it exercises. Held: twelve rejection rows and nine
@@ -2312,10 +2321,11 @@ GrantViewSeal, the negative key vectors, and the r1 vectors); the
 Testing item 11, which waits on the recovery seam; the leg of Testing
 item 10 that rotates `enc_key` between signing and submission; the
 faults Testing item 2 lists as not run on node; the on-node behaviour
-and proving cost of the two unshielded grant twins, which the reference
-localnet cannot carry, and of the jubjub contract-recipient twin, which
-the run never called; and the independent cryptographer review the
-acceptance criteria require.
+and proving cost of the jubjub contract-recipient twin, which the run
+never called, and of either unshielded twin over NIGHT, which the
+reference localnet cannot fund (both are held on node over a non-native
+color, `evidence/grants-e4-spend-*.json`); and the independent
+cryptographer review the acceptance criteria require.
 
 The reference contract now carries the two cells, the two structs, the
 pure derivations, the seam chips and three grant twins on each grantee
@@ -2347,10 +2357,15 @@ the following. Each item names the invariants it exercises.
    and both expiry rows on the grant twins themselves, the accepted
    transactions read back through the indexer to show that the `0`
    record's call records no block-time read and the forward-dated one
-   exactly one. The unshielded twins are exercised off-node only, in
-   the circuit simulator, because the reference localnet refuses a
-   contract call paired with an unshielded offer; that is a property of
-   the network the run used rather than a gap in the item.
+   exactly one. The unshielded twins are held on node too, over a
+   non-native color, on both grantee arms: five spends debiting the
+   mirror, advancing `nonce` and `spent_commit`, and honouring a
+   recipient pin (`evidence/grants-e4-spend-*.json`). Over NIGHT they
+   are exercised off-node only, in the circuit simulator, because the
+   reference localnet refuses the funding leg, a small contract call
+   carrying a NIGHT unshielded input that balancing pairs with a NIGHT
+   change output; that is a property of the network the run used rather
+   than a gap in the item.
 2. **Rejection matrix.** The same call aborts with no state change under
    each single fault: out-of-scope operation; over `per_call_cap`; over
    `cap`; a cumulative wrap attempt; a wrong `spent_prev` opening; a
@@ -2622,6 +2637,14 @@ the following. Each item names the invariants it exercises.
   evidence at `contract/evidence/block-time-unit.json` and
   `contract/evidence/block-time-sweep.json` on the branch
   `nicolasdp/grants-seam-e1` of the
+  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
+  repository.
+- The unshielded grant twins on node (Implementation): the findings in
+  the 2026/09/16 section of `contract/GRANTS-E2.md` and the evidence at
+  `contract/evidence/grants-e4-*.json`, five files, one per group
+  (funding, issue, spend, rejections, and proving), together with the
+  per-shape dismissal pricing at `contract/evidence/dismiss-cost.json`,
+  on the branch `nicolasdp/grants-unshielded-twins` of the
   [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
   repository.
 

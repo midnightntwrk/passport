@@ -23,12 +23,14 @@
     "test:custody-unshielded": "tsx src/tests/custody-unshielded.ts",
     "test:custody-payments": "tsx src/tests/custody-payments.ts",
     "test:grants-conformance": "tsx src/tests/grants-conformance.ts",
+    "test:grants-unshielded": "tsx src/tests/grants-unshielded.ts",
     "test:leak-audit": "tsx src/tests/leak-audit.ts",
     "probe:revocation": "tsx src/tests/probe-revocation.ts",
     "probe:block-time": "tsx src/tests/probe-block-time.ts",
     "probe:wave-ceiling": "tsx src/tests/probe-wave-ceiling.ts",
     "probe:onchain-vk": "tsx src/tests/probe-onchain-vk.ts ../experiments/proving-key-regeneration/onchain",
-    "probe:vk-derived-pk": "tsx src/tests/probe-vk-derived-pk.ts"
+    "probe:vk-derived-pk": "tsx src/tests/probe-vk-derived-pk.ts",
+    "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
