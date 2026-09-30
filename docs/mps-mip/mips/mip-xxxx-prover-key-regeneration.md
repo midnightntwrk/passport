@@ -70,15 +70,18 @@ to share a version string.
 
 The proposed deployment model is ordinary application distribution:
 
-```text
-application package / web assets                 deployed contract
-  circuit ZKIR + regeneration recipe               verifier key
-                   \                                /
-                    \---- compatible keygen -------/
-                                    |
-                           regenerated prover key
-                                    |
-                             local cache / prover
+```mermaid
+flowchart TD
+    bundle["Application package / web assets<br/>Circuit ZKIR + regeneration recipe"]
+    contract["Deployed contract<br/>Verifier key"]
+    keygen["Compatible key generation"]
+    key["Regenerated prover key"]
+    consumer["Local cache / prover"]
+
+    bundle --> keygen
+    contract --> keygen
+    keygen --> key
+    key --> consumer
 ```
 
 The application already selects the network, contract address and operation
