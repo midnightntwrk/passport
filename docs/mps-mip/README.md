@@ -103,6 +103,16 @@ together; the upstream copies are canonical.
   (`contract/`) on both authorisation arms and evidenced in the
   runtime simulator (the full behaviour matrix) and on a local
   network (the lifecycle end to end).
+- `mips/mip-xxxx-prover-key-regeneration.md` — **On-Demand Prover Keys
+  from Bundled ZKIR**: a solution MIP under MPS-0039. Applications package
+  small ZKIR assets and regenerate/cache prover keys using verifier keys
+  read from the deployed contract, without requiring a registry. Defines
+  a versioned recipe, compatible keygen profile, independent ZKIR/VK
+  validation and upgrade handling. Native feasibility evidence is merged
+  in `experiments/proving-key-regeneration/`; supported SDK/WASM APIs,
+  conformance vectors and integration evidence remain to be delivered.
+  This is the chosen direction instead of the additional MPS in PR #172.
+
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on
