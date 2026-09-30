@@ -5,3 +5,4 @@ midnight-level-db/
 infra/.env
 deployment.json
 *.log
+rust/caller-context/target/

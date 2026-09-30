@@ -1,0 +1,27 @@
+# P9 control arms: the node's own refusal lines
+#
+# Captured 2026/09/14 with
+#   docker logs cross-contract-calls-node-1 2>&1 | grep 'Rejected transaction'
+# from the localnet that ran P9 (midnightntwrk/midnight-node:2.1.0-2e92c4ae642c).
+# The hash in each line is the SHA-256 of the submitted transaction bytes, and
+# it equals the sha256 the probe recorded in evidence/p9-lending.json under
+# details.hexFiles for the balanced capture of each control arm, so every line
+# ties to a captured arm without inference. The wallet SDK surfaced each of
+# these to the client as a bare SubmissionError; the RPC layer surfaced a
+# Substrate InvalidTransaction::Custom(u8) code (212, 216, 219) with no name.
+#
+# Final run (the one evidence/p9-lending.json and the *.hex captures record):
+#   9a78bbf1… = control-a (subset:     evidence/p9-tx-control-a-balanced.hex)
+#   ba53ae43… = control-b (uniqueness: evidence/p9-tx-control-b-balanced.hex)
+#   b4e8e5d2… = control-c (sequencing: evidence/p9-tx-control-c-balanced.hex)
+# The two earlier triples (12:11, 12:15) are the two preceding full runs of the
+# same probe, kept to show the outcome is stable across runs.
+2026-09-14 12:11:09 🚫 Rejected transaction 25f9c965614862295cdace82b899d2922619b0f933b67642a51fba4c57780201 from mempool: Transaction Error: Malformed(EffectsCheck(RealCallsSubsetCheckFailure))
+2026-09-14 12:11:11 🚫 Rejected transaction e4955af02eff19471e63d7c41c28f95a7c274fa9a17e46c7dc0978c12ff4fad0 from mempool: Transaction Error: Malformed(EffectsCheck(ClaimedCallsUniquenessFailure))
+2026-09-14 12:11:12 🚫 Rejected transaction de304cae257c13a0fef483e0b092c96fb8ff9d2ed908b454fdb8e9dbc6a07d17 from mempool: Transaction Error: Malformed(SequencingCheck(CallSequencingViolation))
+2026-09-14 12:15:58 🚫 Rejected transaction 61a00675791e5098b9679ca9d74a4340c70cfb494a8810d4c660ad33895e82fb from mempool: Transaction Error: Malformed(EffectsCheck(RealCallsSubsetCheckFailure))
+2026-09-14 12:16:00 🚫 Rejected transaction 88b4f4bb6d8ac9c698e7986c898607fb73dfc4c8fd8dadf048d1ad3a09e390f9 from mempool: Transaction Error: Malformed(EffectsCheck(ClaimedCallsUniquenessFailure))
+2026-09-14 12:16:01 🚫 Rejected transaction 6d66dc698af5211f506644d3053f5bda2725108c9e54e91822e813e9aaf5e2c6 from mempool: Transaction Error: Malformed(SequencingCheck(CallSequencingViolation))
+2026-09-14 12:17:57 🚫 Rejected transaction 9a78bbf126c1b40284a02df9760819901e94618a9c27bba3470ad521db8f29d4 from mempool: Transaction Error: Malformed(EffectsCheck(RealCallsSubsetCheckFailure))
+2026-09-14 12:17:59 🚫 Rejected transaction ba53ae4316f76863b4b35daaed34251195973d776fb36dc58018342b18935f77 from mempool: Transaction Error: Malformed(EffectsCheck(ClaimedCallsUniquenessFailure))
+2026-09-14 12:18:00 🚫 Rejected transaction b4e8e5d2f74fc74328170ec5f722f10ac3f53e60eca1ef9aeeae2ea8e9b92c7a from mempool: Transaction Error: Malformed(SequencingCheck(CallSequencingViolation))

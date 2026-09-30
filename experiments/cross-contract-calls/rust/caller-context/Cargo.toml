@@ -1,0 +1,47 @@
+# caller-context: run the ledger's own CallContext.caller derivation on
+# serialised transaction bytes, off-node. See README.md.
+#
+# Dependency of record: the midnight-ledger repository at git tag
+# ledger-9.1.0.0-rc.3 (commit 4823b5351b17cc49e30f19760dbd30a73cf95e22), the
+# same tag the experiment's @midnightntwrk/ledger-v9 1.0.0-rc.3 binding is
+# built from. No path dependencies.
+
+[package]
+name = "caller-context"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Runs ContractCall::context(...).caller from midnight-ledger ledger-9.1.0.0-rc.3 on serialised transaction bytes and prints the per-call caller graph."
+
+[dependencies]
+# proof-verifying is off, as in ledger-wasm: proofs are carried as opaque
+# bytes and deserialise without the verifier machinery.
+ledger = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-ledger-v9", default-features = false }
+onchain-runtime = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-onchain-runtime" }
+coin-structure = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-coin-structure" }
+storage = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-storage" }
+serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-serialize" }
+transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-transient-crypto" }
+base-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-base-crypto" }
+
+anyhow = "1"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The ledger crate depends on the PREVIOUS transient-crypto line
+# (midnight-transient-crypto ^2.0.0) for legacy verifier keys, and relies on
+# 2.2 additions that are not published on crates.io (2.1.1 is the newest
+# there). The upstream workspace resolves this with exactly these three
+# [patch.crates-io] entries (midnight-ledger/Cargo.toml at the tag); they are
+# reproduced here against the same git tags so the consumer build resolves
+# the graph the way upstream's does. They are part of the pin, not a local
+# accelerator.
+[patch.crates-io]
+midnight-transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "transient-crypto-2.2.0-rc.1", package = "midnight-transient-crypto" }
+midnight-base-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-base-crypto" }
+midnight-serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", tag = "ledger-9.1.0.0-rc.3", package = "midnight-serialize" }
+
+[profile.release]
+# Crypto dependencies are slow unoptimised; keep the default release profile.
+debug = false

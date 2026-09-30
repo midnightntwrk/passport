@@ -9,7 +9,7 @@
 # explicitly with +0.34.0), openssl.
 #
 # Usage:
-#   ./run-all.sh               # run everything (P0 → P7, gated)
+#   ./run-all.sh               # run everything (P0 → P9, gated)
 #   ./run-all.sh --fresh       # reset chain state first
 #   ./run-all.sh --tests p2,p3 # run a subset (gating off — explicit override)
 #
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
   shift || true
 done
 
-ALL_TESTS=(p0 p1 p2 p3 p4 p5 p6 p7)
+ALL_TESTS=(p0 p1 p2 p3 p4 p5 p6 p7 p8 p9)
 GATING=true
 if [[ -n "$TESTS" ]]; then
   IFS=',' read -r -a SELECTED <<< "$TESTS"
@@ -96,6 +96,9 @@ echo "Compiling Compact contracts (real proving keys — no --skip-zk)..."
 # artefact directory (named after the declared contract type) on --compact-path.
 npm run compile:tally
 npm run compile:caller
+# The Lender backs P9 (the voluntary-lending claim primitive); it is a leaf
+# contract and needs no --compact-path.
+npm run compile:lender
 # The value pair backs P6/P7 (callee before caller, same artefact-name ABI).
 npm run compile:till
 npm run compile:payer
@@ -111,7 +114,7 @@ mkdir -p "$EVIDENCE_DIR"
 
 NEEDS_CHAIN=false
 for tid in "${SELECTED[@]}"; do
-  case "$tid" in p2|p3|p4|p5|p6|p7) NEEDS_CHAIN=true ;; esac
+  case "$tid" in p2|p3|p4|p5|p6|p7|p8|p9) NEEDS_CHAIN=true ;; esac
 done
 
 if $NEEDS_CHAIN; then
@@ -195,6 +198,8 @@ test_file_for() {
     p5) echo "src/tests/p5-passport-callee.ts" ;;
     p6) echo "src/tests/p6-unshielded-value.ts" ;;
     p7) echo "src/tests/p7-shielded-value.ts" ;;
+    p8) echo "src/tests/p8-caller-derivation.ts" ;;
+    p9) echo "src/tests/p9-lending.ts" ;;
     *)  echo "" ;;
   esac
 }

@@ -1,0 +1,43 @@
+pragma language_version 0.26;
+
+// Lender — the P9 "voluntary lending" probe contract.
+//
+// The ledger derives a call's `caller` (VM context slot 6) from whichever
+// OTHER ContractCall in the same intent claims it: a ClaimedContractCallsValue
+// (seq, callee address, entry-point hash, communication commitment) in the
+// claimant's transcript effects, matched against the callee call's own
+// (address, ep_hash, communication_commitment). The runtime writes that
+// effect when a circuit makes a genuine cross-contract call, but the kernel
+// primitive behind it takes wholly chosen arguments from Compact source. This
+// contract exports exactly that primitive on client-supplied arguments, for a
+// callee call its own circuit never made, so the probe can ask the node what
+// happens when a contract "lends" itself as the caller of an otherwise
+// unclaimed root call in the same intent.
+//
+// Declared signature on compactc 0.34.0, established from the compiler's own
+// diagnostics (a ContractAddress struct is refused for argument 1: "expected
+// first argument of claimContractCall to have type Bytes<32>"; a Uint<64> is
+// refused for arguments 2 and 3: "expected second argument ... Bytes<32>",
+// "expected third argument ... Field"; zero arguments: "requires 3 arguments"):
+//
+//   kernel.claimContractCall(addr: Bytes<32>, ep_hash: Bytes<32>, comm: Field): []
+//
+// All three arguments need disclose(): the compiler reports "ledger operation
+// might disclose the address of a contract being called" on an undisclosed
+// witness-derived argument. The circuit's parameter is typed ContractAddress
+// (the struct the TypeScript boundary already produces for callee references)
+// and its .bytes field is what the kernel takes.
+//
+// The `lends` counter is NOT a compiler requirement (a claim-only circuit
+// compiles); it is a harness constraint recorded in EXPERIMENT_GUIDELINE.md:
+// every probe circuit changes public state, because a zero-public-state-
+// effect call can hang the wallet SDK finalisation watch on this stack.
+
+import CompactStandardLibrary;
+
+export ledger lends: Counter;
+
+export circuit lend(addr: ContractAddress, ep_hash: Bytes<32>, comm: Field): [] {
+  kernel.claimContractCall(disclose(addr.bytes), disclose(ep_hash), disclose(comm));
+  lends.increment(1);
+}

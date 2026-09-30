@@ -97,6 +97,7 @@ export const accountZkConfigPath = path.join(managedPath, 'Account');
 export const accountGateZkConfigPath = path.join(managedPath, 'AccountGate');
 export const tillZkConfigPath = path.join(managedPath, 'Till');
 export const payerZkConfigPath = path.join(managedPath, 'Payer');
+export const lenderZkConfigPath = path.join(managedPath, 'Lender');
 
 export function deriveKeys(seed: string) {
   const hdWallet = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
