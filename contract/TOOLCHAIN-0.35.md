@@ -41,7 +41,7 @@ The verification project is `account-custody-compact035`, using newly created
 node/indexer volumes. Indexer storage predating rc.5 requires re-indexing.
 
 ```sh
-cp infra/.env.example infra/.env
+printf 'APP__INFRA__SECRET=%s\n' "$(openssl rand -hex 32)" > infra/.env
 docker compose -p account-custody-compact035 \
   -f infra/docker-compose.yml -f infra/docker-compose.macos.yml \
   up -d --pull always --wait

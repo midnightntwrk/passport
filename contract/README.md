@@ -208,7 +208,7 @@ compact update 0.35.0
 npm ci
 npm run compile                      # compact compile → contracts/managed/
 (cd signer-rs && cargo build)        # the independent Rust signer
-cp infra/.env.example infra/.env    # throwaway localnet indexer configuration
+printf 'APP__INFRA__SECRET=%s\n' "$(openssl rand -hex 32)" > infra/.env
 (cd infra && docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d)
 
 export WALLET_SEED=0000000000000000000000000000000000000000000000000000000000000001
