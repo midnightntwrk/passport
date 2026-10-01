@@ -429,11 +429,11 @@ async function dryRun(providersList: any[], fn: () => Promise<unknown>): Promise
       });
     }
     for (const holder of [p.walletProvider, p.midnightProvider]) {
-      if (!holder || patched.has(holder)) continue;
+      if (!holder || typeof holder.submitTx !== 'function' || patched.has(holder)) continue;
       patched.add(holder);
       const real = holder.submitTx.bind(holder);
       holder.submitTx = async (tx: any) => {
-        captured = tx;
+        captured = tx.tx;
         phase = 'balanced';
         throw new Error(SENTINEL);
       };

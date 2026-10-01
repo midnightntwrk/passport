@@ -185,7 +185,7 @@ function instrumentProofProvider(providers: any, tag: string): void {
   if (!pp || typeof pp.proveTx !== 'function' || (pp as any).__instrumented) return;
   const original = pp.proveTx.bind(pp);
   pp.proveTx = async (unprovenTx: any, config?: any) => {
-    const circuits = circuitIdsOf(unprovenTx);
+    const circuits = circuitIdsOf(unprovenTx.tx);
     const t0 = Date.now();
     try {
       const r = await original(unprovenTx, config);
@@ -227,7 +227,7 @@ async function ensureProver(label: string): Promise<void> {
   try {
     const { execFile } = await import('node:child_process');
     await new Promise<void>((resolve) => {
-      execFile('docker', ['start', 'account-custody-reference-proof-server-1'], () => resolve());
+      execFile('docker', ['start', process.env.MIDNIGHT_PROOF_CONTAINER ?? 'account-custody-reference-proof-server-1'], () => resolve());
     });
   } catch { /* fall through to the wait below */ }
   for (let i = 0; i < 60; i++) {
@@ -247,7 +247,7 @@ async function restartProver(label: string): Promise<void> {
   proverRestarts.push({ label: `deliberate: ${label}`, at: new Date().toISOString() });
   const { execFile } = await import('node:child_process');
   await new Promise<void>((resolve) => {
-    execFile('docker', ['restart', 'account-custody-reference-proof-server-1'], () => resolve());
+    execFile('docker', ['restart', process.env.MIDNIGHT_PROOF_CONTAINER ?? 'account-custody-reference-proof-server-1'], () => resolve());
   });
   for (let i = 0; i < 60; i++) {
     if (await proverHealthy()) return;
@@ -505,14 +505,13 @@ function instrumentPhases(providers: any): void {
     setPhase('balance');
     return balanceTx(tx, ttl);
   };
-  const submit = providers.walletProvider.submitTx.bind(providers.walletProvider);
+  const submit = providers.midnightProvider.submitTx.bind(providers.midnightProvider);
   const wrapped = async (tx: any) => {
     setPhase('submit');
     const id = await submit(tx);
     setPhase('submitted');
     return id;
   };
-  providers.walletProvider.submitTx = wrapped;
   providers.midnightProvider.submitTx = wrapped;
   (providers as any).__phaseInstrumented = true;
   console.log('  phase tracer installed (build / prove / balance / submit)');
@@ -604,7 +603,7 @@ async function rawSubmit(
  *  "would this witness satisfy the circuit?" without spending anything. */
 async function proveOnly(providers: any, unprovenTx: any): Promise<void> {
   setPhase('prove');
-  await providers.proofProvider.proveTx(unprovenTx);
+  await providers.proofProvider.proveTx({ version: 'v9', tx: unprovenTx });
 }
 
 interface ChainStates {

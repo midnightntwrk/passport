@@ -83,6 +83,7 @@ import {
   type GrantOpening,
   type PlainScope,
 } from '../wallet/signer.js';
+import { k256GrantIdFixture } from './k256-fixtures.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reporting
@@ -244,17 +245,14 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
   const L = (): Ledger => ledger(state);
 
   async function call(name: string, ...args: unknown[]): Promise<any> {
-    const ctx = createCircuitContext<PrivateState>(
-      name,
-      addressHex,
-      coinPk,
-      state,
-      {} as PrivateState,
-      undefined,
-      undefined,
-      undefined,
+    const ctx = createCircuitContext<PrivateState>({
+      circuitId: name,
+      contractAddress: addressHex,
+      coinPublicKeyOrZswapState: coinPk,
+      contractState: state,
+      privateState: {} as PrivateState,
       time,
-    );
+    });
     const res = await impure[name](ctx, ...args);
     state = res.context.callContext.currentQueryContext.state;
     return res.result;
@@ -741,13 +739,13 @@ async function armNegatives(): Promise<void> {
   const dummySigR = pureCircuits.compute_public_point_with_jubjub(1n);
 
   // ── k256: the point at infinity ──────────────────────────────────────────
-  // `authenticate_grant_with_k256` calls the device seam's own weak-key
-  // guard (GR-14) before it derives an identity, so a record issued at the
-  // identity point's id is unreachable by construction.
+  // Plant the legacy opaque id with the byte recipe: Compact 0.35's point
+  // accessors already reject the identity when using the generated helper.
+  // Authorisation must reject it even when the record is present.
   {
     const idPk: Secp256k1Point = { x: 0n, y: 0n, identity: true };
     const salt = rnd(32);
-    const id = pureCircuits.derive_grant_id_with_k256({ bytes: acc.address }, idPk, K256_ENVELOPE_NONE, origin, 10n);
+    const id = k256GrantIdFixture(acc.address, idPk, K256_ENVELOPE_NONE, origin, 10n);
     await acc.issue(scope, id, salt);
     await expectAbort(
       '[k256] grantee at the point at infinity',
@@ -760,7 +758,7 @@ async function armNegatives(): Promise<void> {
           opening: openingOf(scope, salt, origin, 10n),
           auth: { arm: 'k256', pk: idPk, envelope: K256_ENVELOPE_NONE, sig: dummyEcdsa },
         }),
-      'device key is the point at infinity',
+      'identity point',
     );
   }
 

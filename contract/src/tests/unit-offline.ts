@@ -21,6 +21,7 @@
 // widths of section 6.3 are settled here for every twin.
 
 import { createHash, randomBytes } from 'node:crypto';
+import { throws } from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,6 +60,7 @@ import {
 } from '../wallet/signer.js';
 import { generateEncKeyPair, sealInboxEntry, openInboxEntry, ENTRY_SIZE } from '../wallet/inbox.js';
 import { bytesToHex } from '../wallet/hex.js';
+import { k256DeviceEntryFixture, k256GrantIdFixture, k256AddDeviceChallengeFixture } from './k256-fixtures.js';
 
 function assert(cond: boolean, label: string): void {
   if (!cond) throw new Error(`assertion failed: ${label}`);
@@ -281,9 +283,9 @@ await runScenario('unit-offline', async () => {
   // The co-residency invariant: one device set, two arms, kept disjoint only
   // by the arm marker in each derivation's DST. Distinct keys give distinct
   // entries trivially, so the property has to be tested where it could
-  // actually collide — the SAME coordinates presented to both derivations.
-  // JubJub's field modulus is below secp256k1's p, so a JubJub point's
-  // coordinates are always numerically admissible as a k256 point's.
+  // actually collide — the SAME coordinates in both byte recipes. Compact
+  // 0.35 rejects points off the declared curve, so use an independent encoder
+  // for the hypothetical k256 input and check it against a valid-key control.
   step('[both arms] the arm marker keeps the shared device set disjoint');
   {
     const addr = new Uint8Array(randomBytes(32));
@@ -291,19 +293,32 @@ await runScenario('unit-offline', async () => {
     const asJubjub = pureCircuits.derive_device_entry_with_jubjub(
       { bytes: addr }, { x, y }, 0n, 0n,
     );
-    const asK256 = pureCircuits.derive_device_entry_with_k256(
-      { bytes: addr }, { x, y, identity: false }, K256_ENVELOPE_NONE, 0n, 0n,
-    );
+    const asK256 = k256DeviceEntryFixture(addr, { x, y }, K256_ENVELOPE_NONE, 0n, 0n);
+    assert(Buffer.from(k256DeviceEntryFixture(addr, kDevice.pk, K256_ENVELOPE_NONE, 0n, 0n)).equals(
+      Buffer.from(kDevice.entryAt(addr, 0n, 0n))), '[k256] independent entry fixture matches a valid key');
+    const foreignPoint = { x: 0n, y: 1n, identity: false }; // JubJub identity, off secp256k1
+    throws(() => pureCircuits.derive_device_entry_with_k256(
+      { bytes: addr }, foreignPoint, K256_ENVELOPE_NONE, 0n, 0n,
+    ), /expected value of type Secp256k1Point/);
     assert(
       !Buffer.from(asJubjub).equals(Buffer.from(asK256)),
       '[both arms] identical coordinates derive different entries under each arm',
     );
     const bootJ = pureCircuits.derive_boot_commitment_with_jubjub(addr, { x, y });
-    const bootK = pureCircuits.derive_boot_commitment_with_k256(addr, { x, y, identity: false }, K256_ENVELOPE_NONE);
+    const bootK = sha256(padTag(32, 'midnight:account:boot:k1:v2'), addr, fe(x), fe(y), u8(K256_ENVELOPE_NONE));
+    assert(Buffer.from(pureCircuits.derive_boot_commitment_with_k256(addr, kDevice.pk, K256_ENVELOPE_NONE)).equals(
+      Buffer.from(sha256(padTag(32, 'midnight:account:boot:k1:v2'), addr, fe(kDevice.pk.x), fe(kDevice.pk.y), u8(K256_ENVELOPE_NONE)))),
+    '[k256] independent boot recipe matches a valid key');
     assert(
       !Buffer.from(bootJ).equals(Buffer.from(bootK)),
       '[both arms] the boot commitment is arm-marked, so only one arm can activate',
     );
+    assert(Buffer.from(k256GrantIdFixture(addr, kDevice.pk, K256_ENVELOPE_NONE, color, 10n)).equals(
+      Buffer.from(pureCircuits.derive_grant_id_with_k256({ bytes: addr }, kDevice.pk, K256_ENVELOPE_NONE, color, 10n))),
+    '[k256] independent grant fixture matches a valid key');
+    assert(Buffer.from(k256AddDeviceChallengeFixture(addr, kDevice.pk, color, 7n)).equals(
+      Buffer.from(k256Challenges.addDevice({ contractAddress: addr, authNonce: 7n }, kDevice.pk, color))),
+    '[k256] independent add-device challenge fixture matches a valid key');
   }
 
   step('[k256] signing pipeline: ECDSA over the envelope digest (envelope 0)');

@@ -345,12 +345,12 @@ await runScenario('probe: kernel block-time unit and enforcement point', async (
     phase = 'balance';
     return balanceTx(tx, ttl);
   };
-  const submitTx = providers.walletProvider.submitTx.bind(providers.walletProvider);
+  const submitTx = providers.midnightProvider.submitTx.bind(providers.midnightProvider);
   const submitWrapped = async (tx: any) => {
     phase = 'submit';
     try {
       const ttls: string[] = [];
-      for (const [, intent] of (tx.intents ?? new Map()) as Map<number, any>) {
+      for (const [, intent] of (tx.tx.intents ?? new Map()) as Map<number, any>) {
         const ttl = intent?.ttl;
         ttls.push(ttl instanceof Date ? ttl.toISOString() : String(ttl));
       }
@@ -362,7 +362,6 @@ await runScenario('probe: kernel block-time unit and enforcement point', async (
     phase = 'submitted';
     return id;
   };
-  providers.walletProvider.submitTx = submitWrapped;
   providers.midnightProvider.submitTx = submitWrapped;
 
   // Clock shim for the enforcement cases. compact-runtime's createCallContext
