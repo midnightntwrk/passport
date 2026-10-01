@@ -1,7 +1,8 @@
 # Passkey viewing-key envelope: sizing experiment
 
-**Discussion starting point for Angel and the Lace team:**
-[wallet integration questions and proposed next experiment](DISCUSSION.md).
+**Draft for Nicolas's initial review:**
+[internal review notes and authority boundaries](DISCUSSION.md).
+Review and iteration come before deciding on any wider discussion.
 This experiment builds on the P-256/WebAuthn circuits in
 [Passport PR #175](https://github.com/midnightntwrk/passport/pull/175).
 
@@ -29,6 +30,21 @@ transaction history and spends with B's enrolled P-256 credential.
 An account owner can publish another envelope using B's retained **public**
 reader key while B is offline. Signing authority and viewing access are
 separate: enrolling a signing key does not deliver the viewing secret.
+
+### Device, dApp and reader roles
+
+A and B are **ACC devices in this test harness**. Their signing credentials
+carry account-control authority. **Lace's role is a connected dApp**: its
+key represents the dApp/grantee under a scoped grant authorised by the
+account, not a device key supplied for the user's ACC. Connecting that dApp
+must not implicitly enrol it as an account-control device.
+
+Viewing-secret delivery is a separate capability. A reader envelope grants
+neither device authority nor permission to spend; a dApp's spending must
+remain within its grant. The current run tests device restoration and
+device-authorised spends, not the dApp connection or grant handover. Its
+wire format includes public P-256 **device** registration metadata; a dApp
+reader profile and grant-based journey still need design and validation.
 
 ### Same passkey? Same account?
 

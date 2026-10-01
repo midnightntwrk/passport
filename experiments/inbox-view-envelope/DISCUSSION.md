@@ -1,6 +1,28 @@
-# Discussion with Angel and the Lace team
+# Viewing-key envelopes — internal review notes
 
-## The journey we want to support
+**Draft for Nicolas's initial review.** Review the work and iterate before
+deciding on wider discussion. The items below are internal design and
+evidence-review points.
+
+## Authority boundaries
+
+| Role | Authority |
+|---|---|
+| ACC device | Account-control signing authority held by an enrolled device; A and B have this role in the test harness. |
+| Connected dApp / grantee | Uses its own signing key under an account-authorised scoped grant. **This is Lace's role**, not the role of an ACC device-key provider. |
+| Viewing reader | Receives separately authorised access to the account viewing secret. This grants neither account control nor spending authority. |
+
+Lace connecting to the ACC must not be modelled as supplying the user's
+device secret or being enrolled as an account-control device. A dApp key
+and an ACC device key have different authority even if both use a signature
+scheme the contract supports. Any dApp spending is bounded by its grant.
+
+The experiment below uses two devices to exercise the envelope mechanism.
+It does not implement a Lace connection, grant issuance or grant-based
+restoration/spending. Its 192-byte profile also carries public P-256 device
+registration metadata; adapting it to a dApp reader is separate work.
+
+## The device journey exercised by this experiment
 
 > A creates a Passport account. Independent passkey B is enrolled while A
 > is available. Later, B opens the wallet on a fresh client. With A offline
@@ -11,7 +33,7 @@ Signing enrolment alone leaves a gap: B can approve operations but cannot
 discover the account's encrypted coins. The experiment fills that gap with
 a separately encrypted copy of the account viewing secret for each reader.
 
-## Proposed division of work
+## Experimental device flow
 
 ```text
 Passkey B                         Passport account inbox
@@ -23,10 +45,11 @@ Passkey B                         Passport account inbox
                                       └─ discovers encrypted coin descriptions
 ```
 
-The wallet owns reader-key derivation, authenticated enrolment, envelope
-creation/opening, coin discovery and key lifecycle. Passport provides
-existing account authorisation, an opaque inbox and the current viewing
-public key against which a restored secret is checked.
+The experiment client implements reader-key derivation, trusted enrolment,
+envelope creation/opening, coin discovery and key lifecycle. The ACC supplies
+existing authorisation, an opaque inbox and the current viewing public key
+against which a restored secret is checked. This describes the test harness,
+not an assignment of account-device responsibilities to Lace.
 
 One PRF-capable passkey can provide both functions. The signing private key
 stays in the authenticator; the wallet derives a **different encryption key**
@@ -38,21 +61,21 @@ currently needs one authorised append transaction. Full transactions are
 larger; see [measured results](../../contract/evidence/inbox-view-envelope/RESULTS.md)
 and the [experiment guide](README.md) for the proof/storage breakdown.
 
-## Decisions to make together
+## Internal design review
 
-| Topic | Question for the integration |
+| Topic | Review point |
 |---|---|
-| Wallet key model | Can Lace load the account viewing secret independently of the currently selected passkey, and retain authenticated reader public keys? |
-| Existing accounts | Can an authorised existing client wrap its current viewing secret for B? The experiment begins with a random account secret; it does not demonstrate migration from Lace's current derivation/storage model. |
-| Enrolment | How does A authenticate the association between B's signing credential and reader public key? What is the user-visible confirmation, and when is B considered fully enrolled? |
-| Fresh-client bootstrap | Where do account address, network, RP/origin, profile and credential-selection metadata come from when local storage is empty? The prototype supplies these public inputs explicitly. |
-| PRF support | Which browser/authenticator combinations support repeatable PRF for existing credentials, newly created credentials and synced credentials? Where does the RP ceremony run in the Lace UX? |
-| Rotation | Who retains the trusted reader roster and publishes new envelopes while other readers are offline? How are interrupted staging/activation steps resumed? |
-| Existing live coins | Should the wallet retain historical keys, re-encrypt live coin descriptions, or both? The experiment backfills one live coin under the new secret. |
-| Recovery | What viewing keys must guardian recovery restore, and how are recovery-wrap updates coordinated with every key rotation? |
-| Cost and UX | Are N append transactions acceptable for N readers? Who proves and pays, and how does enrolment report partial completion? |
+| Authority model | Keep device enrolment, dApp grant issuance and viewing-reader authorisation separate. The passing device journey is not a dApp integration result. |
+| Existing accounts | The experiment begins with a random account viewing secret; migration from an existing derivation/storage model remains to be demonstrated. |
+| Enrolment | Review the authenticated association between a recipient and its reader public key, retained roster trust and partial completion. Device and dApp onboarding have different authority requirements. |
+| Fresh-client bootstrap | Account address, network, RP/origin, profile and credential-selection metadata are explicit inputs; their discovery is not implemented. |
+| PRF support | Establish repeatable PRF for the intended browser/authenticator and RP/origin profile. Existing, new and synced credentials need separate evidence. |
+| Rotation | Review roster retention, offline re-sealing and interrupted staging/activation. |
+| Existing live coins | Review historical-key retention versus coin-description backfill. The experiment backfills one live coin under the new secret. |
+| Recovery | Specify the viewing generations recovery must restore and the wrap/session lifecycle across rotation. |
+| Cost and UX | Review N append transactions for N readers, proving/funding and reporting of partial completion. |
 
-### Boundaries worth agreeing explicitly
+### Evidence boundaries
 
 - **Signing access and reading access are distinct.** The experiment enrols
   B for both. Read-only sharing can use reader envelopes without enrolling a
@@ -128,22 +151,13 @@ provisioning need an explicit before/after-finalisation rule. Wallets also
 need a migration policy for the existing `recovery_wrap` field. An old quorum
 retains access to already published ciphertext from its era.
 
-## Suggested joint next step
+## Review sequence
 
-Run the journey with **two real independent credentials and a genuinely
-fresh Lace client**, declaring its public bootstrap inputs up front:
+Nicolas reviews the implementation, evidence and authority model first.
+The draft can then be revised and follow-up experiments selected.
 
-1. A enrols B's signing key and authenticates B's reader public key.
-2. A publishes B's envelope for the account's actual viewing secret.
-3. B starts with empty wallet state; A is unavailable.
-4. B selects its credential, evaluates PRF, retrieves its envelope and
-   discovers a real held coin from chain data.
-5. B signs a spend, and the node accepts it on the original account.
-6. Repeat after rotation while B is offline; document how live coins and
-   the recovery wrap remain usable.
-
-The automated localnet suite is a reproducible starting point: software
-ES256 credentials, synthetic PRF outputs, real contract proofs and an
-empty private-state provider. The included browser probe separately checks
-same-credential PRF unlock and ES256 signing. Real PRF, cross-machine sync,
-and Lace integration need their own observed results.
+Candidate follow-ups include real-credential device restoration, a separate
+dApp/grant reader profile and journey, and the recovery-group recipient
+above. A dApp journey must show account-approved grant issuance and separate
+viewing-key delivery, then grant-bounded operations rather than device
+enrolment. None of those follow-ups is demonstrated by the current suite.
