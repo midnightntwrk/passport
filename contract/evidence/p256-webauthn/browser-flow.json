@@ -1,0 +1,362 @@
+{
+  "testId": "p256-browser",
+  "verdict": "PASS",
+  "runId": "83c60e55-2be1-4360-85b5-7ae75b22e3f8",
+  "startedAt": "2026-10-01T14:33:41.716Z",
+  "origin": "http://localhost:8973",
+  "rpId": "localhost",
+  "profile": "wa-json134",
+  "authenticator": "interactive browser WebAuthn, userVerification=required",
+  "attestation": "none; authenticator hardware and biometric method are not remotely attested",
+  "operation": "rotate_enc_key_with_p256",
+  "samples": [
+    {
+      "label": "activation",
+      "keyLocation": "contract:e0a33cfae237a8772eeb02db2b05377715ffb57257b7a0ca2b3c91d85e85786d/activate_initial_device_with_p256?vk=042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd",
+      "startedAt": "2026-10-01T14:37:21.528Z",
+      "milliseconds": 1908.9249580000178,
+      "proofBytes": 6364
+    },
+    {
+      "label": "rotate_enc_key_with_p256",
+      "keyLocation": "contract:e0a33cfae237a8772eeb02db2b05377715ffb57257b7a0ca2b3c91d85e85786d/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+      "startedAt": "2026-10-01T14:39:40.353Z",
+      "milliseconds": 27180.560375,
+      "proofBytes": 6364
+    }
+  ],
+  "transactions": [
+    {
+      "name": "activate_initial_device_with_p256",
+      "txId": "000a18d451e9644e9f66d41189d574c60da79f7d257fb092a3bcd8e7bb9371e927",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 138,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 36,
+        "hash": "0c7a22f3d78093f3716e696d54cdaa2d485cfe44ee641a84c8d2eff79034044f",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 138,
+          "hash": "249ccabd1616fbb5cea6b281218794c708295a6315037dede784df4a65b19aa4"
+        }
+      }
+    },
+    {
+      "name": "rotate_enc_key_with_p256",
+      "txId": "00e9925d444914750d55a04b4f34aaa33da31709a8da854372ae397e7773df9cde",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 165,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 37,
+        "hash": "e220b64041f21fe7d9fd8ac5d950f2b6ba02aee0e23d75151b3309ba089b77fb",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 165,
+          "hash": "e6aa1103441dd23edea8abe0d00391e511e21c1c23e9dad1923d3e9949ced6d3"
+        }
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "d1d20279-ec71-4a83-89b3-d6f145d24cb0",
+      "challenge": "817bb5a4415db167ffa962d4d462c48d48690dad75774a25c5ec16936f60499b",
+      "purpose": "approve",
+      "requestedAt": "2026-10-01T14:37:43.911Z",
+      "receivedAt": "2026-10-01T14:39:36.861Z",
+      "browserMilliseconds": 6126,
+      "authenticatorData": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97631d00000000",
+      "clientDataJSON": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2267587531704546647357665f71574c5531474c456a5568704461313164306f6c786577576b323967535a73222c226f726967696e223a22687474703a2f2f6c6f63616c686f73743a38393733222c2263726f73734f726967696e223a66616c73657d",
+      "signature": "3045022100c483f3b78fa04d02dd3680b4c79351ef2066c3f7941250304ae8aee4487387a202205346a258fb48561257ddd307af4673aac8cc78a31125d13c1246897479a84112"
+    },
+    {
+      "id": "581bd311-714b-4ed1-917c-d506218dc270",
+      "challenge": "06d0544ca33f12938929c4cf9492094a0f4cec6678b668e6ae0421e89cd7eaf3",
+      "purpose": "cancel",
+      "requestedAt": "2026-10-01T14:40:27.346Z",
+      "receivedAt": "2026-10-01T14:40:41.585Z",
+      "browserMilliseconds": 6410,
+      "authenticatorData": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97631d00000000",
+      "clientDataJSON": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2242744255544b4d5f45704f4a4b6354506c4a494a5367394d37475a34746d6a6d72675168364a7a5836764d222c226f726967696e223a22687474703a2f2f6c6f63616c686f73743a38393733222c2263726f73734f726967696e223a66616c73657d",
+      "signature": "3045022055c1944dc125afe57651407bf1bc512edd11fbd501d761101754845b15c6ca94022100af0003f9e3e822767c10514969037ee4a9e97d5f0d8f66293f12ebc4ecf55081"
+    },
+    {
+      "id": "0668b536-008c-4ec0-b51c-6457aeb60a74",
+      "challenge": "06d0544ca33f12938929c4cf9492094a0f4cec6678b668e6ae0421e89cd7eaf3",
+      "purpose": "cancel",
+      "requestedAt": "2026-10-01T14:40:41.642Z",
+      "receivedAt": "2026-10-01T14:40:49.981Z",
+      "browserMilliseconds": 5288,
+      "authenticatorData": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97631d00000000",
+      "clientDataJSON": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2242744255544b4d5f45704f4a4b6354506c4a494a5367394d37475a34746d6a6d72675168364a7a5836764d222c226f726967696e223a22687474703a2f2f6c6f63616c686f73743a38393733222c2263726f73734f726967696e223a66616c73657d",
+      "signature": "304602210083d7d13b95d73fcc3c76c6aa1a18dcaae6630f1f9060bb2fadae58eec8e2022b022100f6f2d998030bb3c5b1a09c05b6efd623b61eb239fad57ded269c6f8456bc13ea"
+    },
+    {
+      "id": "5d460397-cdbd-48f3-b3f9-36271ea1aa42",
+      "challenge": "06d0544ca33f12938929c4cf9492094a0f4cec6678b668e6ae0421e89cd7eaf3",
+      "purpose": "cancel",
+      "requestedAt": "2026-10-01T14:40:50.016Z",
+      "receivedAt": "2026-10-01T14:41:33.315Z",
+      "browserMilliseconds": 2889,
+      "error": {
+        "name": "NotAllowedError",
+        "message": "The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission."
+      }
+    }
+  ],
+  "negatives": [
+    {
+      "name": "changed operation argument",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid WebAuthn signature",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid WebAuthn signature"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: invalid WebAuthn signature"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'rotate_enc_key_with_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: invalid WebAuthn signature"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "proofCalls": 0,
+      "submissions": 0
+    },
+    {
+      "name": "replay consumed authorisation",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: unknown device entry"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'rotate_enc_key_with_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: unknown device entry"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "proofCalls": 0,
+      "submissions": 0
+    },
+    {
+      "name": "browser cancellation/denial",
+      "stage": "browser",
+      "browserName": "NotAllowedError",
+      "message": "The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission.",
+      "stateUnchanged": true,
+      "proofCalls": 0,
+      "submissions": 0
+    }
+  ],
+  "browserEvents": [
+    {
+      "at": "2026-10-01T14:40:41.592Z",
+      "event": "Cancellation check was approved; discarded without submission. Retry and cancel the prompt."
+    },
+    {
+      "at": "2026-10-01T14:40:49.985Z",
+      "event": "Cancellation check was approved; discarded without submission. Retry and cancel the prompt."
+    }
+  ],
+  "methodology": "Prove timing includes key lookup/load and HTTP. Operation wall time starts when the server receives the assertion and includes local checks, proving, balancing and inclusion. Browser ceremony time is recorded separately.",
+  "credential": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0.1 Safari/605.1.15",
+    "pk": {
+      "x": "44467800605087435359313655702549266610225406547000721229346297448840627056120",
+      "y": "71951133317735709095183577516765743294954597463508837525149454755225978939898",
+      "identity": false
+    },
+    "rpId": "localhost",
+    "origin": "http://localhost:8973",
+    "createdOrReused": "resumed public metadata",
+    "sourceRunId": "1f340022-3c24-4882-b510-f0da3684dac3"
+  },
+  "chain": {
+    "indexedBlock": {
+      "height": 97,
+      "hash": "cf772e855ea3363b24782583edca277241dbae0ba4d863d48494d4575a4133ea",
+      "timestamp": 1790865204004
+    },
+    "nodeBlockHash": "0xcf772e855ea3363b24782583edca277241dbae0ba4d863d48494d4575a4133ea"
+  },
+  "account": "e0a33cfae237a8772eeb02db2b05377715ffb57257b7a0ca2b3c91d85e85786d",
+  "before": {
+    "authNonce": "0",
+    "encKey": "17a41ca2d6a8aa9bb0caf5d16949b9553a7db03aaae8174f807ee63e9350781d",
+    "deviceCounter": "0"
+  },
+  "operationMilliseconds": 50001.43495800003,
+  "assertionToAcceptedMilliseconds": 50191.89433400001,
+  "after": {
+    "authNonce": "1",
+    "encKey": "7e91e6e67ce4bdf8ebe2d035f43506050ddb23b383c380e01ea682fb351a1d2d",
+    "deviceCounter": "1"
+  },
+  "completedAt": "2026-10-01T14:41:33.393Z",
+  "progress": {
+    "runId": "83c60e55-2be1-4360-85b5-7ae75b22e3f8",
+    "phase": "complete",
+    "message": "PASS: real browser assertion accepted on-node; changed argument, replay and cancellation/denial checks passed.",
+    "origin": "http://localhost:8973",
+    "rpId": "localhost",
+    "events": [
+      {
+        "at": "2026-10-01T14:33:41.734Z",
+        "message": "Reusing your registered passkey. Checking node/indexer consistency and deploying a fresh account…"
+      },
+      {
+        "at": "2026-10-01T14:34:18.366Z",
+        "message": "Submitting account deployment transaction 1 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:34:37.301Z",
+        "message": "Submitting account deployment transaction 2 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:34:56.960Z",
+        "message": "Submitting account deployment transaction 3 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:35:14.357Z",
+        "message": "Submitting account deployment transaction 4 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:35:33.077Z",
+        "message": "Submitting account deployment transaction 5 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:35:50.483Z",
+        "message": "Submitting account deployment transaction 6 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:36:09.214Z",
+        "message": "Submitting account deployment transaction 7 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:36:26.593Z",
+        "message": "Submitting account deployment transaction 8 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:36:45.295Z",
+        "message": "Submitting account deployment transaction 9 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:37:02.699Z",
+        "message": "Submitting account deployment transaction 10 (ten waves)…"
+      },
+      {
+        "at": "2026-10-01T14:37:43.911Z",
+        "message": "Account ready. Click “Approve account change” and complete the passkey prompt."
+      },
+      {
+        "at": "2026-10-01T14:39:36.861Z",
+        "message": "Received the browser assertion; checking the signature and account operation."
+      },
+      {
+        "at": "2026-10-01T14:39:36.915Z",
+        "message": "Checking changed-operation rejection, then proving the approved account change…"
+      },
+      {
+        "at": "2026-10-01T14:40:27.346Z",
+        "message": "Transaction accepted. Click “Test cancellation”, then cancel the system passkey prompt."
+      },
+      {
+        "at": "2026-10-01T14:40:41.585Z",
+        "message": "Received the browser assertion; checking the signature and account operation."
+      },
+      {
+        "at": "2026-10-01T14:40:41.642Z",
+        "message": "Transaction accepted. Click “Test cancellation”, then cancel the system passkey prompt."
+      },
+      {
+        "at": "2026-10-01T14:40:49.981Z",
+        "message": "Received the browser assertion; checking the signature and account operation."
+      },
+      {
+        "at": "2026-10-01T14:40:50.016Z",
+        "message": "Transaction accepted. Click “Test cancellation”, then cancel the system passkey prompt."
+      },
+      {
+        "at": "2026-10-01T14:41:33.315Z",
+        "message": "Browser ceremony returned without an assertion."
+      },
+      {
+        "at": "2026-10-01T14:41:33.393Z",
+        "message": "PASS: real browser assertion accepted on-node; changed argument, replay and cancellation/denial checks passed."
+      }
+    ],
+    "account": "e0a33cfae237a8772eeb02db2b05377715ffb57257b7a0ca2b3c91d85e85786d",
+    "operation": {
+      "name": "Cancellation check — no change will be submitted",
+      "newKey": "2747defac0bee778f5e94b40987f2721cf2a3c1ba7b04e72725d7b15162aa175",
+      "authNonce": "1"
+    },
+    "result": {
+      "txId": "00e9925d444914750d55a04b4f34aaa33da31709a8da854372ae397e7773df9cde",
+      "before": {
+        "authNonce": "0",
+        "encKey": "17a41ca2d6a8aa9bb0caf5d16949b9553a7db03aaae8174f807ee63e9350781d",
+        "deviceCounter": "0"
+      },
+      "after": {
+        "authNonce": "1",
+        "encKey": "7e91e6e67ce4bdf8ebe2d035f43506050ddb23b383c380e01ea682fb351a1d2d",
+        "deviceCounter": "1"
+      }
+    }
+  },
+  "publication": {
+    "sourceRunSha256": "b9ebb1fe9efa7eaefa3b5ee922a7f44b0138fe8b1fa72654ba1a8928fcbfc697",
+    "omittedFields": [
+      "credentialId",
+      "stack",
+      "inspected"
+    ],
+    "note": "Published projection of the recorded live run. Signature checks need neither credential lookup IDs nor workstation stack traces."
+  }
+}

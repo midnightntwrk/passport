@@ -76,6 +76,9 @@ once, below every arm.
   without exposing the credential's secret. Device, grant and recovery
   twins use the same shared mutation chips. See [WEBAUTHN.md](WEBAUTHN.md)
   for supported shapes, browser use, verification and new measurements.
+  The [live passkey account experiment](../experiments/passkey-account-flow/README.md)
+  records a real Safari approval accepted on-node, with signed assertion
+  evidence and an offline Node/OpenSSL verifier.
 
 Per-arm circuits instead of one circuit with an in-circuit scheme
 conditional: Compact compiles every exported circuit to its own proof, so
@@ -232,8 +235,10 @@ npm run test:recovery-sim            # recovery MIP circuit matrix in the simula
                                      # refusals, veto window, cancel, finalisation,
                                      # epoch-bump revocation
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
+npm run verify:p256-browser         # recorded live assertion + account binding (Node/OpenSSL)
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
+npm run test:p256-browser           # interactive experiment: real browser passkey approval
 npm run test:auth-coinless           # BOTH seams on-node + cross-arm enrolment + tamper aborts
 npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
 npm run test:custody-discovery      # MIP-0012 test 4
