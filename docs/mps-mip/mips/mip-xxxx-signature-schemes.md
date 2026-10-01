@@ -513,6 +513,18 @@ valid history under the k1 tag family indefinitely.
 
 ## Implementation
 
+**2026-10-01 implementation update.** Compact 0.35.0 exposes native
+P-256 verification. The account's profiled WebAuthn implementation and
+same-stack measurements are documented in
+[`contract/WEBAUTHN.md`](../../../contract/WEBAUTHN.md). This is a
+fixed-shape reference (`wa-json134`), not completion of section 3.5's
+length-agnostic requirement or upstream acceptance of this draft. It
+reconstructs the entire JSON envelope, binds the private RP/origin policy
+in r1:v2 device/boot recipes, and requires UP+UV on all calls. These
+profile and policy-binding deltas from sections 3.1/3.3/3.6 require
+specification review. The older proof-layer measurements below and in
+section 3.7 remain attributed to their original stack.
+
 Reference implementation: the custody reference contract and its
 suites (`contract/` in the passport repository), with the k1 arm on
 its dedicated branch (same circuit roster on the k1 tag family;

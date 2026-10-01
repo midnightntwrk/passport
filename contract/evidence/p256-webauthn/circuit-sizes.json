@@ -1,0 +1,1101 @@
+{
+  "measuredAt": "2026-10-01T10:17:35.873Z",
+  "compiler": "0.35.0",
+  "zkirVersion": "midnight-zkir 3.1.0-rc.1",
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4 Max",
+    "logicalCpus": 16,
+    "memoryBytes": 68719476736
+  },
+  "profile": "wa-json134",
+  "sources": {
+    "account.compact": "caa1e863b1522bf5c753e72b2e9ceb9220bcf641b0a153c117ec6f762d0bba52",
+    "account-p256.compact": "bc6d59add3cbbebb6f5be557222dac20a545ae4daacfc50f45d11e305dfa9f1e",
+    "webauthn.compact": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb",
+    "probe-p256.compact": "e42427fa90b3a40f7d45ce81b39dfcdbfeba078b7bb472ca79bd76cec9c6ba3e"
+  },
+  "circuits": [
+    {
+      "contract": "probe-p256",
+      "circuit": "verify_ecdsa",
+      "k": 17,
+      "rows": 59063,
+      "assets": {
+        "zkir": {
+          "bytes": 9666,
+          "sha256": "09a5d54614db8f7db71b36d8a3ec89635ab127639342a0fa3d6f6e7ec78bbb19"
+        },
+        "prover": {
+          "bytes": 171973082,
+          "sha256": "6890e64dbc1f2fd4e7efab9a93d892c36153c5fab80aa5dad60689e63a5faf98"
+        },
+        "verifier": {
+          "bytes": 2025,
+          "sha256": "fa143ec0e8594776f6aced2ecb5b1f6212e65f02887fcdf6f79053b4019f0538"
+        }
+      }
+    },
+    {
+      "contract": "probe-p256",
+      "circuit": "verify_webauthn",
+      "k": 17,
+      "rows": 112156,
+      "assets": {
+        "zkir": {
+          "bytes": 259279,
+          "sha256": "c762b11ba1874232b7fdcbba94a75173852145d7072d16d9e6a6b3b5085920db"
+        },
+        "prover": {
+          "bytes": 234971079,
+          "sha256": "3634cc126d3c3767c02eb80c223457c9f36750f66585082a105e3e9188480106"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "962f6c2329475033b30bdd0302befab101af6d2e0d21eec5abf953e848eafec0"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "activate_initial_device_with_jubjub",
+      "k": 14,
+      "rows": 13447,
+      "assets": {
+        "zkir": {
+          "bytes": 6789,
+          "sha256": "aa57039b114151e1889e8ae86afcc3aa2ca0e5929275bcc75061b28088eb868b"
+        },
+        "prover": {
+          "bytes": 24648297,
+          "sha256": "6b9571e641ff826dd381550d14e3c445f28efad59890c1cd8a50b27a9517995a"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "b33fa139d34231f6ba1144a4ac3e947b35e679e8e91d31b554d7ff916932931e"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "activate_initial_device_with_k256",
+      "k": 14,
+      "rows": 14129,
+      "assets": {
+        "zkir": {
+          "bytes": 8639,
+          "sha256": "b197e27eaa0b96c3e320a65c238ff662ce3e6cb0be7d56a5e1dabba0e7db8662"
+        },
+        "prover": {
+          "bytes": 29368305,
+          "sha256": "cff06e62e395c6037c8feef50673b9f8a6a82cb9d663a9acd9b690df71bff011"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "7e579319659b7f310c87c553b37ed0c3531e7c4558e76e7de0b8aa96916a8551"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "activate_initial_device_with_p256",
+      "k": 14,
+      "rows": 15342,
+      "assets": {
+        "zkir": {
+          "bytes": 7891,
+          "sha256": "a6c4420309515190f2f93ff5ceb3caf8faf32c1a277c249456a7db6520cf8510"
+        },
+        "prover": {
+          "bytes": 29368076,
+          "sha256": "70f5d46e5e3f56a34c6e9a4c6a44c6e508e0fc11f1c8eee2abe21bed865d7bf8"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "add_device_with_jubjub",
+      "k": 15,
+      "rows": 26819,
+      "assets": {
+        "zkir": {
+          "bytes": 12609,
+          "sha256": "d6086a4bcd2f3d6c0c891657121df7ad753f4b5c52f9843c68e9c927471e6c5f"
+        },
+        "prover": {
+          "bytes": 49291628,
+          "sha256": "f109ee0aa3ea0b3cd61b70f50ab2e3f272810d29794b26de8ff458b12d36df1d"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "8bcb83e10f7ad25fc65e28f3fdb918eaf0f8755f6a0eb7416052c6153ea80408"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "add_device_with_k256",
+      "k": 17,
+      "rows": 61809,
+      "assets": {
+        "zkir": {
+          "bytes": 23394,
+          "sha256": "86bdb1c8b2106d8c484efd67f3f68e851fccce96a1d4f3ad50c7cbc88216db5e"
+        },
+        "prover": {
+          "bytes": 234893509,
+          "sha256": "d60d1845604c0a136e9cc4381e482b559d0cac6ec7a7061e6119b9657f7fc1d0"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "959e4057137caaf8e2febb8f4a6fdb3d5073d852247ca4dc12c84e2698fd9a86"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "add_device_with_p256",
+      "k": 18,
+      "rows": 129887,
+      "assets": {
+        "zkir": {
+          "bytes": 270860,
+          "sha256": "a8fdf50e4fc80b7b5f6faf7fafda911aeeee9ceb9513677ccbfc4a86cabb8ce9"
+        },
+        "prover": {
+          "bytes": 469855382,
+          "sha256": "e9e6912ad9eb35f182ec98346858935b00d53a297aa363fc97db4c25f0e8b355"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "7414477f52366b4098bb5347879fcad174595148b19d853ffa65d4d84d48913f"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "append_inbox_with_jubjub",
+      "k": 16,
+      "rows": 32838,
+      "assets": {
+        "zkir": {
+          "bytes": 13045,
+          "sha256": "7eabd8bcd3ef27e69937e8f84b3e2b280d38c2b2b6cb0c341f296fdc1b6b0135"
+        },
+        "prover": {
+          "bytes": 98574819,
+          "sha256": "6dff5362bd05631680267d83cdab67b5506597a7c851d6053cafa5332225c3e5"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "c7b4858b558b2d53ba36567ae2ff27f9f855593ad8910ebaf60f84b10d9bf601"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "append_inbox_with_k256",
+      "k": 17,
+      "rows": 67836,
+      "assets": {
+        "zkir": {
+          "bytes": 23841,
+          "sha256": "803210bd546868494b8f990eb1af15a2b9b64bc43839b49aa8fef9efee131f48"
+        },
+        "prover": {
+          "bytes": 234893639,
+          "sha256": "7097dd983e8aa72c8f6314c0ea5330e12319c1a105bd59e14765c9590cb31a9c"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "73e67013fa3e37fc0877ab8432be6614fc5835b2c1e79c835e2c8cc40e7be157"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "append_inbox_with_p256",
+      "k": 18,
+      "rows": 135914,
+      "assets": {
+        "zkir": {
+          "bytes": 271417,
+          "sha256": "23402cf8b906d819acea7514c7fea8963e2f47faf2334b975cbc1c9f00c3a3f0"
+        },
+        "prover": {
+          "bytes": 469855622,
+          "sha256": "6bbfb51c6d21a8cbe3085c74517487384c6e0fff4d5fb1458533e8b1532f6c2d"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "deposit_shielded",
+      "k": 13,
+      "rows": 6506,
+      "assets": {
+        "zkir": {
+          "bytes": 5871,
+          "sha256": "9b4af24b42dce2987835aa08b517835015e5e08db893c783088e6f0ffe7943cc"
+        },
+        "prover": {
+          "bytes": 11278212,
+          "sha256": "0c63768a2206101b86d8bfc49f7a55d3cdd230afa6a28f61964f160082a519cb"
+        },
+        "verifier": {
+          "bytes": 2121,
+          "sha256": "18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "deposit_unshielded",
+      "k": 9,
+      "rows": 331,
+      "assets": {
+        "zkir": {
+          "bytes": 4975,
+          "sha256": "e1384ddb55763bd0a3226bbad3337b83a4e076087f212dbe0281e6db671dce1d"
+        },
+        "prover": {
+          "bytes": 446790,
+          "sha256": "d8409e37efa3f142a8c9fb44a7a4c25397312317f9cf28f1243c1bba887f56a3"
+        },
+        "verifier": {
+          "bytes": 1353,
+          "sha256": "bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "issue_grant_with_jubjub",
+      "k": 16,
+      "rows": 52285,
+      "assets": {
+        "zkir": {
+          "bytes": 27897,
+          "sha256": "c16f4b45b6f21155c12865e140d8b3187f60499893a27f3c3fb3c3f137895f50"
+        },
+        "prover": {
+          "bytes": 98579753,
+          "sha256": "66d7042ed9e180c9a761a2cb53702284bc7c5399dd71bf7f35e9bd12b155a993"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "c0ecbf002a013d73681c6240a87ebebef546251fb5abb1b5bbf4e4c76dc80341"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "issue_grant_with_k256",
+      "k": 17,
+      "rows": 87277,
+      "assets": {
+        "zkir": {
+          "bytes": 38797,
+          "sha256": "f9fcd644ceb0b50fb7f959f92e674f91047048b9f1fb6df41ecbb924572410ea"
+        },
+        "prover": {
+          "bytes": 234898677,
+          "sha256": "06ee5e97c309ae91cc3e0f1f05d59483a1f5abc5a8b2ec8aa29f559785c5f750"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "166d9a5f566912077e3101c5908d11a06e31953354b97d639fa76f1d851469d6"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "issue_grant_with_p256",
+      "k": 18,
+      "rows": 155355,
+      "assets": {
+        "zkir": {
+          "bytes": 286584,
+          "sha256": "f5a9b18982128094c4a2f2849a9346322faccd384bdba18153f0c8fdaff208fd"
+        },
+        "prover": {
+          "bytes": 469860871,
+          "sha256": "4b38d62626fade6ec010ad507d8bf878e2b9924c17c153c6183a1a5680dcd25b"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "2b238be64188d81a613bab9ce349e0c3808133038717e2052974264f6253960f"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "publish_recovery_session_with_jubjub",
+      "k": 16,
+      "rows": 36491,
+      "assets": {
+        "zkir": {
+          "bytes": 20252,
+          "sha256": "b3c9ba85558a6114552f1ccf3a0a8f5a3ad2931be27ec588ba8a80768500a23b"
+        },
+        "prover": {
+          "bytes": 98577629,
+          "sha256": "970d2106599f6a0d9c5da65bb474a9ddaaeb5c8d61fbbcd5c6cf9440204deca4"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "40a747a1ff4e2c2a8ff095b4900e80b32ba3b12936164f8f3ecb6178d980a16c"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "publish_recovery_session_with_k256",
+      "k": 17,
+      "rows": 72217,
+      "assets": {
+        "zkir": {
+          "bytes": 31285,
+          "sha256": "280b5f54ba806fa04e5ebdc405462e7e169dd2bb6a8a8a86ee2dbf986134dc6a"
+        },
+        "prover": {
+          "bytes": 247479764,
+          "sha256": "e2fd012acaedfe43e8b486cd8aaf86220ca36e3b584a4e82c8ab1413fa60561a"
+        },
+        "verifier": {
+          "bytes": 2889,
+          "sha256": "95d63f64ed223e13b995f39ec7d2ef630336aabe31aa4d3beaf47467cf5c7854"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "publish_recovery_session_with_p256",
+      "k": 18,
+      "rows": 140296,
+      "assets": {
+        "zkir": {
+          "bytes": 278946,
+          "sha256": "7ce074fcc26434cec22780ded4504d8b739a58740a08b78dc2afe174cdd190e1"
+        },
+        "prover": {
+          "bytes": 495024744,
+          "sha256": "228b587960d707dd6faba39dca8d4fd197a3076d19bdd98cc77edf0e427949b6"
+        },
+        "verifier": {
+          "bytes": 2889,
+          "sha256": "181a530e7af949f811f392aea988cffe471219406c36e57c8c283d647417731c"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "recover_cancel_with_jubjub",
+      "k": 15,
+      "rows": 27029,
+      "assets": {
+        "zkir": {
+          "bytes": 12846,
+          "sha256": "e1f31a71a6cacf62ccfca7becddec9b606bf64a0260606992de763d1bd4043ef"
+        },
+        "prover": {
+          "bytes": 49292003,
+          "sha256": "339bdc588d287faa6b8582047fd5322615f8cf42ea0b732864d8a52c4ed290e7"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "07ee83659226bdec4843a3ef75d62fd77e506492ff5cb43e174592f30644c0c7"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "recover_cancel_with_k256",
+      "k": 17,
+      "rows": 62383,
+      "assets": {
+        "zkir": {
+          "bytes": 23712,
+          "sha256": "8b9f8ff7f7d407ea073da725f140390a58ecd73d6d25ac794ed516b49798edfc"
+        },
+        "prover": {
+          "bytes": 247477110,
+          "sha256": "d02576256a1763b1ce3659a5875a59942f9cfb30543b5764cc552b3e705902c1"
+        },
+        "verifier": {
+          "bytes": 2889,
+          "sha256": "fbb2b207720149ad54ba0a9a8f1b25add0edbb2d11ae2a8222af7ac875d16109"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "recover_cancel_with_p256",
+      "k": 18,
+      "rows": 130460,
+      "assets": {
+        "zkir": {
+          "bytes": 271218,
+          "sha256": "e4e5883325e7baf0fee2915fe3fb5feb6fe31899ee35f2d2557244267eb2f394"
+        },
+        "prover": {
+          "bytes": 495021935,
+          "sha256": "2380566f0e075c7014dd39e52de8d436e0019dd7b6f8748198ab68e9d477453b"
+        },
+        "verifier": {
+          "bytes": 2889,
+          "sha256": "931442529db8c6ee84ef25d582b068c6acd0f92577d180d8f44284ea767e618f"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "recover_finalise",
+      "k": 12,
+      "rows": 2352,
+      "assets": {
+        "zkir": {
+          "bytes": 10283,
+          "sha256": "502d5a6e375ef497c2c2f85e5efebb99fc017d0e0724784da31f40b392dd5845"
+        },
+        "prover": {
+          "bytes": 4201447,
+          "sha256": "4b8c4135800571ecf50f88684de4030195567e823553ff0273d2e0330b4173bd"
+        },
+        "verifier": {
+          "bytes": 1593,
+          "sha256": "67cdf364b9ae2905ca8b73cccd6a987eaa4cab83786da19065df88940c9999d2"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "recover_submit",
+      "k": 15,
+      "rows": 30436,
+      "assets": {
+        "zkir": {
+          "bytes": 16102,
+          "sha256": "383f701d09f5c763f17b5821c41944f3f5681a5b9cf9e39e525dded79e13e6d3"
+        },
+        "prover": {
+          "bytes": 49293353,
+          "sha256": "927dbddd87f7e627391272ed859c378a7daca64c69d2691599b29b6fed0c61fe"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "87f7ef22c8393dff30624ab0b1ce61a666662546395088da2d7127d74b236c9c"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "remove_device_with_jubjub",
+      "k": 16,
+      "rows": 32776,
+      "assets": {
+        "zkir": {
+          "bytes": 15016,
+          "sha256": "a282b7f98e02086266f95257eec57ef6b10b6d6810a5d0b85bdca1d0a8790622"
+        },
+        "prover": {
+          "bytes": 98575409,
+          "sha256": "1975015ef62a2eb946a9960c4d84372dfcf12ffaeb64789a8ed764cf81deef93"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "98b87b827e778a90e5012b99465b7c7cfcc00c5ee859bfbcfeec1da657698be0"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "remove_device_with_k256",
+      "k": 17,
+      "rows": 68314,
+      "assets": {
+        "zkir": {
+          "bytes": 26380,
+          "sha256": "399cb57558a9ff9b23992a39c3c00c33ebed22ce6198aee1762c5ea2d171832e"
+        },
+        "prover": {
+          "bytes": 234894405,
+          "sha256": "cc6513ed778e2214b01011af8ab3a24e945accf593ce35ebd1fcf96b9662033d"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "e1c2c52b3f6d52fb7bef2b40505ba28c4531f0922ac0916bcf56b1b942210fee"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "remove_device_with_p256",
+      "k": 18,
+      "rows": 138266,
+      "assets": {
+        "zkir": {
+          "bytes": 274021,
+          "sha256": "7be3cc6ce957fd54c76f2e0f896aaa65a9e0d5294fc813f3a64b0c2b4bc0ccf0"
+        },
+        "prover": {
+          "bytes": 469856388,
+          "sha256": "340b7f5daf4a1ffd5f1e5ff50d48bb16b0960fe65f58ac2686895f708a824ed3"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "07cc0794c5aaac46ec7832129caff43c7e1c81c24fa034962b48fb06b62c3efc"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "revoke_all_grants_with_jubjub",
+      "k": 15,
+      "rows": 26692,
+      "assets": {
+        "zkir": {
+          "bytes": 11564,
+          "sha256": "59995aa084d8c21882a925db6ea6f7978e657dc2d55a583935046cb618aba5ff"
+        },
+        "prover": {
+          "bytes": 49291293,
+          "sha256": "41b2ceb329c890fc29baafc3d9d3bf65276f4d14ea12451b1b368768e046bf66"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "acf69db5f77b0663f995bbd91a752b4a8be80f89d1a5ea6132d890648a532610"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "revoke_all_grants_with_k256",
+      "k": 17,
+      "rows": 61682,
+      "assets": {
+        "zkir": {
+          "bytes": 22340,
+          "sha256": "219e152e58f3159486f53f068867b6a3e85953a474acac7253a7916013de61d4"
+        },
+        "prover": {
+          "bytes": 234893165,
+          "sha256": "98a59b5c7dc4bd2fe49e895eed72065105e852df543f93e1ef4dab91c9715c5b"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "ddbf3dfd380a258065fff743888e392fa39422fcf54e7046624ce042688932d2"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "revoke_all_grants_with_p256",
+      "k": 18,
+      "rows": 129759,
+      "assets": {
+        "zkir": {
+          "bytes": 269836,
+          "sha256": "1f5ec1f0f70f683313292e6985521d399bf31ede611a376df60d3cc9c487306e"
+        },
+        "prover": {
+          "bytes": 469855068,
+          "sha256": "4b6b38348ed3c82446f08cf9f90b0974d47891d8f944454251bccefd7a9bb314"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "594eb9482fc3c024957afd19b0207e393bf2df62e70c75a6c4aa7b6b59d465eb"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "revoke_grant_with_jubjub",
+      "k": 15,
+      "rows": 26914,
+      "assets": {
+        "zkir": {
+          "bytes": 15105,
+          "sha256": "f4b8323c79330a2eaa92084f097a97aefcd9a3a5538e5c3ccace3501a751ded1"
+        },
+        "prover": {
+          "bytes": 49292391,
+          "sha256": "52b4009cb9427397df516d85339edc2171ea8166aade7c00aaba24ae0c7f1a59"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "4ebbb61e75e3e5097eaf7a1afc97efb5991beb4949d1a14638b0e833b6d26d88"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "revoke_grant_with_k256",
+      "k": 17,
+      "rows": 61904,
+      "assets": {
+        "zkir": {
+          "bytes": 25952,
+          "sha256": "b0b0a96b14a3accfa7fb2cad83f8e4895768e41d4e37a0fffbf95dab8aa5a920"
+        },
+        "prover": {
+          "bytes": 234894334,
+          "sha256": "6f709ee08a2c25d051a08fc351a8f77d4fa8b0b68cdfed424184baf69c487b5c"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "682fe0ba590d975be8d1c45b28d0909000eb50867b21d094c1154df48febb8ca"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "revoke_grant_with_p256",
+      "k": 18,
+      "rows": 129982,
+      "assets": {
+        "zkir": {
+          "bytes": 273520,
+          "sha256": "609d1781ef92e17aa3697cb39759231656251884b50e4baf9a52a0c670b44073"
+        },
+        "prover": {
+          "bytes": 469856309,
+          "sha256": "c2657e6b7d1d3072d45c85df9431c42a5eb70107ea251b0d290c6f6d0959aa24"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "90d2615c354820fdb9b60df8ba907c0159d49e9233d078b351d9d4518e150eaa"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "k": 15,
+      "rows": 26764,
+      "assets": {
+        "zkir": {
+          "bytes": 11013,
+          "sha256": "c9e1e5f58c19179f290face9c90935a20c28938c4c8db2bbf0bf1fc0d10999ab"
+        },
+        "prover": {
+          "bytes": 49291116,
+          "sha256": "659e1c4830023cee599a696fd4037f9a77dbac082eca35b490e84833b8b88be5"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "15238b09168c63a597c7d47cfe3b732fa126257bdf6b0558229d98feb5cb2322"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "rotate_enc_key_with_k256",
+      "k": 17,
+      "rows": 61754,
+      "assets": {
+        "zkir": {
+          "bytes": 21785,
+          "sha256": "7f22b917111f9de789a5da7d7b2c1182c8c5578b9d06bb7c11b5339ac829052f"
+        },
+        "prover": {
+          "bytes": 234892984,
+          "sha256": "e15da9923170735669ef1a16907c0b205f7843b400e70a1208578f92cd4b4370"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "5389d0d3d845bd94ef91bed9d501be4449a060d0def2336d4b7baedf6f410213"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "rotate_enc_key_with_p256",
+      "k": 18,
+      "rows": 129832,
+      "assets": {
+        "zkir": {
+          "bytes": 269246,
+          "sha256": "2b056dde43dc3e75a651b3f19f48abf8d0fe48c6a167a561b58c5a8ee714ea5f"
+        },
+        "prover": {
+          "bytes": 469854852,
+          "sha256": "d8f545d7a8a2729794349f77a10d88984f9a744bf35d2419f44b0fd8c6b51b39"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "k": 17,
+      "rows": 71757,
+      "assets": {
+        "zkir": {
+          "bytes": 31711,
+          "sha256": "890d802847086d03413025ef87a5f6b9d331ca9c591855670b30cf9612584c80"
+        },
+        "prover": {
+          "bytes": 197146593,
+          "sha256": "0d2c04a9723a03dc9f7e6721c65d9ffd65422b9b01f3f1e146406d428b450057"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "058bc110ef1ebe70c45e10b44fcf138aeedb33c72f7e3f76112e2554db30ce1f"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "k": 17,
+      "rows": 106223,
+      "assets": {
+        "zkir": {
+          "bytes": 42144,
+          "sha256": "ddb3d8170098c6d707c8415c128403e4cd5c62d98aff552133209caacad43b7a"
+        },
+        "prover": {
+          "bytes": 234899216,
+          "sha256": "75de5aa103883de009d844be42aa598f68409cc6aee2e94517ee92e96daf39cf"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "291d8f2a8d621c2276f117e211755534c9ba33efd2361db38ee229b762e07513"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_to_contract_with_grant_p256",
+      "k": 18,
+      "rows": 176220,
+      "assets": {
+        "zkir": {
+          "bytes": 291183,
+          "sha256": "002e70b613efb6726b51e77977faecfe591f444534ecb4de361c2a3d7c39b6ea"
+        },
+        "prover": {
+          "bytes": 469861954,
+          "sha256": "1e1050526511b6b805bc4db8aa49a3cfad08700a724e5e4ce9a3f736e6b8dc5a"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "5369388883f0e9ec883c4ef118f21bc114ecdd414dc0b61bafab92b11b675c5f"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "k": 16,
+      "rows": 55792,
+      "assets": {
+        "zkir": {
+          "bytes": 20347,
+          "sha256": "c087bf65963c03672d68c11eff432bac02c912d089855f0c9c8664b45c67076e"
+        },
+        "prover": {
+          "bytes": 98576810,
+          "sha256": "6d89f210faffba5b9b5853e6050148e6203c22f0e15a4f18606d31e7135e3086"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "80de79cc371eecbcede1cac34aa729abc5e5e0b58da8683fa585bb8242cf6cf2"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "k": 17,
+      "rows": 88939,
+      "assets": {
+        "zkir": {
+          "bytes": 31239,
+          "sha256": "0db43b367e679e53477200c9ab5576baa640ede5b0ddaf9da89b866a1c423daa"
+        },
+        "prover": {
+          "bytes": 234895726,
+          "sha256": "3d710ee2f9e8db491a45c5b7c3b863af8a6f74973b97d30a965c05aced50bc00"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "aafb9d7c641bcc7a9eb79c0e7db18ab40721cb1dff480013a9ffe92eb8821c5d"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_to_contract_with_p256",
+      "k": 18,
+      "rows": 157018,
+      "assets": {
+        "zkir": {
+          "bytes": 278899,
+          "sha256": "3b89edcabbc56d04da38ab0e4c268b692769d482158ed1ed3799e487bb9642f0"
+        },
+        "prover": {
+          "bytes": 469857793,
+          "sha256": "abaecff5c71bb5da95647062d80cb1b60a6cc140bca384f6a9f9d8f6e724ae46"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "8a53f9c55fc22caef6eb27880cca12230a6b77464db6121e3c7f76e0c6db30e6"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "k": 17,
+      "rows": 66054,
+      "assets": {
+        "zkir": {
+          "bytes": 30081,
+          "sha256": "4dbe7b4dbae5c18ece6e4a042edcfb8d6544d2aef1c492ae63754a4eb82d07bf"
+        },
+        "prover": {
+          "bytes": 197146073,
+          "sha256": "ea38d153051514b605188f4c5f999ca2fd7e1e0a24c1c8e6c44d0fc252d022a0"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "fda16f85f266d3b2c2ccaf8093a6480ec26b4b157d2b2e8045978b4e308313a9"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "k": 17,
+      "rows": 100520,
+      "assets": {
+        "zkir": {
+          "bytes": 40516,
+          "sha256": "e6fe845b1763044124efeb7317cc428a70591e66f1f20462c9df4a181859cfe4"
+        },
+        "prover": {
+          "bytes": 234898697,
+          "sha256": "64c5c1fe3c2a978249756104cc741791d09e18fa97033e8e9434078bedc1143d"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "66fe6fbddfe1f6772c91f9e83d950b4205e5bcafb6b687224045a7d839c969fb"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_with_grant_p256",
+      "k": 18,
+      "rows": 170517,
+      "assets": {
+        "zkir": {
+          "bytes": 289532,
+          "sha256": "de4c31875d20e2e7c98d308fed53e9cd46397683bf050b5b0dbe3da02df6cf1c"
+        },
+        "prover": {
+          "bytes": 469861412,
+          "sha256": "3a4cd6c0177bacf427ec0b8556bae774218e223e6d0626f285d9b840dce5e267"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "a85761af5cddcaeb5955360edc37d08c24c76823d925866704274672158a1bcc"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_with_jubjub",
+      "k": 16,
+      "rows": 50089,
+      "assets": {
+        "zkir": {
+          "bytes": 18730,
+          "sha256": "7f5f16ce5a776c531d6edffb65c129d2291ced12a4bbc76223905e11d468c48b"
+        },
+        "prover": {
+          "bytes": 98576303,
+          "sha256": "0c48656916ee76661bd4e49c47eaab299d4c4cf07ac41ddfb66cd8b2641d4e22"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "81036722d686c1d6296e1a123118680d0240a96ce021da12f702101e4a7c554b"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_with_k256",
+      "k": 17,
+      "rows": 83236,
+      "assets": {
+        "zkir": {
+          "bytes": 29609,
+          "sha256": "88c323da596cb4d463159a1b25c30eedffef0106729dec657b03bdd0ad020535"
+        },
+        "prover": {
+          "bytes": 234895206,
+          "sha256": "40cd11f0ecf36bf55f7b432b28a54858793a262667be867074d789dad5d999db"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "67f60dc3ed608b79c03cc635d09b327edf5d68774aa6576453b7a0003739b473"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_shielded_with_p256",
+      "k": 18,
+      "rows": 151315,
+      "assets": {
+        "zkir": {
+          "bytes": 277246,
+          "sha256": "5224abbbbc4a1adc0c77365d8e9a0b9c1077d12f2a78c9ff93bb82f543242f23"
+        },
+        "prover": {
+          "bytes": 469857250,
+          "sha256": "79efc4faffc2358fb75aa54c1334aa1ea61b727594415e89c6e25ad8d9619cd2"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "k": 16,
+      "rows": 38546,
+      "assets": {
+        "zkir": {
+          "bytes": 21966,
+          "sha256": "250423ce0e39b8ad02655e0de6c75a9afbe65547c4071fc502d5f86ff6cda459"
+        },
+        "prover": {
+          "bytes": 98577592,
+          "sha256": "5d3e43e71c162cf5a6e4cf45254332f33a6090c3d592765b86a6c086025ec381"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "420693c04102c00f18b25acf00740743b24652bd0b5b1a8611a572b1ee1250e6"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "k": 17,
+      "rows": 73002,
+      "assets": {
+        "zkir": {
+          "bytes": 32398,
+          "sha256": "126c29a8b3b02cf68eda7585b0b18a9076de144892079a96badc98f714d04ebd"
+        },
+        "prover": {
+          "bytes": 234896357,
+          "sha256": "f3d22a7dafb3be9a6cb577081dac6a1911b8ee8abd4d4317283db1e9c97efcab"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "419aaf185095be2fa6b566b5bd0df516f15e5364ac37e04b6a65b1c31a47a900"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_unshielded_with_grant_p256",
+      "k": 18,
+      "rows": 142999,
+      "assets": {
+        "zkir": {
+          "bytes": 281247,
+          "sha256": "ee0eb04ddec6c5bd9c8693ef0fbe12979e25eed74b4339ef8828cd01f8adb35e"
+        },
+        "prover": {
+          "bytes": 469858905,
+          "sha256": "1883fba0cda14359b13849d414619978b40a7432bd5c83bf4d878b3966ca6df0"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "fbcb7f6a5d92fd9d717380461e5ec7130c661c9e1443c524ff71d18867396899"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "k": 15,
+      "rows": 28920,
+      "assets": {
+        "zkir": {
+          "bytes": 15368,
+          "sha256": "5f17d3c2335ce77121a9b5dede0cf9c16b5f5aa3bb8ede55118cebc4796a6299"
+        },
+        "prover": {
+          "bytes": 49292614,
+          "sha256": "246a2c3278ea1744527449aab5f099f9a0856b1d0dcfdbd9335352d4c87f982e"
+        },
+        "verifier": {
+          "bytes": 2313,
+          "sha256": "265a64198c2baf14b79ffdc57362c173cd0e13257e1627acae55c6cc821118c4"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_unshielded_with_k256",
+      "k": 17,
+      "rows": 63907,
+      "assets": {
+        "zkir": {
+          "bytes": 26162,
+          "sha256": "86687ed1b92a4ac33ab7d72e7eb14fe1e01e701ef99f46677d408103018a5688"
+        },
+        "prover": {
+          "bytes": 234894504,
+          "sha256": "773d7fe33704b070dc2d976aea3707b9ec16554e9e4123b5db0db2d32ac1c093"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "a0d7624f9f25ad695511dc169d4daa9f25853f0af35bbea375f4fdb12fc943b6"
+        }
+      }
+    },
+    {
+      "contract": "account",
+      "circuit": "withdraw_unshielded_with_p256",
+      "k": 18,
+      "rows": 131986,
+      "assets": {
+        "zkir": {
+          "bytes": 273717,
+          "sha256": "841c15cbb978a8b63e90a9d1501ce37233445b0a2150ceca3133ed82b28b29d4"
+        },
+        "prover": {
+          "bytes": 469856466,
+          "sha256": "b471b16ada0e75ef80eec5e6791f9e6f4487c51328b3d6931b1d40ad75e0146a"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "a4b8fd3383755f6f110a2b94fe97ab48a0dadd652043b200c30eb93e81fdc209"
+        }
+      }
+    }
+  ]
+}

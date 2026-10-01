@@ -44,7 +44,7 @@ void runScenario('toolchain-offline', async () => {
     assert.ok(deployment.private.unprovenTx.serialize().length > 0);
   }
 
-  step('all account ZKIR/VKs load; both wave plans cover the roster and sign v4 updates');
+  step('all account ZKIR/VKs load; every arm\'s wave plan covers the roster and signs v4 updates');
   const keys = new Map<string, Uint8Array>();
   for (const id of allCircuits()) {
     const vk = await accountProvider.getVerifierKey(id);
@@ -53,7 +53,7 @@ void runScenario('toolchain-offline', async () => {
     keys.set(id, vk);
   }
   const sizes = new Map([...keys].map(([id, vk]) => [id, vk.length]));
-  for (const arm of ['jubjub', 'k256'] as const) {
+  for (const arm of ['jubjub', 'k256', 'p256'] as const) {
     const waves = planWaves(sizes, arm, true);
     assert.deepEqual(waves.flatMap((w) => w.circuits).sort(), allCircuits().sort());
     assert.ok(waves.every((w) => w.verifierBytes <= VERIFIER_BYTE_BUDGET), 'deploy and maintenance fit the budget');

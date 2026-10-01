@@ -1,0 +1,392 @@
+// P-256 / profiled WebAuthn arm, included by account.compact. All custody,
+// grant-scope and recovery mutations use the existing shared chips.
+// Keys, RP and exact origin are private authorisation inputs. Device entries
+// and boot commitments bind the policy, so a prover cannot choose a new RP.
+// Grant identity binds origin; its salted rp_commit binds the RP separately.
+
+// Keep these structs internal: Compact 0.35's exported-struct TypeScript
+// unifier omits curve-secp256r1. Inline ABI emission handles the same fields.
+struct P256Auth {
+  pk: Secp256r1Point;
+  use_counter: Uint<64>;
+  policy: WebAuthnPolicy;
+  authenticator_data: Bytes<37>;
+  sig: Secp256r1EcdsaSignature;
+}
+
+struct P256GrantAuth {
+  pk: Secp256r1Point;
+  policy: WebAuthnPolicy;
+  authenticator_data: Bytes<37>;
+  sig: Secp256r1EcdsaSignature;
+}
+
+export pure circuit compute_public_point_with_p256(scalar: Secp256r1Scalar): Secp256r1Point {
+  return ecMulGenerator(scalar);
+}
+
+export pure circuit derive_boot_commitment_with_p256(
+  salt: Bytes<32>, pk: Secp256r1Point, policy: WebAuthnPolicy
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, WebAuthnPolicy]>([
+    pad(32, "midnight:account:boot:r1:v2"), salt,
+    secp256r1PointX(pk) as Bytes<32>, secp256r1PointY(pk) as Bytes<32>, policy
+  ]);
+}
+
+export pure circuit derive_device_entry_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, policy: WebAuthnPolicy,
+  epoch: Uint<32>, counter: Uint<64>
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, WebAuthnPolicy, Uint<32>, Uint<64>]>([
+    pad(32, "midnight:account:device:r1:v2"), self_addr,
+    secp256r1PointX(pk) as Bytes<32>, secp256r1PointY(pk) as Bytes<32>, policy, epoch, counter
+  ]);
+}
+
+export circuit activate_initial_device_with_p256(
+  pk: Secp256r1Point, salt: Bytes<32>, policy: WebAuthnPolicy
+): [] {
+  assert(!booted, "already activated");
+  // Point-coordinate extraction rejects identity; foreign point inputs are
+  // constrained by the native curve type. P-256 has cofactor one.
+  assert(derive_boot_commitment_with_p256(salt, pk, policy) == boot, "boot commitment mismatch");
+  do_activate_initial_device(derive_device_entry_with_p256(kernel.self(), pk, policy, device_epoch, 0));
+}
+
+circuit require_authorised_with_p256(auth: P256Auth, challenge: Bytes<32>): [] {
+  const entry = disclose(derive_device_entry_with_p256(
+    kernel.self(), auth.pk, auth.policy, device_epoch, auth.use_counter
+  ));
+  assert(devices.member(entry), "unknown device entry");
+  assert(webauthn_verify(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk),
+         "invalid WebAuthn signature");
+  devices.remove(entry);
+  devices.insert(disclose(derive_device_entry_with_p256(
+    kernel.self(), auth.pk, auth.policy, device_epoch, (auth.use_counter + 1) as Uint<64>
+  )));
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+  bump_round();
+}
+
+// Field-aligned tuples flatten in declaration order. The generic argument
+// tuple below preserves the byte recipe of the other ECDSA arm with r1 DSTs.
+circuit p256_device_challenge<T>(
+  tag: Bytes<64>, self_addr: ContractAddress, pk: Secp256r1Point,
+  args: T, nonce_value: Uint<64>
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, T, Uint<64>]>([
+    persistentHash<[Bytes<64>]>([tag]), self_addr,
+    secp256r1PointX(pk) as Bytes<32>, secp256r1PointY(pk) as Bytes<32>, args, nonce_value
+  ]);
+}
+
+export pure circuit challenge_withdraw_unshielded_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, color: Bytes<32>, amount: Uint<128>,
+  recipient: UserAddress, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[Bytes<32>, Uint<128>, UserAddress]>(
+    pad(64, "midnight:account:auth:r1:v1:withdraw_unshielded"), self_addr, pk,
+    [color, amount, recipient], nonce_value);
+}
+
+export pure circuit challenge_withdraw_shielded_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, recipient: ZswapCoinPublicKey,
+  color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo]>(
+    pad(64, "midnight:account:auth:r1:v1:withdraw_shielded"), self_addr, pk,
+    [recipient, color, amount, coin], nonce_value);
+}
+
+export pure circuit challenge_withdraw_shielded_to_contract_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, recipient: ContractAddress,
+  color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[ContractAddress, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo]>(
+    pad(64, "midnight:account:auth:r1:v1:withdraw_shielded_to_contract"), self_addr, pk,
+    [recipient, color, amount, coin], nonce_value);
+}
+
+export pure circuit challenge_append_inbox_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, entry: Bytes<192>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<Bytes<192>>(
+    pad(64, "midnight:account:auth:r1:v1:append_inbox"), self_addr, pk, entry, nonce_value);
+}
+
+export pure circuit challenge_rotate_enc_key_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, key: Bytes<32>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<Bytes<32>>(
+    pad(64, "midnight:account:auth:r1:v1:rotate_enc_key"), self_addr, pk, key, nonce_value);
+}
+
+export pure circuit challenge_add_device_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, entry: Bytes<32>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<Bytes<32>>(
+    pad(64, "midnight:account:auth:r1:v1:add_device"), self_addr, pk, entry, nonce_value);
+}
+
+export pure circuit challenge_remove_device_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, entry: Bytes<32>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<Bytes<32>>(
+    pad(64, "midnight:account:auth:r1:v1:remove_device"), self_addr, pk, entry, nonce_value);
+}
+
+export pure circuit challenge_issue_grant_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, digest: Bytes<32>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[Bytes<32>, Bytes<32>]>(
+    pad(64, "midnight:account:auth:r1:v1:issue_grant"), self_addr, pk, [id, digest], nonce_value);
+}
+
+export pure circuit challenge_revoke_grant_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<Bytes<32>>(
+    pad(64, "midnight:account:auth:r1:v1:revoke_grant"), self_addr, pk, id, nonce_value);
+}
+
+export pure circuit challenge_revoke_all_grants_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[]>(
+    pad(64, "midnight:account:auth:r1:v1:revoke_all_grants"), self_addr, pk, [], nonce_value);
+}
+
+export pure circuit challenge_publish_recovery_session_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, new_recovery_pk: JubjubPoint,
+  session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field,
+  phi_len: Uint<8>, wrap: Bytes<64>, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[JubjubPoint, Bytes<32>, Field, Field, Field, Field, Uint<8>, Bytes<64>]>(
+    pad(64, "midnight:account:auth:r1:v1:publish_recovery_session"), self_addr, pk,
+    [new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap], nonce_value);
+}
+
+export pure circuit challenge_recover_cancel_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_device_challenge<[]>(
+    pad(64, "midnight:account:auth:r1:v1:recover_cancel"), self_addr, pk, [], nonce_value);
+}
+
+export circuit withdraw_unshielded_with_p256(
+  color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, auth: P256Auth
+): [] {
+  require_authorised_with_p256(auth, challenge_withdraw_unshielded_with_p256(
+    kernel.self(), auth.pk, color, amount, recipient, auth_nonce));
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+export circuit withdraw_shielded_with_p256(
+  recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, auth: P256Auth
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  require_authorised_with_p256(auth, challenge_withdraw_shielded_with_p256(
+    kernel.self(), auth.pk, recipient, color, amount, coin, auth_nonce));
+  return do_withdraw_shielded(recipient, amount, coin);
+}
+
+export circuit withdraw_shielded_to_contract_with_p256(
+  recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, auth: P256Auth
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  require_authorised_with_p256(auth, challenge_withdraw_shielded_to_contract_with_p256(
+    kernel.self(), auth.pk, recipient, color, amount, coin, auth_nonce));
+  return do_withdraw_shielded_to_contract(recipient, amount, coin);
+}
+
+export circuit append_inbox_with_p256(entry: Bytes<192>, auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_append_inbox_with_p256(kernel.self(), auth.pk, entry, auth_nonce));
+  do_append_inbox(entry);
+}
+
+export circuit rotate_enc_key_with_p256(key: Bytes<32>, auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_rotate_enc_key_with_p256(kernel.self(), auth.pk, key, auth_nonce));
+  do_rotate_enc_key(key);
+}
+
+export circuit add_device_with_p256(entry: Bytes<32>, auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_add_device_with_p256(kernel.self(), auth.pk, entry, auth_nonce));
+  do_add_device(entry);
+}
+
+export circuit remove_device_with_p256(entry: Bytes<32>, auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_remove_device_with_p256(kernel.self(), auth.pk, entry, auth_nonce));
+  do_remove_device(entry, derive_device_entry_with_p256(
+    kernel.self(), auth.pk, auth.policy, device_epoch, (auth.use_counter + 1) as Uint<64>));
+}
+
+export circuit issue_grant_with_p256(
+  grant_id: Bytes<32>, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean,
+  op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>,
+  recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>,
+  per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>,
+  read_pk_hash: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>,
+  scope_salt: Bytes<32>, auth: P256Auth
+): [] {
+  const digest = derive_grant_scope_digest(
+    scope_salt, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract,
+    read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at,
+    rp_id_hash, read_pk_hash, window_len, window_cap);
+  require_authorised_with_p256(auth, challenge_issue_grant_with_p256(
+    kernel.self(), auth.pk, grant_id, digest, auth_nonce));
+  do_issue_grant(grant_id, op_withdraw_unshielded, op_withdraw_shielded,
+    op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value,
+    per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash, window_len, window_cap, scope_salt);
+}
+
+export circuit revoke_grant_with_p256(grant_id: Bytes<32>, auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_revoke_grant_with_p256(kernel.self(), auth.pk, grant_id, auth_nonce));
+  do_revoke_grant(grant_id);
+}
+
+export circuit revoke_all_grants_with_p256(auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_revoke_all_grants_with_p256(kernel.self(), auth.pk, auth_nonce));
+  do_revoke_all_grants();
+}
+
+export circuit publish_recovery_session_with_p256(
+  new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field,
+  phi_3: Field, phi_4: Field, phi_len: Uint<8>, wrap: Bytes<64>, auth: P256Auth
+): [] {
+  require_authorised_with_p256(auth, challenge_publish_recovery_session_with_p256(
+    kernel.self(), auth.pk, new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap, auth_nonce));
+  do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+}
+
+export circuit recover_cancel_with_p256(auth: P256Auth): [] {
+  require_authorised_with_p256(auth, challenge_recover_cancel_with_p256(kernel.self(), auth.pk, auth_nonce));
+  do_recover_cancel();
+}
+
+// Grant identity follows the r1 recipe: no k1 envelope selector. The RP is a
+// committed scope field; the origin below is checked against the signed JSON.
+export pure circuit derive_grant_id_with_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, origin_hash: Bytes<32>, slot: Uint<8>
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>([
+    pad(32, "midnight:account:grant:id:r1:v1"), self_addr,
+    secp256r1PointX(pk) as Bytes<32>, secp256r1PointY(pk) as Bytes<32>, origin_hash, slot]);
+}
+
+circuit p256_grant_challenge<T>(
+  tag: Bytes<64>, self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>,
+  issued_at: Uint<64>, args: T, nonce_value: Uint<64>
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>, T, Uint<64>]>([
+    persistentHash<[Bytes<64>]>([tag]), self_addr,
+    secp256r1PointX(pk) as Bytes<32>, secp256r1PointY(pk) as Bytes<32>, id, issued_at, args, nonce_value]);
+}
+
+export pure circuit challenge_withdraw_unshielded_with_grant_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, issued_at: Uint<64>,
+  color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_grant_challenge<[Bytes<32>, Uint<128>, UserAddress]>(
+    pad(64, "midnight:account:grant:auth:r1:v1:withdraw_unshielded"), self_addr, pk,
+    id, issued_at, [color, amount, recipient], nonce_value);
+}
+
+export pure circuit challenge_withdraw_shielded_with_grant_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, issued_at: Uint<64>,
+  recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>,
+  change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_grant_challenge<[ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo]>(
+    pad(64, "midnight:account:grant:auth:r1:v1:withdraw_shielded"), self_addr, pk,
+    id, issued_at, [recipient, color, amount, change_entry, enc_pk, coin], nonce_value);
+}
+
+export pure circuit challenge_withdraw_shielded_to_contract_with_grant_p256(
+  self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, issued_at: Uint<64>,
+  recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>,
+  change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, nonce_value: Uint<64>
+): Bytes<32> {
+  return p256_grant_challenge<[ContractAddress, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo]>(
+    pad(64, "midnight:account:grant:auth:r1:v1:withdraw_shielded_to_contract"), self_addr, pk,
+    id, issued_at, [recipient, color, amount, change_entry, enc_pk, coin], nonce_value);
+}
+
+circuit authenticate_grant_with_p256(
+  auth: P256GrantAuth, origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>
+): [Bytes<32>, GrantRecord] {
+  assert(persistentHash<[Bytes<32>, Bytes<21>]>([
+    pad(32, "midnight:account:grant:origin:v1"), auth.policy.origin]) == origin_hash, "grant origin mismatch");
+  const id = disclose(derive_grant_id_with_p256(kernel.self(), auth.pk, origin_hash, slot));
+  assert(grants.member(id), "unknown grant");
+  const g = grants.lookup(id);
+  assert(g.active, "grant revoked");
+  assert(g.epoch == device_epoch, "grant epoch stale");
+  assert(g.gen == grant_generation, "grant generation stale");
+  assert(g.scope.expires_at == 0 || kernel.blockTimeLessThan(g.scope.expires_at), "grant expired");
+  assert(derive_grant_rp_commit(scope_salt, auth.policy.rp_id_hash) == g.scope.rp_commit, "grant RP mismatch");
+  return [id, g];
+}
+
+circuit settle_grant_with_p256(
+  id: Bytes<32>, g: GrantRecord, auth: P256GrantAuth, challenge: Bytes<32>,
+  scope_salt: Bytes<32>, new_spent: Uint<128>
+): [] {
+  assert(webauthn_verify(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk), "invalid grant signature");
+  grants.insert(id, GrantRecord {
+    epoch: g.epoch, gen: g.gen, issued_at: g.issued_at, nonce: (g.nonce + 1) as Uint<64>,
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),
+    window_start: g.window_start, window_spent: g.window_spent, active: g.active, scope: g.scope
+  });
+  bump_round();
+}
+
+export circuit withdraw_unshielded_with_grant_p256(
+  color: Bytes<32>, amount: Uint<128>, recipient: UserAddress,
+  origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>, recipient_kind: Uint<8>,
+  pinned_recipient: Bytes<32>, max_coin_value: Uint<128>, spent_prev: Uint<128>, auth: P256GrantAuth
+): [] {
+  const [id, g] = authenticate_grant_with_p256(auth, origin_hash, slot, scope_salt);
+  const new_spent = check_spend_scope(g, g.scope.op_withdraw_unshielded, scope_salt, color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev, 1, recipient.bytes);
+  const challenge = challenge_withdraw_unshielded_with_grant_p256(
+    kernel.self(), auth.pk, id, g.issued_at, color, amount, recipient, g.nonce);
+  settle_grant_with_p256(id, g, auth, challenge, scope_salt, new_spent);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+export circuit withdraw_shielded_with_grant_p256(
+  recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>, recipient_kind: Uint<8>,
+  pinned_recipient: Bytes<32>, max_coin_value: Uint<128>, spent_prev: Uint<128>, auth: P256GrantAuth
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_p256(auth, origin_hash, slot, scope_salt);
+  const new_spent = check_spend_scope(g, g.scope.op_withdraw_shielded, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev, 2, recipient.bytes);
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_with_grant_p256(
+    kernel.self(), auth.pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin, g.nonce);
+  settle_grant_with_p256(id, g, auth, challenge, scope_salt, new_spent);
+  const result = do_withdraw_shielded(recipient, amount, coin);
+  if (disclose(result.is_some)) { do_append_inbox(change_entry); }
+  return result;
+}
+
+export circuit withdraw_shielded_to_contract_with_grant_p256(
+  recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>, recipient_kind: Uint<8>,
+  pinned_recipient: Bytes<32>, max_coin_value: Uint<128>, spent_prev: Uint<128>, auth: P256GrantAuth
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_p256(auth, origin_hash, slot, scope_salt);
+  const new_spent = check_spend_scope(g, g.scope.op_withdraw_shielded_to_contract, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev, 3, recipient.bytes);
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_to_contract_with_grant_p256(
+    kernel.self(), auth.pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin, g.nonce);
+  settle_grant_with_p256(id, g, auth, challenge, scope_salt, new_spent);
+  const [sent, change] = do_withdraw_shielded_to_contract(recipient, amount, coin);
+  if (disclose(change.is_some)) { do_append_inbox(change_entry); }
+  return [sent, change];
+}

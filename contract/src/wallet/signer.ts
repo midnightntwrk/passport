@@ -1,8 +1,8 @@
 // Device signers — one per authorisation arm of the contract (see the
 // contract header: arm `jubjub` is the normative MIP-0013 scheme, arm
-// `k256` the interim ECDSA stand-in for the planned secp256r1 passkey arm).
+// `k256` ECDSA, and `p256` profiled WebAuthn/ES256).
 //
-// Common to both arms: a device holds an independent keypair (sk, pk =
+// Common to all arms: a device holds an independent keypair (sk, pk =
 // sk·G) on its arm's curve; keys are never derived from one another or
 // from a seed (AUTH-7). The challenge preimages are reproduced through the
 // contract's own exported pure circuits, so each signer inherits the
@@ -31,6 +31,9 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
+export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
+export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 
 import {
   pureCircuits,
@@ -40,7 +43,7 @@ import {
 } from './contract.js';
 
 /** The authorisation arms the contract exports circuits for. */
-export type Arm = 'jubjub' | 'k256';
+export type Arm = 'jubjub' | 'k256' | 'p256';
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */
@@ -416,12 +419,16 @@ export const k256Challenges = {
 // Arm-generic surface
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type AnyDevice = JubjubDevice | K256Device;
-export type Authorisation = JubjubAuthorisation | K256Authorisation;
+export type AnyDevice = JubjubDevice | K256Device | P256Device;
+export type Authorisation = JubjubAuthorisation | K256Authorisation | P256Authorisation;
 
 /** The trailing circuit arguments an Authorisation expands to, in the
  *  order the arm's gated circuits declare them. */
 export function authArgs(a: Authorisation): unknown[] {
+  if (a.arm === 'p256') {
+    const { arm, ...auth } = a;
+    return [auth];
+  }
   return a.arm === 'jubjub'
     ? [a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce]
     : [a.pk, a.use_counter, a.sig, a.envelope];
@@ -694,7 +701,7 @@ export interface JubjubGrantAuthorisation {
   grind_nonce: bigint;
 }
 
-export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation;
+export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation;
 
 /**
  * A grantee key on the k256 arm. Unlike a device it has no use counter
@@ -797,7 +804,7 @@ export class JubjubGrantee {
   }
 }
 
-export type AnyGrantee = K256Grantee | JubjubGrantee;
+export type AnyGrantee = K256Grantee | JubjubGrantee | P256Grantee;
 
 // Grant-twin challenges (section 6.3). Preimage, k256:
 // [DST_TWIN, self, pk_x, pk_y, grant_id, issued_at, ...args, [coin], nonce];
@@ -873,6 +880,10 @@ export const jubjubGrantChallenges = {
  */
 export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[] {
   const openings = [o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev];
+  if (a.arm === 'p256') {
+    const { arm, ...auth } = a;
+    return [o.originHash, o.slot, ...openings, auth];
+  }
   return a.arm === 'k256'
     ? [a.pk, a.envelope, o.originHash, o.slot, ...openings, a.sig]
     : [a.pk, o.originHash, o.slot, ...openings, a.sig_r, a.sig_s, a.grind_nonce];
