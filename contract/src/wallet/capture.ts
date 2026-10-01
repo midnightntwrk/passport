@@ -1,6 +1,6 @@
 // Client-side mt_index capture (MIP-0012 §6.5).
 //
-// The indexer's per-transaction startIndex/endIndex give the Zswap
+// The indexer's per-transaction zswapStartIndex/zswapEndIndex give the Zswap
 // commitment-tree positions the transaction's outputs occupy. For a
 // single-output deposit the coin's mt_index IS startIndex; for multi-output
 // transactions the client gets every candidate and MAY resolve by retry: an
@@ -33,8 +33,8 @@ export async function queryTxPosition(txId: string): Promise<TxPosition> {
         hash
         block { height hash }
         ... on RegularTransaction {
-          startIndex
-          endIndex
+          startIndex: zswapStartIndex
+          endIndex: zswapEndIndex
           transactionResult { status }
         }
       }

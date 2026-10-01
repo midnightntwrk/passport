@@ -33,10 +33,9 @@ once, below every arm.
   (`secp256k1EcdsaVerify`, ZKIR v3), an **interim engineering arm**, not
   a scheme proposal: MIP-0013 R2 rejects secp256k1 ECDSA for account
   authorisation. It stands in for the intended **secp256r1 (P-256)
-  passkey arm** until that curve has a Compact language surface; the two
-  curves share the short-Weierstrass ECDSA shape, so the k1 → r1 swap is
-  a type and constant substitution (built-in names, `:k1:` → `:r1:` DST
-  markers). Its challenges carry no signature announcement (an ECDSA
+  passkey arm**. Compact 0.35.0 now exposes P-256 verification; implementing
+  the arm and its WebAuthn message binding remains separate work.
+  Its challenges carry no signature announcement (an ECDSA
   message must not depend on its own signature) and no grinding nonce
   (the verify reduces the digest mod n natively); keys bind as
   little-endian affine coordinate bytes; both S forms are accepted (real
@@ -86,8 +85,8 @@ A second authoriser class sits beside the device set at
 `spec_version = 2`: a **grantee**, a key the owner enrols into the `grants`
 register under a scope rather than into the device set, and which can spend
 within that scope without holding a device. Grantees are co-resident the same
-way. Each grantee arm (`jubjub` and `k256` today, `p256` when that curve has a
-Compact surface) exports three grant twins over the unchanged custody chips,
+way. Each grantee arm (`jubjub` and `k256` today, with `p256` still to be
+implemented) exports three grant twins over the unchanged custody chips,
 `withdraw_unshielded_with_grant_<arm>`, `withdraw_shielded_with_grant_<arm>`,
 and `withdraw_shielded_to_contract_with_grant_<arm>`; each device arm exports
 the three lifecycle circuits `issue_grant_with_<arm>`,
@@ -159,18 +158,32 @@ measured, it is live on both arms, and deriving the entry in-circuit does not
 prevent it. See erratum 8, which is the substantive open defect in this
 implementation and in MIP-0013 §3 and §6.
 
-Toolchain: the k256 arm requires the ZKIR v3 pre-release stack, so the
-whole contract compiles with it. The one coherent all-published set
-today — the set this package pins — is compactc 0.33.0-rc.2 (generates
-for compact-runtime 0.18.0-rc.1), compact-js 2.5.5-rc.6, and midnight-js
-5.0.0-beta.4, on the node 2.1.0 / ledger 9.1 localnet images with fresh
-volumes (see `infra/docker-compose.yml`). midnight-js 5.0.0-beta.6
-requires an unpublished compact-js interface (per-call Zswap local
-state), and the newer compactc 0.34.0-rc.0 / compact-runtime 0.19.0-rc.0
-line has no published midnight-js consumer; mixing the lines fails at
-deploy or call time on runtime-instance checks. The full experiment
-behind this verdict (`experiments/secp256k1-in-compact/`) is not yet on
-the main branch; until it lands, the summary above is the citable form.
+Toolchain: **Compact 0.35.0** (language 0.27.0), **compact-runtime 0.20.0**,
+compact-js **3.0.0-rc.3**, midnight-js **5.0.0-rc.2**, ledger-v9
+**1.0.0-rc.5**, and wallet-sdk facade **5.0.0-rc.0**. All are published;
+the compiler/runtime are stable releases, while the SDKs remain RCs.
+The k256 arm requires `--feature-zkir-v3`, which now emits **ZKIR 3.1**.
+This targets a ledger-9 localnet; see the
+[compiler release notes](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.35.0).
+The latest ledger-9 standalone images checked on 2026-10-01 are pinned in
+`infra/docker-compose.yml`: **node 2.1.0-rc.4**, **indexer
+4.4.0-rc.6-b5e6c809**, and **proof-server 9.0.0-rc.8**. The indexer is a
+published, commit-pinned rc.6 candidate; the rc.6 release is still pending.
+Its previous numbered release, rc.5, crashes at genesis with the newer node
+([upstream #1516](https://github.com/midnightntwrk/midnight-indexer/issues/1516)),
+reproduced during this upgrade. The candidate indexes the fresh chain.
+All three images have amd64 and arm64 builds. Indexer storage from before rc.5
+requires re-indexing from genesis. See [upgrade verification](TOOLCHAIN-0.35.md)
+for image digests, sources and test results.
+
+Upgrade verification (2026-10-01): full key generation, TypeScript, unit,
+grants-offline (121 checks), recovery-offline, recovery-sim and the independent
+Rust cross-implementation suite pass. `test:toolchain-offline` checks SDK
+deployment construction and wave-maintenance key compatibility. The fresh-localnet
+`test:auth-coinless` suite passes, including both signature arms and maintenance
+retirement; results are recorded in `evidence/compact-0.35/`. Existing on-node
+evidence and cost tables below describe their recorded older stack; they are
+not new measurements on 0.35.0.
 
 ## Layout
 
@@ -186,16 +199,16 @@ the main branch; until it lands, the summary above is the citable form.
 
 ## Running
 
-The compile script pins the RC toolchain (`compact compile +0.33.0-rc.2
---feature-zkir-v3`); install it once by unzipping the release asset from
-LFDT-Minokawa/compact into
-`~/.compact/versions/0.33.0-rc.2/aarch64-darwin/` (the `compact update`
-manager only sees the stable line).
+Use Node.js >=22.12. The compile script pins
+`compact compile +0.35.0 --feature-zkir-v3` and builds the account, control,
+faucet and block-time probe, including their proving/verifier keys.
 
 ```sh
-npm install
+compact update 0.35.0
+npm ci
 npm run compile                      # compact compile → contracts/managed/
 (cd signer-rs && cargo build)        # the independent Rust signer
+cp infra/.env.example infra/.env    # throwaway localnet indexer configuration
 (cd infra && docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d)
 
 export WALLET_SEED=0000000000000000000000000000000000000000000000000000000000000001
@@ -203,6 +216,7 @@ export WALLET_SEED_SECONDARY=000000000000000000000000000000000000000000000000000
 
 # Offline (no localnet needed; both suites run BOTH arms)
 npm run test:unit                    # signer pipelines, codec, domain separation
+npm run test:toolchain-offline       # SDK deployment construction and wave-key compatibility
 npm run test:grants-offline          # scoped grants: lifecycle and the unshielded
                                      # grant twin on both arms, in the simulator
 npm run test:recovery-offline        # recovery MIP client halves: BUSS split and
@@ -282,7 +296,14 @@ network on these parameters refuses the same deploy, and any contract
 with roughly 17 or more typical entry points is undeployable in one
 transaction.
 
-The reference client therefore deploys in waves
+**Current planner (Compact 0.35.0 / node 2.1.0-rc.4):** the verifier-byte
+budget defaults to **15,000** for both deploy and maintenance waves. The
+36-circuit roster plans as seven waves, with activation after all keys are
+installed. The newer node refuses the old 25,434-byte deployment batch.
+See [upgrade verification](TOOLCHAIN-0.35.md) for current results.
+
+The following measurements are historical (the 30-circuit grant roster on
+node `2.1.0-2e92c4ae642c`). At that time the reference client deployed in waves
 (`src/wallet/wave-deploy.ts`), packed greedily against a per-update
 verifier-byte budget: wave 1 is the deploy itself and carries the deposits
 and the initial device's arm (10 operations, 25,434 verifier bytes, about
@@ -308,7 +329,7 @@ all-operations DEPLOY instead, before a transaction exists. The two are
 different mechanisms at different points, and for a maintenance update nothing
 client-side warns an implementer.
 
-`VERIFIER_BYTE_BUDGET` therefore defaults to **25,000** verifier bytes: the
+`VERIFIER_BYTE_BUDGET` then defaulted to **25,000** verifier bytes: the
 largest accepted payload less a safety margin of 4,484 bytes, about 15 per
 cent, rounded down, the margin covering the Dust spend balancing adds, block
 fullness, and the per-block fee-price adjustment. At that default the roster
@@ -332,9 +353,9 @@ the measurement used 18,504 and took four. Details and evidence in
 `GRANTS-E2.md`.
 
 Not through midnight-js's published circuit maintenance interface, for two
-reasons. It cannot produce a current key: compact-js 2.5.5-rc.6 hardcodes
+reasons. Its ledger-9 binding still hardcodes
 `ContractOperationVersion 'v3'`, whose raw keys carry the
-`midnight:verifier-key[v6]:` header, while compactc 0.33.0-rc.2 emits
+`midnight:verifier-key[v6]:` header, while compactc 0.35.0 with ZKIR v3 emits
 v7-headed keys (tag `'v4'`), so `insertVerifierKey` throws before a
 transaction exists. And it is per-circuit, so it would cost 8 transactions
 where the ledger API takes all 8 inserts in one. **This is the third
@@ -679,9 +700,9 @@ To be folded back into the MIP texts:
   finalisation watch. Avoid on-chain calls for pure derivations; compute
   them client-side (`rawTokenType` for token colors).
 - **The published circuit-maintenance interface cannot insert a current
-  verifier key**: compact-js 2.5.5-rc.6 hardcodes
+  ZKIR v3 verifier key**: compact-js 3.0.0-rc.3's ledger-9 binding hardcodes
   `ContractOperationVersion 'v3'` (v6-headed keys) while compactc
-  0.33.0-rc.2 emits v7-headed keys (tag `'v4'`), so
+  0.35.0 with `--feature-zkir-v3` emits v7-headed keys (tag `'v4'`), so
   `CircuitMaintenanceTxInterface.insertVerifierKey` throws a header-tag
   mismatch before a transaction exists. A version-matrix gap between two
   published packages, not a misuse: nothing in the interface takes a

@@ -1,0 +1,32 @@
+{
+  "testId": "AUTH-COINLESS-ARMS",
+  "name": "auth-coinless",
+  "description": "Co-resident arms: k256 and jubjub seams both gate on-node; cross-arm enrolment in both directions; tampered signatures abort per arm; seam guards S12 (identity key) and S13 (self-removal) hold",
+  "verdict": "PASS",
+  "note": "Proved calls using both k256 and JubJub authorisation were accepted, including cross-arm enrolment in both directions. Tampered signatures, weak-key forgeries and self-removal aborted during local transaction building; no rejection proof was submitted. Both weak-key entries were first planted by accepted transactions. Compact 0.35 rejects k256 identity coordinate extraction and the off-curve unflagged twin at the runtime boundary; the JubJub identity and self-removal hit contract assertions. S14 uses an on-node positive control: a signed maintenance update removes withdraw_shielded_with_k256 and inserts the permissionless deposit_unshielded verifier key under that operation id. The live-authority account accepts the swap (SucceedEntirely); the retired-authority account refuses it and has an empty maintenance committee at threshold 1. This verifies deployment, valid proofs, authorisation state changes and maintenance retirement on the recorded stack, not a complete accepted-proof public-key admissibility map.",
+  "details": {
+    "account": "d1aa87f2da4dabbd7aa5c84d954432d994396565276e511bc9905f2637970302",
+    "crossArmAddTx": "00d9707f99ac14595586e3801fb42dc4b1b590e91bcc20ce10fc1491733e6fd0aa",
+    "jubjubSeamTx": "00e2aafcbb7f82befdd4dfef3a8b15b4922112a665d3cbff6e287137bca020cdb5",
+    "tamperedJubjubAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "tamperedK256Abort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "identityEntryPlantedTx": "00466f0d1cd32bf3fb7958de130fb32c71ee77284feab08ff159ac738df50393bb",
+    "identityForgeryAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: cannot extract the x-coordinate of the secp256k1 identity point",
+    "identityUnflaggedForgeryAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: type error: add_device_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1330 char 1; expected value of type Secp256k1Point but received { x: 0n, y: 0n, identity: false }",
+    "jubjubIdentityEntryPlantedTx": "0024fb1aa7edf45e6292738a0b481af0846d3f9c1c2d27719ce344351ef660da95",
+    "jubjubIdentityForgeryAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key has small order",
+    "selfRemovalAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cannot remove the authorising device",
+    "liveAuthoritySwapTx": "0019ef56e2b98941d37714fad5557d4695d28367da7c89dc1a8b54ce3715247c6f",
+    "liveAuthoritySwapStatus": "SucceedEntirely",
+    "retiredAuthoritySwapRefusal": "rejected at submission: Transaction submission error",
+    "retiredAuthorityCommitteeSize": 0,
+    "retiredAuthorityThreshold": 1,
+    "reverseCrossArmAddTx": "000a28d80fb7ad28d972ff8b7007dcee72710dcce101ca35ffedd681e1ca094195"
+  },
+  "ranAt": "2026-10-01T08:46:56.871Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-rc.4",
+    "indexer": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8"
+  }
+}

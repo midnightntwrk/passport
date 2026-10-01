@@ -49,6 +49,7 @@ import { CONFIG } from '../node/wallet.js';
 import { runScenario, step, waitForLedger } from './runner.js';
 import { writeEvidence } from './evidence.js';
 import { standardSetup, expectAbort } from './flow.js';
+import { k256DeviceEntryFixture, k256AddDeviceChallengeFixture } from './k256-fixtures.js';
 import { compiledAccountContract } from '../node/setup.js';
 import { CustodyAccount } from '../wallet/account.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
@@ -141,15 +142,16 @@ await runScenario('auth-coinless (both arms)', async () => {
 
   step('S12: the point at infinity is refused as a k256 device key');
   {
-    // ECDSA is forgeable against the identity: the stdlib verify computes
+    // Unguarded ECDSA is forgeable against the identity: verification computes
     // P = u1·G + u2·pk and tests x(P) == r, so with pk = O the key-dependent
     // term vanishes and any s yields a passing r = x((z·s⁻¹)·G). Plant the
     // identity's entry (do_add_device takes an already-derived entry, so this
-    // is permitted), then present a genuine forgery against it.
+    // is permitted), then present that forgery. Use independent byte recipes:
+    // Compact 0.35's generated helpers refuse identity coordinate extraction.
     const identity: Secp256k1Point = { x: 0n, y: 0n, identity: true };
     const lPre = await s.account.ledgerState();
-    const identityEntry = pureCircuits.derive_device_entry_with_k256(
-      { bytes: s.account.addressBytes }, identity, K256_ENVELOPE_NONE, lPre.device_epoch, 0n,
+    const identityEntry = k256DeviceEntryFixture(
+      s.account.addressBytes, identity, K256_ENVELOPE_NONE, lPre.device_epoch, 0n,
     );
     const planted = await s.account.addDeviceEntry(j1, identityEntry);
     const lPlanted = await waitForLedger(
@@ -162,7 +164,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     const ctx = await s.account.callContext();
     const probe = K256Device.generate();
     const newEntry = probe.entryAt(s.account.addressBytes, lPlanted.device_epoch, 0n);
-    const challenge = k256Challenges.addDevice(ctx, identity, newEntry);
+    const challenge = k256AddDeviceChallengeFixture(ctx.contractAddress, identity, newEntry, ctx.authNonce);
     // Forge: choose s freely, then derive the r that closes the equation
     // over the digest the seam verifies (envelope 0: SHA-256(challenge)).
     const z = bytesToScalarBE(pureCircuits.envelope_digest(K256_ENVELOPE_NONE, challenge));
@@ -176,17 +178,12 @@ await runScenario('auth-coinless (both arms)', async () => {
     details.identityForgeryAbort = await expectAbort('forged signature under pk = O', () =>
       s.account.addDeviceWithAuth(newEntry, forged));
 
-    // BOTH encodings must be refused. Secp256k1Point carries an identity flag,
-    // and a flag-based guard (`pk != default<Secp256k1Point>`) lets the
-    // unflagged twin {0,0,identity:false} through: the structural comparison
-    // returns "not equal" the moment the flags differ. That twin hashes to the
-    // SAME entry as the flagged form (the entry binds only x and y), so it
-    // reaches the very same planted entry — which is why the guard compares
-    // coordinates instead. Presenting only the flagged form would leave this
-    // untested, which is exactly how the gap survived its first fix.
+    // The old unflagged twin must also be refused. Both byte recipes name the
+    // same planted entry, but Compact 0.35 rejects {0,0,identity:false} as an
+    // off-curve point at the runtime boundary, before signature verification.
     const identityUnflagged: Secp256k1Point = { x: 0n, y: 0n, identity: false };
-    const unflaggedEntry = pureCircuits.derive_device_entry_with_k256(
-      { bytes: s.account.addressBytes }, identityUnflagged, K256_ENVELOPE_NONE, lPlanted.device_epoch, 0n,
+    const unflaggedEntry = k256DeviceEntryFixture(
+      s.account.addressBytes, identityUnflagged, K256_ENVELOPE_NONE, lPlanted.device_epoch, 0n,
     );
     if (Buffer.compare(Buffer.from(unflaggedEntry), Buffer.from(identityEntry)) !== 0) {
       throw new Error('the two identity encodings no longer share an entry; revisit this test');
@@ -200,7 +197,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     if (untouched.auth_nonce !== lPlanted.auth_nonce) {
       throw new Error('refused identity call changed auth_nonce');
     }
-    console.log('  ✓ the entry is on-ledger and the forgery is valid ECDSA; both encodings refused');
+    console.log('  ✓ legacy weak-key entry is on-ledger; identity and off-curve twin both refused');
   }
 
   step('S12, normative arm: a small-order jubjub key is refused');
@@ -261,7 +258,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     // While a maintenance authority is live it sits ABOVE the seam: a
     // VerifierKeyInsert replaces an operation's verifier key outright, so its
     // holder can substitute an arbitrary relation for a gated circuit and
-    // release assets with no device signature. Wave 2 retires it.
+    // release assets with no device signature. The final wave retires it.
     //
     // The rejection alone would not show WHY the update failed, so this runs
     // with a positive control, the way leak-audit does: the identical swap is
@@ -399,7 +396,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     description:
       'Co-resident arms: k256 and jubjub seams both gate on-node; cross-arm enrolment in both directions; tampered signatures abort per arm; seam guards S12 (identity key) and S13 (self-removal) hold',
     verdict: 'PASS',
-    note: 'Both in-circuit verifications gate state changes on-node: a k256 device enrolled a jubjub device and vice versa (the arm-migration path), the jubjub device authorised its own gated call through its rolling entry, and a tampered signature of either arm failed its in-circuit assert with no state change. The seam guards are exercised through their real attacks. S12, on BOTH arms: an entry for the weak key was planted on-ledger, then a genuine forgery against it was refused — the secp256k1 point at infinity, against which ECDSA needs no private key, and the JubJub identity (0,1), against which the Schnorr equation collapses to s·G == R. S13: a device was refused the removal of the post-roll entry it had just authorised with. Each refusal left auth_nonce and device_count unchanged. S14, with a positive control: the deploy-time signing key was used to build a maintenance update that removes the verifier key of the gated operation withdraw_shielded_with_k256 and inserts the permissionless deposit_unshielded key in its place, substituting a relation that verifies no signature at all for the seam, at the authority counter read from chain. Against an account deployed with retireAuthority: false that update returns SucceedEntirely, which demonstrates that a live maintenance authority sits above the seam and can replace a gate; the identical update against the default account fails, and the account state shows a maintenance authority with an empty committee at threshold 1, which no signature set can satisfy. Measured while establishing this: a bare VerifierKeyInsert over an operation that already holds a key is refused at every counter, so replacing a key requires the remove-and-insert pair, and compact-js addOrReplaceContractOperation (which emits a bare insert) cannot replace one.',
+    note: 'Proved calls using both k256 and JubJub authorisation were accepted, including cross-arm enrolment in both directions. Tampered signatures, weak-key forgeries and self-removal aborted during local transaction building; no rejection proof was submitted. Both weak-key entries were first planted by accepted transactions. Compact 0.35 rejects k256 identity coordinate extraction and the off-curve unflagged twin at the runtime boundary; the JubJub identity and self-removal hit contract assertions. S14 uses an on-node positive control: a signed maintenance update removes withdraw_shielded_with_k256 and inserts the permissionless deposit_unshielded verifier key under that operation id. The live-authority account accepts the swap (SucceedEntirely); the retired-authority account refuses it and has an empty maintenance committee at threshold 1. This verifies deployment, valid proofs, authorisation state changes and maintenance retirement on the recorded stack, not a complete accepted-proof public-key admissibility map.',
     details,
   });
 });

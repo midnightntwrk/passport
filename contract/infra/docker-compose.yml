@@ -3,8 +3,11 @@
 # macOS: docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d
 #
 # Image versions are the ledger-9 wave the devnet runs (node 2.1.0 line,
-# ZKIR v3 capable proof server). Fresh volumes are mandatory: ledger 9 has
-# no 8-to-9 state migration on this line.
+# ZKIR 3.1 capable proof server), checked against standalone releases on
+# 2026-10-01. The indexer rc.5 storage layout requires re-indexing from
+# genesis; use fresh volumes for this stack. Its images are GHCR-only.
+# Indexer rc.6 is a published commit-pinned candidate; the numbered rc.5
+# release fails at genesis with node 2.1.0-rc.x (upstream issue #1516).
 #
 # The explicit project name keeps this stack's containers and volumes
 # separate from other experiments whose compose dir is also named `infra`
@@ -14,7 +17,7 @@ name: account-custody-reference
 
 services:
   node:
-    image: 'midnightntwrk/midnight-node:2.1.0-2e92c4ae642c'
+    image: 'midnightntwrk/midnight-node:2.1.0-rc.4'
     network_mode: host
     cap_drop:
       - ALL
@@ -35,7 +38,7 @@ services:
       SIDECHAIN_BLOCK_BENEFICIARY: '04bcf7ad3be7a5c790460be82a713af570f22e0f801f6659ab8e84a52be6969e'
 
   indexer:
-    image: 'midnightntwrk/indexer-standalone:4.4.0-rc.2'
+    image: 'ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809'
     network_mode: host
     cap_drop:
       - ALL
@@ -63,7 +66,7 @@ services:
         condition: service_healthy
 
   proof-server:
-    image: 'midnightntwrk/proof-server:9.0.0-rc.6'
+    image: 'midnightntwrk/proof-server:9.0.0-rc.8'
     network_mode: host
     cap_drop:
       - ALL

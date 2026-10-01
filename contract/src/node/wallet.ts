@@ -1,7 +1,7 @@
 // Node-side provider and wallet plumbing — adapted from
 // experiments/contract-custody-feasibility/src/{utils,common}.ts and ported
-// to the ledger-9 stack (midnight-js 5.0.0-beta.6, wallet-sdk facade
-// 5.0.0-beta.2, ledger-v9 1.0.0-rc.3) following the upstream
+// to the ledger-9 stack (midnight-js 5.0.0-rc.2, wallet-sdk facade
+// 5.0.0-rc.0, ledger-v9 1.0.0-rc.5) following the upstream
 // compact-end-2-end harness's utils/{wallet,providers}.ts.
 //
 // The funding wallet (genesis-seeded on the local devnet) pays Dust fees and
@@ -24,7 +24,9 @@ import {
   nodeZkConfigRegistry,
 } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { createWalletProvider, createMidnightProvider } from '@midnight-ntwrk/midnight-js-types';
 import * as ledger from '@midnightntwrk/ledger-v9';
+import { NoOpTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk-abstractions';
 import { WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 import { DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet';
 import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd';
@@ -45,18 +47,6 @@ const http = cjsRequire('node:http') as typeof import('node:http');
 const https = cjsRequire('node:https') as typeof import('node:https');
 http.globalAgent = new http.Agent({ keepAlive: false });
 https.globalAgent = new https.Agent({ keepAlive: false });
-
-// Mirrors wallet-sdk-abstractions' NoOpTransactionHistoryStorage: the wallet
-// records tx-history lifecycle transitions through this, but the suites read
-// ledger state and events from the indexer, not from tx history.
-const NoopTxHistoryStorage = {
-  gotPending: async () => undefined,
-  gotFinalized: async () => undefined,
-  gotRejected: async () => undefined,
-  getAll: async () => [] as unknown[],
-  get: async () => undefined,
-  serialize: async () => '[]',
-};
 
 // Enable WebSocket for GraphQL subscriptions.
 // @ts-expect-error required for wallet sync
@@ -125,22 +115,24 @@ export async function createWallet(seed: string) {
     costParameters: {
       feeBlocksMargin,
     },
-    txHistoryStorage: NoopTxHistoryStorage,
+    // The suites read ledger state and events from the indexer.
+    txHistoryStorage: new NoOpTransactionHistoryStorage(),
   };
 
-  const wallet: WalletFacade = await (WalletFacade as any).init({
+  const wallet = await WalletFacade.init({
     configuration,
-    shielded: (config: any) => ShieldedWallet(config).startWithSecretKeys(shieldedSecretKeys),
-    unshielded: (config: any) =>
+    shielded: (config) => ShieldedWallet(config).startWithSeed(keys[Roles.Zswap]),
+    unshielded: (config) =>
       UnshieldedWallet(config).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
-    dust: (config: any) =>
-      DustWallet(config).startWithSecretKey(
-        dustSecretKey,
-        ledger.LedgerParameters.initialParameters().dust,
-      ),
+    dust: (config) =>
+      DustWallet(config).startWithSeed(keys[Roles.Dust]),
   });
 
-  await wallet.start(shieldedSecretKeys, dustSecretKey);
+  await wallet.start({
+    shielded: keys[Roles.Zswap],
+    unshielded: keys[Roles.NightExternal],
+    dust: keys[Roles.Dust],
+  });
 
   return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
 }
@@ -171,14 +163,14 @@ function errorText(error: unknown): string {
 // until the wallet can cover it (the estimate throws until then).
 async function waitForDustFeeBudget(
   walletCtx: WalletContext,
-  tx: any,
+  tx: Parameters<WalletFacade['estimateTransactionFee']>[0],
   ttl: Date,
 ): Promise<void> {
   const deadline = Date.now() + Number(process.env.DUST_FEE_TIMEOUT_MS ?? '600000');
   let waiting = false;
   for (;;) {
     try {
-      await (walletCtx.wallet as any).estimateTransactionFee(tx, walletCtx.dustSecretKey, { ttl });
+      await walletCtx.wallet.estimateTransactionFee(tx, { ttl });
       if (waiting) console.log('  ✓ enough DUST for the transaction fee');
       return;
     } catch (error) {
@@ -214,7 +206,7 @@ function retryOnDrop<A extends unknown[], R>(
   };
 }
 
-export async function createProviders(walletCtx: WalletContext, contractZkPath: string = zkConfigPath) {
+export async function createProviders<K extends string = string>(walletCtx: WalletContext, contractZkPath: string = zkConfigPath) {
   const state = await Rx.firstValueFrom(
     walletCtx.wallet.state().pipe(Rx.filter((s) => s.isSynced)),
   );
@@ -223,36 +215,37 @@ export async function createProviders(walletCtx: WalletContext, contractZkPath: 
   // signers need it); wrap so the keystore's `this` binding is preserved.
   const signFn = (payload: Uint8Array) => walletCtx.unshieldedKeystore.signDataAsync(payload);
 
-  const walletProvider = {
+  // Midnight JS tags provider transactions by ledger era. The adapters reject
+  // unsupported eras before handing a v9 transaction to this localnet wallet.
+  const walletProvider = createWalletProvider({
     getCoinPublicKey: () => state.shielded.coinPublicKey.toHexString(),
     getEncryptionPublicKey: () => state.shielded.encryptionPublicKey.toHexString(),
-    async balanceTx(tx: any, ttl?: Date) {
+    async balanceTx(tx, ttl) {
       // Node 2.1.0 enforces a fee-model dismissal window far below the
       // 30-minute TTL older stacks accepted (Malformed(FeeCalculation(
       // OutsideTimeToDismiss))); a short TTL keeps the fee calculation
       // inside the window. Balancing-to-submission is sub-second here.
       const transactionTtl = ttl ?? new Date(Date.now() + Number(process.env.TX_TTL_MS ?? '60000'));
-      await waitForDustFeeBudget(walletCtx, tx, transactionTtl);
+      const handle = walletCtx.wallet.adoptTransaction(tx.serialize(), 'Unbound');
+      await waitForDustFeeBudget(walletCtx, handle, transactionTtl);
       const recipe = await walletCtx.wallet.balanceUnboundTransaction(
-        tx,
-        {
-          shieldedSecretKeys: walletCtx.shieldedSecretKeys,
-          dustSecretKey: walletCtx.dustSecretKey,
-        },
+        handle,
         { ttl: transactionTtl },
       );
 
       const signed = await walletCtx.wallet.signRecipe(recipe, signFn);
-      return walletCtx.wallet.finalizeRecipe(signed);
+      const finalized = await walletCtx.wallet.finalizeRecipe(signed);
+      return ledger.Transaction.deserialize('signature', 'proof', 'binding', finalized.serialize());
     },
-    submitTx: (tx: any) => walletCtx.wallet.submitTransaction(tx) as any,
-  };
+  });
+  const midnightProvider = createMidnightProvider((tx) =>
+    walletCtx.wallet.submitTransaction(walletCtx.wallet.adoptTransaction(tx.serialize(), 'Finalized')));
 
   // midnight-js deploy/make reads this contract's own verifier keys by circuit
   // id (the leaf provider); proving a cross-contract call tree needs keys for
   // every contract in the tree, so the proof provider gets a registry over the
   // artifact root (the parent holding every compiled bundle).
-  const zkConfigProvider = new NodeZkConfigProvider(contractZkPath);
+  const zkConfigProvider = new NodeZkConfigProvider<K>(contractZkPath);
   const zkConfigRegistry = await nodeZkConfigRegistry(managedPath);
 
   const pdp = indexerPublicDataProvider(CONFIG.indexer, CONFIG.indexerWS);
@@ -273,7 +266,7 @@ export async function createProviders(walletCtx: WalletContext, contractZkPath: 
     zkConfigProvider,
     proofProvider: httpClientProofProvider(CONFIG.proofServer, zkConfigRegistry),
     walletProvider,
-    midnightProvider: walletProvider,
+    midnightProvider,
   };
 }
 

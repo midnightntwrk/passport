@@ -11,6 +11,7 @@ export async function runScenario(name: string, fn: () => Promise<void>): Promis
     console.log(`\n◆ ${name}: FAIL — ${e?.message ?? e}`);
     code = 1;
   }
+  process.exitCode = code;
   // Wallet/indexer subscriptions keep the event loop alive; force exit the
   // same way the sibling experiments' runners do.
   setTimeout(() => process.exit(code), 100).unref();

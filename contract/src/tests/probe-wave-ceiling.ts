@@ -67,14 +67,11 @@ import { createUnprovenDeployTx, submitTx } from '@midnight-ntwrk/midnight-js-co
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
 import {
-  SHARED_CIRCUITS,
   VERIFIER_BYTE_BUDGET,
   allCircuits,
-  armCircuits,
-  grantTwins,
-  lifecycleCircuits,
+  planWaves,
 } from '../wallet/wave-deploy.js';
-import { K256Device } from '../wallet/signer.js';
+import { K256Device, JubjubDevice } from '../wallet/signer.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
 import { emptyCoinStore } from '../wallet/witnesses.js';
 import { bytesToHex } from '../wallet/hex.js';
@@ -233,7 +230,7 @@ async function deployWaveOneOnly(
     compiledContract: compiledAccountContract(),
     privateStateId,
     initialPrivateState: emptyCoinStore(encKeys.secretKey),
-    args: [device.bootCommitment(salt), encKeys.publicKey],
+    args: [device.bootCommitment(salt), encKeys.publicKey, JubjubDevice.generate().pk, new Uint8Array(64), 60n],
   } as any);
   const full: ContractState = ContractState.deserialize(
     deployData.public.initialContractState.serialize(),
@@ -360,18 +357,12 @@ await runScenario('probe: the per-maintenance-update verifier-byte ceiling', asy
   }
   const sizeOf = (id: string): number => verifierKeys.get(id)!.length;
 
-  // Wave 1 and the twenty ids it does not carry, in the order planWaves packs
+  // Wave 1 and the ids it does not carry, in the order planWaves packs
   // them; a probe of size N takes the first N of that list, so the probe's
   // byte totals are exactly the byte totals a real wave would carry.
-  const waveOneIds = [...SHARED_CIRCUITS, ...armCircuits(FIRST_ARM)];
-  const second = FIRST_ARM === 'k256' ? 'jubjub' : 'k256';
-  const remaining = [
-    ...armCircuits(second as any),
-    ...grantTwins(FIRST_ARM),
-    ...lifecycleCircuits(FIRST_ARM),
-    ...grantTwins(second as any),
-    ...lifecycleCircuits(second as any),
-  ];
+  const plan = planWaves(new Map([...verifierKeys].map(([id, vk]) => [id, vk.length])), FIRST_ARM, false);
+  const waveOneIds = plan[0].circuits;
+  const remaining = plan.slice(1).flatMap((wave) => wave.circuits);
   const prefixBytes = (n: number): number =>
     remaining.slice(0, n).reduce((sum, id) => sum + sizeOf(id), 0);
 
@@ -381,7 +372,7 @@ await runScenario('probe: the per-maintenance-update verifier-byte ceiling', asy
     keyBytes: sizeOf(id),
     cumulativeBytes: prefixBytes(i + 1),
   }));
-  step('the twenty keys wave 1 does not carry, and their prefix sums');
+  step('the keys wave 1 does not carry, and their prefix sums');
   for (const r of table) {
     console.log(`  ${String(r.n).padStart(2)}  ${r.id.padEnd(48)} ${String(r.keyBytes).padStart(5)}  cumulative ${String(r.cumulativeBytes).padStart(6)}`);
   }
@@ -402,7 +393,7 @@ await runScenario('probe: the per-maintenance-update verifier-byte ceiling', asy
     step(`probe ${seq}: ${n} keys, ${verifierBytes} verifier bytes`);
 
     if (accountSpent) {
-      console.log('  deploying a throwaway wave-1 account (10 operations, no activation)');
+      console.log(`  deploying a throwaway wave-1 account (${waveOneIds.length} operations, no activation)`);
       const fresh = await deployWaveOneOnly(providers, waveOneIds);
       account = { address: fresh.address, signingKey: fresh.signingKey };
       accountSpent = false;

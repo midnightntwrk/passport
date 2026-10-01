@@ -1,6 +1,6 @@
 // Budget-driven wave deployment of the account contract.
 //
-// The co-resident-arms contract at `spec_version = 2` exports 30 impure
+// The original grant roster at `spec_version = 2` exported 30 impure
 // circuits (2 deposits, 8 device circuits per arm, 3 grant twins per arm,
 // and 3 grant-lifecycle circuits per arm), and a deploy carrying all of
 // their verifier keys exceeds the ledger-9 per-block limits. The 18-circuit
@@ -9,23 +9,21 @@
 // the ledger fee computation refuses it up front ("exceeded block limit in
 // transaction fee computation"). The 30-circuit roster prices at 74,286
 // verifier bytes and is refused by a wider margin. The account therefore
-// deploys in waves that each fit a block:
+// deploys in budgeted waves (36 circuits with recovery):
 //
-//   wave 1  deposits + the initial device's arm (10 operations), the
-//           constructor's ledger state, and the maintenance authority:
-//           a functional single-arm account;
-//   wave 2  and every wave after it, the remaining 26 verifier keys packed
+//   wave 1  a prefix of the deposits + initial device's arm, the
+//           constructor's ledger state, and the maintenance authority;
+//   wave 2  and every wave after it, the remaining verifier keys packed
 //           greedily under a per-update payload budget and added by batched
 //           contract maintenance updates signed by the authority key wave 1
 //           stored locally. The LAST of those updates also retires that
 //           authority (see the note on deployAccountInWaves for why the
 //           default is to retire it).
 //
-// At the measured key sizes and the measured budget below, the 30-circuit
-// roster plans as THREE waves: the deploy (10 operations, 25,434 verifier
-// bytes) plus two maintenance updates of 10 keys each (23,994 and 24,858
-// verifier bytes). The plan is computed from the real artefacts rather than
-// from that table, so a roster or key-size change re-plans itself.
+// The earlier 25 KB budget fit the 30-circuit roster into three waves. Node
+// 2.1.0-rc.4 refuses that deployment batch; the 15 KB budget applies to every
+// wave and plans the 36-circuit roster as seven waves. The plan is computed
+// from the real artefacts, so a roster or key-size change re-plans itself.
 //
 // The maintenance waves are not a workaround detail: adding circuits to a
 // LIVE account by maintenance update is exactly how the planned secp256r1
@@ -128,9 +126,9 @@ export const allCircuits = (): string[] => [
 const otherArm = (arm: Arm): Arm => (arm === 'jubjub' ? 'k256' : 'jubjub');
 
 /**
- * Verifier bytes admitted into one maintenance update.
+ * Verifier-byte budget for each deploy or maintenance wave.
  *
- * MEASURED, not estimated (probe:wave-ceiling, node 2.1.0, ledger 9;
+ * HISTORICAL measurement (probe:wave-ceiling, node 2.1.0-2e92c4ae642c;
  * evidence/wave-ceiling.json). Throwaway wave-1 accounts were given one
  * hand-built maintenance update apiece and the payload bisected:
  *
@@ -159,7 +157,7 @@ const otherArm = (arm: Arm): Arm => (arm === 'jubjub' ? 'k256' : 'jubjub');
  *   client-side says no. The refusal is the node's alone, and it arrives only
  *   after the transaction has been built, balanced, and submitted.
  *
- * THE DEFAULT. 25,000 verifier bytes is the largest accepted payload (29,484)
+ * THE OLD DEFAULT. 25,000 verifier bytes is the largest accepted payload (29,484)
  * less a safety margin of 4,484 bytes, about 15 per cent, rounded down to a
  * round number. The margin covers what the measurement cannot: the Dust spend
  * the wallet adds when it balances the update (the figures above price the
@@ -168,13 +166,15 @@ const otherArm = (arm: Arm): Arm => (arm === 'jubjub' ? 'k256' : 'jubjub');
  * largest maintenance batch is 24,858 verifier bytes, which is 4,626 below
  * the measured ceiling, or about two jubjub verifier keys of headroom.
  *
- * The budget governs the maintenance waves only. Wave 1 is a deploy of 10
- * operations carrying 25,434 verifier bytes, above this budget and accepted
- * by the node on every probe run.
+ * On node 2.1.0-rc.4 the old 25,434-byte wave-1 deploy is refused at
+ * submission with ExhaustsResources. Pack the deploy as well as maintenance
+ * updates, using a smaller 15,000-byte budget. A byte budget is a packing
+ * heuristic, not a replacement for the node's weight/fee checks; the older
+ * ceiling above must not be applied to the new node.
  *
  * Overridable through the environment variable of the same name.
  */
-export const VERIFIER_BYTE_BUDGET = Number(process.env.VERIFIER_BYTE_BUDGET ?? '25000');
+export const VERIFIER_BYTE_BUDGET = Number(process.env.VERIFIER_BYTE_BUDGET ?? '15000');
 
 /** One planned wave: the deploy, or one batched maintenance update. */
 export interface Wave {
@@ -196,13 +196,11 @@ export interface Wave {
  * Pure, so a suite can print the plan without a node: pass the lengths of
  * `getVerifierKey(id)` for every id of `allCircuits()`.
  *
- * Wave 1 is the deploy and is fixed: the deposits plus the initial device's
- * arm, which is the smallest functional account. The remaining 26 keys are
- * packed greedily under `VERIFIER_BYTE_BUDGET` in a deterministic order:
- * the other arm's device circuits first (so both device arms are live as
- * early as possible), then the first arm's grant twins and lifecycle, then
- * the other arm's. The authority retirement rides on the last wave, which
- * is the last operation that needs the authority.
+ * Pack every wave under `VERIFIER_BYTE_BUDGET`, starting with the deposits
+ * and initial device's arm, then the other device arm, grants and recovery.
+ * The deploy may carry only a prefix of the first arm. Activation happens
+ * after all waves complete. Authority retirement rides on the last
+ * maintenance wave, which is the last operation that needs the authority.
  */
 export function planWaves(
   sizes: Map<string, number>,
@@ -215,9 +213,18 @@ export function planWaves(
     return n;
   };
   const total = (ids: string[]): number => ids.reduce((sum, id) => sum + sizeOf(id), 0);
+  if (!Number.isFinite(VERIFIER_BYTE_BUDGET) || VERIFIER_BYTE_BUDGET <= 0) {
+    throw new Error('VERIFIER_BYTE_BUDGET must be a positive finite number');
+  }
 
   const second = otherArm(firstArm);
-  const waveOne = [...SHARED_CIRCUITS, ...armCircuits(firstArm)];
+  const first = [...SHARED_CIRCUITS, ...armCircuits(firstArm)];
+  const waveOne: string[] = [];
+  for (const id of first) {
+    if (total(waveOne) + sizeOf(id) > VERIFIER_BYTE_BUDGET) break;
+    waveOne.push(id);
+  }
+  if (waveOne.length === 0) throw new Error('deploy verifier key exceeds the per-wave budget');
   const waves: Wave[] = [{
     index: 1,
     kind: 'deploy',
@@ -227,6 +234,7 @@ export function planWaves(
   }];
 
   const remaining = [
+    ...first.slice(waveOne.length),
     ...armCircuits(second),
     ...grantTwins(firstArm),
     ...lifecycleCircuits(firstArm),
@@ -314,9 +322,9 @@ async function awaitAuthorityCounter(
 }
 
 export interface WaveDeployOptions {
-  /** The initial device's arm — deployed in wave 1 so activation works. */
+  /** The initial device's arm — prioritised in the wave roster. */
   firstArm: Arm;
-  /** Constructor arguments (boot commitment, encryption key). */
+  /** Constructor arguments (boot commitment, encryption key, recovery settings). */
   args: unknown[];
   privateStateId: string;
   initialPrivateState: unknown;
@@ -333,7 +341,7 @@ export interface WaveDeployOptions {
 
 /**
  * Deploys the account contract in a planned sequence of waves and returns its
- * address. On return the contract carries all 30 operations and the
+ * address. On return the contract carries all 36 operations and the
  * constructor state.
  *
  * The maintenance authority, and why this retires it by default.
@@ -341,7 +349,7 @@ export interface WaveDeployOptions {
  * Deploying a contract mints a maintenance authority and stores its signing
  * key locally; midnight-js's own `deployContract` does the same, so this is
  * inherited rather than introduced here. What the authority can do is total:
- * a `VerifierKeyInsert` REPLACES an operation's verifier key, and a
+ * a remove-and-insert update REPLACES an operation's verifier key, and a
  * `ContractOperation` carries nothing but that key, so whoever holds the
  * signing key can substitute their own relation for `withdraw_shielded_with_*`
  * and release the account's assets with no device signature and no auth_nonce
@@ -366,7 +374,7 @@ export async function deployAccountInWaves(
   compiledContract: any,
   options: WaveDeployOptions,
 ): Promise<string> {
-  // Run the constructor and collect the full 30-operation state through
+  // Run the constructor and collect the full operation roster through
   // the standard pipeline; its transaction is discarded (it cannot fit a
   // block), its state and authority are re-used.
   const deployData: any = await createUnprovenDeployTx(providers, {
@@ -396,7 +404,7 @@ export async function deployAccountInWaves(
   const waves = planWaves(sizes, options.firstArm, retire);
   console.log(
     `  wave plan: ${waves.length} waves for ${allCircuits().length} circuits ` +
-    `(budget ${VERIFIER_BYTE_BUDGET} verifier bytes per maintenance update)`,
+    `(budget ${VERIFIER_BYTE_BUDGET} verifier bytes per wave)`,
   );
   for (const wave of waves) {
     console.log(
@@ -407,7 +415,7 @@ export async function deployAccountInWaves(
   }
 
   // Wave 1: same ledger data and maintenance authority, operations
-  // restricted to the deposits and the initial device's arm.
+  // restricted to the budgeted prefix of the initial roster.
   const [waveOne, ...maintenanceWaves] = waves;
   const wave1 = new ContractState();
   wave1.data = full.data;
@@ -426,7 +434,7 @@ export async function deployAccountInWaves(
 
   console.log(
     `  wave 1: deploying ${waveOne.circuits.length} operations ` +
-    `(${options.firstArm} arm + deposits, ${waveOne.verifierBytes} verifier bytes)`,
+    `(${options.firstArm}-first roster, ${waveOne.verifierBytes} verifier bytes)`,
   );
   const finalized: any = await withDustRetry('wave-1 deploy', () =>
     (submitTx as any)(providers, { unprovenTx }));
@@ -446,9 +454,9 @@ export async function deployAccountInWaves(
   // The maintenance waves: each carries its batch of verifier keys in ONE
   // hand-built maintenance update, signed with the stored authority key.
   // midnight-js's published per-circuit maintenance interface cannot be used
-  // here: compact-js 2.5.5-rc.6 hardcodes ContractOperationVersion 'v3',
+  // here: compact-js 3.0.0-rc.3's ledger-9 binding hardcodes version 'v3',
   // whose raw keys carry the 'midnight:verifier-key[v6]:' header, while
-  // compactc 0.33.0-rc.2 emits v7-headed keys (version tag 'v4') — the
+  // compactc 0.35.0 with ZKIR v3 emits v7-headed keys (tag 'v4') — the
   // insert throws before a transaction exists. A version-matrix gap in the
   // published stack; upstream-report candidate.
   for (const wave of maintenanceWaves) {

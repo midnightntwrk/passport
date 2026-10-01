@@ -87,17 +87,14 @@ export class AccountSim {
   }
 
   async call(circuit: string, ...args: unknown[]): Promise<unknown> {
-    const ctx = createCircuitContext<CoinStorePrivateState>(
-      circuit,
-      this.addressHex,
-      this.coinPk,
-      this.state,
-      this.privateState,
-      undefined,
-      undefined,
-      undefined,
-      this.now,
-    );
+    const ctx = createCircuitContext<CoinStorePrivateState>({
+      circuitId: circuit,
+      contractAddress: this.addressHex,
+      coinPublicKeyOrZswapState: this.coinPk,
+      contractState: this.state,
+      privateState: this.privateState,
+      time: this.now,
+    });
     const r = await this.impure[circuit](ctx, ...args);
     this.state = r.context.callContext.currentQueryContext.state;
     if (r.context.callContext.currentPrivateState !== undefined) {

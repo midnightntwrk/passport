@@ -205,7 +205,7 @@ function instrument(providers: any, tag: string): void {
         const rec: ProofRecord = {
           label: currentLabel,
           ms: Date.now() - t0,
-          provenBytes: serialisedLength(proven),
+          provenBytes: serialisedLength(proven.tx),
           ok: true,
         };
         proofLog.push(rec);
@@ -224,7 +224,7 @@ function instrument(providers: any, tag: string): void {
     if (!holder || typeof holder.submitTx !== 'function' || (holder as any).__e4Instrumented) continue;
     const real = holder.submitTx.bind(holder);
     holder.submitTx = async (tx: any) => {
-      lastSubmittedBytes = serialisedLength(tx);
+      lastSubmittedBytes = serialisedLength(tx.tx);
       return real(tx);
     };
     (holder as any).__e4Instrumented = true;
@@ -261,7 +261,7 @@ async function ensureProver(label: string, reason: string): Promise<void> {
   try {
     const { execFile } = await import('node:child_process');
     await new Promise<void>((resolve) => {
-      execFile('docker', ['start', 'account-custody-reference-proof-server-1'], () => resolve());
+      execFile('docker', ['start', process.env.MIDNIGHT_PROOF_CONTAINER ?? 'account-custody-reference-proof-server-1'], () => resolve());
     });
   } catch { /* fall through to the wait */ }
   for (let i = 0; i < 60; i++) {

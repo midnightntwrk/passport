@@ -85,7 +85,7 @@ export async function connectAccount(
 // ── Control contract (leak-audit baseline — conformance test 5 only) ────────
 
 export function compiledControlContract() {
-  return CompiledContract.make('control', (ControlModule as any).Contract).pipe(
+  return CompiledContract.make('control', ControlModule.Contract).pipe(
     CompiledContract.withVacantWitnesses,
     CompiledContract.withCompiledFileAssets(controlZkConfigPath),
   );
@@ -100,12 +100,12 @@ export interface ControlHandle {
 }
 
 export async function deployControl(walletCtx: WalletContext): Promise<ControlHandle> {
-  const providers = await createProviders(walletCtx, controlZkConfigPath);
+  const providers = await createProviders<keyof ControlModule.ProvableCircuits<{}>>(walletCtx, controlZkConfigPath);
   const deployed = await deployContract(providers, {
     compiledContract: compiledControlContract(),
     privateStateId: 'control',
     initialPrivateState: {},
-  } as any);
+  });
   const address = deployed.deployTxData.public.contractAddress;
   const idOf = (r: any) => r?.public?.txId ?? r?.public?.transactionHash;
   return {
@@ -125,7 +125,7 @@ export async function deployControl(walletCtx: WalletContext): Promise<ControlHa
 // ── Faucet (test scaffolding — token origins on localnet) ───────────────────
 
 export function compiledFaucetContract() {
-  return CompiledContract.make('faucet', (FaucetModule as any).Contract).pipe(
+  return CompiledContract.make('faucet', FaucetModule.Contract).pipe(
     CompiledContract.withVacantWitnesses,
     CompiledContract.withCompiledFileAssets(faucetZkConfigPath),
   );
@@ -146,12 +146,12 @@ export interface FaucetHandle {
 }
 
 export async function deployFaucet(walletCtx: WalletContext): Promise<FaucetHandle> {
-  const providers = await createProviders(walletCtx, faucetZkConfigPath);
+  const providers = await createProviders<keyof FaucetModule.ProvableCircuits<{}>>(walletCtx, faucetZkConfigPath);
   const deployed = await deployContract(providers, {
     compiledContract: compiledFaucetContract(),
     privateStateId: 'faucet',
     initialPrivateState: {},
-  } as any);
+  });
   const address = deployed.deployTxData.public.contractAddress;
   const idOf = (r: any) => r?.public?.txId ?? r?.public?.transactionHash;
   return {

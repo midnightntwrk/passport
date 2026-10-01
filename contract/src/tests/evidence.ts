@@ -8,7 +8,9 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EVIDENCE_DIR = path.resolve(__dirname, '..', '..', 'evidence');
+const EVIDENCE_DIR = process.env.EVIDENCE_DIR
+  ? path.resolve(process.env.EVIDENCE_DIR)
+  : path.resolve(__dirname, '..', '..', 'evidence');
 
 export type Verdict = 'PASS' | 'FAIL' | 'PARTIAL';
 
@@ -40,9 +42,9 @@ export function writeEvidence(e: Omit<Evidence, 'ranAt' | 'stack'>): void {
     stack: {
       // Defaults mirror infra/docker-compose.yml; override via env when
       // running against a different stack.
-      node: process.env.MIDNIGHT_NODE_TAG ?? 'midnightntwrk/midnight-node:2.1.0-2e92c4ae642c',
-      indexer: process.env.MIDNIGHT_INDEXER_TAG ?? 'midnightntwrk/indexer-standalone:4.4.0-rc.2',
-      proofServer: process.env.MIDNIGHT_PROOF_TAG ?? 'midnightntwrk/proof-server:9.0.0-rc.6',
+      node: process.env.MIDNIGHT_NODE_TAG ?? 'midnightntwrk/midnight-node:2.1.0-rc.4',
+      indexer: process.env.MIDNIGHT_INDEXER_TAG ?? 'ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809',
+      proofServer: process.env.MIDNIGHT_PROOF_TAG ?? 'midnightntwrk/proof-server:9.0.0-rc.8',
     },
   };
   const file = path.join(EVIDENCE_DIR, e.fileName ?? `${e.testId.toLowerCase()}-${e.name}.json`);
