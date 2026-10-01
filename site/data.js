@@ -598,7 +598,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C17', name: 'View-key + indexer (sync)', category: 'wallet',
-      status_note: 'Draft #177 passes automated localnet restoration/spending before and after rotation using 192-byte inbox reader envelopes. Software ES256 and synthetic PRF; trusted reader-roster retention, bootstrap, real PRF, recovery and Lace integration remain.',
+      status_note: 'Draft #177 is for Nicolas to review and iterate first. Its device-based localnet restore/spend tests pass with software ES256 and synthetic PRF. Lace connects as a dApp/grantee, not an ACC device-key provider; that grant journey is not tested here. Reader-roster trust, bootstrap, real PRF and recovery remain.',
       serves: ['P3', 'P8'],
       outcome: 'The read half of the wallet — how visible chain state is reconstructed for the UI, and what a substitutable indexer must be trusted with. The view/spend separation is settled for account-custodied assets: the custody MIP (MIP-0012) makes the account encryption secret a pure viewing capability (reads everything, spends nothing; delegable without ceding custody; rotation specified), validated end-to-end by the stateless custody experiment. Consequence: for account-held assets no viewing key is ever handed to an indexer — the inbox walk needs only public chain data plus local decryption, and the indexer\'s one required surface, contract-address → transaction enumeration, exists: the contractActions subscription replays the complete per-address history, verified end-to-end by the reference implementation\'s discovery suite (closing the gap W5 had recorded). The classic view-key-to-indexer trade-off survives only for user-held Zswap coins — and C4\'s exclusivity decision bounds even that: one-hop coins are transient in-flight value the client sweeps into the account, so the remaining surface is incoming-payment detection, not a standing balance.',
       hard_deps: ['C2', 'C10', 'C11', 'C16', 'C18'],
@@ -1201,9 +1201,9 @@ window.PASSPORT_DATA = {
     },
     {
       lane: 'Client',
-      title: 'PRF support matrix and derivation spec',
-      detail: 'Real Safari signing is evidenced in #175; PRF is separate. Use #177 with Angel/Lace to settle supported credentials, public bootstrap inputs, authenticated reader rosters, rotation and recovery. Synthetic PRF is not a browser support result.',
-      components: ['C9'],
+      title: 'Initial review of the viewing-key experiment',
+      detail: 'Nicolas reviews #177 before wider involvement. Keep ACC device keys, dApp grant keys and viewing-reader access distinct: Lace has the dApp role. The tested A/B devices do not validate that grant journey. Bootstrap, roster trust, real PRF and recovery remain review points.',
+      components: ['C9', 'C16', 'C17'],
     },
     {
       lane: 'Client',
@@ -1444,7 +1444,6 @@ window.PASSPORT_DATA = {
     { party: 'MPC providers', item: 'A FROST-over-JubJub committee demonstration against an unmodified contract.', components: ['C5'] },
     { party: 'Upstream ecosystem', item: 'The trade-intent format, the cross-chain interface contract, and the Open Wallet Standard draft.', components: ['C22', 'C25', 'C23'] },
     { party: 'Upstream toolchain', item: 'Supported SDK/WASM key regeneration and secp256k1 point operations for BIP-340. Compact 0.35 already supplies P-256 verification and immediate caller identity.', components: ['C5', 'C6', 'C12'] },
-    { party: 'Angel / Lace', item: 'Review viewing-key envelope #177: bootstrap, PRF support, authenticated reader roster, rotation and recovery integration.', components: ['C9', 'C16', 'C17'] },
   ],
 
   // Original May–October planning baseline, not a current release checklist.

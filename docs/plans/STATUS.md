@@ -21,7 +21,7 @@ public websites. “Merged”, “demonstrated”, “submitted upstream” and
 | Prover-key regeneration | Native feasibility [#170](https://github.com/midnightntwrk/passport/pull/170) and solution draft [#173](https://github.com/midnightntwrk/passport/pull/173) merged. | Supported SDK/WASM APIs, compatible keygen profiles, validation vectors and client integration. |
 | P-256 / profiled WebAuthn | [#175](https://github.com/midnightntwrk/passport/pull/175) open, review required, five checks passing at this snapshot. Real Safari passkey approved an account-key rotation accepted on localnet; automated account-call measurements use software ES256 fixtures. | Review the bounded `wa-json134` profile and integrate after approval. General WebAuthn compatibility, live spending and PRF support remain separate. |
 | Caller-bound grants | [#176](https://github.com/midnightntwrk/passport/pull/176) open, review required, five checks passing. Optional immediate-contract pin using `kernel.caller()`; accepted forwarding calls and a fabricated-caller proof refused at node admission. | Review schema v3 and migration. Reconcile P-256 grant issuance with this schema when integrating #175 and #176. |
-| Viewing-key sharing | [Draft #177](https://github.com/midnightntwrk/passport/pull/177), stacked on #175. Complete automated localnet PASS: two fresh-private-state restores and accepted shielded spends, rotation while B is offline, live-coin backfill and exclusion from a later generation. | Angel/Lace discussion: bootstrap inputs, authenticated reader roster, PRF availability, wallet integration and recovery. |
+| Viewing-key sharing | [Draft #177](https://github.com/midnightntwrk/passport/pull/177), stacked on #175. Complete automated localnet PASS: two fresh-private-state restores and accepted shielded spends, rotation while B is offline, live-coin backfill and exclusion from a later generation. | Nicolas's initial review and iteration: authority roles, bootstrap, reader-roster trust, PRF and recovery. Wider discussion follows that review. |
 
 The viewing-key experiment stores **192 bytes per reader per viewing-key
 generation** in the existing inbox, without Compact changes. Five measured
@@ -37,6 +37,14 @@ account discovery from a passkey alone or cross-machine passkey sync. Real
 Safari **signing** in #175 does not establish real **PRF** support in #177.
 Viewing access does not grant signing authority; excluding a reader from
 future envelopes cannot erase secrets it already learned.
+
+**Authority clarification:** A and B are ACC devices in the experiment.
+Lace connects to the ACC as a **dApp/grantee**, using its own key under an
+account-authorised scoped grant; it is not the user's ACC device-key
+provider. Viewing-key delivery is separately authorised. The device
+restore/spend evidence does not demonstrate a Lace connection or a
+grant-based reader journey. #177 is for Nicolas's review before wider
+involvement.
 
 The proposed recovery-group inbox recipient is documented in #177, but is
 **unimplemented and untested**. Existing recovery uses a separate 64-byte
@@ -121,7 +129,7 @@ picks are planning history, not the current deployed configuration.
 | #11 / #15 / #48 / #51 — signing and passkeys | Link open #175 and its real Safari evidence; retain profile review, browser/PRF matrix and SDK integration. |
 | #16 / #18 / #67 — grants and enforcement | Merged reference evidence plus open caller extension #176; formal audit, client ceremony and editor rulings remain. |
 | #20 / #21 / #62 — recovery | Merged reference tranche and upstream #339; transport, interoperability and crypto memo remain. |
-| #23 / #58 / #167 — viewing and private state | Link draft #177; settle bootstrap, reader-roster trust and rotation/recovery semantics with Angel/Lace. |
+| #23 / #58 / #167 — viewing and private state | Review draft #177 internally first; distinguish devices from dApp/grantees and readers, then settle bootstrap and lifecycle follow-ups. |
 | #44 — domain separation | Follow upstream #331 and unresolved review points. |
 | #168 — proving-key registry | Track MPS-0039 and #338; the merged solution regenerates from bundled ZKIR and chain VKs, without requiring a registry. |
 | #36 / #67 — formal work | Align with formal-spec issues #4–#9 and #169's requested revisions. |
