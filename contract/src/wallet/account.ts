@@ -2,7 +2,7 @@
 // contract (MIP-0012 asset surface + MIP-0013 authorisation seam).
 //
 // The contract exports every gated operation once per authorisation arm
-// (`<operation>_with_jubjub`, `<operation>_with_k256`); this client is
+// (`<operation>_with_jubjub`, `_with_k256`, `_with_p256`); this client is
 // arm-generic: a call takes any device, builds the challenge with that
 // device's arm's builders, and targets the arm's circuit. Every authorised
 // call follows the same shape: read the live auth_nonce, resolve the
@@ -46,9 +46,11 @@ import {
   JubjubDevice,
   jubjubChallenges,
   k256Challenges,
+  p256Challenges,
   authArgs,
   jubjubGrantChallenges,
   k256GrantChallenges,
+  p256GrantChallenges,
   grantAuthArgs,
   scopeArgs,
   scopeDigest,
@@ -378,7 +380,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter)
-      : device.sign(k256Challenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter);
     const r = await this.withdrawUnshieldedWithAuth(color, amount, recipient, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -397,7 +399,7 @@ export class CustodyAccount {
     const coin = await this.heldCoin(color);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter)
-      : device.sign(k256Challenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter);
     const r = await this.withdrawShieldedWithAuth(recipient, color, amount, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -414,7 +416,7 @@ export class CustodyAccount {
     const coin = await this.heldCoin(color);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter)
-      : device.sign(k256Challenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter);
     const r = await this.withdrawShieldedToContractWithAuth(recipient, color, amount, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -425,7 +427,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.appendInbox(ctx, device.pk, entry), counter)
-      : device.sign(k256Challenges.appendInbox(ctx, device.pk, entry), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).appendInbox(ctx, device.pk, entry), counter);
     const r = await this.appendInboxWithAuth(entry, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -436,7 +438,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.rotateEncKey(ctx, device.pk, newKey), counter)
-      : device.sign(k256Challenges.rotateEncKey(ctx, device.pk, newKey), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).rotateEncKey(ctx, device.pk, newKey), counter);
     const r = await this.rotateEncKeyWithAuth(newKey, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -464,7 +466,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.addDevice(ctx, device.pk, newEntry), counter)
-      : device.sign(k256Challenges.addDevice(ctx, device.pk, newEntry), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).addDevice(ctx, device.pk, newEntry), counter);
     const r = await this.addDeviceWithAuth(newEntry, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -485,7 +487,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.removeDevice(ctx, device.pk, entry), counter)
-      : device.sign(k256Challenges.removeDevice(ctx, device.pk, entry), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).removeDevice(ctx, device.pk, entry), counter);
     const r = await this.removeDeviceEntryWithAuth(entry, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -599,7 +601,7 @@ export class CustodyAccount {
       ? device.sign(jubjubChallenges.publishRecoverySession(
           ctx, device.pk, artefacts.recoveryPk, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
         ), counter)
-      : device.sign(k256Challenges.publishRecoverySession(
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).publishRecoverySession(
           ctx, device.pk, artefacts.recoveryPk, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
         ), counter);
     const name = `publish_recovery_session_with_${auth.arm}`;
@@ -655,7 +657,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.recoverCancel(ctx, device.pk), counter)
-      : device.sign(k256Challenges.recoverCancel(ctx, device.pk), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).recoverCancel(ctx, device.pk), counter);
     const name = `recover_cancel_with_${auth.arm}`;
     const r = await submitWithDustRetry(name, () => this.handle.callTx[name](...authArgs(auth)));
     this.advanceCounter(device.pk, counter);
@@ -717,7 +719,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.issueGrant(ctx, device.pk, grantId, digest), counter)
-      : device.sign(k256Challenges.issueGrant(ctx, device.pk, grantId, digest), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).issueGrant(ctx, device.pk, grantId, digest), counter);
     const r = await this.issueGrantWithAuth(grantId, scope, scopeSalt, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -730,7 +732,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.revokeGrant(ctx, device.pk, grantId), counter)
-      : device.sign(k256Challenges.revokeGrant(ctx, device.pk, grantId), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).revokeGrant(ctx, device.pk, grantId), counter);
     const r = await this.revokeGrantWithAuth(grantId, auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -742,7 +744,7 @@ export class CustodyAccount {
     const counter = await this.resolveUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.revokeAllGrants(ctx, device.pk), counter)
-      : device.sign(k256Challenges.revokeAllGrants(ctx, device.pk), counter);
+      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).revokeAllGrants(ctx, device.pk), counter);
     const r = await this.revokeAllGrantsWithAuth(auth);
     this.advanceCounter(device.pk, counter);
     return r;
@@ -799,7 +801,7 @@ export class CustodyAccount {
     const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient))
-      : grantee.sign(k256GrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient));
+      : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawUnshielded(g, grantee.pk, color, amount, recipient));
     return this.withdrawUnshieldedWithGrantAuth(color, amount, recipient, opening, auth);
   }
 
@@ -817,7 +819,7 @@ export class CustodyAccount {
     const coin = await this.heldCoin(color);
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
-      : grantee.sign(k256GrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
+      : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
     return this.withdrawShieldedWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
   }
 
@@ -835,7 +837,7 @@ export class CustodyAccount {
     const coin = await this.heldCoin(color);
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
-      : grantee.sign(k256GrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
+      : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
     return this.withdrawShieldedToContractWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
   }
 
@@ -914,6 +916,7 @@ export class CustodyAccount {
  * Typescript), received 3`.
  */
 function activationArgs(device: AnyDevice, salt: Uint8Array): unknown[] {
+  if (device.arm === 'p256') return [device.pk, salt, device.policy];
   return device.arm === 'k256' ? [device.pk, salt, device.envelope] : [device.pk, salt];
 }
 

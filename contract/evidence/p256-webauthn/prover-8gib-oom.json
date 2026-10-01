@@ -1,0 +1,23 @@
+{
+  "observedAt": "2026-10-01T10:18:51.269831126Z",
+  "profile": "wa-json134",
+  "stage": "add_device_with_p256 proving, after successful deployment and activation",
+  "account": "b0e2f682bd5940305ea7ab1692ac6380ca1518799f6003e83c0179391758daec",
+  "circuitK": 18,
+  "proverKeyMiB": 448.09,
+  "dockerVM": {
+    "architecture": "aarch64",
+    "cpus": 8,
+    "configuredMemoryMiB": 8092,
+    "reportedMemoryBytes": 8215117824
+  },
+  "proofServer": {
+    "image": "midnightntwrk/proof-server:9.0.0-rc.8",
+    "imageId": "sha256:2c9b9917d3dd81b6f47ccdab333064eb6bad0fa0f7b5a0c9087fc7cd1d26cade",
+    "container": "account-custody-compact035-proof-server-1",
+    "OOMKilled": true,
+    "exitCode": 137
+  },
+  "result": "No completed full-account WebAuthn proof or proving-time sample. Proof server was OOM-killed; subsequent HTTP connection attempts were refused.",
+  "followUp": "User approved increasing Docker Desktop to 24576 MiB RAM and restarting the same persistent local stack for a fresh conformance/timing run. CPU allocation remains 8."
+}

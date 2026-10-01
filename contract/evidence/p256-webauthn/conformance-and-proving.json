@@ -1,0 +1,316 @@
+{
+  "testId": "p256-webauthn",
+  "name": "conformance-and-proving",
+  "fileName": "conformance-and-proving.json",
+  "description": "P-256 WebAuthn profile wa-json134: enrolled account, cross-arm calls, lifecycle, real-assertion verifier probes",
+  "verdict": "PASS",
+  "note": "Account calls: OpenSSL software authenticator. Verifier probes: captured real WebAuthn assertion. Negatives rejected at build stage.",
+  "details": {
+    "account": "2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138",
+    "transactions": [
+      {
+        "label": "p256 adds jubjub",
+        "txId": "00798ba031f2a8efcf6840afc07d03753fccf600772c22bcdb1ea642473ea6d30d",
+        "blockHeight": 1285,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "jubjub adds k256",
+        "txId": "00b2c265e3babf6e0e05bc85567b9ed15b50c436b6d1baf1429de5a0c4500cd014",
+        "blockHeight": 1289,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "k256 adds p256",
+        "txId": "000fa75e5d4b5be9e321b041217b38d3f8ad7894c2e209a35749e1377eb9502047",
+        "blockHeight": 1295,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_jubjub/0",
+        "txId": "0055a35f6ea1a8976cdea63a9d4b3512c20d45370db44ae19c911807317c1ca9a6",
+        "blockHeight": 1299,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_jubjub/1",
+        "txId": "001334645898827a9a5f7b9c5f25be6d4bafb0f80ca5df9af47bd7c9a0554b9402",
+        "blockHeight": 1303,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_jubjub/2",
+        "txId": "002d33e0ae76a09f31cde23e6faeddaab0e77870f60e25b78e043cfefc97360a92",
+        "blockHeight": 1307,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_k256/0",
+        "txId": "005914641aed20f2f5faf447d49efb158d2c942a01c5a1968e88357294081f879e",
+        "blockHeight": 1313,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_k256/1",
+        "txId": "00c5652406349b02d4a2551b500302617e19a627eca48c3e8f17f356c6b06a5adf",
+        "blockHeight": 1318,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_k256/2",
+        "txId": "00ef96f354eaba20812b63338705d049f3f95164a58810c4a05939824a0bad889b",
+        "blockHeight": 1323,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_p256/0",
+        "txId": "006e0e559647138c6a7b67c35c90151b59cafaae825c4f73821f4035db394792e4",
+        "blockHeight": 1331,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_p256/1",
+        "txId": "00517cbf85d125e23fdb519e5e05853b8ba4e2d68024a9e9b0dacff8a1b7d840de",
+        "blockHeight": 1338,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "rotate_enc_key_with_p256/2",
+        "txId": "007be7e9c7f5c94801d1f3615d0857d60d720fdd9c6449930ab292b1a20afa5025",
+        "blockHeight": 1345,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "p256 valid after negative probes",
+        "txId": "0072fb91558ab6fb7e1da694954dab3ed65a75a93ad483159c540cc601df1c02b1",
+        "blockHeight": 1353,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "issue_grant_with_p256",
+        "txId": "00293c408c2170012d396817dc6b171968e4b81e64f28b9bf59e6ce3c2adb0e0de",
+        "blockHeight": 1361,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "revoke_grant_with_p256",
+        "txId": "008444934ae2659bb4fec136edbbd39db61122d028c34d77e56c35861a8575a7c6",
+        "blockHeight": 1369,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "verify_ecdsa/0",
+        "txId": "00e85c2edc3212a79470f4e428adaa7fcf726c33ca98ee7b50f43d0171e7f69c03",
+        "blockHeight": 1377,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "verify_ecdsa/1",
+        "txId": "0088503b497f73a918494e2c0106a73e61370e640c2907bcf790da21438c351585",
+        "blockHeight": 1382,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "verify_ecdsa/2",
+        "txId": "002c9acdc47ef2e1c79cf511ad393e5051752c38a8f0e1d91355c7fe15e852db55",
+        "blockHeight": 1387,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "verify_webauthn/0",
+        "txId": "000fa42c8924bc4fd7186e3e45cd0afb434c8d293bcd47c6003c5a4b244abd60b1",
+        "blockHeight": 1393,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "verify_webauthn/1",
+        "txId": "00d75fe91d1dcbbd6c84a8cad3217d45511c500a854ae17c48f5d4640af171164f",
+        "blockHeight": 1398,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "verify_webauthn/2",
+        "txId": "0082ad0d2da0f42ad7c5ab96680a1f1b113e043a81025cb41d6292e3175fdee2c2",
+        "blockHeight": 1404,
+        "status": "SUCCESS"
+      }
+    ],
+    "samples": [
+      {
+        "label": "deployment",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/activate_initial_device_with_p256?vk=042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd",
+        "startedAt": "2026-10-01T10:55:57.498Z",
+        "milliseconds": 1561.8401669999876,
+        "proofBytes": 6364
+      },
+      {
+        "label": "p256 adds jubjub",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/add_device_with_p256?vk=7414477f52366b4098bb5347879fcad174595148b19d853ffa65d4d84d48913f",
+        "startedAt": "2026-10-01T10:56:24.480Z",
+        "milliseconds": 22568.576374999975,
+        "proofBytes": 6364
+      },
+      {
+        "label": "jubjub adds k256",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/add_device_with_jubjub?vk=8bcb83e10f7ad25fc65e28f3fdb918eaf0f8755f6a0eb7416052c6153ea80408",
+        "startedAt": "2026-10-01T10:57:08.396Z",
+        "milliseconds": 2995.331165999989,
+        "proofBytes": 5772
+      },
+      {
+        "label": "k256 adds p256",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/add_device_with_k256?vk=959e4057137caaf8e2febb8f4a6fdb3d5073d852247ca4dc12c84e2698fd9a86",
+        "startedAt": "2026-10-01T10:57:33.747Z",
+        "milliseconds": 12955.421666999988,
+        "proofBytes": 6364
+      },
+      {
+        "label": "rotate_enc_key_with_jubjub/0",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_jubjub?vk=15238b09168c63a597c7d47cfe3b732fa126257bdf6b0558229d98feb5cb2322",
+        "startedAt": "2026-10-01T10:58:08.534Z",
+        "milliseconds": 2988.7884170000325,
+        "proofBytes": 5772
+      },
+      {
+        "label": "rotate_enc_key_with_jubjub/1",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_jubjub?vk=15238b09168c63a597c7d47cfe3b732fa126257bdf6b0558229d98feb5cb2322",
+        "startedAt": "2026-10-01T10:58:32.572Z",
+        "milliseconds": 2567.8337090000277,
+        "proofBytes": 5772
+      },
+      {
+        "label": "rotate_enc_key_with_jubjub/2",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_jubjub?vk=15238b09168c63a597c7d47cfe3b732fa126257bdf6b0558229d98feb5cb2322",
+        "startedAt": "2026-10-01T10:58:56.632Z",
+        "milliseconds": 2528.7741249999963,
+        "proofBytes": 5772
+      },
+      {
+        "label": "rotate_enc_key_with_k256/0",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_k256?vk=5389d0d3d845bd94ef91bed9d501be4449a060d0def2336d4b7baedf6f410213",
+        "startedAt": "2026-10-01T10:59:21.986Z",
+        "milliseconds": 13094.075041999982,
+        "proofBytes": 6364
+      },
+      {
+        "label": "rotate_enc_key_with_k256/1",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_k256?vk=5389d0d3d845bd94ef91bed9d501be4449a060d0def2336d4b7baedf6f410213",
+        "startedAt": "2026-10-01T10:59:58.079Z",
+        "milliseconds": 11101.801625000022,
+        "proofBytes": 6364
+      },
+      {
+        "label": "rotate_enc_key_with_k256/2",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_k256?vk=5389d0d3d845bd94ef91bed9d501be4449a060d0def2336d4b7baedf6f410213",
+        "startedAt": "2026-10-01T11:00:28.835Z",
+        "milliseconds": 11024.596707999997,
+        "proofBytes": 6364
+      },
+      {
+        "label": "rotate_enc_key_with_p256/0",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+        "startedAt": "2026-10-01T11:00:59.996Z",
+        "milliseconds": 26754.04679200001,
+        "proofBytes": 6364
+      },
+      {
+        "label": "rotate_enc_key_with_p256/1",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+        "startedAt": "2026-10-01T11:01:48.111Z",
+        "milliseconds": 22139.764166999958,
+        "proofBytes": 6364
+      },
+      {
+        "label": "rotate_enc_key_with_p256/2",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+        "startedAt": "2026-10-01T11:02:29.523Z",
+        "milliseconds": 22070.23729099997,
+        "proofBytes": 6364
+      },
+      {
+        "label": "p256 valid after negative probes",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+        "startedAt": "2026-10-01T11:03:12.549Z",
+        "milliseconds": 22115.25812500005,
+        "proofBytes": 6364
+      },
+      {
+        "label": "issue_grant_with_p256",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/issue_grant_with_p256?vk=2b238be64188d81a613bab9ce349e0c3808133038717e2052974264f6253960f",
+        "startedAt": "2026-10-01T11:04:00.535Z",
+        "milliseconds": 26650.08658299991,
+        "proofBytes": 6364
+      },
+      {
+        "label": "revoke_grant_with_p256",
+        "keyLocation": "contract:2f6e96a87aab6b01f11fc125eac88785bf28146e8187bab7adb10d85759fe138/revoke_grant_with_p256?vk=90d2615c354820fdb9b60df8ba907c0159d49e9233d078b351d9d4518e150eaa",
+        "startedAt": "2026-10-01T11:04:48.588Z",
+        "milliseconds": 26917.08149999997,
+        "proofBytes": 6364
+      },
+      {
+        "label": "verify_ecdsa/0",
+        "keyLocation": "contract:85fd22af4d1effc8eabddf6c154e04cbdbf7dfb5148ed81fe49a47d893278ee5/verify_ecdsa?vk=fa143ec0e8594776f6aced2ecb5b1f6212e65f02887fcdf6f79053b4019f0538",
+        "startedAt": "2026-10-01T11:05:51.907Z",
+        "milliseconds": 10774.741707999958,
+        "proofBytes": 5276
+      },
+      {
+        "label": "verify_ecdsa/1",
+        "keyLocation": "contract:85fd22af4d1effc8eabddf6c154e04cbdbf7dfb5148ed81fe49a47d893278ee5/verify_ecdsa?vk=fa143ec0e8594776f6aced2ecb5b1f6212e65f02887fcdf6f79053b4019f0538",
+        "startedAt": "2026-10-01T11:06:21.263Z",
+        "milliseconds": 9370.424459000002,
+        "proofBytes": 5276
+      },
+      {
+        "label": "verify_ecdsa/2",
+        "keyLocation": "contract:85fd22af4d1effc8eabddf6c154e04cbdbf7dfb5148ed81fe49a47d893278ee5/verify_ecdsa?vk=fa143ec0e8594776f6aced2ecb5b1f6212e65f02887fcdf6f79053b4019f0538",
+        "startedAt": "2026-10-01T11:06:52.008Z",
+        "milliseconds": 9286.204499999993,
+        "proofBytes": 5276
+      },
+      {
+        "label": "verify_webauthn/0",
+        "keyLocation": "contract:85fd22af4d1effc8eabddf6c154e04cbdbf7dfb5148ed81fe49a47d893278ee5/verify_webauthn?vk=962f6c2329475033b30bdd0302befab101af6d2e0d21eec5abf953e848eafec0",
+        "startedAt": "2026-10-01T11:07:21.937Z",
+        "milliseconds": 13992.12933399994,
+        "proofBytes": 6364
+      },
+      {
+        "label": "verify_webauthn/1",
+        "keyLocation": "contract:85fd22af4d1effc8eabddf6c154e04cbdbf7dfb5148ed81fe49a47d893278ee5/verify_webauthn?vk=962f6c2329475033b30bdd0302befab101af6d2e0d21eec5abf953e848eafec0",
+        "startedAt": "2026-10-01T11:07:57.984Z",
+        "milliseconds": 11981.601292000036,
+        "proofBytes": 6364
+      },
+      {
+        "label": "verify_webauthn/2",
+        "keyLocation": "contract:85fd22af4d1effc8eabddf6c154e04cbdbf7dfb5148ed81fe49a47d893278ee5/verify_webauthn?vk=962f6c2329475033b30bdd0302befab101af6d2e0d21eec5abf953e848eafec0",
+        "startedAt": "2026-10-01T11:08:28.739Z",
+        "milliseconds": 11973.667999999947,
+        "proofBytes": 6364
+      }
+    ],
+    "profile": "wa-json134",
+    "proverEnvironment": {
+      "container": [
+        {
+          "image": "sha256:2c9b9917d3dd81b6f47ccdab333064eb6bad0fa0f7b5a0c9087fc7cd1d26cade",
+          "platform": "linux",
+          "configuredImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+          "cpus": 0,
+          "memory": 0
+        }
+      ],
+      "dockerVM": "aarch64 8 CPUs 25159827456 memoryBytes"
+    },
+    "containerPeakMemoryBytes": null,
+    "methodology": "Sequential per-circuit ProvingProvider.prove wall time, including key lookup/load and local HTTP transfer; excludes signing, circuit execution/check, wallet balancing and node inclusion. First observation + two repeats per circuit; no claim of OS/server cold caches. Key generation excluded."
+  },
+  "ranAt": "2026-10-01T11:09:03.133Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-rc.4",
+    "indexer": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8"
+  }
+}

@@ -9,7 +9,7 @@
 // the ledger fee computation refuses it up front ("exceeded block limit in
 // transaction fee computation"). The 30-circuit roster prices at 74,286
 // verifier bytes and is refused by a wider margin. The account therefore
-// deploys in budgeted waves (36 circuits with recovery):
+// deploys in budgeted waves (52 circuits with recovery and P-256):
 //
 //   wave 1  a prefix of the deposits + initial device's arm, the
 //           constructor's ledger state, and the maintenance authority;
@@ -22,12 +22,12 @@
 //
 // The earlier 25 KB budget fit the 30-circuit roster into three waves. Node
 // 2.1.0-rc.4 refuses that deployment batch; the 15 KB budget applies to every
-// wave and plans the 36-circuit roster as seven waves. The plan is computed
+// wave; it planned the pre-P-256 36-circuit roster as seven waves. The plan is computed
 // from the real artefacts, so a roster or key-size change re-plans itself.
 //
 // The maintenance waves are not a workaround detail: adding circuits to a
-// LIVE account by maintenance update is exactly how the planned secp256r1
-// arm would reach accounts deployed before it exists. Note the tension that
+// LIVE account by maintenance update is how additional arms can reach older
+// accounts with a live authority. Note the tension that
 // creates, and which the retirement resolves in favour of custody: an
 // authority able to add an arm is equally able to replace an existing arm's
 // verifier key, which is a path around the seam. The block-limit finding is
@@ -101,29 +101,23 @@ const RECOVERY_GATED_BASES = [
 export const recoveryCircuits = (arm: Arm): string[] =>
   RECOVERY_GATED_BASES.map((base) => `${base}_with_${arm}`);
 
-/** The two permissionless deposits, shared by both arms. */
+/** The two permissionless deposits, shared by all arms. */
 export const SHARED_CIRCUITS = ['deposit_unshielded', 'deposit_shielded'];
 
 /** The recovery gate itself: secret-gated submission and the permissionless
  *  finalisation, arm-independent (recovery MIP 6). */
 export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
 
-/** The whole roster: the 30 `spec_version = 2` impure circuits plus the
- *  six recovery circuits (two shared, two per arm). */
+export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256'];
+
+/** All 52 impure circuits: four shared and sixteen per credential arm. */
 export const allCircuits = (): string[] => [
   ...SHARED_CIRCUITS,
-  ...armCircuits('k256'),
-  ...armCircuits('jubjub'),
-  ...grantTwins('k256'),
-  ...lifecycleCircuits('k256'),
-  ...grantTwins('jubjub'),
-  ...lifecycleCircuits('jubjub'),
+  ...ARMS.flatMap(armCircuits),
+  ...ARMS.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
   ...RECOVERY_SHARED_CIRCUITS,
-  ...recoveryCircuits('k256'),
-  ...recoveryCircuits('jubjub'),
+  ...ARMS.flatMap(recoveryCircuits),
 ];
-
-const otherArm = (arm: Arm): Arm => (arm === 'jubjub' ? 'k256' : 'jubjub');
 
 /**
  * Verifier-byte budget for each deploy or maintenance wave.
@@ -197,7 +191,7 @@ export interface Wave {
  * `getVerifierKey(id)` for every id of `allCircuits()`.
  *
  * Pack every wave under `VERIFIER_BYTE_BUDGET`, starting with the deposits
- * and initial device's arm, then the other device arm, grants and recovery.
+ * and initial device's arm, then the other device arms, grants and recovery.
  * The deploy may carry only a prefix of the first arm. Activation happens
  * after all waves complete. Authority retirement rides on the last
  * maintenance wave, which is the last operation that needs the authority.
@@ -217,7 +211,7 @@ export function planWaves(
     throw new Error('VERIFIER_BYTE_BUDGET must be a positive finite number');
   }
 
-  const second = otherArm(firstArm);
+  const others = ARMS.filter(arm => arm !== firstArm);
   const first = [...SHARED_CIRCUITS, ...armCircuits(firstArm)];
   const waveOne: string[] = [];
   for (const id of first) {
@@ -235,17 +229,16 @@ export function planWaves(
 
   const remaining = [
     ...first.slice(waveOne.length),
-    ...armCircuits(second),
+    ...others.flatMap(armCircuits),
     ...grantTwins(firstArm),
     ...lifecycleCircuits(firstArm),
-    ...grantTwins(second),
-    ...lifecycleCircuits(second),
+    ...others.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
     // Recovery last: the gate and the first arm's session and cancel, then
     // the other arm's. An account is functional without them; they are the
     // last thing the authority installs before retiring.
     ...RECOVERY_SHARED_CIRCUITS,
     ...recoveryCircuits(firstArm),
-    ...recoveryCircuits(second),
+    ...others.flatMap(recoveryCircuits),
   ];
 
   let current: string[] = [];
