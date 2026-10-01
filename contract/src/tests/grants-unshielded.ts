@@ -891,9 +891,9 @@ await runScenario('grants-unshielded (GRANTS-E4: the unshielded grant twins on n
 
   const l0 = await account.ledgerState();
   fundDetails.specVersion = l0.spec_version.toString();
-  if (l0.spec_version !== 2n) {
+  if (l0.spec_version !== 3n) {
     setVerdict('funding', 'FAIL');
-    throw new Error(`spec_version ${l0.spec_version}, expected 2`);
+    throw new Error(`spec_version ${l0.spec_version}, expected 3`);
   }
   fundDetails.initialLedger = snapshotOf(l0, color);
 

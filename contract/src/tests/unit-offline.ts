@@ -148,7 +148,7 @@ const concat = (parts: Uint8Array[]): Uint8Array => {
 const dstOf = (tag: string): Uint8Array => sha256(padTag(64, tag));
 
 /** A pinned cross-implementation vector, as written to
- *  `src/tests/vectors/grants-e1.json` for the Rust signer. */
+ *  `src/tests/vectors/grants-v3.json` for the Rust signer. */
 interface GrantVector {
   name: string;
   circuit: string;
@@ -663,14 +663,21 @@ await runScenario('unit-offline', async () => {
       [rpTag, gSalt, gZero],
     );
 
-    step('[grant] the seventeen-element scope digest, flags as single bytes (§4.5)');
-    const scopeTag = padTag(32, 'midnight:account:grant:scope:v1');
+    step('[grant] the v2 scope digest, flags as single bytes (§4.5)');
+    const scopeTag = padTag(32, 'midnight:account:grant:scope:v2');
+    const noCaller = { is_some: false, value: { bytes: gZero } };
+    const callerTag = padTag(32, 'midnight:account:grant:caller:v1');
+    pin('contract_caller', 'derive_grant_caller_commit', '4.5',
+      { scope_salt: bytesToHex(gSalt), caller: bytesToHex(gContract) },
+      pureCircuits.derive_grant_caller_commit(gSalt, { is_some: true, value: { bytes: gContract } }),
+      [callerTag, gSalt, gContract]);
     /** One plaintext scope, in the §4.2 argument order. */
     interface Scope {
       opU: boolean; opS: boolean; opSC: boolean; read: boolean;
       color: Uint8Array; kind: bigint; recipient: Uint8Array;
       maxCoin: bigint; perCall: bigint; cap: bigint; expiresAt: bigint;
       rpIdHash: Uint8Array; readPkHash: Uint8Array;
+      caller?: Uint8Array;
     }
     const scopeDigestOf = (name: string, s: Scope): Uint8Array => pin(
       name, 'derive_grant_scope_digest', '4.5',
@@ -683,15 +690,18 @@ await runScenario('unit-offline', async () => {
         per_call_cap: s.perCall.toString(), cap: s.cap.toString(),
         expires_at: s.expiresAt.toString(), rp_id_hash: bytesToHex(s.rpIdHash),
         read_pk_hash: bytesToHex(s.readPkHash), window_len: '0', window_cap: '0',
+        caller: s.caller ? bytesToHex(s.caller) : null,
       },
       pureCircuits.derive_grant_scope_digest(
         gSalt, s.opU, s.opS, s.opSC, s.read, s.color, s.kind, s.recipient,
         s.maxCoin, s.perCall, s.cap, s.expiresAt, s.rpIdHash, s.readPkHash, 0n, 0n,
+        { is_some: s.caller !== undefined, value: { bytes: s.caller ?? gZero } },
       ),
       [
         scopeTag, gSalt, flag(s.opU), flag(s.opS), flag(s.opSC), flag(s.read),
         s.color, u8(s.kind), s.recipient, u128(s.maxCoin), u128(s.perCall),
         u128(s.cap), u64(s.expiresAt), s.rpIdHash, s.readPkHash, u64(0n), u128(0n),
+        s.caller ? sha256(concat([callerTag, gSalt, s.caller])) : gZero,
       ],
     );
     const spendScope: Scope = {
@@ -701,6 +711,7 @@ await runScenario('unit-offline', async () => {
       rpIdHash: gZero, readPkHash: gReadPkHash,
     };
     const scopeDigest = scopeDigestOf('unshielded_and_read', spendScope);
+    scopeDigestOf('contract_caller_pin', { ...spendScope, caller: gContract });
     scopeDigestOf('shielded_and_read', {
       ...spendScope, opU: false, opS: true, opSC: true, kind: 2n, recipient: gZswapPk,
     });
@@ -725,6 +736,7 @@ await runScenario('unit-offline', async () => {
         const d = pureCircuits.derive_grant_scope_digest(
           gSalt, (bits & 1) !== 0, (bits & 2) !== 0, (bits & 4) !== 0, (bits & 8) !== 0,
           gColor, 1n, gUserAddr, 5_000_000n, 1_000n, 450n, 1_800_000_000n, gZero, gReadPkHash, 0n, 0n,
+          noCaller,
         );
         seen.add(bytesToHex(d));
       }
@@ -1305,9 +1317,9 @@ await runScenario('unit-offline', async () => {
     step('[grant] writing the cross-implementation vectors for signer-rs');
     const vectorsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'vectors');
     mkdirSync(vectorsDir, { recursive: true });
-    const vectorsFile = path.join(vectorsDir, 'grants-e1.json');
+    const vectorsFile = path.join(vectorsDir, 'grants-v3.json');
     writeFileSync(vectorsFile, `${JSON.stringify({
-      title: 'Scoped grants, cross-implementation vectors, both grantee arms (Testing item 5)',
+      title: 'Scoped grants v3, caller commitment and scope:v2 cross-implementation vectors',
       source: 'contract/src/tests/unit-offline.ts, section [grant]',
       recipe: {
         hash: 'SHA-256 over the raw concatenation of fixed-width elements (persistentHash over byte atoms)',
@@ -1349,7 +1361,7 @@ await runScenario('unit-offline', async () => {
       vectors,
       signatures: gSignatures,
     }, null, 2)}\n`);
-    assert(vectors.length === 34, `[grant] ${vectors.length} pinned vectors written to src/tests/vectors/grants-e1.json`);
+    assert(vectors.length === 36, `[grant] ${vectors.length} pinned vectors written to src/tests/vectors/grants-v3.json`);
     assert(gSignatures.length === 3, `[grant] ${gSignatures.length} pinned signatures written (two k1 envelopes and one v1)`);
   }
 

@@ -1,0 +1,99 @@
+{
+  "testId": "grants-caller",
+  "name": "conformance",
+  "fileName": "conformance.json",
+  "verdict": "PASS",
+  "description": "Callee-enforced immediate contract caller pin on scoped grants",
+  "note": "Real unshielded JubJub grant spends; wrong/direct callers fail at build, fabricated caller fails at node admission. Both arms/all six gates are also covered offline.",
+  "details": {
+    "account": "2b98588001d91ec80e271104457dafb0ac0277f0e916346729f045eb0bde28e8",
+    "proxyA": "1113966ecca66ca71e057281d4fd38ba369d2a8789eb735bf8b36fb4e100d1d1",
+    "proxyB": "7f263c1820b089bcb0f9ed9edd30488d94889f4eecde594976c9201e1a764cbb",
+    "transactions": [
+      {
+        "label": "mint",
+        "txId": "001ef88b527f8e6c0f10364d45da1825af9f19b77d4b936e762831342107c275ee",
+        "blockHeight": 2022,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "deposit",
+        "txId": "00f22f3f51bdc4b5b34db8104939cee03556de3c103224a7c716ef80c6929a3fca",
+        "blockHeight": 2028,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "issue pinned to B",
+        "txId": "005a913deadc7f0d0b4cef4fe38b48342fdfd5124debdcee24016ce28385e9fa5d",
+        "blockHeight": 2032,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "B -> account",
+        "txId": "001664fef511dcf92fd34af6921aa6abf687c6f5d3fdc8dff0bc6e5825a4640dc6",
+        "blockHeight": 2036,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "A -> B -> account (B observed)",
+        "txId": "00fe101e529ede5086f60587bbf120505ec920aa26b09072fa96f082d8b853d44f",
+        "blockHeight": 2040,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "revoke",
+        "txId": "006276acfd8a24f1da1dc33e3c43f386f308fcb441d8d81fd53c98d4b1ceff6202",
+        "blockHeight": 2045,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "reissue unrestricted",
+        "txId": "00d80099c3f7355a60b2547268d9ee06160910816746b5541c30665143da73a147",
+        "blockHeight": 2049,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "unrestricted root",
+        "txId": "003147720f836d2d9ed3efbbab18b7b0c934e03052878f1657df454c7813fa0a2f",
+        "blockHeight": 2053,
+        "status": "SUCCESS"
+      }
+    ],
+    "negatives": [
+      {
+        "label": "direct root",
+        "stage": "build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant requires a contract caller"
+      },
+      {
+        "label": "wrong immediate caller A",
+        "stage": "build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant caller mismatch"
+      },
+      {
+        "label": "replay through B",
+        "stage": "build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature"
+      },
+      {
+        "label": "fabricated caller without claim",
+        "stage": "node-submit",
+        "rpcError": "Custom error: 104",
+        "txHash": "4e08381a41d50c87716ee4fce0389cc486a3b412f3b357f061a65462a9182ad7",
+        "nodeLog": "2026-10-01 12:12:45 🚫 Rejected transaction 4e08381a41d50c87716ee4fce0389cc486a3b412f3b357f061a65462a9182ad7 from mempool: guaranteed execution would fail: mismatch between expected (<[01, 01, 7f263c1820b089bcb0f9ed9edd30488d94889f4eecde594976c9201e1a764cbb, -]: b1b1b32b32>) and actual (<[-, -, -, -]: b1b1b32b32>) read    "
+      }
+    ],
+    "compiler": "0.35.0",
+    "runtime": "0.20.0",
+    "accountZkir": "3.1",
+    "proxyZkir": "2.0",
+    "schema": 3,
+    "limitation": "Caller authenticates the ledger claiming contract; a contract exposing arbitrary claimContractCall can lend its identity. It does not attest a browser origin or a calling circuit."
+  },
+  "ranAt": "2026-10-01T12:13:55.962Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-rc.4",
+    "indexer": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8"
+  }
+}

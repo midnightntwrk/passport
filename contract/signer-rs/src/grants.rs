@@ -48,7 +48,7 @@ const TAG_ID_V1: &str = "midnight:account:grant:id:v1";
 const TAG_OBJ: &str = "midnight:account:grant:obj:v1";
 const TAG_SPENT: &str = "midnight:account:grant:spent:v1";
 const TAG_RP: &str = "midnight:account:grant:rp:v1";
-const TAG_SCOPE: &str = "midnight:account:grant:scope:v1";
+const TAG_SCOPE: &str = "midnight:account:grant:scope:v2";
 /// Off-chain, raw 32-byte pad, prefixed to the normalised `client_id` bytes.
 const TAG_ORIGIN: &str = "midnight:account:grant:origin:v1";
 
@@ -250,6 +250,21 @@ pub fn rp_commit(scope_salt: &[u8; 32], rp_id_hash: &[u8; 32]) -> Result<[u8; 32
     ])
 }
 
+pub fn caller_commit(scope_salt: &[u8; 32], caller: Option<&[u8; 32]>) -> Result<[u8; 32]> {
+    let Some(address) = caller else {
+        return Ok([0u8; 32]);
+    };
+    let commitment = persistent_hash(&[
+        el_bytes(32, &pad32("midnight:account:grant:caller:v1")?),
+        el_bytes(32, scope_salt),
+        el_bytes(32, address),
+    ])?;
+    if commitment == [0u8; 32] {
+        bail!("reserved caller commitment");
+    }
+    Ok(commitment)
+}
+
 /// The plaintext scope of section 4.2, as the approver consents to it and
 /// as `issue_grant` takes it.
 #[derive(Clone, Debug)]
@@ -269,6 +284,7 @@ pub struct GrantScopePlain {
     pub read_pk_hash: [u8; 32],
     pub window_len: u64,
     pub window_cap: u128,
+    pub caller: Option<[u8; 32]>,
 }
 
 impl GrantScopePlain {
@@ -293,11 +309,12 @@ impl GrantScopePlain {
             read_pk_hash,
             window_len: 0,
             window_cap: 0,
+            caller: None,
         }
     }
 }
 
-/// `scope_digest`: seventeen elements, 277 preimage bytes. This is the
+/// `scope_digest` v2: eighteen elements, 309 preimage bytes. This is the
 /// single element through which the `issue_grant` device challenge binds
 /// the whole plaintext scope, so the four flags enter as single bytes and
 /// every reserved field is hashed at its declared width.
@@ -320,6 +337,7 @@ pub fn scope_digest(scope_salt: &[u8; 32], scope: &GrantScopePlain) -> Result<[u
         el_bytes(32, &scope.read_pk_hash),
         el_uint(8, u128::from(scope.window_len)),
         el_uint(16, scope.window_cap),
+        el_bytes(32, &caller_commit(scope_salt, scope.caller.as_ref())?),
     ])
 }
 
@@ -1107,6 +1125,8 @@ pub struct ScopeJson {
     pub window_len: String,
     #[serde(default)]
     pub window_cap: String,
+    #[serde(default)]
+    pub caller: Option<String>,
 }
 
 fn parse_reserved(value: &str) -> Result<u128> {
@@ -1138,6 +1158,12 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
         window_len: u64::try_from(parse_reserved(&req.scope.window_len)?)
             .context("window_len exceeds Uint<64>")?,
         window_cap: parse_reserved(&req.scope.window_cap)?,
+        caller: req
+            .scope
+            .caller
+            .as_deref()
+            .map(bytes32_from_hex)
+            .transpose()?,
     };
 
     let (arm, grant_id, pk_json) = match req.arm.as_deref() {
@@ -1193,6 +1219,7 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
         )?),
         "spent_commit_at_issue": hex::encode(spent_commit(&scope_salt, 0)?),
         "rp_commit": hex::encode(rp_commit(&scope_salt, &scope.rp_id_hash)?),
+        "caller_commit": hex::encode(caller_commit(&scope_salt, scope.caller.as_ref())?),
         "scope_digest": hex::encode(scope_digest(&scope_salt, &scope)?),
     });
     if let Some(spent) = &req.spent {
@@ -1425,6 +1452,7 @@ mod tests {
             read_pk_hash: READ_PK_HASH,
             window_len: 0,
             window_cap: 0,
+            caller: None,
         }
     }
 
@@ -1739,7 +1767,7 @@ mod tests {
         let scope = spend_scope();
         let via_fab = scope_digest(&SALT, &scope).unwrap();
         let parts = [
-            pad_to(32, b"midnight:account:grant:scope:v1"),
+            pad_to(32, b"midnight:account:grant:scope:v2"),
             SALT.to_vec(),
             vec![0x01],
             vec![0x01],
@@ -1756,20 +1784,20 @@ mod tests {
             READ_PK_HASH.to_vec(),
             u8le(0),
             u16le(0),
+            vec![0u8; 32],
         ];
-        // Seventeen elements, 277 preimage bytes.
-        assert_eq!(parts.len(), 17);
-        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 277);
+        assert_eq!(parts.len(), 18);
+        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 309);
         assert_eq!(via_fab, sha256_concat(&parts));
         assert_eq!(
             hex::encode(via_fab),
-            "9c314030d3312495526ec32b9e6e32544486716e063662b891cb1515f9859089"
+            "2f356e76f20e89b1a88fb6ca0c005b70f3ce9e45f979334a0d90fc82ed6aeda6"
         );
 
         let read_only = scope_digest(&SALT, &GrantScopePlain::read_only(READ_PK_HASH)).unwrap();
         assert_eq!(
             hex::encode(read_only),
-            "221d585f16e8aa25be1644bd38d577d32f03b1709d99fb1bfb5b7e5b9b98ce33"
+            "ec8d07c6d708008adf899a3ab31963bd85e3ac0507dd2e6a736ab0f03fa4e49c"
         );
 
         let mut all_flags = spend_scope();
@@ -1777,7 +1805,7 @@ mod tests {
         all_flags.rp_id_hash = sha256_concat(&[b"bank.example".to_vec()]);
         assert_eq!(
             hex::encode(scope_digest(&SALT, &all_flags).unwrap()),
-            "2343559d2e91ff6a9a3e76bcfae275007dcf0ef39a404b2101f3944ec309741c"
+            "52bb99bd1360fcca5f772aa69f3536a246357e9b8bc88b363b56ef4c3780d4cb"
         );
     }
 
@@ -2218,6 +2246,7 @@ mod tests {
             read_pk_hash: hex::encode(READ_PK_HASH),
             window_len: String::new(),
             window_cap: String::new(),
+            caller: None,
         };
         // k256 grantee (sk = 1), k256 device (sk = 2), auth_nonce 7.
         let req = DeriveGrantRequest {
@@ -2290,6 +2319,7 @@ mod tests {
                 read_pk_hash: hex::encode(READ_PK_HASH),
                 window_len: String::new(),
                 window_cap: String::new(),
+                caller: None,
             },
             spent: None,
             device: None,
@@ -2934,6 +2964,7 @@ mod tests {
                 read_pk_hash: hex::encode(READ_PK_HASH),
                 window_len: String::new(),
                 window_cap: String::new(),
+                caller: None,
             },
             spent: None,
             // The device key is a JubJub scalar on this arm, [7]G.
@@ -3020,10 +3051,10 @@ mod tests {
 
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../src/tests/vectors/grants-e1.json"
+            "/../src/tests/vectors/grants-v3.json"
         );
         let text = std::fs::read_to_string(path)
-            .expect("src/tests/vectors/grants-e1.json is written by `npm run test:unit`");
+            .expect("src/tests/vectors/grants-v3.json is written by `npm run test:unit`");
         let doc: Value = serde_json::from_str(&text).unwrap();
 
         let h32 = |v: &Value| -> [u8; 32] {
@@ -3166,6 +3197,9 @@ mod tests {
                 "derive_grant_rp_commit" => {
                     rp_commit(&h32(&a["scope_salt"]), &h32(&a["rp_id_hash"]))
                 }
+                "derive_grant_caller_commit" => {
+                    caller_commit(&h32(&a["scope_salt"]), Some(&h32(&a["caller"])))
+                }
                 "derive_grant_scope_digest" => scope_digest(
                     &h32(&a["scope_salt"]),
                     &GrantScopePlain {
@@ -3186,6 +3220,7 @@ mod tests {
                         read_pk_hash: h32(&a["read_pk_hash"]),
                         window_len: uint(&a["window_len"]) as u64,
                         window_cap: uint(&a["window_cap"]),
+                        caller: a["caller"].as_str().map(|_| h32(&a["caller"])),
                     },
                 ),
                 "challenge_withdraw_unshielded_with_grant_k256" => {

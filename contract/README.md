@@ -91,7 +91,7 @@ seam chip, one challenge family, one thin export per operation; the
 custody chips do not change.
 
 A second authoriser class sits beside the device set at
-`spec_version = 2`: a **grantee**, a key the owner enrols into the `grants`
+`spec_version = 3`: a **grantee**, a key the owner enrols into the `grants`
 register under a scope rather than into the device set, and which can spend
 within that scope without holding a device. Grantees are co-resident the same
 way. Each grantee arm (`jubjub`, `k256`, `p256`) exports three grant twins over the shared custody chips,
@@ -111,6 +111,11 @@ device-gated, and the register is killable in one call, since
 twins include the scope-opening and signature constraints. Historical
 per-circuit costs are in "Scoped grants" below; the current 52-circuit
 inventory is in `evidence/p256-webauthn/circuit-sizes.json`.
+
+Grants may additionally pin an **immediate calling contract**, enforced
+inside the account with `kernel.caller()`. See [GRANTS-CALLER.md](GRANTS-CALLER.md)
+for the API, schema migration, semantics and conformance run. The cost
+tables below predate that extension.
 
 The arms share one device set (arm-marked entry DSTs keep them
 disjoint), one `device_count`, and one last-device rule. **Cross-arm
