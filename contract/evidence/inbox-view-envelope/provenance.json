@@ -1,0 +1,62 @@
+{
+  "capturedAt": "2026-10-01T20:18:05.417Z",
+  "note": "Local files hashed when this report was rendered; base commit does not include uncommitted experiment sources.",
+  "files": {
+    "src/tests/inbox-view-envelope/codec.ts": {
+      "bytes": 6928,
+      "sha256": "fc1d51c49d692e801b7833a82452b45baeb36a9539497ffb00a0fc581b9baaf4"
+    },
+    "src/tests/inbox-view-envelope/offline.ts": {
+      "bytes": 8463,
+      "sha256": "474ddd5a0c668c89d9192902df6f33dacdeddfd33cdd96ae6b4e8064c94c6261"
+    },
+    "src/tests/inbox-view-envelope/localnet.ts": {
+      "bytes": 16654,
+      "sha256": "31fa7352eb0da0fc295a1f9157e14c277adb7b7d32301656397d298d1f02156a"
+    },
+    "src/tests/inbox-view-envelope/private-state.ts": {
+      "bytes": 1632,
+      "sha256": "39bf85b8ca2d03748455d87c058898796bd2fea358126d50170b67dc430d4295"
+    },
+    "package-lock.json": {
+      "bytes": 112661,
+      "sha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51"
+    },
+    "contracts/account.compact": {
+      "bytes": 128007,
+      "sha256": "caa1e863b1522bf5c753e72b2e9ceb9220bcf641b0a153c117ec6f762d0bba52"
+    },
+    "contracts/account-p256.compact": {
+      "bytes": 19866,
+      "sha256": "bc6d59add3cbbebb6f5be557222dac20a545ae4daacfc50f45d11e305dfa9f1e"
+    },
+    "contracts/managed/account/contract/index.js": {
+      "bytes": 1682709,
+      "sha256": "44631f38e58aa9bc944a2e754ae9ab4965a4dff63766721987a33b1d3a702685"
+    },
+    "contracts/managed/account/keys/append_inbox_with_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9"
+    },
+    "contracts/managed/account/zkir/append_inbox_with_p256.bzkir": {
+      "bytes": 87904,
+      "sha256": "5216deac0c2d865f57cceec0527a8ead88ff8805565d07d35ec4cb544f76d92c"
+    },
+    "contracts/managed/account/keys/withdraw_shielded_with_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26"
+    },
+    "contracts/managed/account/zkir/withdraw_shielded_with_p256.bzkir": {
+      "bytes": 89532,
+      "sha256": "4f261b83715f9314de02ba5d47e24a55df4086709ff9dafff765321d590790bd"
+    },
+    "contracts/managed/account/keys/rotate_enc_key_with_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f"
+    },
+    "contracts/managed/account/zkir/rotate_enc_key_with_p256.bzkir": {
+      "bytes": 87134,
+      "sha256": "2f4bf0b5bce44c87d23de6e33276bc0dd6db19c6547e37bb4b53d81b574d1a83"
+    }
+  }
+}

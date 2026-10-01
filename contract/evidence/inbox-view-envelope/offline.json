@@ -1,0 +1,96 @@
+{
+  "verdict": "PASS",
+  "test": "inbox-view-envelope-offline",
+  "at": "2026-10-01T16:15:23.017Z",
+  "profile": "experimental-e1",
+  "payloadBytes": 192,
+  "meaningfulBytes": 190,
+  "zeroPaddingBytes": 2,
+  "encryptedBytes": {
+    "viewingSecret": 32,
+    "publicP256Coordinates": 64
+  },
+  "layout": [
+    [
+      "version",
+      0,
+      1
+    ],
+    [
+      "suite",
+      1,
+      1
+    ],
+    [
+      "recipient tag",
+      2,
+      32
+    ],
+    [
+      "ephemeral X25519 public key",
+      34,
+      32
+    ],
+    [
+      "AES-GCM nonce",
+      66,
+      12
+    ],
+    [
+      "AES-GCM tag",
+      78,
+      16
+    ],
+    [
+      "encrypted viewing secret",
+      94,
+      32
+    ],
+    [
+      "encrypted public ES256 x/y coordinates",
+      126,
+      64
+    ],
+    [
+      "zero padding",
+      190,
+      2
+    ]
+  ],
+  "readerCounts": [
+    {
+      "readers": 1,
+      "bytesPerGeneration": 192
+    },
+    {
+      "readers": 2,
+      "bytesPerGeneration": 384
+    },
+    {
+      "readers": 5,
+      "bytesPerGeneration": 960
+    },
+    {
+      "readers": 10,
+      "bytesPerGeneration": 1920
+    },
+    {
+      "readers": 100,
+      "bytesPerGeneration": 19200
+    }
+  ],
+  "controls": {
+    "everyByteTamperRejected": 192,
+    "wrongReader": true,
+    "wrongContext": true,
+    "invalidX25519": true,
+    "poisonKey": true,
+    "substitutedSigningMetadata": true,
+    "staleAndStagedKeys": true,
+    "independentOpenSSL": true,
+    "actualP256CompiledCircuitCalls": true,
+    "legacyReaderSkips": true,
+    "offlineRecipientReseal": true
+  },
+  "limits": "Software ES256 authenticator and random synthetic PRF outputs. Compiled-circuit simulation, not a node proof or browser/PRF-sync test."
+}
