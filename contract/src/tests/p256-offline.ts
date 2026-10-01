@@ -67,7 +67,8 @@ for (const badJSON of [
   originalJSON.replace('webauthn.get', 'webauthn.create'),
   originalJSON.replace('8973', '8974'), originalJSON.replace('false', 'true'),
   originalJSON.replace('"type":', '"type":"evil","type":'),
-  originalJSON.replace('}', ',"extra":1}'), originalJSON.replace('{', '{ '),
+  // Insert an unsupported member or whitespace into the canonical test envelope.
+  `${originalJSON.slice(0, -1)},"extra":1}`, `{ ${originalJSON.slice(1)}`,
   originalJSON.replace(Buffer.from(fresh).toString('base64url'), Buffer.from(rnd()).toString('base64url')),
 ]) {
   const a = await f.assertion(fresh, { clientDataJSON: new Uint8Array(Buffer.from(badJSON)) });
