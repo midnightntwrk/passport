@@ -6,6 +6,12 @@ mainnet (halo2-style PLONK, KZG over BLS12-381).
 
 ## Why
 
+**October follow-up:** Compact 0.35.0 now supplies native P-256 verification.
+The [live passkey account experiment](../passkey-account-flow/README.md)
+records an interactive Safari approval accepted by the reference account
+on-node. The Rust proof-system measurements below remain their own evidence
+set.
+
 Passkeys (WebAuthn), the Apple Secure Enclave, and the Android Keystore all
 sign with P-256 ECDSA over SHA-256, and none of them will ever export a seed
 or sign with another curve. If a Midnight custody contract wants to be

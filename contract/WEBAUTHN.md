@@ -129,6 +129,69 @@ binding and device/grant/recovery state transitions. On-node evidence
 separately identifies software-authenticator account calls, the captured
 real-assertion probes, and build-stage negatives.
 
+### Interactive browser-to-account test
+
+**Observed result:** [live Safari passkey flow — PASS, 1 October 2026](evidence/p256-webauthn/browser-flow.md).
+The [experiment guide](../experiments/passkey-account-flow/README.md) links
+the published assertion/outcome evidence and its offline verification command.
+This separate run used an interactive browser assertion for the account
+operation itself; the earlier automated benchmark suite still uses the
+software-authenticator fixtures described above.
+
+With the compiled artifacts, local stack and `WALLET_SEED` configured:
+
+```sh
+npm run test:p256-browser
+# Open http://localhost:8973 in Safari or Chrome.
+```
+
+This uses the production `createBrowserCredential` and
+`browserAssertionProvider` adapters. It installs no virtual authenticator
+and has no software-signing fallback. The user performs the system passkey
+ceremonies:
+
+1. **Create passkey**, then approve the adapter's profile-check assertion.
+   Public credential metadata is retained in this origin's local storage;
+   **Use saved test passkey** can reuse it on another run.
+2. Wait for a new passkey-first account to deploy and activate. The local
+   funding wallet pays fees; the account deployment uses ten waves.
+3. **Approve account change**. The browser signs the challenge for this
+   account's encryption-key rotation, bound to its new key and fresh nonce.
+   The runner checks changed-argument rejection, proves/submits the intended
+   operation, requires indexed `SUCCESS`, checks the new key/nonce/device
+   counter, and checks that the consumed authorisation cannot be replayed.
+4. **Test cancellation**, then cancel the system prompt. No further account
+   mutation should occur. Browsers report cancellation, denial and timeout
+   as `NotAllowedError` in many cases; evidence records the returned error
+   rather than inferring the user's exact action from it.
+
+The server binds only loopback, requires the exact localhost Host and
+same-origin JSON POSTs, and serves the browser bundle locally. It records
+per-run evidence as `evidence/p256-webauthn/run-browser-<uuid>.json` (ignored
+by Git), including public credential data, signed assertions, accepted
+transaction IDs, state checks and timings. Review that local evidence before
+publishing it. Private signing keys and biometrics are never requested by
+the server. `attestation: none` means the run does not independently attest
+the hardware model or whether the user chose a biometric versus a PIN.
+
+`PARTIAL` denotes an unfinished run; `PASS` requires the complete sequence.
+Changed-argument and replay negatives must abort before any proving or node
+submission, with the expected circuit error and unchanged account state.
+Proof timing and browser-ceremony timing are recorded separately. Keep the
+terminal running while interacting; stop it with Ctrl-C after completion.
+
+If a run stops after credential creation, reuse **Use saved test passkey**,
+or restart the server with `PASSKEY_CREDENTIAL_FILE` pointing at that run's
+JSON evidence. This resumes only the credential's public metadata; the new
+account operation still requires a fresh browser approval.
+
+The runner compares the indexer's latest block hash with the node before
+initialising the wallet. Recreating a dev node can reset its chain while the
+indexer retains old data; `isSynced` alone cannot detect that mismatch. If
+the check fails, rebuild the indexer for the current chain (retain the old
+volume separately if needed). Otherwise a stale DUST state can produce node
+error 170, `InvalidDustSpendProof`, before passkey account activation.
+
 `circuit-sizes.json` records `k`, used rows, exact uncompressed prover/VK/
 ZKIR byte counts and SHA-256 hashes. `conformance-and-proving.json` records
 sequential per-circuit `ProvingProvider.prove` timings, proof bytes and

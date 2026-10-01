@@ -1,0 +1,11 @@
+# Selected node logs for the interactive browser run, 2026-10-01 UTC.
+# First attempt: stale indexer chain, before passkey account activation.
+2026-10-01 14:30:55 Transaction malformed: dust spend proof failed to verify; this is just as likely a disagreement on dust state on the declared time (Timestamp(1790859906)) as the proof being invalid: DustSpend { v_fee: 857753077619264186, old_nullifier: <dust nullifier>, new_commitment: <dust commitment>, proof: <proof> }
+2026-10-01 14:30:55 🚫 Rejected transaction ab5006e0923224049bdf316af6786e2995502c5606c2103f55756857631e10b8 from mempool: Transaction Error: Malformed(InvalidDustSpendProof)
+
+# After rebuilding the indexer: live passkey-approved account-key rotation.
+2026-10-01 14:40:08 📋 Validated transaction e220b64041f21fe7d9fd8ac5d950f2b6ba02aee0e23d75151b3309ba089b77fb for mempool
+2026-10-01 14:40:12 📥 Applying transaction e220b64041f21fe7d9fd8ac5d950f2b6ba02aee0e23d75151b3309ba089b77fb
+2026-10-01 14:40:12 🎁 Prepared block for proposing at 165 (73 ms) hash: 0xc5d90526d2a094b36c4f1162e508cafcdb1c303eb0733b5dedfcce7aa7e35a7a; parent_hash: 0xaafc…a515; end: NoMoreTransactions; extrinsics_count: 5
+2026-10-01 14:40:12 🏆 Imported #165 (0xaafc…a515 → 0xe6aa…d6d3)
+2026-10-01 14:40:28 💤 Idle (0 peers), best: #167 (0xebc7…63ac), finalized #165 (0xe6aa…d6d3), ⬇ 0 ⬆ 0

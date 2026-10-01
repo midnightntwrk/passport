@@ -10,6 +10,8 @@
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:p256-offline": "tsx src/tests/p256-offline.ts",
     "test:p256": "tsx src/tests/p256-conformance.ts",
+    "test:p256-browser": "tsx src/tests/p256-browser.ts",
+    "verify:p256-browser": "tsx src/tests/p256-browser-evidence.ts",
     "measure:p256": "tsx src/tests/p256-measure.ts",
     "report:p256": "tsx src/tests/p256-report.ts",
     "test:toolchain-offline": "tsx src/tests/toolchain-offline.ts",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "0.28.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
