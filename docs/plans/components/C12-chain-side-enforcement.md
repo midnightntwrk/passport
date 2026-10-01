@@ -23,6 +23,13 @@ message the specification names, no transaction, and a byte-identical
 ledger snapshot either side; nine grantee-key rows are refused on both
 arms (`contract/GRANTS-E2.md`).
 
+**Update 2026/10/01:** unshielded follow-up #163 is merged. Open
+[#176](https://github.com/midnightntwrk/passport/pull/176) adds optional
+immediate-contract pins using `kernel.caller()`. Forwarded calls were
+accepted and a fabricated-caller proof refused at node admission. Schema
+v3 needs reconciliation with P-256 #175 on integration; audit/formal work
+(#67) remains. See [status](../STATUS.md).
+
 ## Dependencies
 
 - **C1** — verifier lives in or alongside the account-custody contract.
@@ -33,11 +40,9 @@ arms (`contract/GRANTS-E2.md`).
 
 ## Open questions
 
-**Verifier inside or outside C1?** Resolved: inside. Compact exposes
-no caller identity on any released line (confirmed by the
-cross-contract-calls experiment), so a separate verifier contract
-cannot know who called it; grant-scope evaluation lives behind the
-same seam in the account contract.
+**Verifier inside or outside C1?** Chosen: inside. Compact 0.35 now supplies
+immediate caller identity. #176 keeps scope evaluation inside the account;
+it does not implement a separate verifier or calling-circuit identity.
 
 **Scope-evaluation language.** Resolved: per-shape circuits. Compact
 compiles every exported circuit to its own proof, so one grant twin
@@ -45,7 +50,8 @@ per spend operation per grantee arm pays only its own scheme.
 
 **Unshielded grant twins on node.** Both arms hold over a non-native
 color; the user-funded NIGHT leg meets the node fee wall for
-offer-plus-call transactions. Evidence in review.
+offer-plus-call transactions. Evidence merged in #163; retain its recorded
+resource and funding-path qualifications.
 
 **Cross-chain enforcement (P10).** When an operation crosses chains,
 does enforcement happen in C12 (Midnight-side) or in the upstream MCS
@@ -69,8 +75,8 @@ expressed in the scope language, or vice versa.
 lives in the account contract behind the same `require_authorised()`
 contract MIP-0013 fixes.
 
-**B — Separate verifier contract.** Rejected: no caller identity on
-any released line, so a separate verifier cannot know who called it.
+**B — Separate verifier contract.** Not selected. Immediate caller identity
+is now available; a separate-verifier architecture needs its own evidence.
 
 **C — Generic parameterised verifier.** Rejected: every exported
 circuit is its own proof, so a generic circuit would pay every arm's

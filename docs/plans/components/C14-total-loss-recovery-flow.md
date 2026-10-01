@@ -8,7 +8,14 @@ The flow by which a user recovers their account when all authorised
 devices are lost. Implements P5 (recover-from-zero). Mirrors I-5.1
 through I-5.4.
 
-**Status 2026/07 — decided; specification is the next step.** The
+**Status 2026/10/01:** draft and reference tranche
+[#165](https://github.com/midnightntwrk/passport/pull/165) are merged;
+Hector submitted [upstream #339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339),
+still open. The reference uses recovery/successor signatures in a two-phase
+gate with a veto window and a separate viewing-key wrap. Transport,
+interoperability and multi-session crypto review remain. See [status](../STATUS.md).
+
+**Prototype baseline (2026/07).** The
 mechanism is **BUSS (ANARKey, EPRINT 2025/551): stateless guardians
 plus paper keys**, chosen after the workspace assessment
 (`research/anarkey-buss-recovery-assessment.md`, PR #90) and already
@@ -34,10 +41,10 @@ plaintext-Shamir placeholder:
   and vice versa. The BUSS mathematics runs client-side through
   `buss-wasm` (wasm-bindgen over the Pleiades library).
 
-What remains is to **specify it** — the recovery-paths MIP (building
-block three), instantiating the seam with the BUSS construction while
-keeping the contract surface scheme-agnostic, with DeRec and
-encrypted-blob backup as substitutable profiles behind the same seam.
+The recovery-paths draft now specifies the construction; the prototype
+description above is historical. The merged reference adds session,
+pending-recovery and viewing-wrap state and a delegation-safe signature
+gate. DeRec and encrypted-blob remain substitutable profiles.
 
 ## Dependencies
 
@@ -65,10 +72,11 @@ that a `buss-req` really comes from the account owner (out-of-band
 confirmation UX) — the maths bounds what a malicious quorum can do,
 the UX bounds how often one forms.
 
-**Recovery of the encryption secret.** The device set recovers via the
-epoch bump; the account encryption secret (viewing capability, inbox
-walk) must also survive total loss — inside the BUSS-recovered
-material, or as a separate item in the paper key?
+**Recovery of the encryption secret.** The existing 64-byte `recovery_wrap`
+seals the viewing secret under a key derived from the recovery secret;
+refresh requires a session update. Freshness and successor lifecycle
+remain. Draft #177 proposes an inbox recovery-group recipient, but that
+extension is unimplemented and untested; its experiment covers passkey readers.
 
 **Cryptographer review of the integration.** The ANARKey construction
 is published; our integration (φ handling, session nonces, the
@@ -92,9 +100,9 @@ reconstructs without user consent. *Detection / bound:* the session
 nonce and on-chain φ scope what a coalition can do and when; guardian
 UX confirms requests out of band.
 
-**Recovery exposes seed material to the UI.** I-1.4 violated — the
-recovered secret must flow into the recover circuit's witness, never
-onto a screen. *Detection:* code review of the recovery flow.
+**Recovery exposes secrets to UI or prover.** Reconstructed secrets stay
+off-chain and sign the challenge. The proof consumes signatures, not those
+secrets. *Detection:* review of recovery and delegated-proving boundaries.
 
 **Recovered identity does not match original.** Different name or
 account anchor than registered. *Detection:* the end-to-end recovery

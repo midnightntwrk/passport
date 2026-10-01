@@ -549,7 +549,7 @@
       <header class="section-head">
         <div class="section-kind">Symbiosis</div>
         <h2>Shared with the MVP</h2>
-        <p>Where the v1.0 deliverable and the October MVP converge — one body of work, not two. Same primitives, same evidence, same direction; the <a href="demo.html#picks">demo picks table</a> flags every temporary departure with its migration plan.</p>
+        <p>The demo consumes pinned contract builds while reference implementation and standards work continue. Use the <a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">1 October status report</a> for merged work, open upstream submissions (#338/#339), feature PRs and release evidence. The <a href="demo.html#picks">original demo picks</a> are retained as planning history.</p>
       </header>
 
       <div class="crossovers-grid" id="crossovers"></div>
@@ -563,8 +563,8 @@
         <p>Both keystone MIPs are Proposed upstream and open for review. Three errata the implementation surfaced are merged, and two measured gaps in MIP-0013 (a weak-key rejection, and a device identity so that removal revokes a device) are recorded with a remedy proposed; beyond those, what remains is exactly the ecosystem scrutiny that moves a proposal toward acceptance. Comment where the standards live; file issues where the plan lives.</p>
         <div class="engage-links">
           <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/discussions" target="_blank" rel="noopener">Upstream discussions ↗</a>
-          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012.md" target="_blank" rel="noopener">MIP-0012 upstream ↗</a>
-          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013.md" target="_blank" rel="noopener">MIP-0013 upstream ↗</a>
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012-native-asset-custody.md" target="_blank" rel="noopener">MIP-0012 upstream ↗</a>
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013-account-authorisation.md" target="_blank" rel="noopener">MIP-0013 upstream ↗</a>
           <a href="https://github.com/midnightntwrk/passport/issues" target="_blank" rel="noopener">Workspace issues ↗</a>
         </div>
       </div>
@@ -616,7 +616,7 @@
           : escapeHtml(cid);
       }).join(' · ') || '—';
       const badge = m.kind === 'prerequisite' ? '<span class="mip-prereq-badge">Prerequisite</span>'
-        : m.kind === 'upstream' ? '<span class="mip-upstream-badge">Adopted upstream</span>'
+        : m.kind === 'upstream' ? `<span class="mip-upstream-badge">${(m.upstream || '').includes('/mps/') ? 'Published problem statement' : 'Adopted upstream'}</span>`
         : '';
       const secondMeta = m.kind === 'upstream'
         ? `<dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream || '#')}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd>`

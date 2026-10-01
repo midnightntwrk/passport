@@ -631,14 +631,14 @@
         <a class="fact" href="demo.html#recover">
           <span class="fact-kicker">Validated</span>
           <h3>Losing every device is survivable</h3>
-          <p>Recovery uses guardians who store nothing between ceremonies, running in the working prototype. One transaction retires every old device and grant; the account, name, and balances never move.</p>
+          <p>The recovery reference tranche is merged. Guardians retain their own keys, with no per-account shares to store; a two-phase signature gate and veto window precede finalisation. Upstream proposal #339 and integration review remain open.</p>
           <span class="fact-foot">How recovery works →</span>
         </a>
         <a class="fact" href="demo.html#demo">
           <span class="fact-kicker plan">In delivery</span>
-          <h3>Public demo in October 2026</h3>
-          <p id="phaseFact">Six monthly phases run to October; the demo consumes the published standards as they firm up.</p>
-          <span class="fact-foot">The demo plan →</span>
+          <h3>Demo v5.2 is released</h3>
+          <p>Published 29 September with browser installation guidance. Staging and production expose its build marker; release notes and deployment-workflow provenance need reconciliation. Reference feature PRs are still in review.</p>
+          <span class="fact-foot">Release and integration status →</span>
         </a>
       </div>
     </div>
@@ -655,7 +655,7 @@
           <h3>Midnight Foundation &amp; partners</h3>
           <ul>
             <li><a href="#status">Where the work stands</a> — standards, components, and the dated evidence trail.</li>
-            <li><a href="demo.html#demo">The October demo plan</a> — phases, what ships, and which picks are shortcuts.</li>
+            <li><a href="demo.html#demo">The demo release status</a> — current observations and integration work.</li>
             <li><a href="#asks">What we need from the ecosystem</a> — four concrete asks.</li>
           </ul>
         </div>
@@ -684,9 +684,17 @@
       <header class="section-head">
         <div class="section-kind">Status</div>
         <h2>Where the work stands</h2>
-        <p>One vocabulary throughout: a component is <b>specified</b> when a published standard covers it, <b>decided</b> when the choice is set in stone but the specification is pending, an <b>open decision</b> when the design space is still live, and <b>in design</b> otherwise. Standards are counted separately from components.</p>
+        <p>A component is <b>specified</b> when a standard or draft documents its design, <b>decided</b> when a choice is recorded, an <b>open decision</b> when the design space is still live, and <b>in design</b> otherwise. These labels do not imply implementation, release or completed review; the linked evidence and upstream lifecycle record those separately.</p>
         <p class="status-updated" id="statusUpdated"></p>
+        <p><a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">Full 1 October reconciliation: issues, PRs, releases and next actions ↗</a></p>
       </header>
+
+      <div class="facts">
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/174" target="_blank" rel="noopener"><span class="fact-kicker">Merged</span><h3>Compact 0.35 baseline</h3><p>Recovery, unshielded grant evidence and key-regeneration drafts are also on main. Deployment waves retain the 15,000-byte verifier budget.</p></a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/175" target="_blank" rel="noopener"><span class="fact-kicker plan">Open PR #175</span><h3>Real passkey account control</h3><p>A Safari passkey approved an account-key rotation on localnet under the bounded WebAuthn profile. Broader browser and PRF support remain.</p></a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/176" target="_blank" rel="noopener"><span class="fact-kicker plan">Open PR #176</span><h3>Caller-bound grants</h3><p>Immediate-caller pins passed on-node checks, including refusal of a fabricated-caller proof. Schema v3 and P-256 integration need review.</p></a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/177" target="_blank" rel="noopener"><span class="fact-kicker plan">Draft PR #177</span><h3>Viewing-key sharing</h3><p>192-byte inbox envelopes restored fresh clients that spent before and after rotation. Automated localnet PASS with software credentials and synthetic PRF; Angel/Lace integration remains.</p></a>
+      </div>
 
       <div class="status-tiles" id="statusTiles"></div>
       <div class="glance-map" id="glanceMap"></div>
@@ -788,17 +796,6 @@
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-  // ---- The October fact card: name the current phase from data ----
-  const phaseFact = document.getElementById('phaseFact');
-  if (phaseFact) {
-    const phases = data.demo_phases || [];
-    const current = phases.find(p => p.status === 'current');
-    if (current) {
-      phaseFact.textContent =
-        `Six monthly phases run to October — currently in Phase ${current.id} of ${phases.length} (${current.name.toLowerCase()}), consuming the published standards as they firm up.`;
-    }
-  }
-
   // ---- Status board freshness stamp ----
   const updated = document.getElementById('statusUpdated');
   if (updated && data.meta && data.meta.updated) {
@@ -823,11 +820,13 @@
     const mergedMps = mips.filter(m => (m.upstream || '').includes('/mps/')).length;
     const adopted = mips.filter(m => m.kind === 'upstream' && !(m.upstream || '').includes('/mps/')).length;
     const pipeline = mips.filter(m => m.lifecycle === 'Not yet filed').length;
+    const submitted = mips.filter(m => m.lifecycle === 'Submitted draft').length;
     const tiles = [
       { v: publishedOurs, label: 'MIPs published upstream — ours', dot: 's-specified' },
       { v: mergedMps,     label: 'Problem statements merged upstream — ours', dot: 's-specified' },
       { v: adopted,       label: 'Upstream standards adopted', dot: 's-decided' },
-      { v: pipeline,      label: 'MIPs drafted, not yet filed', dot: 's-neutral' },
+      { v: submitted,     label: 'Open upstream solution submissions', dot: 's-neutral' },
+      { v: pipeline,      label: 'Local drafts / outlines, not yet filed', dot: 's-neutral' },
       { v: (data.experiments || []).filter(e => /^Complete/.test(e.status || '')).length,
         label: 'Experiments complete', dot: 's-neutral' },
     ];

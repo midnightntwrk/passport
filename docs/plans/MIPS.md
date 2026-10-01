@@ -20,7 +20,8 @@ Each MIP names an external co-author or committed external reviewer —
 unilateral drafts become shelfware. The adoption narrative tracks who
 that counterpart is for each MIP.
 
-Last updated: 2026/09/17.
+Last updated: 2026/10/01. See the [development-status reconciliation](STATUS.md)
+for implementation, ticket and release evidence.
 
 ---
 
@@ -32,6 +33,8 @@ Last updated: 2026/09/17.
 | **MPS-0027** | Domain Separation for Midnight Hash Constructions | Proposed | C8 |
 | **MIP-0012** | Contract Custody of Midnight-Native Assets | Proposed | C4 · C1 |
 | **MIP-0013** | Multi-key Account Authorisation for Custody Contracts | Proposed | C1 · C5 |
+| **MPS-0039** | Calling a Contract Requires Its Full Compiled Artifacts | Proposed | C6 |
+| **MPS-0040** | Cross-Contract Call Provenance in Compact Circuits | Proposed | C1 · C12 |
 
 MIP-0012 and MIP-0013 are the two building blocks of the multi-key
 account keystone MPS-0018 recommends. Implementing them surfaced three
@@ -43,7 +46,7 @@ contract-to-contract validation also restated the payment-mode section
 upstream: one-hop counterparty-private routing and linking-accepted
 direct transfer are both normative.
 
-Implementation has since measured two gaps in MIP-0013 that the errata
+Earlier implementation runs measured two gaps in MIP-0013 that the errata
 did not cover, both live on the JubJub arm as published and reproduced
 on the interim secp256k1 arm. First, the curve identity passes as a
 device key: each arm's verification equation collapses at the identity,
@@ -64,6 +67,13 @@ its circuit signatures and verifier keys are now a public ABI and the
 gap fixes should land before dependents accumulate; and the seam is
 carried as co-resident arms in the reference contract, which is the
 shape the signature-schemes draft standardises.
+
+**1 October qualification:** Compact 0.35 adds compiler/runtime checks;
+the older weak-key observations above are not a current accepted-proof
+admissibility map. That mapping and the normative correction remain open.
+Caller-bound grants in open #176 use schema v3; coordinate the outstanding
+device-identity remedy with grants/recovery migration rather than assuming
+the earlier proposed schema-v2 remedy has shipped.
 
 **Path to Active for the keystone pair.** Cryptographer review of the
 signature scheme (an explicit acceptance criterion), the FROST
@@ -111,7 +121,19 @@ surfaces that need a chain identifier follow it.
 
 ---
 
-## In the pipeline (Passport-authored, not yet filed)
+## Submitted upstream (open proposals)
+
+### On-demand prover keys from bundled ZKIR
+
+Native regeneration evidence [#170](https://github.com/midnightntwrk/passport/pull/170)
+and solution draft [#173](https://github.com/midnightntwrk/passport/pull/173)
+are merged in Passport. Hector submitted the draft under MPS-0039 as
+[upstream #338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338).
+It retains **Nicolas Di Prima and Vincent Hanquez** as authors. Package
+small ZKIR assets and regenerate/cache prover keys using on-chain verifier
+keys, without requiring a registry. Supported SDK/WASM APIs, compatible
+keygen profiles, validation vectors and integration remain. Open upstream
+submission is not acceptance.
 
 ### Recovery paths — building block three
 
@@ -122,13 +144,19 @@ paper keys (ePrint 2025/551), implemented in the account-custody
 prototype (shared guardian wire formats across CLI and app). The MIP
 specifies the construction, the guardian protocol and wire formats,
 the paper-key format, and parameters, with DeRec and encrypted-blob
-backup as substitutable profiles behind the same seam. The upstream
-recovery slot is unclaimed; no other recovery MPS or MIP has been
-filed.
+backup as substitutable profiles behind the same seam. Draft and reference
+tranche [#165](https://github.com/midnightntwrk/passport/pull/165) are merged;
+Hector submitted [upstream #339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339),
+still open with a Draft-status document. The reference gate consumes
+recovery/successor signatures, not reconstructed secrets, in a two-phase
+flow with a veto window. Multi-session crypto review, wallet transport,
+interoperability and viewing-wrap lifecycle remain.
 
 **Maps to components.** [C14](components/C14-total-loss-recovery-flow.md) ·
 [C15](components/C15-helper-protocol.md) ·
 [C13](components/C13-lost-device-flow.md).
+
+## Local drafts awaiting upstream submission
 
 ### Signature schemes (building block: the C5 signing primitive)
 
@@ -150,8 +178,11 @@ co-resident arms on the reference contract with both suites green on
 node, and the wallet-gate experiment (BIP-340 verified in-circuit on
 real wallet vectors at k=15 to k=16). Gates to submission: a
 cryptographer pass on the envelope binding and the accept-both-s
-policy, the secp256r1 Compact language surface for the r1 arm (a
-declared dependency, not a blocker), and the Interim-status ruling.
+policy, and the Interim-status ruling. Compact 0.35 now exposes native
+P-256 verification; open [#175](https://github.com/midnightntwrk/passport/pull/175)
+implements the bounded `wa-json134` profile and includes a real Safari
+account-key rotation accepted on localnet. Profile/spec alignment remains;
+the older k=15 midnight-zk measurements are not the new Compact account cost.
 Local copy: `docs/mps-mip/mips/mip-xxxx-signature-schemes.md`.
 
 **Maps to components.** [C5](components/C5-signing-primitive.md) ·
@@ -180,14 +211,21 @@ chain state. Read access is the MIP-0012 viewing capability sealed to
 a dApp key; the text says plainly that the ledger enforces spend scope
 and not read scope. Requires a `spec_version = 2` redeploy, proposed to
 carry the erratum 8 remedy as well. Evidence on `main`: the reference
-contract at `spec_version = 2` carries the whole thirty-circuit roster
-on both grantee arms; on node, eleven of twelve evidence groups pass,
+contract carries grant twins on both grantee arms; the earlier evidence
+at `spec_version = 2` records eleven of twelve groups passing,
 twelve rejection rows abort at build time with the named message, and
 the unit of `kernel.blockTimeLessThan` is measured as whole seconds
 enforced at client build and node admission (`contract/GRANTS-E1.md`
 to `GRANTS-E3.md`). Outstanding: editors' rulings collected at the head
 of the draft, and the companion erratum to MIP-0013 AUTH-1, AUTH-2, and
 AUTH-9. Local copy: `docs/mps-mip/mips/mip-xxxx-scoped-grants.md`.
+
+The unshielded evidence follow-up #163 is now merged. Open
+[#176](https://github.com/midnightntwrk/passport/pull/176) adds optional
+immediate-contract pins through `kernel.caller()`, with accepted forwarding
+calls and a fabricated-caller proof refused at node admission. It uses
+schema v3 and needs reconciliation with #175 during integration. The
+device-wide revocation remedy is still separate unfinished work.
 
 **Maps to components.** [C10](components/C10-scoped-grant-primitive.md) ·
 [C11](components/C11-grant-lifecycle.md) ·
@@ -207,6 +245,11 @@ Cryptographer review gates ratification. Evidence:
 upstream code now ships an untagged JubJub Schnorr challenge, and the
 unpublished `persistentHash` byte framing has been raised as a gap by
 others in the upstream venues.
+
+[Upstream convention #331](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/331)
+is open, with feedback posted on encoding, catalogue/source of truth and
+Passport compatibility. Transient-hash scope and benchmark corrections
+also remain review points; C8 is not complete.
 
 **Maps to component.** [C8](components/C8-domain-separation-registry.md).
 
@@ -248,15 +291,16 @@ credentials.
 - **Passkey-derived device keys** — the PRF → JubJub scalar
   derivation, domain-separated under the registry; graduates from C9
   if it needs to become a standard for cross-wallet portability.
-- **secp256r1 (P-256) signature verification in Compact** — the
-  upstream signature-verification MPS family stops at RSA and
-  secp256k1, and the proof system now carries a first-class P-256 chip;
-  the slot is unclaimed, Passport holds the passkey-gate evidence, and
-  the signature-schemes draft declares the language surface as its
-  dependency.
-- **Cross-contract call provenance** — a callee cannot identify its
-  caller on any released line, so authority must travel in the
-  arguments; a problem statement framing the gap is in preparation.
+- **Viewing-key sharing** — draft [#177](https://github.com/midnightntwrk/passport/pull/177)
+  demonstrates 192-byte inbox reader envelopes and fresh-client restoration
+  with software credentials and synthetic PRF. Protocol, bootstrap, roster
+  trust and recovery decisions remain before proposing a standard.
+
+**Dependencies now available:** Compact 0.35 exposes P-256 verification and
+immediate caller identity. Call provenance is already published as
+MPS-0040; #176 covers immediate-contract pins, not calling-circuit identity
+or all broader provenance requirements. BIP-340 still needs secp256k1
+point operations.
 
 ---
 
