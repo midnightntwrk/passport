@@ -3,7 +3,10 @@
 Compact **0.35.0** / runtime **0.20.0** exposes `kernel.caller()`.
 An owner may now pin a grant to an immediate calling contract. The
 account checks this itself, before its spend and grant-settlement chips,
-on both grant arms and all six spend circuits.
+on both grant arms and all six spend circuits. The P-256 device arm,
+which landed on `main` after this work, issues grants through the same
+scope digest and spends through the same gate, so it carries the caller
+pin as well; the evidence below does not exercise that arm.
 
 ```ts
 const scope = spendScope({
