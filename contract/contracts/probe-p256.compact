@@ -1,0 +1,25 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+include "webauthn";
+import WebAuthn<21>;
+export { WebAuthnPolicy, webauthn_challenge_base64, webauthn_client_data_hash,
+         p256_verify_digest, webauthn_verify };
+
+// Public output prevents the compiler from treating these benchmarks as pure
+// helpers. This is a verifier-cost probe, not an enrolled account gate.
+export ledger accepted: Bytes<32>;
+
+export circuit verify_ecdsa(
+  digest: Bytes<32>, sig: Secp256r1EcdsaSignature, pk: Secp256r1Point
+): [] {
+  assert(p256_verify_digest(digest, sig, pk), "invalid P-256 signature");
+  accepted = disclose(digest);
+}
+
+export circuit verify_webauthn(
+  challenge: Bytes<32>, policy: WebAuthnPolicy, authenticator_data: Bytes<37>,
+  sig: Secp256r1EcdsaSignature, pk: Secp256r1Point
+): [] {
+  assert(webauthn_verify(challenge, policy, authenticator_data, sig, pk), "invalid WebAuthn signature");
+  accepted = disclose(challenge);
+}

@@ -3,11 +3,17 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "Reference implementation of the Midnight account custody standard: MIP-0012 (contract custody of native assets) with the authorisation seam carried as co-resident arms: JubJub Schnorr (the MIP-0013 scheme) and an interim ECDSA-secp256k1 engineering arm.",
+  "description": "Reference implementation of Midnight account custody with co-resident JubJub Schnorr, secp256k1 ECDSA and profiled P-256 WebAuthn authorisation arms.",
   "scripts": {
-    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time",
+    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
+    "test:p256-offline": "tsx src/tests/p256-offline.ts",
+    "test:p256": "tsx src/tests/p256-conformance.ts",
+    "test:p256-browser": "tsx src/tests/p256-browser.ts",
+    "verify:p256-browser": "tsx src/tests/p256-browser-evidence.ts",
+    "measure:p256": "tsx src/tests/p256-measure.ts",
+    "report:p256": "tsx src/tests/p256-report.ts",
     "test:toolchain-offline": "tsx src/tests/toolchain-offline.ts",
     "test:recovery-offline": "tsx src/tests/recovery-offline.ts",
     "test:recovery-sim": "tsx src/tests/recovery-sim.ts",
@@ -36,6 +42,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "0.28.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
@@ -57,6 +64,7 @@
     "@midnightntwrk/wallet-sdk-shielded": "4.0.0-rc.0",
     "@midnightntwrk/wallet-sdk-unshielded-wallet": "4.0.0-rc.0",
     "@noble/curves": "2.2.0",
+    "@noble/hashes": "2.2.0",
     "rxjs": "^7.8.2",
     "ws": "^8.19.0"
   }

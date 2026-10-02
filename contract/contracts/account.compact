@@ -1,6 +1,12 @@
 pragma language_version >= 0.17.0;
 
 import CompactStandardLibrary;
+include "webauthn";
+// Profile wa-json134: 21-byte origin, canonical clientDataJSON with
+// crossOrigin=false. Other origin widths require a separately compiled profile.
+import WebAuthn<21>;
+export { WebAuthnPolicy, webauthn_challenge_base64, webauthn_client_data_hash };
+include "account-p256";
 
 // ---------------------------------------------------------------------------
 // Midnight account custody contract — reference implementation.
@@ -37,9 +43,8 @@ import CompactStandardLibrary;
 //       entry the caller authorised with, which is what carries the
 //       last-device rule (AUTH-5, S13) now that entries arrive already
 //       derived; the epoch mechanism (AUTH-6) is present in state, and its
-//       only bump site is the recovery seam of MIP-0013 §8, which awaits the
-//       recovery-paths MIP — no recovery circuit is exposed here yet;
-//     - both seams reject device keys of small order (S12). MIP-0013 §4 does
+//       only bump site is the recovery finalisation circuit;
+//     - all seams reject device keys of small order (S12). MIP-0013 §4 does
 //       not require this, and both schemes degenerate at their curve
 //       identity (ECDSA loses its key-dependent term; Schnorr reduces to
 //       s·G == R), so an identity key would authorise with no secret. See
@@ -65,9 +70,7 @@ import CompactStandardLibrary;
 //
 //   arm `k256` — ECDSA over secp256k1, an interim engineering arm. NOT a
 //     MIP-0013 conforming scheme (MIP-0013 R2 selects JubJub and rejects
-//     secp256k1 ECDSA); it stands in for the planned secp256r1 (P-256)
-//     passkey arm until that curve has a Compact language surface, the two
-//     curves sharing the short-Weierstrass ECDSA shape. The challenge binds
+//     secp256k1 ECDSA). It also exercises the connector envelope. The challenge binds
 //     no signature term (an ECDSA message must not depend on its own
 //     signature) and no grinding nonce (secp256k1EcdsaVerify reduces the
 //     32-byte challenge mod the curve order natively). Keys are bound as
@@ -110,13 +113,18 @@ import CompactStandardLibrary;
 //     pk, use_counter, sig, envelope). Cost: one extra persistentHash per
 //     k256 authorisation.
 //
+//   arm `p256` — native secp256r1 ECDSA with the wa-json134 WebAuthn profile.
+//     account-p256.compact binds the RP/origin in device entries and grant
+//     scope; webauthn.compact reconstructs the complete signed envelope,
+//     including the challenge, and requires UP+UV. See WEBAUTHN.md for the
+//     supported fixed lengths and asynchronous browser assertion adapter.
+//
 // Per-arm circuits instead of one circuit with an in-circuit scheme choice:
 // Compact compiles every exported circuit to its own proof, so a proof
 // through a `_with_jubjub` circuit pays only the Schnorr constraints and a
 // proof through `_with_k256` only the ECDSA constraints. A single circuit
 // selecting the scheme by conditional would make every authorisation pay
-// for every registered scheme. Later arms (`_with_p256` when secp256r1
-// becomes expressible, possibly `_with_ed25519`) are added the same way:
+// for every registered scheme. Later arms are added the same way:
 // one seam chip, one challenge family, one thin export per operation — the
 // custody chips do not change.
 //

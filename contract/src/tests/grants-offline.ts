@@ -333,7 +333,7 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
 
 interface SpendOptions {
   /** The signing grantee. Omitted only when `auth` is supplied by hand. */
-  grantee?: AnyGrantee;
+  grantee?: Exclude<AnyGrantee, { arm: 'p256' }>;
   /** The record the challenge names. */
   grantId: Uint8Array;
   color: Uint8Array;

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passport — live passkey account test</title>
+<style>
+  :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background:#0b0c10; color:#f8f9fc; }
+  body { max-width: 880px; margin: 48px auto; padding: 0 24px; }
+  h1 { line-height:1.15; font-size: 38px; } h2 { font-size:18px; }
+  .eyebrow { color:#5be0c1; font-weight:650; letter-spacing:.1em; font-size:12px; }
+  .muted { color:#b3bece; } section { background:#171a23; border:1px solid #303745; border-radius:16px; padding:24px; margin:20px 0; }
+  button { border:0; border-radius:8px; padding:14px 20px; margin:8px 8px 0 0; font:inherit; font-weight:650; background:#5be0c1; color:#0b0c10; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; } [hidden] { display:none; }
+  pre, code { font:12px/1.6 ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+  #error { color:#ffc27a; } #phase { color:#5be0c1; font-size:12px; font-weight:650; }
+</style>
+<p class="eyebrow">PASSPORT / LOCALNET CONFORMANCE</p>
+<h1>Your passkey. A real account transaction.</h1>
+<p class="muted">Create a passkey, approve an account change, and verify its acceptance by the local Midnight node.</p>
+<section>
+  <div id="phase">CONNECTING</div>
+  <h2 id="status">Connecting to the local test runner…</h2>
+  <p>Use the system passkey prompt on your device. Registration includes a second approval to check browser compatibility.</p>
+  <button id="create" hidden>Create passkey</button>
+  <button id="reuse" hidden>Use saved test passkey</button>
+  <button id="approve" hidden>Approve account change</button>
+  <button id="cancel" hidden>Test cancellation — cancel the prompt</button>
+  <p id="error" role="alert"></p>
+</section>
+<section>
+  <h2>What you are approving</h2>
+  <p>This run rotates the encryption key of a newly deployed test account. The passkey signs a challenge bound to that account, operation, new key and current nonce.</p>
+  <p class="muted">The funding wallet pays localnet fees. The passkey’s signing secret stays with your authenticator.</p>
+  <h2>Account</h2><code id="account"></code>
+  <h2>Operation</h2><pre id="operation"></pre>
+</section>
+<section><h2>Run log</h2><pre id="events"></pre><pre id="result"></pre></section>
+<p class="muted">Profile wa-json134 · RP localhost · local evidence only · software authenticator disabled</p>
+<script type="module" src="/app.js"></script>
+</html>

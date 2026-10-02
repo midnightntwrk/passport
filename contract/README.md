@@ -32,9 +32,7 @@ once, below every arm.
 - **Arm `k256`** — in-circuit **ECDSA over secp256k1**
   (`secp256k1EcdsaVerify`, ZKIR v3), an **interim engineering arm**, not
   a scheme proposal: MIP-0013 R2 rejects secp256k1 ECDSA for account
-  authorisation. It stands in for the intended **secp256r1 (P-256)
-  passkey arm**. Compact 0.35.0 now exposes P-256 verification; implementing
-  the arm and its WebAuthn message binding remains separate work.
+  authorisation. It remains useful for connector-envelope experiments.
   Its challenges carry no signature announcement (an ECDSA
   message must not depend on its own signature) and no grinding nonce
   (the verify reduces the digest mod n natively); keys bind as
@@ -43,8 +41,7 @@ once, below every arm.
   twin non-replayable). Gated ABIs are
   `(…args, pk, use_counter, sig, envelope)`.
   Its signer is software only (`@noble/curves` in TypeScript, `k256` in
-  Rust): WebAuthn passkeys are hardware-locked to P-256, which is
-  precisely what the r1 landing enables.
+  Rust); the ES256 WebAuthn arm below uses P-256 credentials.
 
   ECDSA signs a 32-byte digest, and signers wrap the challenge
   differently before hashing it, so the arm carries a per-device
@@ -71,13 +68,25 @@ once, below every arm.
   device was enrolled with. Unknown ids abort. The challenge preimages
   (`midnight:account:auth:k1:v1:*`) are unchanged.
 
+- **Arm `p256`** — native **P-256 ECDSA with profiled WebAuthn**.
+  Profile `wa-json134` reconstructs the complete 134-byte client-data JSON
+  in-circuit (21-byte origin, `crossOrigin:false`) and hashes it with the
+  37-byte authenticator data. RP and exact origin are bound at enrolment;
+  UP+UV are required. The browser adapter accepts asynchronous assertions
+  without exposing the credential's secret. Device, grant and recovery
+  twins use the same shared mutation chips. See [WEBAUTHN.md](WEBAUTHN.md)
+  for supported shapes, browser use, verification and new measurements.
+  The [live passkey account experiment](../experiments/passkey-account-flow/README.md)
+  records a real Safari approval accepted on-node, with signed assertion
+  evidence and an offline Node/OpenSSL verifier.
+
 Per-arm circuits instead of one circuit with an in-circuit scheme
 conditional: Compact compiles every exported circuit to its own proof, so
 a proof through a `_with_jubjub` circuit pays only the Schnorr
-constraints and a `_with_k256` proof only the ECDSA constraints (the
-withdraw prover keys measure 49 MB and 117 MB respectively — the split
-keeps the ECDSA premium off the normative arm). Later arms
-(`_with_p256`, possibly `_with_ed25519`) are added the same way: one
+constraints, a `_with_k256` proof only its ECDSA constraints and a
+`_with_p256` proof the P-256/WebAuthn constraints. Current same-toolchain
+costs are recorded in [WEBAUTHN.md](WEBAUTHN.md); older tables below retain
+their historical attribution. Later arms are added the same way: one
 seam chip, one challenge family, one thin export per operation; the
 custody chips do not change.
 
@@ -85,13 +94,12 @@ A second authoriser class sits beside the device set at
 `spec_version = 2`: a **grantee**, a key the owner enrols into the `grants`
 register under a scope rather than into the device set, and which can spend
 within that scope without holding a device. Grantees are co-resident the same
-way. Each grantee arm (`jubjub` and `k256` today, with `p256` still to be
-implemented) exports three grant twins over the unchanged custody chips,
+way. Each grantee arm (`jubjub`, `k256`, `p256`) exports three grant twins over the shared custody chips,
 `withdraw_unshielded_with_grant_<arm>`, `withdraw_shielded_with_grant_<arm>`,
 and `withdraw_shielded_to_contract_with_grant_<arm>`; each device arm exports
 the three lifecycle circuits `issue_grant_with_<arm>`,
 `revoke_grant_with_<arm>`, and `revoke_all_grants_with_<arm>`, so an owner on
-either device arm issues to a grantee on either grantee arm. A grant twin
+any device arm issues to a grantee on any grantee arm. A grant twin
 authenticates against the record found at `grant_id` (a contract-recomputed
 commitment to the account, arm, key, envelope, origin, and slot), asserts the
 whole scope in-circuit before any custody chip runs, verifies the grantee
@@ -100,11 +108,9 @@ signature, and writes back only that record's `nonce` and `spent_commit`:
 so an owner signature pending across a grant call still verifies. Lifecycle is
 device-gated, and the register is killable in one call, since
 `revoke_all_grants` bumps `grant_generation` and clears the map. The grant
-twins are the most expensive circuits in the contract: their prover keys
-measure 99 MB (unshielded) and 197 MB (shielded) on the jubjub arm and 235 MB
-for every k256 grant twin, beside the 49 MB and 99 MB of the jubjub device
-withdraw twins and the 117 MB and 235 MB of the k256 ones. Per-circuit costs
-are in "Scoped grants" below.
+twins include the scope-opening and signature constraints. Historical
+per-circuit costs are in "Scoped grants" below; the current 52-circuit
+inventory is in `evidence/p256-webauthn/circuit-sizes.json`.
 
 The arms share one device set (arm-marked entry DSTs keep them
 disjoint), one `device_count`, and one last-device rule. **Cross-arm
@@ -229,8 +235,10 @@ npm run test:recovery-sim            # recovery MIP circuit matrix in the simula
                                      # refusals, veto window, cancel, finalisation,
                                      # epoch-bump revocation
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
+npm run verify:p256-browser         # recorded live assertion + account binding (Node/OpenSSL)
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
+npm run test:p256-browser           # interactive experiment: real browser passkey approval
 npm run test:auth-coinless           # BOTH seams on-node + cross-arm enrolment + tamper aborts
 npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
 npm run test:custody-discovery      # MIP-0012 test 4
@@ -298,9 +306,10 @@ transaction.
 
 **Current planner (Compact 0.35.0 / node 2.1.0-rc.4):** the verifier-byte
 budget defaults to **15,000** for both deploy and maintenance waves. The
-36-circuit roster plans as seven waves, with activation after all keys are
-installed. The newer node refuses the old 25,434-byte deployment batch.
-See [upgrade verification](TOOLCHAIN-0.35.md) for current results.
+52-circuit roster plans as **ten waves** for any initial arm, with activation
+after all keys are installed. The pre-P-256 36-circuit roster needed seven
+waves. The newer node refuses the old 25,434-byte deployment batch.
+See [upgrade verification](TOOLCHAIN-0.35.md) and [P-256 evidence](WEBAUTHN.md).
 
 The following measurements are historical (the 30-circuit grant roster on
 node `2.1.0-2e92c4ae642c`). At that time the reference client deployed in waves
@@ -364,8 +373,8 @@ observed"), alongside the block limit above and the fee-model rejection
 below.
 
 The maintenance waves also demonstrate the arm-migration mechanism: adding an
-arm's circuits to a LIVE account by maintenance update is how a secp256r1 arm
-would reach accounts deployed before it exists, and it is how the twelve grant
+arm's circuits to a LIVE account by maintenance update is how the secp256r1 arm
+can reach older accounts with a live authority, and it is how the twelve grant
 circuits reached the account measured above. That mechanism carries a custody
 cost the reference refuses to pay silently, so the last wave ends by retiring
 the authority, as below.
@@ -401,8 +410,8 @@ shows `committee = 0, threshold = 1`. After deploy, the seam is the only way
 to move the account's assets.
 
 The cost is explicit and is the trade-off a deployer must make: a retired
-account can never receive a future arm's circuits, so the secp256r1 arm
-reaches it only by migrating to a new account. `retireAuthority: false`
+account can never receive a future arm's circuits, so pre-P-256 retired
+accounts gain passkey support only by migrating to a new account. `retireAuthority: false`
 keeps that door open for a deployer who has weighed the custody risk.
 
 ## Known localnet limitation: the NIGHT funding leg is mempool-rejected
