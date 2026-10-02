@@ -49,3 +49,13 @@ attestation leaf can be confused with a non-attestation use of
 metadata).
 
 **C — Hybrid (shared root for global presence, per-issuer subtrees).**
+
+## Readings
+
+- **External prior art.** Attribute-as-commitment leaf construction is
+  realised by [Kredz](https://github.com/zkos-labs/kredz)
+  (`kredz_score_profile.compact`): the score is held as
+  `persistentHash<ScoreData>(score, salt)` — a domain-separated commitment
+  of an attribute — though in a flat per-user map rather than a Merkle
+  tree; see
+  [research/kredz-credit-credentials.md](../../../research/kredz-credit-credentials.md).
