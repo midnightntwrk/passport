@@ -1,22 +1,26 @@
 {
-  "capturedAt": "2026-10-01T20:18:05.417Z",
-  "note": "Local files hashed when this report was rendered; base commit does not include uncommitted experiment sources.",
+  "capturedAt": "2026-10-02T08:49:47.584Z",
+  "note": "Local files hashed when this report was rendered. The run's recorded commit may predate these sources; compare these hashes with the committed files.",
   "files": {
     "src/tests/inbox-view-envelope/codec.ts": {
-      "bytes": 6928,
-      "sha256": "fc1d51c49d692e801b7833a82452b45baeb36a9539497ffb00a0fc581b9baaf4"
+      "bytes": 8886,
+      "sha256": "9c4198ca8b579ff355011d1a981eba2b39f114eb992a1a0ea600eeb240da2071"
     },
     "src/tests/inbox-view-envelope/offline.ts": {
-      "bytes": 8463,
-      "sha256": "474ddd5a0c668c89d9192902df6f33dacdeddfd33cdd96ae6b4e8064c94c6261"
+      "bytes": 9851,
+      "sha256": "14ab99a049c1f123a04685b98a5656b5371595f90b1e1bd0e8423a22ca81c012"
     },
     "src/tests/inbox-view-envelope/localnet.ts": {
-      "bytes": 16654,
-      "sha256": "31fa7352eb0da0fc295a1f9157e14c277adb7b7d32301656397d298d1f02156a"
+      "bytes": 16707,
+      "sha256": "4ac06be14b219dcd3c6e353106ffa35e9e4dc19126e462b1a0026c55d05078bb"
     },
     "src/tests/inbox-view-envelope/private-state.ts": {
       "bytes": 1632,
       "sha256": "39bf85b8ca2d03748455d87c058898796bd2fea358126d50170b67dc430d4295"
+    },
+    "src/tests/instrumentation.ts": {
+      "bytes": 4027,
+      "sha256": "05e36dbb3abf83856ae4519f877c485025585ff808b472a33df64bd9b58e098b"
     },
     "package-lock.json": {
       "bytes": 112661,

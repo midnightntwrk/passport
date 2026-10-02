@@ -1,6 +1,6 @@
 {
   "verdict": "PASS",
-  "startedAt": "2026-10-01T20:03:21.438Z",
+  "startedAt": "2026-10-02T08:35:19.075Z",
   "profile": "experimental-e1",
   "payloadBytes": 192,
   "layout": [
@@ -69,7 +69,7 @@
       },
       "serializedStateDelta": 553,
       "serializedInboxFrameDelta": 522,
-      "wallMilliseconds": 48118.640999999974
+      "wallMilliseconds": 48125.629083999986
     },
     {
       "name": "envelope B / generation 0",
@@ -88,7 +88,7 @@
       },
       "serializedStateDelta": -738,
       "serializedInboxFrameDelta": 608,
-      "wallMilliseconds": 46791.69425
+      "wallMilliseconds": 48122.85374999995
     },
     {
       "name": "envelope A / staged generation 1",
@@ -100,20 +100,20 @@
         "authNonce": "4"
       },
       "after": {
-        "contractStateBytes": 139325,
+        "contractStateBytes": 139338,
         "inboxFrameBytes": 1335,
         "inboxCount": "5",
         "authNonce": "5"
       },
-      "serializedStateDelta": 723,
+      "serializedStateDelta": 736,
       "serializedInboxFrameDelta": -709,
-      "wallMilliseconds": 41405.61916599993
+      "wallMilliseconds": 41425.75483400002
     },
     {
       "name": "envelope B / staged generation 1",
       "payloadBytes": 192,
       "before": {
-        "contractStateBytes": 139325,
+        "contractStateBytes": 139338,
         "inboxFrameBytes": 1335,
         "inboxCount": "5",
         "authNonce": "5"
@@ -124,9 +124,9 @@
         "inboxCount": "6",
         "authNonce": "6"
       },
-      "serializedStateDelta": 260,
+      "serializedStateDelta": 247,
       "serializedInboxFrameDelta": 253,
-      "wallMilliseconds": 41395.88983299991
+      "wallMilliseconds": 42723.98675000004
     },
     {
       "name": "envelope A only / generation 2",
@@ -145,128 +145,148 @@
       },
       "serializedStateDelta": 280,
       "serializedInboxFrameDelta": 271,
-      "wallMilliseconds": 48185.29233300011
+      "wallMilliseconds": 41476.22562500008
     }
   ],
   "proofs": [
     {
       "label": "account deployment",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/activate_initial_device_with_p256?vk=042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd",
-      "milliseconds": 1591.7205420000246,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/activate_initial_device_with_p256?vk=042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd",
+      "startedAt": "2026-10-02T08:38:44.470Z",
+      "milliseconds": 1904.3046250000189,
       "proofBytes": 6364
     },
     {
       "label": "envelope A / generation 0",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
-      "milliseconds": 22628.694374999992,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-02T08:39:06.101Z",
+      "milliseconds": 27638.45199999999,
       "proofBytes": 6364
     },
     {
       "label": "enrol B",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/add_device_with_p256?vk=7414477f52366b4098bb5347879fcad174595148b19d853ffa65d4d84d48913f",
-      "milliseconds": 22367.275416999997,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/add_device_with_p256?vk=7414477f52366b4098bb5347879fcad174595148b19d853ffa65d4d84d48913f",
+      "startedAt": "2026-10-02T08:39:54.306Z",
+      "milliseconds": 26369.678000000014,
       "proofBytes": 6364
     },
     {
       "label": "envelope B / generation 0",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
-      "milliseconds": 22440.70879199996,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-02T08:40:42.378Z",
+      "milliseconds": 22246.35249999998,
       "proofBytes": 6364
     },
     {
       "label": "deposit first coin",
       "keyLocation": "midnight/zswap/output",
-      "milliseconds": 881.1964999999618,
+      "startedAt": "2026-10-02T08:42:18.300Z",
+      "milliseconds": 728.6619169999612,
       "proofBytes": 4860
     },
     {
       "label": "deposit first coin",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/deposit_shielded?vk=18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
-      "milliseconds": 865.4335830000346,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/deposit_shielded?vk=18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+      "startedAt": "2026-10-02T08:42:18.391Z",
+      "milliseconds": 960.3812080000062,
       "proofBytes": 5420
     },
     {
       "label": "B fresh restore / first shielded spend",
       "keyLocation": "midnight/zswap/output",
-      "milliseconds": 1709.0092500000028,
+      "startedAt": "2026-10-02T08:42:38.755Z",
+      "milliseconds": 1706.169125000015,
       "proofBytes": 4860
     },
     {
       "label": "B fresh restore / first shielded spend",
       "keyLocation": "midnight/zswap/spend",
-      "milliseconds": 1709.4236670000246,
+      "startedAt": "2026-10-02T08:42:38.755Z",
+      "milliseconds": 1706.5945000000065,
       "proofBytes": 4860
     },
     {
       "label": "B fresh restore / first shielded spend",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/withdraw_shielded_with_p256?vk=d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26",
-      "milliseconds": 27023.509625000006,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/withdraw_shielded_with_p256?vk=d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26",
+      "startedAt": "2026-10-02T08:42:42.074Z",
+      "milliseconds": 26814.865500000014,
       "proofBytes": 6364
     },
     {
       "label": "deposit second coin",
       "keyLocation": "midnight/zswap/output",
-      "milliseconds": 857.9150420000078,
+      "startedAt": "2026-10-02T08:43:59.895Z",
+      "milliseconds": 918.3104159999639,
       "proofBytes": 4860
     },
     {
       "label": "deposit second coin",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/deposit_shielded?vk=18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
-      "milliseconds": 867.591584000038,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/deposit_shielded?vk=18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+      "startedAt": "2026-10-02T08:43:59.991Z",
+      "milliseconds": 919.8538750000298,
       "proofBytes": 5420
     },
     {
       "label": "envelope A / staged generation 1",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
-      "milliseconds": 21972.336249999935,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-02T08:44:24.341Z",
+      "milliseconds": 22059.71000000008,
       "proofBytes": 6364
     },
     {
       "label": "envelope B / staged generation 1",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
-      "milliseconds": 22203.657791999984,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-02T08:45:05.889Z",
+      "milliseconds": 22659.07012499997,
       "proofBytes": 6364
     },
     {
       "label": "activate generation 1",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
-      "milliseconds": 26674.860458000097,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+      "startedAt": "2026-10-02T08:45:48.529Z",
+      "milliseconds": 26290.417791999993,
       "proofBytes": 6364
     },
     {
       "label": "backfill live coin under generation 1",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
-      "milliseconds": 22215.166916000075,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-02T08:46:36.638Z",
+      "milliseconds": 22037.577291999944,
       "proofBytes": 6364
     },
     {
       "label": "B fresh restore / post-rotation shielded spend",
       "keyLocation": "midnight/zswap/output",
-      "milliseconds": 1725.7835409999825,
+      "startedAt": "2026-10-02T08:47:20.740Z",
+      "milliseconds": 1708.280000000028,
       "proofBytes": 4860
     },
     {
       "label": "B fresh restore / post-rotation shielded spend",
       "keyLocation": "midnight/zswap/spend",
-      "milliseconds": 1726.247250000015,
+      "startedAt": "2026-10-02T08:47:20.740Z",
+      "milliseconds": 1708.673999999999,
       "proofBytes": 4860
     },
     {
       "label": "B fresh restore / post-rotation shielded spend",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/withdraw_shielded_with_p256?vk=d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26",
-      "milliseconds": 22534.691749999998,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/withdraw_shielded_with_p256?vk=d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26",
+      "startedAt": "2026-10-02T08:47:24.112Z",
+      "milliseconds": 22158.85412500007,
       "proofBytes": 6364
     },
     {
       "label": "envelope A only / generation 2",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
-      "milliseconds": 22348.316541000037,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-02T08:48:06.177Z",
+      "milliseconds": 21986.58370800002,
       "proofBytes": 6364
     },
     {
       "label": "activate generation 2",
-      "keyLocation": "contract:b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
-      "milliseconds": 22295.22545799997,
+      "keyLocation": "contract:5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+      "startedAt": "2026-10-02T08:48:47.647Z",
+      "milliseconds": 22156.42291600001,
       "proofBytes": 6364
     }
   ],
@@ -274,170 +294,170 @@
     {
       "label": "account deployment",
       "bytes": 19451,
-      "sha256": "b78cef2190c5dc5e254ea41d3b547f51ca9f7e603ebe8c0abcd73f00ccb50f61",
-      "modelledFeeSpecks": "9563195063747988",
-      "txId": "008ae02dd95fabfdea8b7a7bdc88d071a2e01e3090db330dc652ab48b277bb5804"
+      "sha256": "045b507c22ab198a825e72d6af29b8892cea13430cc5d07a0d33179c51ffe3f1",
+      "modelledFeeSpecks": "4390942678031470",
+      "txId": "0006e7551d5d0924fb9c435048a592534cf93141fd9e92e4e0382f4ed33f6dffd2"
     },
     {
       "label": "account deployment",
-      "bytes": 17398,
-      "sha256": "c50aa2fabcb35eeddb46e4ddfd2ebe60cc5893e8c70565b83aa135fcc35400c7",
-      "modelledFeeSpecks": "6577312026941635",
-      "txId": "00b5387e5230dfa092ae52215b50fcc5c6d984d5f4af9a86aaa1e994fff0d6c7b3"
+      "bytes": 17397,
+      "sha256": "29e61caae3f268aaa34b2d8f2a6e3cb8db29617d7b9ef8abe4990b56eb0e6207",
+      "modelledFeeSpecks": "3049703850478465",
+      "txId": "005fbcd9c19fe93ad58f113f09cb1e7fa5db32044f846a7c9612cadf8d71b82844"
     },
     {
       "label": "account deployment",
       "bytes": 17400,
-      "sha256": "2ec905f897b0e9e3853ddca089c84226748dfaa8cb4716cc5e92e7e560273949",
-      "modelledFeeSpecks": "6578232702011997",
-      "txId": "00e937c8ed4be64046af40c49d564883d210264dbca1a754e0f0d307938dd9b418"
+      "sha256": "34de2fc0691b897ce76e9e61e6269f251649adc50ccd75749348d2c1e10121f8",
+      "modelledFeeSpecks": "3050137640116786",
+      "txId": "002bfc90f94eccbf0c7d84b72ff17dd3a3c8cbf41c5dde56f8a077994a095964b3"
     },
     {
       "label": "account deployment",
       "bytes": 18423,
-      "sha256": "9d78190c1d3683556323dd48b97a55c4967676c37ec19a22ebd73d0c4c515353",
-      "modelledFeeSpecks": "7060322165436531",
-      "txId": "0017154391aedd2d8d169964adfc06c6542f2d7e34ea577303793dfcfe789b0633"
+      "sha256": "00bc2310a24ef484a31e55d95232292132656816ffbbd819d007f2f1151aae4d",
+      "modelledFeeSpecks": "3271830351592218",
+      "txId": "0009f4145b5f2ebd26642b695dddc71612ad33e76d025bf64f15143efa6d92bef3"
     },
     {
       "label": "account deployment",
-      "bytes": 18441,
-      "sha256": "a53da3566f5f22938a908a6c830a3a5da387a5e1ccd7b6e565a19776693fc019",
-      "modelledFeeSpecks": "7069517078983694",
-      "txId": "0067444eeb964277d8c73ac0a4fed72dae06799a6cc43e62c1144f6e826b11e7b0"
+      "bytes": 18443,
+      "sha256": "c3b1d173f0be85b3530ccd844bace1953f0099c68aa1dda8156e07dbaf1d9484",
+      "modelledFeeSpecks": "3276067594372580",
+      "txId": "004e1df9e110e65d13df1670437ef63ff7ac42b26cf963b06d498eb138807f2a9a"
     },
     {
       "label": "account deployment",
       "bytes": 17409,
-      "sha256": "67eff6a28e0173ae2caf37d3286b70ffb0dbca0c25dc3d5fc5864c11c6d6e4c8",
-      "modelledFeeSpecks": "6582375739828626",
-      "txId": "0045573b8845c9d3ba86d94a7128807b50a3b14e1b11916dae31e588b3702306c0"
+      "sha256": "6e15838d525d3d19d17bd70d6d9f90332a8d090b95acfbc381e35cf468e45dea",
+      "modelledFeeSpecks": "3052044399367949",
+      "txId": "00c0f2af9a3a3e32247d513416bc81db4d9387d08edbbdd30349d541658c175972"
     },
     {
       "label": "account deployment",
-      "bytes": 17406,
-      "sha256": "7bb75bdfbc8318206aa24e5b71bc4f7288c753e38eb2ca2666c5f6db66362f52",
-      "modelledFeeSpecks": "6581449146180035",
-      "txId": "004262a2a67a4be5104c3a2f6925c90f2091439232c8c86d1df8ec14bc82cae9bc"
+      "bytes": 17407,
+      "sha256": "3a5b87f391e1de9e51d061c8c0298990a58d063e43f58014e55b97a1a18358c1",
+      "modelledFeeSpecks": "3051620675089913",
+      "txId": "00f0c5601a39d95bf5463242e97f14f020d359788dcec09a2887741fec6b94ac6a"
     },
     {
       "label": "account deployment",
       "bytes": 17592,
-      "sha256": "6503593d23c011739c9a81277bee894741bdebed6328f975d9d10a7d18f543b6",
-      "modelledFeeSpecks": "6677781673701149",
-      "txId": "00bd3c8768a6cf55d49d08a2c241017bede5e9e169a03ef644a13864321ba26a1f"
+      "sha256": "e79905ffefcf72b148e62f726cf67b0c01b8457abaa704a1200256248da17c75",
+      "modelledFeeSpecks": "3095772914068182",
+      "txId": "001f70fc2bf84da8c43df3427e3660d16ef0d0f4fa9f9a2dcc13bd2f9567c5e9c7"
     },
     {
       "label": "account deployment",
-      "bytes": 16229,
-      "sha256": "d8186ef046e269d27fc5f92515b47bea2233a89c561b4f71587784bec68db284",
-      "modelledFeeSpecks": "6039177448315086",
-      "txId": "004e4f50f2ccde9650e63dd472d40d8764b89db47373adf83828faa55657ede1da"
+      "bytes": 16228,
+      "sha256": "5c41a68acfcf91120b9293d0d4b3717e5c17c37ca3cc0719c2bb3ce2f8e35fc3",
+      "modelledFeeSpecks": "2802037009966314",
+      "txId": "0055946eab1ab5a940b761e6644c5b14f1ab68f51148d0a83c6d4ff0887dff203e"
     },
     {
       "label": "account deployment",
-      "bytes": 11176,
-      "sha256": "f314a52ecbe3a27185b6580022d6d70b6d231ef03ba3cddae601d2419f32fb75",
-      "modelledFeeSpecks": "3687375405433816",
-      "txId": "00e5eb89beb379fa0573d91e609bdeca72d06564c76412445ea7baab271b9c2b41"
+      "bytes": 11175,
+      "sha256": "7e4ceabc749577bc83300587f253046574112f285862a6ac2d60304c3094fc29",
+      "modelledFeeSpecks": "1720077538205806",
+      "txId": "00ff501af9689ac2e95168820de8c8bb51eff8bc70587494cea07df0540af4b861"
     },
     {
       "label": "account deployment",
       "bytes": 10566,
-      "sha256": "4f9fdcb4add7d61dd5c2183dd3a40b04b637aa1f6be117b7cabaa19d42fa9375",
-      "modelledFeeSpecks": "273608910754210",
-      "txId": "006fcd9c2624c89bac13f729c21213c898376e53253d425aa8642063900eb75511"
+      "sha256": "07147a73441715d4aa0d4e89cbfbc6a408ecbc28ceac917c330c2cd8bb7d0136",
+      "modelledFeeSpecks": "199577529968651",
+      "txId": "0093b76b554fc478cb410164d88c09b80e545c812d11fde649bc3bdef888f0f270"
     },
     {
       "label": "envelope A / generation 0",
-      "bytes": 10919,
-      "sha256": "004658896e8ebdc09664dcc69054ba499524571ba8e959ef90d3148c248e0440",
-      "modelledFeeSpecks": "490242082176916",
-      "txId": "008cce8159bd114d321c0854040bfb1d468b9b1ff31bbdc8e89255afde6e6b49ea"
+      "bytes": 10920,
+      "sha256": "1be42283b3c7c3fa36407a4cb4dab89c3bc7e5903b18a1f7524ff96f83d84270",
+      "modelledFeeSpecks": "298414577059274",
+      "txId": "00d7d553d7984c6c9ef14bf9695152e459e2e59c87d59985c008a1a49650ab5031"
     },
     {
       "label": "enrol B",
-      "bytes": 10774,
-      "sha256": "09ef67841e96049207f24fdb4600bce9fd9ac2dc51b261831d44e223a63e3d7f",
-      "modelledFeeSpecks": "381504827953274",
-      "txId": "00385406ba872dd4aa414efe66cd12e01087fcb0b60a28980c3377020485ba47a5"
+      "bytes": 10773,
+      "sha256": "c5bb3625c1d12e377c79125a95718e713804bf70c36cb7466bea6191d62c76cc",
+      "modelledFeeSpecks": "249028413826116",
+      "txId": "001f76b7428c0c05728703e73efe6adbc8b9938d72d811c9bc2b825dbe79340605"
     },
     {
       "label": "envelope B / generation 0",
-      "bytes": 10958,
-      "sha256": "c486d4b2abdcd86c0a04b5d24be2796f1d1aab13cd2ed2b6b92ac67def794e47",
-      "modelledFeeSpecks": "71971224132952",
-      "txId": "00b297104804b5c1673877e234a35034548e0703af02d519d0b6d21d6d8d35c82a"
+      "bytes": 10951,
+      "sha256": "1ff331e19655ec9caa17ce3c0bb8f5fd8ad73d6d0554ea80aca8e1e8a043f745",
+      "modelledFeeSpecks": "112879841885797",
+      "txId": "0092ed7646b3fe5199bc84bd783aa2e221693c8a3c42fa3f5ad40471c4aa3852d9"
     },
     {
       "label": "deposit first coin",
-      "bytes": 19625,
-      "sha256": "24e4fa0ecd3632c4073359da8cd0ce241a237948657327f7770ab01bde210d72",
-      "modelledFeeSpecks": "950317313996642",
-      "txId": "00c63e8d5c77aaec12cadb1a85c1ea930637bf63a5375c77cd4fa2cbb614e4c9f1"
+      "bytes": 19624,
+      "sha256": "5c1697869f008b20bdf210d0bc1ea28acd22af7d06463a3f7acb0b40cd09c28e",
+      "modelledFeeSpecks": "567450077678263",
+      "txId": "0046890a74ad5c8c7fc63370329a7c33a9242328b5bb4cf9bc3d9efc96cb03edcd"
     },
     {
       "label": "B fresh restore / first shielded spend",
-      "bytes": 21076,
-      "sha256": "f802c2dd2a022cc0c96dc2a9c91843b32f5fa9c490cb05aba8ebdee596bd11af",
-      "modelledFeeSpecks": "341059434794500",
-      "txId": "0077312a7d739f88cc221b61c6f35a717227c9b1c58cf73f4d7365433f08df808c"
+      "bytes": 21079,
+      "sha256": "91b64f326a6fc4c2b842c7da03982e5e92b448634cff93859b161266da3f23d1",
+      "modelledFeeSpecks": "307724406452219",
+      "txId": "003ac04221fc16b17f9e0353d3456d3972f189b9b211eeeb9752c3c02299e09d1c"
     },
     {
       "label": "deposit second coin",
       "bytes": 19625,
-      "sha256": "2c437ac8e5ff4765e0ccce71645c0765f4d0c0b0c4659e7527adea53cccc27b1",
-      "modelledFeeSpecks": "332471577784844",
-      "txId": "006435cf63e485888dfaa60e9813e8b69cb7972839bf49f568c94213811f9bcf6f"
+      "sha256": "7df0f6df710acbd7eef5880336242c945a42b0899f260622d1efafd8b7df16c8",
+      "modelledFeeSpecks": "293089372598260",
+      "txId": "007d7ac782d674479322a1ec68aff81f31fb1514b7a02cde9c3e055f663db869d1"
     },
     {
       "label": "envelope A / staged generation 1",
       "bytes": 10919,
-      "sha256": "c5c9867fd05f82eae25fa484668a0d0063b3cab26f37d3c0b8239040e1290d19",
-      "modelledFeeSpecks": "678862757247673",
-      "txId": "003fb0eb6c706b62baeea442025e2363b20b38d72e89a81e3eb5e6b77566720d6b"
+      "sha256": "a34d05e1dd4990d3199640e04590c97042296a305aaeb2fa87e90d93095c4cd8",
+      "modelledFeeSpecks": "385193472093425",
+      "txId": "00427c126362cc6770f2be90c22e261edcec1e41b8faee8506656ff612a7199a6e"
     },
     {
       "label": "envelope B / staged generation 1",
       "bytes": 10919,
-      "sha256": "24f73e2d137206b243e48d55efa005e67015a5be7a4ef20ea664d9062384cafd",
-      "modelledFeeSpecks": "218088751182298",
-      "txId": "0024af8c748f403370a870fe27577805752ea34534eea0cdde3ef978cb3c06ff86"
+      "sha256": "f9badd515f5076fe129ab28fe7d62b2249a04edb55caf557f5ca964f20f9d02b",
+      "modelledFeeSpecks": "174523688999128",
+      "txId": "000b7f345b48ec341e69205bdb9343141042c6c3ceb268a852fe53a1e63933dd5a"
     },
     {
       "label": "activate generation 1",
       "bytes": 10660,
-      "sha256": "ccd7a7bb46448747a08f7c178338c410b24a3cfc367838f5e46f03420ef68ea4",
-      "modelledFeeSpecks": "216254105233682",
-      "txId": "0071da5ed6d3542633a1746bdbfc3e9e07d9c9b936e9d4f17eb38b7528f592f01f"
+      "sha256": "defbdd6e6f38e39cfe1ec2f0b6d07ee42ebbdad8bc3d88a23f8a6e4feea3200b",
+      "modelledFeeSpecks": "174806692353630",
+      "txId": "00135ff34b1ce66504d3c6341993e17d36bc866bdd67623a8454cb850c2e0e4c06"
     },
     {
       "label": "backfill live coin under generation 1",
       "bytes": 10903,
-      "sha256": "b7ba0b8fa004eb80fbc66098fe9cfd00261f8d8e5d80fd68bc844d1f5a506228",
-      "modelledFeeSpecks": "217994053930641",
-      "txId": "007442af4c8ab7b6db728f765eb284b91626eb7a25760633dd37114c495add6615"
+      "sha256": "391b3fa6fefa8c6ffb9fcf67815c762e556047a124223e5bf9ae6c097db041c6",
+      "modelledFeeSpecks": "177386567963892",
+      "txId": "000e33ec618650af2c59e3a97c1721e060ea73528374dd55dba41e06442a28a0c1"
     },
     {
       "label": "B fresh restore / post-rotation shielded spend",
-      "bytes": 21079,
-      "sha256": "f616fc876bb3e4831803c5b3ed2c506667b3af95e09c0c426ff03be13006ed20",
-      "modelledFeeSpecks": "341236691583076",
-      "txId": "00b901e168e21d3794ca38ac83cefb28f66fd97309a254ba9e4e47638a5d150793"
+      "bytes": 21077,
+      "sha256": "c7672a637199ed6812a860966bbac34fc128abf7ecbb55b51cea90edb389fb94",
+      "modelledFeeSpecks": "307775106400985",
+      "txId": "000fa930abac7ec731ea0f9c285209c8f8985a60b9a7f7bf706d4a1fa869965d31"
     },
     {
       "label": "envelope A only / generation 2",
       "bytes": 10951,
-      "sha256": "e781df2a23f534f4b470802e79473124d68e010332a893a1a74a0e5e416c6355",
-      "modelledFeeSpecks": "218278145685613",
-      "txId": "0050085294523dca4c9f488055a85bad3098c9ad5d220276bb2df38a5964aefc22"
+      "sha256": "285dbeda3a3ffd192d58afea0df0a43471f94e09e490ab3336ffb661e3eca451",
+      "modelledFeeSpecks": "177869705257558",
+      "txId": "0030bd08f71e09832673bb90ae39c60f05f82e7e5adcb79f669d720c0e1946c544"
     },
     {
       "label": "activate generation 2",
-      "bytes": 10696,
-      "sha256": "3add7b45219a5c41976aaf44b516fec4ef75bf9a0b16416e1a40c75d21e6a0b7",
-      "modelledFeeSpecks": "216467174049911",
-      "txId": "00b838562d16d2e8f6211fffaded1f9b1a26269b4decc38f125f15a7cec742a14f"
+      "bytes": 10660,
+      "sha256": "6f10d858cac438de68470866f67bf1d0f2e7ec26c2c322eec3fba1904f143412",
+      "modelledFeeSpecks": "174806692353630",
+      "txId": "00898fc4ec2db268d517750b6e503b09ccb8e513707e36d2e9e1783f2860c9bee2"
     }
   ],
   "restores": [
@@ -445,7 +465,7 @@
       "name": "B fresh restore / first shielded spend",
       "initiallyEmpty": true,
       "aUnavailable": true,
-      "account": "b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14",
+      "account": "5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f",
       "signingKeyRecoveredFromEnvelope": true,
       "sameEnrolledP256Key": true,
       "decryptedCoins": 1,
@@ -453,17 +473,18 @@
       "candidateCount": 1,
       "attempts": [
         {
-          "index": "31",
+          "index": "29",
           "result": "accepted"
         }
       ],
-      "acceptedTx": "0077312a7d739f88cc221b61c6f35a717227c9b1c58cf73f4d7365433f08df808c"
+      "attemptsBeyondFirst": 0,
+      "acceptedTx": "003ac04221fc16b17f9e0353d3456d3972f189b9b211eeeb9752c3c02299e09d1c"
     },
     {
       "name": "B fresh restore / post-rotation shielded spend",
       "initiallyEmpty": true,
       "aUnavailable": true,
-      "account": "b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14",
+      "account": "5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f",
       "signingKeyRecoveredFromEnvelope": true,
       "sameEnrolledP256Key": true,
       "decryptedCoins": 1,
@@ -471,317 +492,324 @@
       "candidateCount": 2,
       "attempts": [
         {
-          "index": "34",
+          "index": "32",
           "result": "accepted"
         }
       ],
-      "acceptedTx": "00b901e168e21d3794ca38ac83cefb28f66fd97309a254ba9e4e47638a5d150793"
+      "attemptsBeyondFirst": 0,
+      "acceptedTx": "000fa930abac7ec731ea0f9c285209c8f8985a60b9a7f7bf706d4a1fa869965d31"
     }
   ],
   "transactions": [
     {
       "name": "envelope A / generation 0",
-      "txId": "008cce8159bd114d321c0854040bfb1d468b9b1ff31bbdc8e89255afde6e6b49ea",
-      "startIndex": 30,
-      "endIndex": 30,
-      "blockHeight": 1648,
+      "txId": "00d7d553d7984c6c9ef14bf9695152e459e2e59c87d59985c008a1a49650ab5031",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 84,
       "status": "SUCCESS",
       "raw": {
-        "id": 88,
-        "hash": "004658896e8ebdc09664dcc69054ba499524571ba8e959ef90d3148c248e0440",
-        "startIndex": 30,
-        "endIndex": 30,
+        "id": 37,
+        "hash": "1be42283b3c7c3fa36407a4cb4dab89c3bc7e5903b18a1f7524ff96f83d84270",
+        "startIndex": 28,
+        "endIndex": 28,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1648,
-          "hash": "ea4a99288cb2ffb8b695d4ae7c4784aeff39df1c8a0a76ae15e36e1c8fe0bd9f"
+          "height": 84,
+          "hash": "536c9c44072199a2444d3c9d4be22f0bbbace3625fe7d84a33d3ca426f80ca6b"
         }
       },
-      "nodeBlockHash": "0xea4a99288cb2ffb8b695d4ae7c4784aeff39df1c8a0a76ae15e36e1c8fe0bd9f"
+      "nodeBlockHash": "0x536c9c44072199a2444d3c9d4be22f0bbbace3625fe7d84a33d3ca426f80ca6b"
     },
     {
       "name": "enrol B",
-      "txId": "00385406ba872dd4aa414efe66cd12e01087fcb0b60a28980c3377020485ba47a5",
-      "startIndex": 30,
-      "endIndex": 30,
-      "blockHeight": 1656,
+      "txId": "001f76b7428c0c05728703e73efe6adbc8b9938d72d811c9bc2b825dbe79340605",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 92,
       "status": "SUCCESS",
       "raw": {
-        "id": 89,
-        "hash": "09ef67841e96049207f24fdb4600bce9fd9ac2dc51b261831d44e223a63e3d7f",
-        "startIndex": 30,
-        "endIndex": 30,
+        "id": 38,
+        "hash": "c5bb3625c1d12e377c79125a95718e713804bf70c36cb7466bea6191d62c76cc",
+        "startIndex": 28,
+        "endIndex": 28,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1656,
-          "hash": "335f3893e48cdf102ae23d3156db039bdf108f6bc2481501101593eb934bb2eb"
+          "height": 92,
+          "hash": "cfb001919ed0ffb86c971306daa79a056cb9b8fb31add2d26787c45aca3fa5e8"
         }
       },
-      "nodeBlockHash": "0x335f3893e48cdf102ae23d3156db039bdf108f6bc2481501101593eb934bb2eb"
+      "nodeBlockHash": "0xcfb001919ed0ffb86c971306daa79a056cb9b8fb31add2d26787c45aca3fa5e8"
     },
     {
       "name": "envelope B / generation 0",
-      "txId": "00b297104804b5c1673877e234a35034548e0703af02d519d0b6d21d6d8d35c82a",
-      "startIndex": 30,
-      "endIndex": 30,
-      "blockHeight": 1664,
+      "txId": "0092ed7646b3fe5199bc84bd783aa2e221693c8a3c42fa3f5ad40471c4aa3852d9",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 100,
       "status": "SUCCESS",
       "raw": {
-        "id": 90,
-        "hash": "c486d4b2abdcd86c0a04b5d24be2796f1d1aab13cd2ed2b6b92ac67def794e47",
-        "startIndex": 30,
+        "id": 39,
+        "hash": "1ff331e19655ec9caa17ce3c0bb8f5fd8ad73d6d0554ea80aca8e1e8a043f745",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 100,
+          "hash": "8005403432505b03361437fac36ca900fd2a1203c25f96b47cab44046f248399"
+        }
+      },
+      "nodeBlockHash": "0x8005403432505b03361437fac36ca900fd2a1203c25f96b47cab44046f248399"
+    },
+    {
+      "name": "deposit first coin",
+      "txId": "0046890a74ad5c8c7fc63370329a7c33a9242328b5bb4cf9bc3d9efc96cb03edcd",
+      "startIndex": 29,
+      "endIndex": 30,
+      "blockHeight": 112,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 42,
+        "hash": "5c1697869f008b20bdf210d0bc1ea28acd22af7d06463a3f7acb0b40cd09c28e",
+        "startIndex": 29,
         "endIndex": 30,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1664,
-          "hash": "21ae0982fce68c867354e8dd2bd10ec138fded3b24af85b8fd95ac11447c1de1"
+          "height": 112,
+          "hash": "0a04e7622c20e0ffbd402d51efd99b6de174540b171812c2489950264c7abd6b"
         }
       },
-      "nodeBlockHash": "0x21ae0982fce68c867354e8dd2bd10ec138fded3b24af85b8fd95ac11447c1de1"
+      "nodeBlockHash": "0x0a04e7622c20e0ffbd402d51efd99b6de174540b171812c2489950264c7abd6b"
     },
     {
-      "name": "deposit first coin",
-      "txId": "00c63e8d5c77aaec12cadb1a85c1ea930637bf63a5375c77cd4fa2cbb614e4c9f1",
-      "startIndex": 31,
-      "endIndex": 32,
-      "blockHeight": 1676,
+      "name": "B fresh restore / first shielded spend",
+      "txId": "003ac04221fc16b17f9e0353d3456d3972f189b9b211eeeb9752c3c02299e09d1c",
+      "startIndex": 30,
+      "endIndex": 31,
+      "blockHeight": 120,
       "status": "SUCCESS",
       "raw": {
-        "id": 93,
-        "hash": "24e4fa0ecd3632c4073359da8cd0ce241a237948657327f7770ab01bde210d72",
-        "startIndex": 31,
-        "endIndex": 32,
+        "id": 43,
+        "hash": "91b64f326a6fc4c2b842c7da03982e5e92b448634cff93859b161266da3f23d1",
+        "startIndex": 30,
+        "endIndex": 31,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1676,
-          "hash": "86f534e4ce2ce4f18e1d0eec175a5b6cc4e9923e0e926ad6f2e1c4562d04a7e4"
+          "height": 120,
+          "hash": "8e00a78367f7183c97a5f730ebdea5cc0d161a650aed11532235839a3fe03578"
         }
       },
-      "nodeBlockHash": "0x86f534e4ce2ce4f18e1d0eec175a5b6cc4e9923e0e926ad6f2e1c4562d04a7e4"
+      "nodeBlockHash": "0x8e00a78367f7183c97a5f730ebdea5cc0d161a650aed11532235839a3fe03578"
     },
     {
-      "name": "B fresh restore / first shielded spend",
-      "txId": "0077312a7d739f88cc221b61c6f35a717227c9b1c58cf73f4d7365433f08df808c",
+      "name": "deposit second coin",
+      "txId": "007d7ac782d674479322a1ec68aff81f31fb1514b7a02cde9c3e055f663db869d1",
       "startIndex": 32,
       "endIndex": 33,
-      "blockHeight": 1684,
+      "blockHeight": 129,
       "status": "SUCCESS",
       "raw": {
-        "id": 94,
-        "hash": "f802c2dd2a022cc0c96dc2a9c91843b32f5fa9c490cb05aba8ebdee596bd11af",
+        "id": 45,
+        "hash": "7df0f6df710acbd7eef5880336242c945a42b0899f260622d1efafd8b7df16c8",
         "startIndex": 32,
         "endIndex": 33,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1684,
-          "hash": "32922c9f3aa5f0e87cc7d6510a8797fe119a5883b7edc7347201b833c4e78a3d"
+          "height": 129,
+          "hash": "61fef8e636321b4ee755cdddcfca444d78c6c2e76624a5fbb9ed7923e6040db6"
         }
       },
-      "nodeBlockHash": "0x32922c9f3aa5f0e87cc7d6510a8797fe119a5883b7edc7347201b833c4e78a3d"
-    },
-    {
-      "name": "deposit second coin",
-      "txId": "006435cf63e485888dfaa60e9813e8b69cb7972839bf49f568c94213811f9bcf6f",
-      "startIndex": 34,
-      "endIndex": 35,
-      "blockHeight": 1693,
-      "status": "SUCCESS",
-      "raw": {
-        "id": 96,
-        "hash": "2c437ac8e5ff4765e0ccce71645c0765f4d0c0b0c4659e7527adea53cccc27b1",
-        "startIndex": 34,
-        "endIndex": 35,
-        "transactionResult": {
-          "status": "SUCCESS"
-        },
-        "block": {
-          "height": 1693,
-          "hash": "91e623fd3bb743ff8bf5c7e8f21ad4b35da64a998d7fe6445d3cc2a7bec50a7b"
-        }
-      },
-      "nodeBlockHash": "0x91e623fd3bb743ff8bf5c7e8f21ad4b35da64a998d7fe6445d3cc2a7bec50a7b"
+      "nodeBlockHash": "0x61fef8e636321b4ee755cdddcfca444d78c6c2e76624a5fbb9ed7923e6040db6"
     },
     {
       "name": "envelope A / staged generation 1",
-      "txId": "003fb0eb6c706b62baeea442025e2363b20b38d72e89a81e3eb5e6b77566720d6b",
-      "startIndex": 35,
-      "endIndex": 35,
-      "blockHeight": 1700,
+      "txId": "00427c126362cc6770f2be90c22e261edcec1e41b8faee8506656ff612a7199a6e",
+      "startIndex": 33,
+      "endIndex": 33,
+      "blockHeight": 136,
       "status": "SUCCESS",
       "raw": {
-        "id": 97,
-        "hash": "c5c9867fd05f82eae25fa484668a0d0063b3cab26f37d3c0b8239040e1290d19",
-        "startIndex": 35,
-        "endIndex": 35,
+        "id": 46,
+        "hash": "a34d05e1dd4990d3199640e04590c97042296a305aaeb2fa87e90d93095c4cd8",
+        "startIndex": 33,
+        "endIndex": 33,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1700,
-          "hash": "cecda7f671b6e867031246cc823e98111c3ec7914c67c368e7f73dbe941db022"
+          "height": 136,
+          "hash": "460cd3bc07a78b3a19db6b102c2fe833d5ebbc1e871a3e00c78493bb10f6d4b0"
         }
       },
-      "nodeBlockHash": "0xcecda7f671b6e867031246cc823e98111c3ec7914c67c368e7f73dbe941db022"
+      "nodeBlockHash": "0x460cd3bc07a78b3a19db6b102c2fe833d5ebbc1e871a3e00c78493bb10f6d4b0"
     },
     {
       "name": "envelope B / staged generation 1",
-      "txId": "0024af8c748f403370a870fe27577805752ea34534eea0cdde3ef978cb3c06ff86",
-      "startIndex": 35,
-      "endIndex": 35,
-      "blockHeight": 1707,
+      "txId": "000b7f345b48ec341e69205bdb9343141042c6c3ceb268a852fe53a1e63933dd5a",
+      "startIndex": 33,
+      "endIndex": 33,
+      "blockHeight": 143,
       "status": "SUCCESS",
       "raw": {
-        "id": 98,
-        "hash": "24f73e2d137206b243e48d55efa005e67015a5be7a4ef20ea664d9062384cafd",
-        "startIndex": 35,
-        "endIndex": 35,
+        "id": 47,
+        "hash": "f9badd515f5076fe129ab28fe7d62b2249a04edb55caf557f5ca964f20f9d02b",
+        "startIndex": 33,
+        "endIndex": 33,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1707,
-          "hash": "c8ac6886b0401cb3f574e9142af8d221fb1d084a5ecfd37fb9b805c6480cddc1"
+          "height": 143,
+          "hash": "fe8df57c77ec6d05b408fe0a447c0aba2ba59d1e1323ab271a7d0b4b63a4a5a6"
         }
       },
-      "nodeBlockHash": "0xc8ac6886b0401cb3f574e9142af8d221fb1d084a5ecfd37fb9b805c6480cddc1"
+      "nodeBlockHash": "0xfe8df57c77ec6d05b408fe0a447c0aba2ba59d1e1323ab271a7d0b4b63a4a5a6"
     },
     {
       "name": "activate generation 1",
-      "txId": "0071da5ed6d3542633a1746bdbfc3e9e07d9c9b936e9d4f17eb38b7528f592f01f",
-      "startIndex": 35,
-      "endIndex": 35,
-      "blockHeight": 1715,
+      "txId": "00135ff34b1ce66504d3c6341993e17d36bc866bdd67623a8454cb850c2e0e4c06",
+      "startIndex": 33,
+      "endIndex": 33,
+      "blockHeight": 151,
       "status": "SUCCESS",
       "raw": {
-        "id": 99,
-        "hash": "ccd7a7bb46448747a08f7c178338c410b24a3cfc367838f5e46f03420ef68ea4",
-        "startIndex": 35,
-        "endIndex": 35,
+        "id": 48,
+        "hash": "defbdd6e6f38e39cfe1ec2f0b6d07ee42ebbdad8bc3d88a23f8a6e4feea3200b",
+        "startIndex": 33,
+        "endIndex": 33,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1715,
-          "hash": "2c702a8e139dcc7da78a38ed439d410ee9ece738b6807e992d99e4b3f6535c6a"
+          "height": 151,
+          "hash": "45e7e2b996bf033cefa551eee819cea439519964a8454d393a0d9a141675adab"
         }
       },
-      "nodeBlockHash": "0x2c702a8e139dcc7da78a38ed439d410ee9ece738b6807e992d99e4b3f6535c6a"
+      "nodeBlockHash": "0x45e7e2b996bf033cefa551eee819cea439519964a8454d393a0d9a141675adab"
     },
     {
       "name": "backfill live coin under generation 1",
-      "txId": "007442af4c8ab7b6db728f765eb284b91626eb7a25760633dd37114c495add6615",
-      "startIndex": 35,
-      "endIndex": 35,
-      "blockHeight": 1722,
+      "txId": "000e33ec618650af2c59e3a97c1721e060ea73528374dd55dba41e06442a28a0c1",
+      "startIndex": 33,
+      "endIndex": 33,
+      "blockHeight": 159,
       "status": "SUCCESS",
       "raw": {
-        "id": 100,
-        "hash": "b7ba0b8fa004eb80fbc66098fe9cfd00261f8d8e5d80fd68bc844d1f5a506228",
-        "startIndex": 35,
-        "endIndex": 35,
+        "id": 49,
+        "hash": "391b3fa6fefa8c6ffb9fcf67815c762e556047a124223e5bf9ae6c097db041c6",
+        "startIndex": 33,
+        "endIndex": 33,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1722,
-          "hash": "e4391549fedc93a984cdb59370c06f3be811311145d2a835adcd54b8eb572294"
+          "height": 159,
+          "hash": "0c9e870fbcb8b2d88cee4aa650b5a4bad543db0b0a0713ca705eada75a94a466"
         }
       },
-      "nodeBlockHash": "0xe4391549fedc93a984cdb59370c06f3be811311145d2a835adcd54b8eb572294"
+      "nodeBlockHash": "0x0c9e870fbcb8b2d88cee4aa650b5a4bad543db0b0a0713ca705eada75a94a466"
     },
     {
       "name": "B fresh restore / post-rotation shielded spend",
-      "txId": "00b901e168e21d3794ca38ac83cefb28f66fd97309a254ba9e4e47638a5d150793",
-      "startIndex": 35,
-      "endIndex": 36,
-      "blockHeight": 1730,
+      "txId": "000fa930abac7ec731ea0f9c285209c8f8985a60b9a7f7bf706d4a1fa869965d31",
+      "startIndex": 33,
+      "endIndex": 34,
+      "blockHeight": 166,
       "status": "SUCCESS",
       "raw": {
-        "id": 101,
-        "hash": "f616fc876bb3e4831803c5b3ed2c506667b3af95e09c0c426ff03be13006ed20",
-        "startIndex": 35,
-        "endIndex": 36,
+        "id": 50,
+        "hash": "c7672a637199ed6812a860966bbac34fc128abf7ecbb55b51cea90edb389fb94",
+        "startIndex": 33,
+        "endIndex": 34,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1730,
-          "hash": "b3e8d785d3453f6709a25c2c488cf0f49f154c016b55594dec25b3c3f16a64d4"
+          "height": 166,
+          "hash": "a2d4f506aae892dd0fa937113fa26ec97f1a32759791e3bc9af5f34cb2d98352"
         }
       },
-      "nodeBlockHash": "0xb3e8d785d3453f6709a25c2c488cf0f49f154c016b55594dec25b3c3f16a64d4"
+      "nodeBlockHash": "0xa2d4f506aae892dd0fa937113fa26ec97f1a32759791e3bc9af5f34cb2d98352"
     },
     {
       "name": "envelope A only / generation 2",
-      "txId": "0050085294523dca4c9f488055a85bad3098c9ad5d220276bb2df38a5964aefc22",
-      "startIndex": 36,
-      "endIndex": 36,
-      "blockHeight": 1738,
+      "txId": "0030bd08f71e09832673bb90ae39c60f05f82e7e5adcb79f669d720c0e1946c544",
+      "startIndex": 34,
+      "endIndex": 34,
+      "blockHeight": 173,
       "status": "SUCCESS",
       "raw": {
-        "id": 102,
-        "hash": "e781df2a23f534f4b470802e79473124d68e010332a893a1a74a0e5e416c6355",
-        "startIndex": 36,
-        "endIndex": 36,
+        "id": 51,
+        "hash": "285dbeda3a3ffd192d58afea0df0a43471f94e09e490ab3336ffb661e3eca451",
+        "startIndex": 34,
+        "endIndex": 34,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1738,
-          "hash": "5e50b0a6b1813873e568a31ad4aca61d46dad77f5a633b9d0cbf194141301c3d"
+          "height": 173,
+          "hash": "34acc8ff046af243df47bff9a5d07972df3d06dbb6d8b87e8afd443867f7c007"
         }
       },
-      "nodeBlockHash": "0x5e50b0a6b1813873e568a31ad4aca61d46dad77f5a633b9d0cbf194141301c3d"
+      "nodeBlockHash": "0x34acc8ff046af243df47bff9a5d07972df3d06dbb6d8b87e8afd443867f7c007"
     },
     {
       "name": "activate generation 2",
-      "txId": "00b838562d16d2e8f6211fffaded1f9b1a26269b4decc38f125f15a7cec742a14f",
-      "startIndex": 36,
-      "endIndex": 36,
-      "blockHeight": 1746,
+      "txId": "00898fc4ec2db268d517750b6e503b09ccb8e513707e36d2e9e1783f2860c9bee2",
+      "startIndex": 34,
+      "endIndex": 34,
+      "blockHeight": 180,
       "status": "SUCCESS",
       "raw": {
-        "id": 103,
-        "hash": "3add7b45219a5c41976aaf44b516fec4ef75bf9a0b16416e1a40c75d21e6a0b7",
-        "startIndex": 36,
-        "endIndex": 36,
+        "id": 52,
+        "hash": "6f10d858cac438de68470866f67bf1d0f2e7ec26c2c322eec3fba1904f143412",
+        "startIndex": 34,
+        "endIndex": 34,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 1746,
-          "hash": "79addfc3c0568d79133683ffae8560155fd6ce5614042b266027be57a301a0c1"
+          "height": 180,
+          "hash": "078eb08c2619c430fcbcf78cbaf4edd4989b1d0f4c3a1016eeae3dc3428a4aab"
         }
       },
-      "nodeBlockHash": "0x79addfc3c0568d79133683ffae8560155fd6ce5614042b266027be57a301a0c1"
+      "nodeBlockHash": "0x078eb08c2619c430fcbcf78cbaf4edd4989b1d0f4c3a1016eeae3dc3428a4aab"
     }
   ],
   "methodology": {
-    "state": "Serialized ledger ContractState including authentication-state changes, not physical database allocation.",
+    "state": "Serialised ledger ContractState including authentication-state changes, not physical database allocation.",
     "transaction": "Full balanced submitted transaction including proof and funding-wallet DUST overhead.",
     "proving": "Single observations including key lookup/load and local HTTP; no cold-cache or repeat-mean claim.",
     "fee": "Ledger model fees in SPECKs against indexed parameters, not a separately observed amount burnt."
   },
   "chain": {
-    "height": 1602,
-    "hash": "abcd0525f778e75b061137e47296ce906bfc7d06b3313637d92ccdac823f5fa7"
+    "height": 38,
+    "hash": "2a7d2562b7b0a34cfc22a2193aa6f3cd7ea72761e4c73ae76628205e1f4e3bac"
   },
   "environment": {
+    "gitHead": "dca9581ad2a1f30c5e7cab526420ad701bd14e56",
+    "gitDirty": false,
     "gitBase": "579da739eaee1a319073128b92c43799923d94d8",
     "docker": "aarch64 8 CPUs 25159827456 memoryBytes"
   },
-  "ledgerParametersSha256": "20449040e86df9286e4df7b273cde5ecf207fcc09a0f67f6ded1ef00dcea93cb",
-  "account": "b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14",
+  "ledgerParametersSha256": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+  "deployment": {
+    "circuitCount": 52,
+    "verifierByteBudget": 15000
+  },
+  "account": "5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f",
   "controls": {
     "excludedReaderCannotOpenNewGeneration": true,
     "legacyCoinReaderSkipsEnvelopes": true,
@@ -791,17 +819,19 @@
   },
   "recovery": "Default test deployment has no usable recovery wrap. Rotation/recovery continuity is NOT tested or claimed.",
   "final": {
-    "account": "b7b147dd6d9d9b7d56df0176c36aa7f022c69360e54a26344f8944f418ff4b14",
+    "account": "5ff5e36e027f0cb636beab22a01ec6e5dbecedd11f32e79dd75e178bdc8b006f",
     "inboxCount": "8",
-    "encKey": "3fad36cb4eced349835762cf9487875820b7f6f656bdae713671d531d976827f",
+    "encKey": "417ff93ce64908b545bf34ed457de83e9351ad27a72262f2f739c6b0245a6b66",
+    "inboxRecords": 8,
     "envelopeCount": 5,
-    "payloadBytes": 1536
+    "envelopeBytes": 960,
+    "inboxRecordBytes": 1536
   },
   "artifacts": {
     "account.compact": "caa1e863b1522bf5c753e72b2e9ceb9220bcf641b0a153c117ec6f762d0bba52",
     "account-p256.compact": "bc6d59add3cbbebb6f5be557222dac20a545ae4daacfc50f45d11e305dfa9f1e",
     "managed/account/contract/index.js": "44631f38e58aa9bc944a2e754ae9ab4965a4dff63766721987a33b1d3a702685"
   },
-  "completedAt": "2026-10-01T20:17:43.854Z",
-  "capturedAt": "2026-10-01T20:18:05.416Z"
+  "completedAt": "2026-10-02T08:49:26.917Z",
+  "capturedAt": "2026-10-02T08:49:47.583Z"
 }

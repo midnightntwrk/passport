@@ -4,12 +4,6 @@
 deciding on wider discussion. The items below are internal design and
 evidence-review points.
 
-**The published localnet results predate the current codec.** They were
-produced with a constant per-reader recipient tag and first-match envelope
-selection, and must be re-run before the figures are quoted. The
-[experiment guide](README.md#evidence-and-scope) lists the files changed
-since that run.
-
 ## Authority boundaries
 
 | Role | Authority |

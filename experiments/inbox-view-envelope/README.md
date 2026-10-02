@@ -6,11 +6,10 @@ Review and iteration come before deciding on any wider discussion.
 This experiment builds on the P-256/WebAuthn circuits in
 [Passport PR #175](https://github.com/midnightntwrk/passport/pull/175).
 
-**Automated localnet result: PASS, 2026/10/01.** B restored from an
+**Automated localnet result: PASS, 2026/10/02.** B restored from an
 empty private store and completed shielded spends before and after viewing-key
 rotation, on the same account. This run uses software ES256 credentials and
-synthetic PRF outputs; live-browser PRF remains unverified. That run
-predates the current codec; see [Evidence and scope](#evidence-and-scope).
+synthetic PRF outputs; live-browser PRF remains unverified.
 
 **Payload result: 192 bytes per reader per viewing-key generation.** Two
 independent readers need 384 bytes; ten need 1,920 bytes. This is the inbox
@@ -64,18 +63,6 @@ The experiment deploys one test account and keeps its address and B's
 signing key across both restores and viewing-key rotations.
 
 ## Evidence and scope
-
-**The published localnet results predate the current codec.** They were
-produced with the earlier codec, which used a constant per-reader recipient
-tag and accepted the first decryptable envelope. The localnet suite must be
-re-run before its figures are quoted. Files changed since that run:
-`codec.ts` (per-record recipient tag, newest-first validated selection),
-`localnet.ts` (validator-driven selection, candidate-retry classification,
-and new `environment`, `deployment`, and `final` evidence fields),
-`report.ts`, `browser.ts`, `browser-client.ts`, `offline.ts`, the shared
-`src/tests/instrumentation.ts`, and `src/wallet/webauthn.ts`. The offline
-results were regenerated with the current codec. Envelope sizes and offsets
-are unchanged.
 
 - [Measurement report](../../contract/evidence/inbox-view-envelope/RESULTS.md):
   observed payload, serialised inbox growth, transaction/proof sizes, and
