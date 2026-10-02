@@ -124,18 +124,30 @@ export function browserAssertionProvider(credentialId: Uint8Array, rpId: string)
   };
 }
 
+export interface CreateCredentialOptions {
+  /** Request the WebAuthn PRF extension at creation (default: not requested). */
+  prf?: boolean;
+  /** Default 'preferred'. */
+  residentKey?: ResidentKeyRequirement;
+  /** Default 'Midnight account'. */
+  rpName?: string;
+}
+
 /** Local credential creation, attestation=none. Only the public key leaves
  * the authenticator. A test assertion checks the profile before enrolment.
  * An RP registration service can supply its validated key/ID instead. */
-export async function createBrowserCredential(rpId: string, origin: string, userName: string) {
+export async function createBrowserCredential(rpId: string, origin: string, userName: string,
+  options: CreateCredentialOptions = {}) {
   const policy = webauthnPolicy(rpId, origin);
   if (location.origin !== origin) throw new Error('registration origin mismatch');
   const credential = await navigator.credentials.create({ publicKey: {
     challenge: crypto.getRandomValues(new Uint8Array(32)),
-    rp: { id: rpId, name: 'Midnight account' },
+    rp: { id: rpId, name: options.rpName ?? 'Midnight account' },
     user: { id: crypto.getRandomValues(new Uint8Array(32)), name: userName, displayName: userName },
     pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-    authenticatorSelection: { userVerification: 'required', residentKey: 'preferred' }, attestation: 'none',
+    authenticatorSelection: { userVerification: 'required', residentKey: options.residentKey ?? 'preferred' },
+    attestation: 'none',
+    ...(options.prf && { extensions: { prf: {} } as AuthenticationExtensionsClientInputs }),
   } }) as PublicKeyCredential | null;
   if (!credential) throw new Error('WebAuthn registration cancelled');
   const response = credential.response as AuthenticatorAttestationResponse;
@@ -149,5 +161,7 @@ export async function createBrowserCredential(rpId: string, origin: string, user
   const assertionProvider = browserAssertionProvider(credentialId, rpId);
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   assertionMaterial(challenge, policy, pk, await assertionProvider(challenge));
-  return { credentialId, pk, rpId, origin };
+  const prfEnabledAtCreation: boolean | null | undefined = options.prf
+    ? ((credential.getClientExtensionResults() as { prf?: { enabled?: boolean } }).prf?.enabled ?? null) : undefined;
+  return { credentialId, pk, rpId, origin, prfEnabledAtCreation };
 }

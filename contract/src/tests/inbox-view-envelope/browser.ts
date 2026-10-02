@@ -5,6 +5,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import { assertionMaterial, webauthnPolicy, validateP256Key } from '../../wallet/webauthn.js';
 import { random, hex } from './codec.js';
+import { bytes } from '../instrumentation.js';
 
 const origin = 'http://localhost:8984', rpId = 'localhost', runId = randomUUID();
 const state: any = { runId, context: { network: 'offline-browser-probe', account: hex(random()), rpId, origin },
@@ -24,16 +25,12 @@ const html = `<!doctype html><meta charset="utf-8"><title>One passkey: PRF + P-2
 <button id="existing">1. Test existing passkey PRF</button><button id="create">Create a test passkey with PRF</button>
 <p>After preparing an envelope, reload this page to discard page memory, then:</p><button id="restore">2. Restore and sign with the same passkey</button>
 <h2 id="status">Loading…</h2><pre id="detail"></pre><script type="module" src="/app.js"></script>`;
-const bytes = (s: unknown, size?: number) => {
-  assert.equal(typeof s, 'string'); assert.match(s as string, /^(?:[0-9a-f]{2})+$/i);
-  const out = new Uint8Array(Buffer.from(s as string, 'hex')); if (size !== undefined) assert.equal(out.length, size); return out;
-};
 const pk = (p: any) => { const value = { x: BigInt(p.x), y: BigInt(p.y), identity: false }; validateP256Key(value); return value; };
 function save() {
   mkdirSync('evidence/inbox-view-envelope', { recursive: true });
   writeFileSync(`evidence/inbox-view-envelope/run-browser-${runId}.json`, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
 }
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   const reply = (code: number, value: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
   res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'");
@@ -67,5 +64,15 @@ createServer(async (req, res) => {
     else throw new Error('unknown route');
     save(); reply(200, { ok: true });
   } catch (e) { reply(400, { error: e instanceof Error ? e.message : String(e) }); }
-}).listen(8984, '127.0.0.1', () => console.log(`Open ${origin}; use existing passkey, reload, restore and sign. Run ${runId}`));
+});
+try {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject); server.listen(8984, '127.0.0.1', resolve);
+  });
+} catch (error) {
+  console.error(`Cannot listen on 127.0.0.1:8984 (${error instanceof Error ? error.message : String(error)}). ` +
+    'Stop the other process using that port, then rerun.');
+  process.exit(1);
+}
+console.log(`Open ${origin}; use the existing passkey, reload, then restore and sign. Run ${runId}`);
 save();
