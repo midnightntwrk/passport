@@ -1,19 +1,20 @@
 # Passkey viewing-key envelope: sizing experiment
 
-**Draft for Nicolas's initial review:**
+**Draft for initial internal review:**
 [internal review notes and authority boundaries](DISCUSSION.md).
 Review and iteration come before deciding on any wider discussion.
 This experiment builds on the P-256/WebAuthn circuits in
 [Passport PR #175](https://github.com/midnightntwrk/passport/pull/175).
 
-**Automated localnet result: PASS — 1 October 2026.** B restored from an
+**Automated localnet result: PASS, 2026/10/01.** B restored from an
 empty private store and completed shielded spends before and after viewing-key
 rotation, on the same account. This run uses software ES256 credentials and
-synthetic PRF outputs; live-browser PRF remains unverified.
+synthetic PRF outputs; live-browser PRF remains unverified. That run
+predates the current codec; see [Evidence and scope](#evidence-and-scope).
 
 **Payload result: 192 bytes per reader per viewing-key generation.** Two
 independent readers need 384 bytes; ten need 1,920 bytes. This is the inbox
-payload, before ledger serialization and transaction/proof overhead.
+payload, before ledger serialisation and transaction/proof overhead.
 
 This experiment uses Passport's existing opaque `Bytes<192>` inbox and
 `append_inbox_with_p256`. It adds a client-side experimental record format.
@@ -25,19 +26,20 @@ A creates an account and enrols independent signing credential B. A also
 encrypts the random account viewing secret to B's separate reader public
 key. Later, a fresh B client retrieves its envelope from the account inbox,
 decrypts coin descriptions, reconstructs a commitment position from public
-transaction history and spends with B's enrolled P-256 credential.
+transaction history, and spends with B's enrolled P-256 credential.
 
 An account owner can publish another envelope using B's retained **public**
 reader key while B is offline. Signing authority and viewing access are
 separate: enrolling a signing key does not deliver the viewing secret.
 
-### Device, dApp and reader roles
+### Device, dApp, and reader roles
 
 A and B are **ACC devices in this test harness**. Their signing credentials
-carry account-control authority. **Lace's role is a connected dApp**: its
-key represents the dApp/grantee under a scoped grant authorised by the
-account, not a device key supplied for the user's ACC. Connecting that dApp
-must not implicitly enrol it as an account-control device.
+carry account-control authority. **A connected dApp, such as a wallet
+provider, has a different role**: its key represents the dApp/grantee under
+a scoped grant authorised by the account, not a device key supplied for the
+user's ACC. Connecting that dApp must not implicitly enrol it as an
+account-control device.
 
 Viewing-secret delivery is a separate capability. A reader envelope grants
 neither device authority nor permission to spend; a dApp's spending must
@@ -63,18 +65,31 @@ signing key across both restores and viewing-key rotations.
 
 ## Evidence and scope
 
+**The published localnet results predate the current codec.** They were
+produced with the earlier codec, which used a constant per-reader recipient
+tag and accepted the first decryptable envelope. The localnet suite must be
+re-run before its figures are quoted. Files changed since that run:
+`codec.ts` (per-record recipient tag, newest-first validated selection),
+`localnet.ts` (validator-driven selection, candidate-retry classification,
+and new `environment`, `deployment`, and `final` evidence fields),
+`report.ts`, `browser.ts`, `browser-client.ts`, `offline.ts`, the shared
+`src/tests/instrumentation.ts`, and `src/wallet/webauthn.ts`. The offline
+results were regenerated with the current codec. Envelope sizes and offsets
+are unchanged.
+
 - [Measurement report](../../contract/evidence/inbox-view-envelope/RESULTS.md):
-  observed payload, serialized inbox growth, transaction/proof sizes and
+  observed payload, serialised inbox growth, transaction/proof sizes, and
   proving times, with restoration outcomes and measurement boundaries.
 - [Offline results](../../contract/evidence/inbox-view-envelope/offline.json):
   independent OpenSSL decryption, every-byte tamper rejection, wrong reader
-  and context, poisoned/stale/staged secrets, substituted signing metadata,
+  and context, poisoned/stale/staged secrets, substituted signing metadata
+  (including validator-driven skipping), per-record recipient tags,
   legacy-reader skipping, and compiled P-256 append/rotation calls.
 - [Localnet measurements](../../contract/evidence/inbox-view-envelope/published-localnet.json):
-  machine-readable verdict, sizes, timings, transaction IDs and restore
+  machine-readable verdict, sizes, timings, transaction IDs, and restore
   outcomes. Check its verdict before treating the flow as successful.
 - Browser capability probe at **http://localhost:8984**: use the earlier
-  Safari credential, reload the page, then decrypt and sign. Its raw local
+  Safari credential, reload the page, and then decrypt and sign. Its raw local
   evidence is Git-ignored. This is an off-chain capability probe.
   **No successful real-browser PRF run is included in this experiment yet.**
 
@@ -83,7 +98,7 @@ random **synthetic PRF outputs**. These exercise the crypto and actual
 on-node proofs but do not establish browser PRF or passkey-sync support.
 Fresh clients use empty in-memory private-state providers in the same test
 process. A's signing provider is disabled during each B restore; the public
-network, prover and local fee-paying wallet are shared test infrastructure.
+network, prover, and local fee-paying wallet are shared test infrastructure.
 This is not yet a separate-machine/browser-to-node integration test.
 
 ## Exact experimental layout
@@ -94,7 +109,7 @@ Record type `0xe1`, suite `0x01`; neither is an allocated standard identifier.
 |---:|---:|---|
 | 0 | 1 | Experimental version/type |
 | 1 | 1 | Suite |
-| 2 | 32 | Account/context-bound recipient tag |
+| 2 | 32 | Per-record recipient tag (context, reader, and ephemeral key) |
 | 34 | 32 | Ephemeral X25519 public key |
 | 66 | 12 | AES-256-GCM nonce |
 | 78 | 16 | GCM authentication tag |
@@ -126,25 +141,34 @@ All hex is lowercase, and the account address is 32 bytes.
   standard internal domain processing.
 - Reader secret: HKDF-SHA-256 of the 32-byte PRF output, context hash as
   salt, reader-key domain string as info, 32-byte output.
-- Recipient tag: SHA-256 of recipient-ID domain string, context and reader
-  public key.
+- Recipient tag: SHA-256 of recipient-ID domain string, context, reader
+  public key, and the record's ephemeral X25519 public key (bytes
+  `[34,66)`). The tag therefore differs per record: a chain observer
+  cannot link two envelopes for the same reader by tag, while the reader
+  recomputes it from its own public key before any X25519 work.
 - Wrapping key: HKDF-SHA-256 of the ephemeral-static X25519 shared secret,
   context hash as salt, view-wrap domain string as info, 32-byte output.
 - AES-GCM plaintext: 32-byte viewing secret followed by 32-byte big-endian
-  public signing x and y coordinates. AAD is context, bytes `[0,78)` and
+  public signing x and y coordinates. AAD is context, bytes `[0,78)`, and
   the two trailing padding bytes.
 
 The PRF output and private reader key are never published. Account,
-network, RP and origin mismatches fail decryption. The restored viewing
+network, RP, and origin mismatches fail decryption. The restored viewing
 secret must derive the trusted current `enc_key`; AEAD success alone is
 insufficient because anyone can encrypt to a public reader key.
+
+Selection walks the inbox newest-first. A caller-supplied validator (in
+the localnet suite, a fresh B assertion verified under the candidate's
+signing key) can reject a decryptable envelope that carries the current
+viewing secret with substituted signing metadata; that candidate's secret
+is zeroed and the walk continues to older records.
 
 ## Required bootstrap inputs
 
 A fresh client must have:
 
 - The public account address and network/indexer endpoint.
-- The RP ID, enrolled signing origin and experimental profile.
+- The RP ID, enrolled signing origin, and experimental profile.
 - A way to select B's credential (the probe supplies its public credential
   ID from earlier registration metadata; discoverable selection is not
   implemented here).
@@ -159,7 +183,7 @@ Fresh signing-client attachment also uses the existing SDK's bounded
 device-use-counter rescan (4,096 candidates). These low-counter restores
 do not establish recovery of an arbitrarily long-used device's counter.
 
-## Storage, calls and lifecycle
+## Storage, calls, and lifecycle
 
 - `N` readers cost **192 × N** payload bytes per key generation. With the
   existing append API they also require **N authorised append calls**.
@@ -182,9 +206,9 @@ do not establish recovery of an arbitrarily long-used device's counter.
   established; the existing recovery-wrap refresh requires a guardian
   session and must be coordinated with key rotation.
 
-Serialized ledger growth, full submitted transaction bytes, proof bytes,
-proving time and modelled fees are recorded separately. Ledger state sizes
-are serialization sizes, not physical node database usage. The experiment
+Serialised ledger growth, full submitted transaction bytes, proof bytes,
+proving time, and modelled fees are recorded separately. Ledger state sizes
+are serialisation sizes, not physical node database usage. The experiment
 also isolates the inbox map in a constant blank `ContractState` frame:
 both isolated-inbox and whole-account snapshot sizes can decrease in these
 observations despite an appended record. They therefore do not establish a
@@ -225,16 +249,16 @@ provider capabilities. Neither browser route creates a Passport account.
 The browser server independently verifies the final ES256 assertion. The
 PRF/decryption result is browser-reported; secret output stays in the page.
 Reload discards page memory; this tests repeated evaluation on one machine,
-not synchronization or recovery on another machine.
+not synchronisation or recovery on another machine.
 
 On macOS, `caffeinate -i npm run test:view-envelope` prevents idle sleep
 during the run. Earlier development runs exposed two instrumentation API
-mismatches (version-tagged transactions and unserializable `ChargedState`),
+mismatches (version-tagged transactions and unserialisable `ChargedState`),
 a missing private-state scoping method, and a proof request timeout after
 long execution pauses. Raw failed runs are retained locally under ignored
 `run-localnet-*.json` names. The fresh provider now implements the full SDK
 interface; an independent attach against the deployed test account verified
-its empty state and the isolated-inbox serialization before rerunning.
+its empty state and the isolated-inbox serialisation before rerunning.
 
 The runner writes ignored `localnet.json`; the report command freezes its
 current contents in `published-localnet.json` alongside the rendered report.
