@@ -35,7 +35,7 @@ MPS: MPS-0018
      | Id | Item | Current default in the text |
      |---|---|---|
      | O1 | external co-author | named (Hector Bulgarini); the team that offered prior art in upstream discussion #223 is still to be answered and credited in Acknowledgements |
-     | O2 | one spec_version = 2 redeploy carrying the grant cells and the device-identity remedy for MIP-0013 erratum 8 | SHOULD, in Backwards Compatibility |
+     | O2 | coordinate the spec_version = 3 redeploy with the device-identity remedy for MIP-0013 erratum 8; caller pinning alone does not remedy it | SHOULD, in Backwards Compatibility |
      | O3 | companion erratum to MIP-0013 AUTH-1, AUTH-2, AUTH-9 (section 12); wordings in .planning/grants-mip/erratum-wordings.md, to travel in the erratum PR | acceptance is an acceptance criterion |
      | O4 | on-chain unit of kernel.blockTimeLessThan | resolved (E3): whole seconds since the UNIX epoch on ledger 9 (node 2.1.0), on the client and the node alike; the comparison is a transcript read enforced at client build (wall clock) and at node admission (block context), not a proof constraint; the never-expires arm records no read; the admission-time block time runs about one block interval plus a network-defined tolerance ahead of the wall clock (8.2 to 10.2 s measured on a 6 s-block localnet); recorded in the registry entry (section 14) |
      | O5 | tombstone pruning and window enforcement | deferred to a circuit revision |
@@ -133,9 +133,10 @@ value-capped, epoch-bound withdraw grant enforced in-circuit on a devnet
 node; origin binding, expiry, signature-based grantee authentication,
 and a connection protocol are what a standard must supply. The dApp
 connector API and the Open Wallet Standard are wallet-side and
-ephemeral, and MPS-0029 records that Compact exposes no authenticated
-caller identity, so a separate verifier contract cannot know who called
-it.
+ephemeral. Compact 0.35.0 now exposes `kernel.caller()`: this revision
+adds an optional immediate-contract caller restriction, checked by the
+account callee itself (section 6.2.1). It is independent of browser-origin
+attestation and retains the grantee signature and all spend bounds.
 
 NEAR's access-key login flow is the closest deployed analogue of the
 connection this MIP specifies: a dApp generates a key, redirects to the
@@ -415,10 +416,10 @@ cryptographer-review item.
 
 ### 4. Ledger state and grant identity
 
-#### 4.1 New cells and structs (`spec_version = 2`)
+#### 4.1 New cells and structs (`spec_version = 3`)
 
 A grant-capable account extends the parent MIPs' ledger state with two
-cells; this is a schema change and the account exposes `spec_version = 2`
+cells; the caller-bound schema exposes `spec_version = 3`
 (Backwards Compatibility Assessment). Ledger-schema excerpt, not
 implementation code:
 
@@ -427,7 +428,7 @@ export ledger grants:           Map<Bytes<32>, GrantRecord>;  // keyed by grant_
 export ledger grant_generation: Uint<32>;  // bumped only by revoke_all_grants
 ```
 
-`GrantScope` (immutable after issue; 164 bytes):
+`GrantScope` (immutable after issue; 196 bytes):
 
 | Field | Type | Width | Meaning |
 |---|---|---|---|
@@ -443,6 +444,7 @@ export ledger grant_generation: Uint<32>;  // bumped only by revoke_all_grants
 | `read_pk_hash` | `Bytes<32>` | 32 | SHA-256 of the delegate's X25519 `read_pk` when `read`; zero otherwise |
 | `window_len` | `Uint<64>` | 8 | reserved; MUST be `0` |
 | `window_cap` | `Uint<128>` | 16 | reserved; MUST be `0` |
+| `caller_commit` | `Bytes<32>` | 32 | zero for unrestricted calls; otherwise salted commitment to the required immediate contract caller |
 
 `GrantRecord` (81 bytes plus the scope):
 
@@ -456,10 +458,10 @@ export ledger grant_generation: Uint<32>;  // bumped only by revoke_all_grants
 | `window_start` | `Uint<64>` | 8 | reserved | `0` |
 | `window_spent` | `Uint<128>` | 16 | reserved | `0` |
 | `active` | `Boolean` | 1 | contract | `false` is a tombstone (revoked) |
-| `scope` | `GrantScope` | 164 | contract, at issue | immutable after issue |
+| `scope` | `GrantScope` | 196 | contract, at issue | immutable after issue |
 
-About 277 bytes per grant including the 32-byte map key (`grant_id`);
-one hundred grants are about 28 KB. The record stores no key, no origin,
+About 309 bytes per grant including the 32-byte map key (`grant_id`);
+one hundred grants are about 31 KB. The record stores no key, no origin,
 and no scheme. A struct embedding a struct as a `Map` value compiles,
 and its lookup and insert execute, on the reference toolchain
 (Implementation); the generated client type exposes the record and its
@@ -479,6 +481,7 @@ takes as arguments:
 | `max_coin_value` | `Uint<128>` | a shielded twin aborts if the consumed coin's value exceeds it; MUST be `>= per_call_cap` when any spend flag is set |
 | `rp_id_hash` | `Bytes<32>` | `H(host(client_id))` for an `r1` grantee; zero otherwise |
 | `per_call_cap`, `cap`, `expires_at`, `read_pk_hash`, `window_len`, `window_cap` | as in `GrantScope` | as in `GrantScope` |
+| `caller` | `Maybe<ContractAddress>` | optional immediate calling contract; absent encodes `is_some = false` and an all-zero address |
 | `scope_salt` | `Bytes<32>` | see below |
 
 `scope_salt` MUST be 32 bytes drawn fresh from a cryptographically secure
@@ -487,7 +490,7 @@ accounts, or re-issues of the same id, and MUST NOT be derived from any
 public value. It is necessary to open the record's commitments and
 therefore required to construct any grant call, but not sufficient for
 authority, which rests on the grantee signing key alone. The circuit
-computes `object_commit`, `rp_commit`, and the initial `spent_commit`
+computes `object_commit`, `rp_commit`, `caller_commit`, and the initial `spent_commit`
 from these arguments; `color`, `recipient`, `max_coin_value`, and
 `rp_id_hash` never appear in ledger state in the clear. The salt is bound
 in the device challenge, delivered to the grantee in the response, and
@@ -566,9 +569,15 @@ arguments.
 | `object_commit` | `pad(32, "midnight:account:grant:obj:v1") \|\| scope_salt \|\| color \|\| u8(recipient_kind) \|\| recipient \|\| u128(max_coin_value)` |
 | `spent_commit` | `pad(32, "midnight:account:grant:spent:v1") \|\| scope_salt \|\| u128(spent)` |
 | `rp_commit` | `pad(32, "midnight:account:grant:rp:v1") \|\| scope_salt \|\| rp_id_hash` |
-| `scope_digest` | `pad(32, "midnight:account:grant:scope:v1") \|\| scope_salt \|\| flag(op_withdraw_unshielded) \|\| flag(op_withdraw_shielded) \|\| flag(op_withdraw_shielded_to_contract) \|\| flag(read) \|\| color \|\| u8(recipient_kind) \|\| recipient \|\| u128(max_coin_value) \|\| u128(per_call_cap) \|\| u128(cap) \|\| u64(expires_at) \|\| rp_id_hash \|\| read_pk_hash \|\| u64(window_len) \|\| u128(window_cap)` |
+| `caller_commit` (present) | `pad(32, "midnight:account:grant:caller:v1") \|\| scope_salt \|\| caller.value` (the contract address's 32 bytes); absent is the all-zero sentinel, not a hash |
+| `scope_digest` | `pad(32, "midnight:account:grant:scope:v2") \|\| scope_salt \|\| flag(op_withdraw_unshielded) \|\| flag(op_withdraw_shielded) \|\| flag(op_withdraw_shielded_to_contract) \|\| flag(read) \|\| color \|\| u8(recipient_kind) \|\| recipient \|\| u128(max_coin_value) \|\| u128(per_call_cap) \|\| u128(cap) \|\| u64(expires_at) \|\| rp_id_hash \|\| read_pk_hash \|\| u64(window_len) \|\| u128(window_cap) \|\| caller_commit` |
 
-The hiding of all three commitments rests on `scope_salt` meeting
+`caller_commit` MUST reject an absent value whose address is not zero,
+and a present value whose hash equals the reserved zero sentinel. At use,
+the callee obtains the address from `kernel.caller()`, not from a grant
+argument. The device's issue signature binds the pin through `scope_digest`.
+
+The hiding of the nonzero commitments rests on `scope_salt` meeting
 section 4.2 and staying with the owner and the grantee; a constant or
 reused salt makes `object_commit` dictionary-testable over the public
 list of colors, turns `spent_commit` into a lookup table publishing
@@ -577,10 +586,10 @@ conformance item (Testing item 2). `scope_digest` is the single element
 through which the `issue_grant` device challenge binds the whole
 plaintext scope (AUTH-3 by collision resistance); flags enter as single
 bytes. The `scope` tag family is new here and its registration is an
-acceptance criterion. Its seventeen elements compile and hash as the
-raw concatenation, a 277-byte preimage; the other preimages of this
+acceptance criterion. Its eighteen elements compile and hash as the
+raw concatenation, a 309-byte preimage; the other preimages of this
 section are 145 (`object_commit`), 80 (`spent_commit`), and 96
-(`rp_commit`) bytes.
+(`rp_commit` and present `caller_commit`) bytes.
 
 ### 5. Scope semantics
 
@@ -591,6 +600,12 @@ and a declarative `read`; the **object** axis as one token color and an
 optional recipient pin, committed; the **quantitative** axis as
 `per_call_cap`, `cap`, `max_coin_value`, and `expires_at`. Rate windows
 are reserved in the schema and not enforced.
+
+An optional **caller** axis pins the immediate contract that must call
+the account (section 6.2.1). It is independent of the recipient and
+`client_id`. A requested pin may be retained exactly, never removed or
+replaced under attenuation; an unrestricted request may be narrowed to
+one contract with explicit consent.
 
 Rules asserted at issue, in this order; the `expires_at` checks that
 fall on the client and the authoriser rather than on the circuit are
@@ -607,7 +622,7 @@ stated below:
 7. a record with no operation flag set MUST carry an all-zero `color`,
    `recipient_kind = 0`, an all-zero `recipient`, and `max_coin_value`,
    `per_call_cap`, and `cap` all zero, so that `object_commit` over a
-   read-only grant is determined by `scope_salt` alone.
+   read-only grant is determined by `scope_salt` alone; `caller` MUST be absent.
 
 `max_coin_value` bounds the value at risk from a shielded grant, which
 is the coin the grantee selects and could leave without change (R7);
@@ -703,16 +718,18 @@ unchanged device seam:
 - `revoke_grant_with_<a>(grant_id: Bytes<32>, ...device auth): []`
 - `revoke_all_grants_with_<a>(...device auth): []`
 - exported pure `derive_grant_scope_digest`, `derive_grant_object_commit`,
-  `derive_grant_spent_commit`, `derive_grant_rp_commit`, and
+  `derive_grant_spent_commit`, `derive_grant_rp_commit`, `derive_grant_caller_commit`, and
   `challenge_<lifecycle circuit>_with_<a>` in the existing device tag
   family (`midnight:account:auth:v1:issue_grant`,
   `midnight:account:auth:k1:v1:issue_grant`, and so on); the
   `issue_grant` challenge's argument list is `[grant_id, scope_digest]`.
 
 No grant twin exists for `rotate_enc_key`, `add_device`,
-`remove_device`, `append_inbox`, or any lifecycle circuit. A
-`spec_version = 2` account carries 30 non-pure circuits (18 existing, 6
-grant twins, 6 lifecycle circuits), 33 with the p256 twins.
+`remove_device`, `append_inbox`, or any lifecycle circuit. The
+original `spec_version = 2` grant roster carried 30 non-pure circuits
+(18 existing, 6 grant twins, 6 lifecycle circuits). The current two-arm
+reference carries 36 including recovery; the caller addition changes
+the schema and existing gates, adding no account entrypoints.
 
 #### 6.2 Seam chip, ordered steps
 
@@ -743,7 +760,8 @@ order:
    is one public input the proof asserts and the node re-executes at
    admission, and the comparison argument reaches the public transcript,
    harmless because the record is public).
-4. **Operation.** Assert the twin's own flag.
+4. **Operation and caller.** Assert the twin's own flag, then enforce
+   `caller_commit` as section 6.2.1 specifies.
 5. **Object and bounds.** With `obj_color = coin.color` on the shielded
    twins and `obj_color = color` on the unshielded twin, the predicate
    set is normative and every predicate is asserted before any custody
@@ -811,6 +829,46 @@ are pinned by the `grant_id` membership assert; `scope_salt`,
 transitively through `grant_id`, which determines the record and its
 commitments; that this satisfies AUTH-3 is a cryptographer-review item,
 and the fallback binds the openings directly at the cost of arity.
+
+#### 6.2.1 Immediate contract caller restriction
+
+When `g.scope.caller_commit` is zero, the callee MUST NOT read
+`kernel.caller()`. The grant is unrestricted by caller; the remaining
+seam predicates still apply. When it is nonzero, the callee MUST read
+`kernel.caller(): Maybe<Either<ContractAddress, UserAddress>>`, require
+`is_some` and the contract (`left`) arm, and recompute `caller_commit`
+from that address and the grant's `scope_salt`. A mismatch aborts before
+spend or settlement. A supplied address argument, witness or signature
+over an address MUST NOT substitute for the kernel read.
+
+This authenticates the ledger's **immediate claiming contract**, not the
+transaction's root, a browser origin, a user address, a fee payer, or a
+particular circuit. For `A -> B -> account`, a pin to B admits the call;
+a pin to A does not. Absent and user-address callers fail closed. Caller
+authorization is conjunctive: the correct contract without the grantee's
+signature, fresh nonce, scope openings and spend bounds has no authority.
+
+Compact 0.35.0 records `none` during top-level off-chain execution, while
+balancing may add single-owner unshielded inputs from which the ledger
+derives a user address. An unconditional root caller read can therefore
+fail at admission. The zero branch above avoids that read entirely;
+restricted grants are intended for composed contract calls. The proof
+binds the read transcript; the ledger checks it against the actual call
+context at admission. Injecting a caller into local execution is not
+evidence of authenticated provenance.
+
+The calling contract MUST authorize any `claimContractCall` it exposes.
+A contract offering arbitrary claim tuples can lend its identity to a
+call it did not execute; the [P9 provenance experiment](../../../experiments/cross-contract-calls/README.md)
+demonstrates this ledger rule. A caller pin authenticates the claiming
+address, not the integrity of that contract's claim policy or its code
+version. Mutable caller contracts retain their address across updates.
+
+The zero/nonzero restriction bit is public. Salting hides the pinned
+address in an unused record; an exercised cross-contract call exposes
+its caller/callee relationship in public transaction data. A caller pin
+does not extend INV-2 to conceal that relationship or revoke a viewing
+secret already handed out.
 
 #### 6.3 Challenge preimages
 
@@ -1125,7 +1183,7 @@ objecting first: the client priced every refused payload without
 complaint, so an implementer gets no warning before submission and a
 refused update leaves the authority counter untouched.
 
-The grant circuits MUST be part of the `spec_version = 2` deploy wave
+The grant circuits MUST be part of the `spec_version = 3` deploy wave
 plan, and maintenance-authority retirement MUST follow the last grant
 wave: a retired account can never receive a future arm's circuits, so
 an account deployed without the grant circuits and then retired can
@@ -1159,9 +1217,11 @@ from the jubjub arm (Implementation).
    `spent_commit = derive_grant_spent_commit(scope_salt, 0)`, window
    fields zero, `active = true`, and the scope with
    `object_commit = derive_grant_object_commit(scope_salt, color, recipient_kind, recipient, max_coin_value)`
-   and `rp_commit = derive_grant_rp_commit(scope_salt, rp_id_hash)`, the
+   and `rp_commit = derive_grant_rp_commit(scope_salt, rp_id_hash)`,
+   `caller_commit = derive_grant_caller_commit(scope_salt, caller)`, the
    clear fields disclosed. `color`, `recipient`, `max_coin_value`, and
-   `rp_id_hash` are never disclosed; only their commitments are.
+   `rp_id_hash` and the plaintext caller pin are never disclosed at
+   issuance; only their commitments are.
 
 `revoke_grant(grant_id)`: disclose `grant_id`; assert `grants.member(id)`
 ("unknown grant"); assert `active` ("grant not live"); rewrite the record
@@ -1433,7 +1493,7 @@ calls into one transaction or submits them in sequence.
 | `account` | MUST when the dApp knows it | contract address hex; when absent the user chooses and the consent screen says so |
 | `grantee` | MUST | `{scheme, [envelope,] pk}` per section 3; `envelope` for `ecdsa_secp256k1_sha256` only |
 | `grants` | MUST | non-empty array of `{slot, scope, bounds}`; distinct slots; unknown strings are `invalid_scope` |
-| `bounds` | MUST when any withdraw string; MUST be absent otherwise | `color`, `per_call_cap`, `cap`, `max_coin_value`, `expires_at` (`0` = never, explicit), `recipient` (null or typed); a read-only element is issued with the all-zero object and caps of section 5.1 rule 7 |
+| `bounds` | MUST when any withdraw string; MUST be absent otherwise | `color`, `per_call_cap`, `cap`, `max_coin_value`, `expires_at` (`0` = never, explicit), `recipient` (null or typed), optional `caller` (64 lowercase hex contract-address bytes, no prefix; omission means unrestricted); a read-only element is issued with the all-zero object and caps of section 5.1 rule 7 |
 | `read_pk` | MUST when `read` is requested or implied | per section 8 item 1 |
 | `state` | MUST | opaque, at least 128 bits of entropy, at most 512 characters, bound to the dApp's browser session, echoed verbatim |
 | `nonce` | MUST | 32 random bytes, hex; one-time within the validity window |
@@ -1579,7 +1639,7 @@ In order:
    error page (no redirect) if `redirect_uri` is not `https`, not
    same-origin with `client_id`, or carries a fragment.
 5. Verify the scheme is registered and the account is capable
-   (`spec_version >= 2`, and the arm deployed per the authoriser's own
+   (`spec_version >= 3` for this schema, and the arm deployed per the authoriser's own
    record, since verifier keys are not a specified chain read); check
    `bounds`, the implications, and the envelope-1 read-only rule.
 6. Sign the user in with an authoriser credential whose relying-party
@@ -1641,7 +1701,9 @@ name is displayed. The screen MUST display:
 7. `per_call_cap`, `cap`, and `max_coin_value` in atomic units with an
    explicit smallest-unit label (no on-chain decimals metadata exists);
    on a re-issue, the tombstone's `spent` as the roster records it;
-8. the recipient pin, or "to any recipient";
+8. the recipient pin, or "to any recipient"; separately, the full caller
+   contract address, or "via any caller", with the immediate-caller and
+   public call-relationship meaning of section 6.2.1;
 9. `expires_at` as a local date, or the words "never expires";
 10. the implications (a shielded spend implies read);
 11. the grantee key's scheme, envelope in words ("software key", "passkey
@@ -1652,6 +1714,11 @@ name is displayed. The screen MUST display:
     amounts, and dApp host are not);
 13. that the transaction is paid by the account;
 14. that the grant can be revoked from any device.
+
+The response's approved bounds MUST retain the caller restriction, if
+requested. The dApp MUST recompute `caller_commit` from the returned
+scope and salt and compare it to the record before accepting the grant;
+an omitted, removed, or substituted requested pin is a binding failure.
 
 The approver MAY narrow any bound (lower cap, earlier expiry, narrower
 recipient, fewer operations, smaller `max_coin_value`) and MUST NOT
@@ -1874,7 +1941,7 @@ and never advance `auth_nonce` (GR-5); AUTH-9 is scoped to device
 handles, with a stable per-grant identifier permitted under a stated
 hiding argument (GR-15). Widening "device" to cover grantees is rejected
 (R1). Every conformance item of the authorisation MIP remains
-device-only and passes unchanged on a `spec_version = 2` account; its
+device-only and passes unchanged on a `spec_version = 3` account; its
 rejection matrix and deposit-independence item gain grant-side
 counterparts in Testing, which do not replace them.
 
@@ -1906,13 +1973,27 @@ MIP's SIG-1 through SIG-5 for the arms it deploys.
 | GR-17 (redirect binding) | The authoriser acts only on a request whose possession proof, computed over the request bytes as received, shows a credential on the requesting origin, whose `aud` names it, whose window is current and `nonce` unseen, whose `redirect_uri` is same-origin with the attested `client_id` and matched exactly, and whose `state` it echoes; the binding is chosen by the transport; the response carries no bearer artefact or key list; the dApp treats its grant as live only after recomputing `grant_id` and reading the record from chain. | RFC 9700 sections 2.1, 4.1.3, 4.10; RFC 9207 |
 | GR-18 (read is a capability, and it is total) | `read` is declarative and the ledger does not enforce a read scope; a grant with `read` confers the whole viewing capability until rotation; the secret is delivered sealed to a bound `read_pk`; rotate-before-share precedes every read issuance and every rotation re-seals or flags the other live read grants; a read revocation rotates `enc_key`; every inbox reader verifies each entry against chain data. | custody MIP R9, S2, section 6.5 |
 
+**GR-19 (caller restriction).** A nonzero `caller_commit` admits only
+the matching immediate contract from `kernel.caller()`, in addition to
+all existing grant predicates. A zero commitment causes no caller read.
+The claim-policy and disclosure boundaries are stated in section 6.2.1.
+GR-15 includes the authenticated caller-context read on restricted calls;
+it does not conceal the exercised contract relationship.
+
 ### 14. Versioning
+
+The caller extension advances the schema to `spec_version = 3` and the
+scope digest to `midnight:account:grant:scope:v2`, including unrestricted
+new grants. Grant identity and operation challenge domains stay at v1;
+the record's `issued_at` and nonce continue to bind each signed spend.
+Old scope:v1 issue signatures cannot issue v3 records. Historical v2
+measurements below describe the base grants implementation.
 
 - **Document.** Versioned by its MIP number and revision history;
   substantive changes after acceptance require a new MIP listing this
   one in `Replaces`. It extends the two parent MIPs and supersedes
   neither.
-- **Contract schema.** Grant-capable accounts expose `spec_version = 2`.
+- **Contract schema.** Caller-capable accounts expose `spec_version = 3`.
   New cells and structs are a redeploy (Backwards Compatibility
   Assessment); twins, lifecycle circuits, pure derivations, and tag
   families are maintenance updates while the authority is live, under
@@ -1957,8 +2038,9 @@ MIP's SIG-1 through SIG-5 for the arms it deploys.
 MIP's INV-1 admits exactly one gate, so a grant must be a way to satisfy
 `require_authorised()`. Widening "device" would make a grant count
 toward `device_count` and weaken AUTH-5; a separate verifier contract
-would need the caller identity MPS-0029 records Compact lacks; a sender
-witness is the `ownPublicKey()` pattern the custody MIP section 4
+would add a cross-contract dependency. Compact 0.35.0 now supplies
+immediate caller identity, used directly in the existing account seam;
+a sender witness is the `ownPublicKey()` pattern the custody MIP section 4
 forbids. The remaining shape, a distinct record class verified by grant
 twins calling a grant seam chip where device twins call the device chip,
 is what the account-custody prototype evidenced on a devnet node.
@@ -2167,7 +2249,7 @@ measured rather than specified here, which is why section 5.1 states
 - [ ] A second independent implementation of the grantee side (a wallet
       provider or an Open Wallet Standard plugin) producing bit-identical
       challenges from the byte recipes alone.
-- [ ] Public-testnet deployment of a `spec_version = 2` account with at
+- [ ] Public-testnet deployment of a `spec_version = 3` account with at
       least one grant issued, exercised, and revoked by a third-party
       dApp; a dApp not written by the authors completing E4 from the
       text alone.
@@ -2178,7 +2260,7 @@ measured rather than specified here, which is why section 5.1 states
 
 1. Name the external co-author and settle the open items with the
    Foundation and the editors; fold the outcomes into the text.
-2. Extend the reference contract to `spec_version = 2` and run E1, E2,
+2. Extend the reference contract to `spec_version = 3` and run E1, E2,
    E6, E9, and E10 (E1 and E3 are held; E2, E6, and E10 are held in
    part and their residue is named in the acceptance criteria); correct
    any byte recipe the compiled encoding contradicts and publish the E5
@@ -2207,8 +2289,8 @@ in the current stable network protocol.
 `grant_generation`, and the two structs are new ledger cells and types.
 A contract's ledger schema is fixed at deploy; only its circuits evolve
 by maintenance update. A grant-capable account therefore exposes
-`spec_version = 2`, and **an existing `spec_version = 1` account cannot
-gain grants by maintenance update**; migration is a new account and is
+`spec_version = 3`, and **an existing v1 or v2 account cannot gain this
+schema by maintenance update**; migration is a new account and is
 out of scope. Clients MUST read `spec_version` before requesting a grant
 and MUST report `account_not_capable` otherwise. The redeploy SHOULD be
 shared with the device-identity remedy for the authorisation MIP's
@@ -2273,7 +2355,7 @@ the salt.
 | S13 | Device compromise not contained by `remove_device` | `revoke_all_grants` composed with a compromise removal (7.3) |
 | S14 | Epoch or generation confusion, pre-planting (erratum 7) | `epoch`, `gen`, `issued_at` contract-written and asserted at use (GR-8) |
 | S15 | Weak or identity keys (erratum 6) | the per-arm table of 3.3, including SEC 1 validation on r1; off-curve negative vectors |
-| S16 | Origin spoofing through a free parameter | the origin is browser-attested; the record holds only commitments; chain-side origin enforcement does not exist |
+| S16 | Origin spoofing through a free parameter | browser origin is browser-attested; optional contract caller enforcement uses the ledger's `kernel.caller()`, never a self-asserted address (6.2.1); the two identities are distinct |
 | S17 | Consent deception by dApp-supplied strings or units | consent from the exact plaintext scope and the proven `client_id`; no dApp strings; atomic units; hex color (9.5) |
 | S18 | Consent as a Document Object Model (DOM) event on a page holding signing material | consent precedes the ceremony; the assertion challenge is the issue challenge; the derived key is used once; `frame-ancestors 'none'`, top-window check, `Cross-Origin-Opener-Policy` (9.4) |
 | S19 | Leakage through URLs, logs, referrers, history | fragment transport on both legs; `no-referrer`; no third-party resources; `replaceState`; `view` sealed; `scope_salt` confers no authority but is the key to the record's INV-2 protection, and history, session restore, profile sync, and extensions remain exposure surfaces |
@@ -2298,6 +2380,14 @@ the salt.
 | S38 | Toolchain hazards | the vacuous-verifier control of the authorisation MIP's S10; pinned toolchain versions |
 
 ## Implementation
+
+**Caller extension (2026-10-01).** The reference uses Compact 0.35.0,
+runtime 0.20.0 and `spec_version = 3`. Both device arms bind the new
+scope:v2 digest; all six grant-spend circuits enforce the caller pin.
+The [caller implementation guide](../../../contract/GRANTS-CALLER.md)
+records reproduction, conformance evidence and the forwarding compiler
+limitation. The following E1/E2 rows retain their historical scope:v1
+measurements and are not measurements of the caller extension.
 
 | Evidence held | What it establishes |
 |---|---|
@@ -2330,7 +2420,7 @@ cryptographer review the acceptance criteria require.
 The reference contract now carries the two cells, the two structs, the
 pure derivations, the seam chips and three grant twins on each grantee
 arm, three lifecycle circuits on each device arm, and
-`spec_version = 2`, and the Rust signer produces bit-identical
+`spec_version = 3`, and the Rust signer produces bit-identical
 `grant_id`, commitments, and `k1` and `v1` challenges from the byte
 recipes alone. A static consent page implementing section
 9 and a dApp implementing the return leg and sign-in, each runnable
@@ -2341,6 +2431,15 @@ contains no implementation code; the reference implementation is an
 acceptance criterion.
 
 ## Testing
+
+**Caller restriction (GR-19).** Exercise correct and wrong immediate
+contract callers, absent and user-address callers, the `A -> B -> account`
+case, and a forged off-chain caller context with no matching ledger
+claim. Verify owner-signature binding of the pin, retained grantee
+signature/freshness checks, and caller-independent transcripts for the
+unrestricted branch. Wrong-caller checks cover both arms and all six
+spend gates; on-node composition and the forged-context control are
+reported separately in the caller implementation guide.
 
 Conformance is demonstrated by a suite exercising, against a real node,
 the following. Each item names the invariants it exercises.

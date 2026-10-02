@@ -1078,14 +1078,14 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   const l0 = await account.ledgerState();
   deployDetails.specVersion = l0.spec_version.toString();
   deployDetails.initialLedger = await snapshot(account);
-  if (l0.spec_version !== 2n) {
+  if (l0.spec_version !== 3n) {
     setVerdict('deploy', 'FAIL');
-    throw new Error(`spec_version ${l0.spec_version}, expected 2`);
+    throw new Error(`spec_version ${l0.spec_version}, expected 3`);
   }
   deployDetails.specVersion1Control =
     'NOT RUN. Testing item 6 also asks that a spec_version = 1 account be shown unable to gain grants. ' +
     'That control needs a compiled v1 (pre-grants) build of the contract, which this tree does not carry: ' +
-    'contracts/account.compact is the spec_version = 2 source and the managed artefacts are its 30-circuit roster. ' +
+    'contracts/account.compact is the spec_version = 3 source with caller-bound grants. ' +
     'The control is therefore outstanding, and the deploy leg of item 6 is reported without it.';
   setVerdict('deploy', 'PARTIAL');
 

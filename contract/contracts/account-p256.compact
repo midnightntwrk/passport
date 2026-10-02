@@ -227,17 +227,18 @@ export circuit issue_grant_with_p256(
   recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>,
   per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>,
   read_pk_hash: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>,
-  scope_salt: Bytes<32>, auth: P256Auth
+  caller: Maybe<ContractAddress>, scope_salt: Bytes<32>, auth: P256Auth
 ): [] {
   const digest = derive_grant_scope_digest(
     scope_salt, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract,
     read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at,
-    rp_id_hash, read_pk_hash, window_len, window_cap);
+    rp_id_hash, read_pk_hash, window_len, window_cap, caller);
   require_authorised_with_p256(auth, challenge_issue_grant_with_p256(
     kernel.self(), auth.pk, grant_id, digest, auth_nonce));
   do_issue_grant(grant_id, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value,
-    per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash, window_len, window_cap, scope_salt);
+    per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash, window_len, window_cap, caller,
+    scope_salt);
 }
 
 export circuit revoke_grant_with_p256(grant_id: Bytes<32>, auth: P256Auth): [] {

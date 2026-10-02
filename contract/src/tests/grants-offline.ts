@@ -1,4 +1,4 @@
-// Off-node execution of the scoped-grants seam (`spec_version = 2`) through
+// Off-node execution of the scoped-grants seam (`spec_version = 3`) through
 // the compact-runtime local simulator: no node, no docker, no proof, no
 // zswap. Block time is the simulator's `time` parameter, which is what
 // makes the `expires_at` items expressible here at all.
@@ -396,7 +396,7 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
   const acc = await openAccount(deviceArm);
   const L = () => acc.L() as any;
 
-  ok(L().spec_version === 2n, `${tag} spec_version is 2`);
+  ok(L().spec_version === 3n, `${tag} spec_version is 3`);
   ok(L().grant_generation === 0n && L().grants.isEmpty(), `${tag} grant state starts empty at generation 0`);
 
   const grantee: AnyGrantee = granteeArm === 'jubjub' ? JubjubGrantee.generate() : K256Grantee.generate();
@@ -420,6 +420,24 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
   const gid = grantee.grantId(acc.address, origin, slot);
 
   // ── Issue rules (section 5.1): each rejected before any write ────────────
+  const beforeCaller = acc.snapshot();
+  const caller = rnd(32);
+  await acc.issue({ ...scope, caller }, gid, scopeSalt);
+  ok(eq(L().grants.lookup(gid).scope.caller_commit,
+    pureCircuits.derive_grant_caller_commit(scopeSalt, { is_some: true, value: { bytes: caller } })),
+    `${tag} device signs and stores caller pin`);
+  acc.restore(beforeCaller);
+  const issueContext = acc.callContext();
+  const unsignedPin = acc.deviceAuth(
+    () => jubjubChallenges.issueGrant(issueContext, acc.owner.pk as JubjubPoint, gid, scopeDigest(scopeSalt, scope)),
+    () => k256Challenges.issueGrant(issueContext, acc.owner.pk as Secp256k1Point, gid, scopeDigest(scopeSalt, scope)));
+  await expectAbort(`${tag} caller pin cannot be added to signed unrestricted scope`,
+    () => acc.call(`issue_grant_with_${acc.owner.arm}`, gid, ...scopeArgs({ ...scope, caller }), scopeSalt, ...authArgs(unsignedPin)),
+    ['invalid signature', 'range error']);
+  await expectAbort(`${tag} read-only grant cannot restrict caller`,
+    () => acc.issue({ ...readOnlyScope({ readPkHash: rnd(32) }), caller }, gid, scopeSalt),
+    'read-only grant cannot restrict caller');
+
   // Built as PlainScope literals, not through `spendScope`, because the
   // circuit is what is under test here; `assertIssueRules` refuses the same
   // scopes client-side and is checked separately at the end of the run.
