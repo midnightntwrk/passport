@@ -8,8 +8,17 @@ How a device proves it is the user's authorised device. Passkey
 (WebAuthn) bound to the device's secure boundary. Provides P1
 (seedless), P3 (peer-device), P6 (key-bound).
 
-**Status 2026/07 — decided.** The passkey is the device boundary in
-both custody models, with two distinct roles:
+**Status 2026/10/01:** open [#175](https://github.com/midnightntwrk/passport/pull/175)
+adds direct P-256 signing under a bounded WebAuthn profile, with real Safari
+account-key rotation accepted on localnet. Draft
+[#177](https://github.com/midnightntwrk/passport/pull/177) separately
+demonstrates reader envelopes with software credentials and synthetic PRF.
+A PRF-capable credential may supply both roles; ES256 does not establish
+PRF availability or synchronization. Live PRF and wallet integration remain.
+See [current evidence](../STATUS.md).
+
+**Earlier design (2026/07).** The following describes PRF-to-JubJub and
+managed-signing options, not the current deployed demo configuration:
 
 - **Decentralised path (v1.0 standards target).** A WebAuthn passkey
   with the **PRF extension**: the PRF evaluation deterministically
@@ -24,7 +33,7 @@ both custody models, with two distinct roles:
   threshold device (MIP-0013 section 7). The account contract cannot
   tell the two paths apart — same verification equation.
 
-What remains is support-matrix and fallback policy, not the model.
+Support-matrix, fallback, bootstrap and reader-roster decisions remain.
 
 ## Dependencies
 
@@ -47,18 +56,17 @@ What remains is support-matrix and fallback policy, not the model.
 authenticator combinations provide PRF, and what is the decentralised
 path's behaviour where it is absent — managed path as fallback,
 platform-native derivation, or unsupported? Product-owner-signed
-matrix still needed. The fallback space is widening upstream: the
-proof system's next ZKIR revision adds native secp256r1, which would
-make a passkey's ordinary ECDSA-P256 assertion verifiable in-circuit —
-a PRF-free candidate fallback worth assessing once the toolchain
-exposes it.
+matrix still needed. Compact 0.35 exposes native P-256; #175 exercises
+PRF-free account signing under `wa-json134`. Viewing-secret restoration
+still needs a separate supported encryption/derivation path.
 
 **Synced passkeys.** A synced passkey (iCloud Keychain, Google
-Password Manager) reproduces the PRF seed on several physical devices,
+Password Manager) may reproduce a PRF output on several physical devices,
 blurring the device boundary: does one synced passkey constitute one
 logical device in the account, or does policy require per-device
 credentials? Interacts with P3's peer-device model and MIP-0013's
-one-commitment-per-device set.
+one-commitment-per-device set. Verify that property per provider; the
+current experiments do not test cross-machine synchronization.
 
 **Derivation specification.** The PRF → JubJub scalar derivation needs
 a specified, domain-separated construction (C8 tag, e.g. under
@@ -107,9 +115,8 @@ derives the on-device JubJub keypair (decentralised path); plain
 assertion is sufficient where the key lives elsewhere (managed path's
 authentication to the MPC service).
 
-**B — WebAuthn assertion only.** Subsumed: it is exactly the managed
-path's requirement, but insufficient alone for on-device key
-derivation.
+**B — WebAuthn assertion only.** Direct P-256 signing is implemented in open
+#175. An assertion alone does not derive a viewing or storage key.
 
 **C — Platform-native** (Secure Enclave on iOS, StrongBox on Android,
 no WebAuthn). Candidate fallback where PRF is unavailable in native

@@ -2,6 +2,13 @@
 
 **Serves:** P1 · P3 · P4 · P5 · P8.
 
+**Status 2026/10/01:** recovery #165 and Compact 0.35 maintenance #174 are
+merged. P-256 #175 and caller-bound grants #176 are open, separate builds;
+the latter uses schema v3. Preserve the 15,000-verifier-byte limit on every
+deployment wave. Public-key admissibility and device-wide revocation
+corrections remain; the earlier observations below are toolchain-specific.
+See [current evidence and integration sequence](../STATUS.md).
+
 ## Outcome
 
 The on-chain Compact contract representing a Passport account. Holds the

@@ -8,7 +8,9 @@ Editor numbers are assigned upstream at merge; files here use `xxxx`
 until then. Once a document is merged upstream, the upstream copy is
 canonical and the copy here is retired to a pointer.
 
-## Submitted (upstream copy is canonical)
+Last reconciled: **1 October 2026**. See [development status](../plans/STATUS.md).
+
+## Published upstream (upstream copy is canonical)
 
 - `mps/mps-asset-custody-model.md` → upstream **MPS-0018**,
   Multi-key Account Custody for Midnight-Native Assets.
@@ -29,12 +31,29 @@ canonical and the copy here is retired to a pointer.
   approval from proving). The DST-derivation and bootstrap errata are
   merged upstream. Scoped grants are deferred to a successor
   extension.
+- `mps/mps-call-provenance.md` → upstream **MPS-0040**, Cross-Contract
+  Call Provenance in Compact Circuits (Proposed). Compact 0.35 now exposes
+  immediate caller identity; open Passport #176 validates a consumer.
+- **MPS-0039**, Calling a Contract Requires Its Full Compiled Artifacts, is published
+  upstream (Proposed); the regeneration proposal below addresses it.
 
 The two MIP files here are retained as working mirrors while the
 reference implementation (`contract/`) and the upstream texts evolve
 together; the upstream copies are canonical.
 
-## In draft
+## Submitted upstream, still open
+
+- [#338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338):
+  `mips/mip-xxxx-prover-key-regeneration.md`, submitted by Hector after
+  Passport #173 merged. Authors: **Nicolas Di Prima and Vincent Hanquez**.
+- [#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339):
+  `mips/mip-xxxx-account-recovery.md`, submitted by Hector after Passport
+  #165 merged.
+
+Both contain Draft-status documents. Neither is accepted/merged upstream;
+retain the local working drafts while review continues.
+
+## Working draft and evidence notes
 
 - `mips/mip-xxxx-signature-schemes.md` — **Signature Schemes for
   Custody-Account Authorisation (C5 signing primitive)**: the scheme
@@ -44,7 +63,9 @@ together; the upstream copies are canonical.
   pattern with the scheme-generic challenge core and its ECDSA
   deltas, the r1 envelope binding, and the SIG invariant family.
   Filled from the evidence base (the P-256 in-circuit experiment and
-  the k1 arm). Remaining tags: [DEP] Compact r1 surface, [CIRCUIT]
+  the k1 arm). Compact 0.35 supplies the r1 surface and open #175 implements
+  the bounded `wa-json134` profile; reconcile the draft's [DEP] marker.
+  Remaining tags: [CIRCUIT]
   length-agnostic client-data hashing, [CRYPTO] envelope-binding and
   malleability-inertness review, [RULING] the k1 Interim-status
   registration. Tracked by passport issue #51 and PR #146.
@@ -67,20 +88,11 @@ together; the upstream copies are canonical.
   contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
   `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
   is exercised on node.
-- `mps/mps-call-provenance.md` — **Cross-Contract Call Provenance in
-  Compact Circuits**: a Compact callee cannot learn whether a contract
-  invoked it, which contract, or which circuit. The ledger already
-  derives the calling contract's address per call frame (VM context
-  slot 6, Contract arm first, unshielded-owner fallback second) and
-  Compact has no reader for it; the calling circuit is recorded by no
-  layer at all. Complements MPS-0029 (wallet identity, same slot) and
-  MPS-0021 (Phase 2 witnesses); `Requires: none`. Filled from the
-  cross-contract-calls experiment (`experiments/cross-contract-calls/`)
-  and a source reading of `ledger-9.1.0.0-rc.3`, with the Contract arm
-  observed on our transaction bytes by P8 and voluntary lending admitted
-  on the node by P9 (2026/09/14). Co-authored with the
-  Midnight Foundation; MPS-0029's author to be invited to review before
-  the upstream filing.
+- Caller-bound grants are implemented in open #176 using `kernel.caller()`
+  on Compact 0.35, with a fabricated-caller proof refused at node admission.
+  The extension uses schema v3 and needs reconciliation with P-256 #175;
+  earlier grant evidence and the unshielded follow-up #163 are merged.
+  Calling-circuit identity remains distinct from immediate caller identity.
 - `mips/mip-xxxx-account-recovery.md` — **Recovery Paths for Custody
   Accounts (building block three)**: total-loss recovery behind the
   MIP-0013 seam, anchored on bottom-up secret sharing (ANARKey/BUSS).

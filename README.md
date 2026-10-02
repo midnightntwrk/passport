@@ -12,6 +12,7 @@ This repository holds the plan, the research that backs it, the reference materi
 | If you are… | Read |
 |---|---|
 | A stakeholder wanting the plan | https://midnightntwrk.github.io/passport |
+| Looking for current development status | [`docs/plans/STATUS.md`](docs/plans/STATUS.md) — refreshed 1 October 2026 |
 | A developer joining the team | [`research/README.md`](research/README.md) |
 | A partner evaluating the proposal | [`docs/plans/README.md`](docs/plans/README.md) |
 | Looking for the design vision | [`docs/secure-onboarding-design.pdf`](docs/secure-onboarding-design.pdf) |

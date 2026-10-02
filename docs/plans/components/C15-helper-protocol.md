@@ -2,6 +2,13 @@
 
 **Serves:** P5 · P8.
 
+**Status 2026/10/01:** draft and reference gate merged in
+[#165](https://github.com/midnightntwrk/passport/pull/165); upstream
+[#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339)
+is open. Transport, roster handling, interoperability vectors and
+multi-session crypto review remain. Prototype wire formats below are
+historical evidence, not a completed interoperable standard.
+
 ## Outcome
 
 The protocol that recovery helpers run — interface between C14 and the

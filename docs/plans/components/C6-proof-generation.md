@@ -1,5 +1,12 @@
 # C6 · Proof generation
 
+**Status 2026/10/01:** native regeneration evidence #170 and solution draft
+#173 are merged; [upstream #338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338)
+is open, co-authored by Nicolas Di Prima and Vincent Hanquez. Supported
+SDK/WASM APIs, validation vectors and integration remain. Browser proving
+measurements below belong to the earlier prototype, not the current P-256
+account's browser/mobile performance. See [status](../STATUS.md).
+
 **Serves:** P6 · P8.
 
 ## Outcome

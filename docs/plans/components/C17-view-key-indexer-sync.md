@@ -1,5 +1,14 @@
 # C17 · View-key + indexer sync
 
+**Status 2026/10/01:** draft [#177](https://github.com/midnightntwrk/passport/pull/177)
+demonstrates 192-byte inbox envelopes per reader/viewing-key generation.
+Two fresh-private-state clients restored and spent before/after rotation
+with B offline, using software ES256 and synthetic PRF. Account and other
+public bootstrap metadata are explicit inputs. Nicolas reviews the draft
+before wider involvement. Lace's role is a connected dApp/grantee, not an
+ACC device-key provider; the device-based test does not validate that grant
+journey. Reader-roster trust, live PRF and recovery remain. See [status](../STATUS.md).
+
 **Serves:** P3 · P8.
 
 ## Outcome

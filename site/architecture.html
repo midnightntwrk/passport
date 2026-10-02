@@ -582,7 +582,7 @@
         <h2>Notes for reviewers</h2>
         <ul>
           <li><strong>This is a context + container view.</strong> It shows where components live and who they talk to, not the data flow for any specific operation. The <a href="demo.html">How it works</a> page walks the account lifecycle end to end.</li>
-          <li><strong>How authority flows.</strong> The user authorises with a biometric on a device-bound passkey; the derived device key signs each call with JubJub Schnorr (C5, C9). Witnesses never leave the device — proving happens in-tab (C6, C7) — and the account custody contract verifies the proof in-circuit and is the sole authority over the account's assets (C1, C4). Recovery guardians reach the account only through the epoch-bump seam (C14, C15); the name binds to the account through the upstream registry (C2), and the DID linkage is a live C3 question.</li>
+          <li><strong>How authority flows.</strong> A device signs a call-bound challenge; the account circuit verifies it against enrolled authority (C1, C5, C9). Main supports JubJub and k256; open #175 adds profiled passkey P-256. Local proving keeps witnesses on-device; delegated proving exposes the required witnesses and one-call signature, never the device signing key (C6, C7). Recovery uses the merged two-phase signature gate and an epoch bump (C14, C15). See the <a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">1 October development status</a> for evidence and integration boundaries.</li>
           <li><strong>Workstreams are explicitly unresolved.</strong> C3 (DID surface), C22 (intent surface), C24 (fee model — mechanism confirmed, sponsor operator open), and C25 (cross-chain interface) are dashed because a live decision remains. C4 (asset custody) has resolved to stateless contract custody, normative in MIP-0012. Placement may shift once a workstream resolves.</li>
           <li><strong>C3 sits inside the on-chain zone</strong> as the primary architectural element, but the workstream's resolution runs through engagement with the external <em>midnight-did</em> repository — drawn alongside in the external identity ecosystem.</li>
           <li><strong>C8 (domain separation) is cross-cutting</strong> and shown as an annotation rather than placed in any single zone — every <code>persistentHash</code> use site needs a registered prefix.</li>
@@ -666,7 +666,7 @@
     },
     'dapp': {
       label: 'dApp partner',
-      body: 'A third-party application requesting scoped access. It receives its own grant secret, scoped on-chain to operation, object, and quantitative caps (C10–C12) and enforced by the circuit, never by the dApp\'s goodwill. It connects through the dApp connection protocol (C23); revocation makes its secret worthless.',
+      body: 'A third-party application requesting scoped access with its own signing key. Grant scope is enforced in-circuit (C10–C12). Revocation ends that grant authority; separately shared viewing secrets cannot be erased from the reader. The connection ceremony and read handover remain integration work (C23).',
     },
     'issuer': {
       label: 'Credential issuer',
@@ -678,7 +678,7 @@
     },
     'helper': {
       label: 'Recovery helper',
-      body: 'A recovery guardian under the decided BUSS design (C14, C15). Guardians store nothing between ceremonies and derive their share on demand from a key they already hold; any quorum plus the on-chain public vector reconstructs the recovery secret off-chain. Paper keys count as guardians too, so no social graph is required.',
+      body: 'A recovery guardian under the BUSS design (C14, C15). Guardians retain their own long-lived keys but no per-account shares; a quorum plus the public session artifacts reconstructs the recovery secret off-chain. The reference gate consumes signatures, not that secret. Paper keys are another guardian profile; transport and multi-session review remain.',
     },
     'sponsor': {
       label: 'Sponsor service',

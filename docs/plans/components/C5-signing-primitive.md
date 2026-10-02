@@ -88,11 +88,17 @@ Interim with a named sunset, the SIG-1 to SIG-5 invariant family, and
   k=15 (SDK path) and k=16 (connector envelope). The arm is blocked in
   Compact only on secp256k1 point operations.
 
-Gates to submission: a cryptographer pass on the envelope binding and
-the accept-both-s policy, the secp256r1 Compact language surface (a
-declared dependency), and the Interim-status ruling. Both ECDSA arms
-reject the curve identity at the seam and the bootstrap ahead of the
-MIP-0013 text (see C1, weak keys).
+**Update 2026/10/01:** Compact 0.35 supplies native P-256 verification.
+Open [#175](https://github.com/midnightntwrk/passport/pull/175) implements
+`wa-json134` (134-byte JSON, 21-byte origin, 37-byte extension-free
+authenticator data, enrolled RP/origin and UP+UV). A real Safari passkey
+approved an account-key rotation accepted on localnet; automated account
+benchmarks use software credentials. The new Compact account circuits are
+k=18; the older k=15 experiment above is a different implementation.
+
+Submission still needs cryptographer/profile review, the accept-both-s
+policy and Interim-status ruling. A supported-toolchain key admissibility
+map and normative amendment remain open (C1). See [status](../STATUS.md).
 
 ## Dependencies
 
