@@ -7,7 +7,7 @@ import { JubjubDevice, jubjubChallenges, authArgs } from '../../wallet/signer.js
 import { p256Challenges } from '../../wallet/signer-p256.js';
 import { assertionMaterial } from '../../wallet/webauthn.js';
 import { generateEncKeyPair, sealInboxEntry, openInboxEntry } from '../../wallet/inbox.js';
-import { ENVELOPE_SIZE, LAYOUT, contextBytes, concat, random, hex, readerFromPrf,
+import { ENVELOPE_SIZE, LAYOUT, contextBytes, concat, random, readerFromPrf,
   sealViewEnvelope, openViewEnvelope, findCurrentEnvelope } from './codec.js';
 
 const a = softwarePasskey(), b = softwarePasskey();
@@ -67,6 +67,8 @@ for (const wrong of [{ ...context, account: random() }, { ...context, network: '
 await assert.rejects(() => sealViewEnvelope(context, new Uint8Array(32), view.secretKey, b.pk));
 await assert.rejects(() => sealViewEnvelope(context, new Uint8Array(32).fill(255), view.secretKey, b.pk));
 const poison = await sealViewEnvelope(context, readerB.publicKey, random(), b.pk);
+// Per-record tags: two envelopes sealed to the same reader are not linkable by tag.
+assert.notDeepEqual(poison.slice(2, 34), envelope.slice(2, 34), 'recipient tag must differ per record');
 assert.equal(await openViewEnvelope(context, readerB.secretKey, poison, view.publicKey), null, 'decryptable wrong key rejected');
 const coin = { nonce: random(), color: random(), value: 17n };
 const coinRecord = sealInboxEntry(view.publicKey, coin);
@@ -85,6 +87,22 @@ const untrusted = await openViewEnvelope(context, readerB.secretKey, wrongMetada
 assert.ok(untrusted);
 const authenticAssertion = await b.assertion(challenge);
 assert.throws(() => assertionMaterial(challenge, b.policy, untrusted.signingKey, authenticAssertion), /signature/);
+// Newest-first selection without a validator picks the later substituted
+// record; with one, that record is zeroed and skipped for the valid envelope.
+const firstMatch = await findCurrentEnvelope(context, readerB.secretKey, [envelope, wrongMetadata], view.publicKey);
+assert.deepEqual(firstMatch.signingKey, a.pk, 'unvalidated selection accepts substituted metadata');
+const rejectedCandidates: Uint8Array[] = [];
+const validated = await findCurrentEnvelope(context, readerB.secretKey, [envelope, wrongMetadata], view.publicKey,
+  candidate => {
+    try { assertionMaterial(challenge, b.policy, candidate.signingKey, authenticAssertion); return true; }
+    catch { rejectedCandidates.push(candidate.viewSecret); return false; }
+  });
+assert.deepEqual(validated.signingKey, b.pk);
+assert.deepEqual(validated.viewSecret, view.secretKey);
+assert.equal(rejectedCandidates.length, 1);
+assert.ok(rejectedCandidates[0].every(v => v === 0), 'rejected candidate secret zeroed');
+await assert.rejects(() => findCurrentEnvelope(context, readerB.secretKey, [wrongMetadata], view.publicKey, () => false),
+  /no current viewing envelope/);
 
 // Stage the next viewing secret using B's PUBLIC reader key only. B performs
 // no PRF or signing operation while the owner stages and activates rotation.
@@ -106,7 +124,8 @@ const report = {
   encryptedBytes: { viewingSecret: 32, publicP256Coordinates: 64 }, layout: LAYOUT,
   readerCounts: [1, 2, 5, 10, 100].map(readers => ({ readers, bytesPerGeneration: readers * ENVELOPE_SIZE })),
   controls: { everyByteTamperRejected: rejected, wrongReader: true, wrongContext: true,
-    invalidX25519: true, poisonKey: true, substitutedSigningMetadata: true, staleAndStagedKeys: true,
+    invalidX25519: true, poisonKey: true, substitutedSigningMetadata: true, validatorSkipsSubstitutedMetadata: true,
+    perRecordRecipientTags: true, staleAndStagedKeys: true,
     independentOpenSSL: true, actualP256CompiledCircuitCalls: true, legacyReaderSkips: true, offlineRecipientReseal: true },
   limits: 'Software ES256 authenticator and random synthetic PRF outputs. Compiled-circuit simulation, not a node proof or browser/PRF-sync test.',
 };

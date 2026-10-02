@@ -6,6 +6,7 @@ import { x25519 } from '@noble/curves/ed25519.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { equalBytes, validateP256Key, type P256PublicKey } from '../../wallet/webauthn.js';
+import { bytesToHex } from '../../wallet/hex.js';
 
 export const ENVELOPE_SIZE = 192;
 export const ENVELOPE_VERSION = 0xe1; // experimental namespace, not allocated by a MIP
@@ -18,7 +19,7 @@ export const LAYOUT = [
 ] as const;
 export interface Context { network: string; account: Uint8Array; rpId: string; origin: string }
 const text = (s: string) => new TextEncoder().encode(s);
-export const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+export const hex = bytesToHex;
 export const random = (n = 32) => crypto.getRandomValues(new Uint8Array(n));
 export const concat = (...parts: Uint8Array[]) => {
   const out = new Uint8Array(parts.reduce((n, b) => n + b.length, 0));
@@ -42,14 +43,19 @@ export function readerFromPrf(output: Uint8Array, c: Context) {
   const secretKey = hkdf(sha256, output, sha256(contextBytes(c)), text('passport:experimental:reader-key:v1'), 32);
   return { secretKey, publicKey: x25519.getPublicKey(secretKey) };
 }
-export const recipientTag = (publicKey: Uint8Array, c: Context) => {
-  requireLength(publicKey, 32);
-  return sha256(concat(text('passport:experimental:reader-id:v1'), contextBytes(c), publicKey));
-};
+// Per-record tag: binding the ephemeral key makes two envelopes for the same
+// reader unlinkable to a chain observer, who cannot recompute the tag without
+// the reader's public key.
+export const recipientTag = (publicKey: Uint8Array, ephemeralPublicKey: Uint8Array, c: Context) =>
+  tagFor(publicKey, ephemeralPublicKey, contextBytes(c));
+function tagFor(publicKey: Uint8Array, ephemeralPublicKey: Uint8Array, context: Uint8Array) {
+  requireLength(publicKey, 32); requireLength(ephemeralPublicKey, 32);
+  return sha256(concat(text('passport:experimental:reader-id:v1'), context, publicKey, ephemeralPublicKey));
+}
 export const viewPublicKey = (secret: Uint8Array) => { requireLength(secret, 32); return x25519.getPublicKey(secret); };
-const wrapKey = (secret: Uint8Array, publicKey: Uint8Array, c: Context) =>
-  hkdf(sha256, x25519.getSharedSecret(secret, publicKey), sha256(contextBytes(c)), text('passport:experimental:view-wrap:v1'), 32);
-const aad = (entry: Uint8Array, c: Context) => concat(contextBytes(c), entry.slice(0, 78), entry.slice(190));
+const wrapKey = (secret: Uint8Array, publicKey: Uint8Array, contextHash: Uint8Array) =>
+  hkdf(sha256, x25519.getSharedSecret(secret, publicKey), contextHash, text('passport:experimental:view-wrap:v1'), 32);
+const aad = (entry: Uint8Array, context: Uint8Array) => concat(context, entry.slice(0, 78), entry.slice(190));
 const coordinate = (n: bigint) => {
   if (n < 0n || n >= 1n << 256n) throw new Error('invalid coordinate');
   return Uint8Array.from({ length: 32 }, (_, i) => Number((n >> BigInt(8 * (31 - i))) & 255n));
@@ -62,51 +68,77 @@ export async function sealViewEnvelope(c: Context, readerPublicKey: Uint8Array,
   // Reject noncanonical recipient encodings, rather than accepting aliases.
   const u = [...readerPublicKey].reverse().reduce((n, v) => (n << 8n) | BigInt(v), 0n);
   if (u >= (1n << 255n) - 19n) throw new Error('noncanonical X25519 recipient');
+  const context = contextBytes(c);
   const ephemeral = random(), entry = new Uint8Array(ENVELOPE_SIZE);
   entry[0] = ENVELOPE_VERSION; entry[1] = ENVELOPE_SUITE;
-  entry.set(recipientTag(readerPublicKey, c), 2);
-  entry.set(x25519.getPublicKey(ephemeral), 34); entry.set(random(12), 66);
-  const keyBytes = wrapKey(ephemeral, readerPublicKey, c); ephemeral.fill(0);
+  entry.set(x25519.getPublicKey(ephemeral), 34);
+  entry.set(tagFor(readerPublicKey, entry.slice(34, 66), context), 2);
+  entry.set(random(12), 66);
+  const keyBytes = wrapKey(ephemeral, readerPublicKey, sha256(context)); ephemeral.fill(0);
   const key = await crypto.subtle.importKey('raw', new Uint8Array(keyBytes), 'AES-GCM', false, ['encrypt']);
   keyBytes.fill(0);
   const plaintext = concat(viewSecret, coordinate(signingKey.x), coordinate(signingKey.y));
   const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM',
-    iv: entry.slice(66, 78), additionalData: new Uint8Array(aad(entry, c)), tagLength: 128 }, key, plaintext));
+    iv: entry.slice(66, 78), additionalData: new Uint8Array(aad(entry, context)), tagLength: 128 }, key, plaintext));
   plaintext.fill(0);
   entry.set(encrypted.slice(0, 96), 94); entry.set(encrypted.slice(96), 78);
   return entry;
 }
 
-export async function openViewEnvelope(c: Context, readerSecret: Uint8Array, entry: Uint8Array,
-  currentViewPublicKey: Uint8Array): Promise<{ viewSecret: Uint8Array; signingKey: P256PublicKey } | null> {
-  requireLength(readerSecret, 32); requireLength(currentViewPublicKey, 32);
+/** Values derived once per reader and context, shared across entries. */
+interface Opener { readerSecret: Uint8Array; readerPublicKey: Uint8Array; context: Uint8Array; contextHash: Uint8Array }
+function opener(c: Context, readerSecret: Uint8Array): Opener {
+  requireLength(readerSecret, 32);
+  const context = contextBytes(c);
+  return { readerSecret, readerPublicKey: x25519.getPublicKey(readerSecret), context, contextHash: sha256(context) };
+}
+export interface OpenedEnvelope { viewSecret: Uint8Array; signingKey: P256PublicKey }
+/** Accepts a candidate only if, for example, a fresh assertion verifies under its signing key. */
+export type EnvelopeValidator = (candidate: OpenedEnvelope) => Promise<boolean> | boolean;
+
+async function openWith(o: Opener, entry: Uint8Array, currentViewPublicKey: Uint8Array): Promise<OpenedEnvelope | null> {
+  // Cheap structural and tag checks first: no X25519 work for foreign records.
   if (entry.length !== ENVELOPE_SIZE || entry[0] !== ENVELOPE_VERSION || entry[1] !== ENVELOPE_SUITE ||
       entry[190] !== 0 || entry[191] !== 0 ||
-      !equalBytes(entry.slice(2, 34), recipientTag(x25519.getPublicKey(readerSecret), c))) return null;
+      !equalBytes(entry.slice(2, 34), tagFor(o.readerPublicKey, entry.slice(34, 66), o.context))) return null;
+  let plaintext: Uint8Array | undefined;
   try {
-    const keyBytes = wrapKey(readerSecret, entry.slice(34, 66), c);
+    const keyBytes = wrapKey(o.readerSecret, entry.slice(34, 66), o.contextHash);
     const key = await crypto.subtle.importKey('raw', new Uint8Array(keyBytes), 'AES-GCM', false, ['decrypt']);
     keyBytes.fill(0);
-    const plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM',
-      iv: entry.slice(66, 78), additionalData: new Uint8Array(aad(entry, c)), tagLength: 128 }, key,
+    plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM',
+      iv: entry.slice(66, 78), additionalData: new Uint8Array(aad(entry, o.context)), tagLength: 128 }, key,
     concat(entry.slice(94, 190), entry.slice(78, 94))));
-    const viewSecret = plaintext.slice(0, 32);
     const signingKey = { x: integer(plaintext.slice(32, 64)), y: integer(plaintext.slice(64, 96)), identity: false };
-    plaintext.fill(0);
-    if (!equalBytes(viewPublicKey(viewSecret), currentViewPublicKey)) { viewSecret.fill(0); return null; }
+    // Validate before any secret is copied out, so a failure leaves nothing to zero.
     validateP256Key(signingKey);
+    const viewSecret = plaintext.slice(0, 32);
+    if (!equalBytes(viewPublicKey(viewSecret), currentViewPublicKey)) { viewSecret.fill(0); return null; }
     // A fresh assertion under this key must ALSO be verified before using it
     // as the selected credential's registration key. Anyone can encrypt to
     // readerPublicKey; AEAD alone does not authenticate the publisher.
     return { viewSecret, signingKey };
-  } catch { return null; }
+  } catch { return null; } finally { plaintext?.fill(0); }
 }
 
+export async function openViewEnvelope(c: Context, readerSecret: Uint8Array, entry: Uint8Array,
+  currentViewPublicKey: Uint8Array): Promise<OpenedEnvelope | null> {
+  requireLength(currentViewPublicKey, 32);
+  return openWith(opener(c, readerSecret), entry, currentViewPublicKey);
+}
+
+/** Walks newest-first. A decryptable envelope that the validator rejects
+ * (for example current secret, substituted signing key) is zeroed and skipped. */
 export async function findCurrentEnvelope(c: Context, readerSecret: Uint8Array,
-  entries: Iterable<Uint8Array>, currentViewPublicKey: Uint8Array) {
-  for (const entry of entries) {
-    const result = await openViewEnvelope(c, readerSecret, entry, currentViewPublicKey);
-    if (result) return result;
+  entries: Iterable<Uint8Array>, currentViewPublicKey: Uint8Array, validate?: EnvelopeValidator) {
+  requireLength(currentViewPublicKey, 32);
+  const o = opener(c, readerSecret);
+  const all = [...entries];
+  for (let i = all.length - 1; i >= 0; i--) {
+    const candidate = await openWith(o, all[i], currentViewPublicKey);
+    if (!candidate) continue;
+    if (!validate || await validate(candidate)) return candidate;
+    candidate.viewSecret.fill(0);
   }
   throw new Error('no current viewing envelope for this reader');
 }
