@@ -1,0 +1,46 @@
+pragma language_version 0.27;
+import CompactStandardLibrary;
+
+// Test-only forwarding contract. The account itself enforces the caller pin,
+// grantee signature and spend scope. This proxy holds no signing secret.
+// All forwarded arguments are disclosed: this is conformance scaffolding,
+// not a privacy-preserving dApp adapter. Compile without --feature-zkir-v3:
+// 0.35.0's v3 backend cannot encode curve points across the call boundary.
+contract Account {
+  circuit withdraw_unshielded_with_grant_jubjub(
+    color: Bytes<32>, amount: Uint<128>, recipient: UserAddress,
+    pk: JubjubPoint, origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>,
+    recipient_kind: Uint<8>, pinned_recipient: Bytes<32>, max_coin_value: Uint<128>,
+    spent_prev: Uint<128>, sig_r: JubjubPoint, sig_s: Field, grind_nonce: Uint<64>
+  ): [];
+}
+
+export struct GrantJubjubCall {
+  color: Bytes<32>; amount: Uint<128>; recipient: UserAddress;
+  pk: JubjubPoint; origin_hash: Bytes<32>; slot: Uint<8>; scope_salt: Bytes<32>;
+  recipient_kind: Uint<8>; pinned_recipient: Bytes<32>; max_coin_value: Uint<128>;
+  spent_prev: Uint<128>; sig_r: JubjubPoint; sig_s: Field; grind_nonce: Uint<64>;
+}
+
+export ledger forwarded: Counter;
+
+export circuit forward_jubjub(account: Account, call: GrantJubjubCall): [] {
+  const target = disclose(account);
+  target.withdraw_unshielded_with_grant_jubjub(
+    disclose(call.color), disclose(call.amount), disclose(call.recipient), disclose(call.pk),
+    disclose(call.origin_hash), disclose(call.slot), disclose(call.scope_salt),
+    disclose(call.recipient_kind), disclose(call.pinned_recipient), disclose(call.max_coin_value),
+    disclose(call.spent_prev), disclose(call.sig_r), disclose(call.sig_s), disclose(call.grind_nonce));
+  forwarded.increment(1);
+}
+
+// A -> B -> account: the account must observe B, never the root A.
+contract Proxy {
+  circuit forward_jubjub(account: Account, call: GrantJubjubCall): [];
+}
+
+export circuit relay_jubjub(proxy: Proxy, account: Account, call: GrantJubjubCall): [] {
+  const target = disclose(proxy);
+  target.forward_jubjub(disclose(account), disclose(call));
+  forwarded.increment(1);
+}

@@ -517,6 +517,8 @@ export interface PlainScope {
   windowLen: bigint;
   /** Reserved; MUST be 0. */
   windowCap: bigint;
+  /** Optional immediate ContractAddress pin; absent means any caller. */
+  caller?: Uint8Array;
 }
 
 const ZERO32 = new Uint8Array(32);
@@ -525,17 +527,19 @@ function isZero(bytes: Uint8Array): boolean {
   return bytes.every((b) => b === 0);
 }
 
-/** The sixteen scope arguments in the circuit's declaration order, as
+/** The scope arguments in the circuit's declaration order, as
  *  `issue_grant_with_<arm>` and `derive_grant_scope_digest` take them. */
 export function scopeArgs(s: PlainScope): [
   boolean, boolean, boolean, boolean,
   Uint8Array, bigint, Uint8Array, bigint, bigint, bigint, bigint,
   Uint8Array, Uint8Array, bigint, bigint,
+  { is_some: boolean; value: { bytes: Uint8Array } },
 ] {
   return [
     s.opWithdrawUnshielded, s.opWithdrawShielded, s.opWithdrawShieldedToContract, s.read,
     s.color, s.recipientKind, s.recipient, s.maxCoinValue, s.perCallCap, s.cap, s.expiresAt,
     s.rpIdHash, s.readPkHash, s.windowLen, s.windowCap,
+    { is_some: s.caller !== undefined, value: { bytes: s.caller ?? ZERO32 } },
   ];
 }
 
@@ -553,6 +557,10 @@ export function assertIssueRules(s: PlainScope): void {
   const spend = isSpendScope(s);
   const shielded = s.opWithdrawShielded || s.opWithdrawShieldedToContract;
   if (!spend && !s.read) throw new Error('issue rule 1: empty scope (no operation flag and no read)');
+  if (s.caller !== undefined) {
+    if (s.caller.length !== 32) throw new Error('caller must be a 32-byte contract address');
+    if (!spend) throw new Error('read-only grant cannot restrict caller');
+  }
   if (shielded && !s.read) throw new Error('issue rule 2: a shielded spend flag requires read');
   if (s.perCallCap > s.cap) throw new Error('issue rule 3: per_call_cap above cap');
   if (spend && (s.cap === 0n || s.maxCoinValue < s.perCallCap)) {
@@ -609,6 +617,7 @@ export function spendScope(opts: {
   expiresAt?: bigint;
   readPkHash?: Uint8Array;
   rpIdHash?: Uint8Array;
+  caller?: Uint8Array;
 }): PlainScope {
   const shielded = !!(opts.withdrawShielded || opts.withdrawShieldedToContract);
   const s: PlainScope = {
@@ -624,6 +633,7 @@ export function spendScope(opts: {
     cap: opts.cap,
     expiresAt: opts.expiresAt ?? 0n,
     rpIdHash: opts.rpIdHash ?? ZERO32,
+    caller: opts.caller,
     readPkHash: opts.readPkHash ?? ZERO32,
     windowLen: 0n, windowCap: 0n,
   };
@@ -631,7 +641,7 @@ export function spendScope(opts: {
   return s;
 }
 
-/** `scope_digest` (section 4.5): the seventeen-element salted digest the
+/** `scope_digest` v2 (section 4.5): the eighteen-element salted digest the
  *  issuing device signs over, through the contract's pure circuit. */
 export function scopeDigest(scopeSalt: Uint8Array, s: PlainScope): Uint8Array {
   return pureCircuits.derive_grant_scope_digest(scopeSalt, ...scopeArgs(s));
@@ -650,7 +660,7 @@ export interface GrantOpening {
   originHash: Uint8Array;
   /** The grantee slot under that origin (Uint<8>). */
   slot: bigint;
-  /** Opens `object_commit`, `rp_commit`, and `spent_commit`. */
+  /** Opens `object_commit`, `rp_commit`, `caller_commit`, and `spent_commit`. */
   scopeSalt: Uint8Array;
   recipientKind: bigint;
   pinnedRecipient: Uint8Array;

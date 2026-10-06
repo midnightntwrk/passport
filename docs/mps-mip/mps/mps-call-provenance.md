@@ -33,6 +33,14 @@ MIP: none
 
 ## Abstract
 
+**Implementation update (2026-10-01).** The gap analysis below is pinned
+to Compact 0.34.0. Compact 0.35.0 now exposes `kernel.caller()` as
+`Maybe<PublicAddress>`: the immediate claiming contract is available to
+a callee, with the top-level balancing limitation documented in that
+release. The [scoped-grants caller extension](../../../contract/GRANTS-CALLER.md)
+uses it for callee-side enforcement. Calling-circuit identity and the
+claim-lending boundary of P9 remain distinct questions.
+
 A Compact contract invoked as the callee of a cross-contract call cannot learn
 whether a contract invoked it, which contract invoked it, or which circuit of
 that contract made the call. The asymmetry is sharp. The protocol already

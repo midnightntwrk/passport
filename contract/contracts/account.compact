@@ -250,7 +250,7 @@ export ledger booted: Boolean;
 // keyed by grant_id, a contract-recomputable commitment to (account, arm,
 // key, [envelope,] origin_hash, slot), and every private field of the scope
 // is held as a salted commitment. The struct field names, types, and widths
-// are the MIP's; a grant-capable account exposes spec_version = 2.
+// are the MIP's; caller-bound grants use the extended spec_version = 3 schema.
 
 export struct GrantScope {
   op_withdraw_unshielded:           Boolean;
@@ -265,6 +265,7 @@ export struct GrantScope {
   read_pk_hash:                     Bytes<32>;
   window_len:                       Uint<64>;
   window_cap:                       Uint<128>;
+  caller_commit:                    Bytes<32>;
 }
 
 export struct GrantRecord {
@@ -359,7 +360,7 @@ constructor(
   round        = 0 as Uint<64>;
   enc_key      = disclose(encryption_key);
   inbox_count  = 0 as Uint<64>;
-  spec_version = 2 as Uint<32>;
+  spec_version = 3 as Uint<32>;
   boot         = disclose(initial_device_boot);
   booted       = false;
   device_epoch = 0 as Uint<32>;
@@ -1496,6 +1497,22 @@ export pure circuit derive_grant_rp_commit(
   );
 }
 
+// Zero means unrestricted. A nonzero commitment pins the immediate contract
+// caller under the grant's salt, independently of browser origin and recipient.
+export pure circuit derive_grant_caller_commit(
+  scope_salt: Bytes<32>, caller: Maybe<ContractAddress>
+): Bytes<32> {
+  assert(caller.is_some || caller.value == default<ContractAddress>, "noncanonical absent caller");
+  if (caller.is_some) {
+    const commitment = persistentHash<[Bytes<32>, Bytes<32>, ContractAddress]>([
+      pad(32, "midnight:account:grant:caller:v1"), scope_salt, caller.value
+    ]);
+    assert(commitment != pad(32, ""), "reserved caller commitment");
+    return commitment;
+  }
+  return pad(32, "");
+}
+
 // The single element through which the issue_grant device challenge binds
 // the whole plaintext scope. Flags enter as single bytes: a Boolean's
 // field-aligned encoding is a one-byte atom (0x01 true, 0x00 false), so the
@@ -1517,12 +1534,14 @@ export pure circuit derive_grant_scope_digest(
   read_pk_hash:                     Bytes<32>,
   window_len:                       Uint<64>,
   window_cap:                       Uint<128>,
+  caller:                           Maybe<ContractAddress>,
 ): Bytes<32> {
-  return persistentHash<[Bytes<32>, Bytes<32>, Boolean, Boolean, Boolean, Boolean, Bytes<32>, Uint<8>, Bytes<32>, Uint<128>, Uint<128>, Uint<128>, Uint<64>, Bytes<32>, Bytes<32>, Uint<64>, Uint<128>]>(
-    [pad(32, "midnight:account:grant:scope:v1"), scope_salt,
+  return persistentHash<[Bytes<32>, Bytes<32>, Boolean, Boolean, Boolean, Boolean, Bytes<32>, Uint<8>, Bytes<32>, Uint<128>, Uint<128>, Uint<128>, Uint<64>, Bytes<32>, Bytes<32>, Uint<64>, Uint<128>, Bytes<32>]>(
+    [pad(32, "midnight:account:grant:scope:v2"), scope_salt,
      op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read,
      color, recipient_kind, recipient, max_coin_value,
-     per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash, window_len, window_cap]
+     per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash, window_len, window_cap,
+     derive_grant_caller_commit(scope_salt, caller)]
   );
 }
 
@@ -1872,6 +1891,16 @@ circuit check_spend_scope(
   recipient_bytes:  Bytes<32>,
 ): Uint<128> {
   assert(op_admitted, "operation not in scope");
+  // Read provenance only for restricted grants: the runtime's root caller is
+  // none, while balancing may give the ledger a UserAddress root caller.
+  // The ledger authenticates this context read at admission, not the client.
+  if (g.scope.caller_commit != pad(32, "")) {
+    const caller = kernel.caller();
+    assert(caller.is_some, "grant requires a contract caller");
+    assert(caller.value.is_left, "grant requires a contract caller");
+    assert(derive_grant_caller_commit(scope_salt, some<ContractAddress>(caller.value.left))
+             == g.scope.caller_commit, "grant caller mismatch");
+  }
   assert(derive_grant_object_commit(scope_salt, obj_color, recipient_kind, pinned_recipient, max_coin_value)
            == g.scope.object_commit,
          "scope object mismatch");
@@ -2259,6 +2288,7 @@ circuit do_issue_grant(
   read_pk_hash:                     Bytes<32>,
   window_len:                       Uint<64>,
   window_cap:                       Uint<128>,
+  caller:                           Maybe<ContractAddress>,
   scope_salt:                       Bytes<32>,
 ): [] {
   const id = disclose(grant_id);
@@ -2273,6 +2303,7 @@ circuit do_issue_grant(
   // Issue rules of MIP section 5.1, in order.
   const spend = op_withdraw_unshielded || op_withdraw_shielded || op_withdraw_shielded_to_contract;
   assert(spend || read, "empty scope");
+  assert(spend || !caller.is_some, "read-only grant cannot restrict caller");
   assert(!(op_withdraw_shielded || op_withdraw_shielded_to_contract) || read,
          "shielded spend requires read");
   assert(per_call_cap <= cap, "per-call cap above cap");
@@ -2311,7 +2342,8 @@ circuit do_issue_grant(
       rp_commit:     disclose(derive_grant_rp_commit(scope_salt, rp_id_hash)),
       read_pk_hash:  disclose(read_pk_hash),
       window_len:    0 as Uint<64>,
-      window_cap:    0 as Uint<128>
+      window_cap:    0 as Uint<128>,
+      caller_commit: disclose(derive_grant_caller_commit(scope_salt, caller))
     }
   });
 }
@@ -2360,6 +2392,7 @@ export circuit issue_grant_with_k256(
   read_pk_hash:                     Bytes<32>,
   window_len:                       Uint<64>,
   window_cap:                       Uint<128>,
+  caller:                           Maybe<ContractAddress>,
   scope_salt:                       Bytes<32>,
   pk:                               Secp256k1Point,
   use_counter:                      Uint<64>,
@@ -2370,7 +2403,7 @@ export circuit issue_grant_with_k256(
     scope_salt, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
     max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
-    window_len, window_cap
+    window_len, window_cap, caller
   );
   const challenge = challenge_issue_grant_with_k256(
     kernel.self(), pk, grant_id, scope_digest, auth_nonce
@@ -2380,7 +2413,7 @@ export circuit issue_grant_with_k256(
     grant_id, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
     max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
-    window_len, window_cap, scope_salt
+    window_len, window_cap, caller, scope_salt
   );
 }
 
@@ -2433,6 +2466,7 @@ export circuit issue_grant_with_jubjub(
   read_pk_hash:                     Bytes<32>,
   window_len:                       Uint<64>,
   window_cap:                       Uint<128>,
+  caller:                           Maybe<ContractAddress>,
   scope_salt:                       Bytes<32>,
   pk:                               JubjubPoint,
   use_counter:                      Uint<64>,
@@ -2444,7 +2478,7 @@ export circuit issue_grant_with_jubjub(
     scope_salt, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
     max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
-    window_len, window_cap
+    window_len, window_cap, caller
   );
   const challenge = challenge_issue_grant_with_jubjub(
     kernel.self(), sig_r, pk, grant_id, scope_digest, auth_nonce, grind_nonce
@@ -2454,7 +2488,7 @@ export circuit issue_grant_with_jubjub(
     grant_id, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
     max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk_hash,
-    window_len, window_cap, scope_salt
+    window_len, window_cap, caller, scope_salt
   );
 }
 

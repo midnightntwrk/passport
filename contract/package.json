@@ -5,7 +5,7 @@
   "private": true,
   "description": "Reference implementation of Midnight account custody with co-resident JubJub Schnorr, secp256k1 ECDSA and profiled P-256 WebAuthn authorisation arms.",
   "scripts": {
-    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256",
+    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:p256-offline": "tsx src/tests/p256-offline.ts",
@@ -19,6 +19,8 @@
     "test:recovery-sim": "tsx src/tests/recovery-sim.ts",
     "test:recovery": "tsx src/tests/recovery-conformance.ts",
     "test:grants-offline": "tsx src/tests/grants-offline.ts",
+    "test:grants-caller-offline": "tsx src/tests/grants-caller-offline.ts",
+    "test:grants-caller": "tsx src/tests/grants-caller.ts",
     "test:crossimpl-offline": "tsx src/tests/crossimpl-offline.ts",
     "test:auth-crossimpl": "tsx src/tests/auth-crossimpl.ts",
     "test:auth": "tsx src/tests/auth-conformance.ts",
