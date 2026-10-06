@@ -1,0 +1,13 @@
+services:
+  proof-server:
+    image: midnightntwrk/proof-server:9.0.0-rc.8
+    container_name: passport-webauthn-variable-prover
+    ports:
+      - '127.0.0.1:6300:6300'
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    environment:
+      PORT: '6300'
+      MIDNIGHT_PROOF_SERVER_NUM_WORKERS: '1'
+      MIDNIGHT_PROOF_SERVER_JOB_CAPACITY: '2'
+      MIDNIGHT_PROOF_SERVER_JOB_TIMEOUT: '1200'

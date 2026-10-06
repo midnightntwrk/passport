@@ -13,5 +13,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*", "test/**/*"],
-  "exclude": ["dist", "node_modules", "app"]
+  "exclude": ["dist", "node_modules", "app", "src/tests/webauthn-variable"]
 }

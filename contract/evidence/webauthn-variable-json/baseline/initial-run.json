@@ -1,0 +1,83 @@
+{
+  "result": "FAIL",
+  "startedAt": "2026-10-05T10:31:39.487Z",
+  "completedAt": "2026-10-05T10:50:53.599Z",
+  "baseCommit": "45721e1d322357ef99a2786a3ba27d64382527d8",
+  "compiler": "0.35.0",
+  "runtime": "0.20.0",
+  "capacityBytes": 256,
+  "originCapacityBytes": 96,
+  "evidenceLayer": "compiled Compact execution with adversarial witness substitution; no ZK proof or on-node call",
+  "realBrowserEvidence": "replayed existing Safari 134-byte assertion; new lengths use software ES256",
+  "sources": {
+    "contracts/probe-webauthn-variable.compact": "44ae08a970c207503cb241fb13925b8067cb9c8b48fd56de7bef18323e6e584c",
+    "contracts/webauthn.compact": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb",
+    "src/tests/webauthn-variable/offline.ts": "04275c85166b401678c285d0a0b80e2ee59b224eac4e07d6b2425afd91733c95",
+    "src/tests/webauthn-variable/witnesses.ts": "f4f48d6be8985974fa03cc4fe144c366cee8f9c63458e18668b4ef5ff771ad1f"
+  },
+  "observed": [
+    {
+      "originBytes": 14,
+      "clientBytes": 127,
+      "splitWordCalls": 1641
+    },
+    {
+      "originBytes": 21,
+      "clientBytes": 134,
+      "splitWordCalls": 1641
+    },
+    {
+      "originBytes": 27,
+      "clientBytes": 140,
+      "splitWordCalls": 1641
+    },
+    {
+      "originBytes": 69,
+      "clientBytes": 182,
+      "splitWordCalls": 1641
+    },
+    {
+      "originBytes": 96,
+      "clientBytes": 209,
+      "splitWordCalls": 1641
+    }
+  ],
+  "tests": [
+    {
+      "name": "SHA-256: every length 0..256 matches independent Node/OpenSSL",
+      "result": "PASS",
+      "milliseconds": 884477.6537499999
+    },
+    {
+      "name": "SHA-256: zero messages and padding boundaries",
+      "result": "PASS",
+      "milliseconds": 184447.618625
+    },
+    {
+      "name": "SHA-256: dishonest length, nonzero tail and oversized input rejected",
+      "result": "PASS",
+      "milliseconds": 12183.303125000093
+    },
+    {
+      "name": "SHA-256: malicious bit witness rejected",
+      "result": "PASS",
+      "milliseconds": 131.08474999992177
+    },
+    {
+      "name": "SHA-256: malicious carry witness rejected",
+      "result": "PASS",
+      "milliseconds": 182.86174999992363
+    },
+    {
+      "name": "strict WebAuthn: varying origin lengths under one circuit",
+      "result": "PASS",
+      "milliseconds": 59898.57437499985
+    },
+    {
+      "name": "captured real Safari wa-json134 assertion accepted by new circuit",
+      "result": "PASS",
+      "milliseconds": 12255.871333000017
+    }
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /length|policy/. Input:\n\n'CompactError: failed assert: truncated client data'\n\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport.worktrees/webauthn-variable-json/contract/src/tests/webauthn-variable/offline.ts:134:7)\n    at async test (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport.worktrees/webauthn-variable-json/contract/src/tests/webauthn-variable/offline.ts:58:36)\n    at async main (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport.worktrees/webauthn-variable-json/contract/src/tests/webauthn-variable/offline.ts:130:3)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport.worktrees/webauthn-variable-json/contract/src/tests/webauthn-variable/offline.ts:196:7)"
+}

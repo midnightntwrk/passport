@@ -1,0 +1,28 @@
+{
+  "trials": [
+    {
+      "variant": "field-word-values",
+      "sourceSha256": "e3f577e92d139889ba1d6b630184b73d3966f8735748b7eb7c18201e904fb936",
+      "keyGeneration": false,
+      "hashBytes": { "rows": 972766, "k": 20 },
+      "verifyWebauthn": { "rows": 1118747, "k": 21 },
+      "decision": "No improvement over baseline. Test polynomial Boolean operations next."
+    },
+    {
+      "variant": "field-boolean-polynomials",
+      "verifyIrSha256": "8af962cc37b99e90e9240eb4e233e3fb59a5ad6b89e83a92ef702b388ef819ca",
+      "keyGeneration": false,
+      "hashBytes": { "rows": 1144417, "k": 21 },
+      "verifyWebauthn": { "rows": 1290398, "k": 21 },
+      "decision": "Larger than baseline; not selected."
+    },
+    {
+      "variant": "conditional-bits-deferred-reduction",
+      "sourceSha256": "ac1236612ca73e1551377008b2360c296ed9f29d66913e0a80a76eec0f8be654",
+      "verifyIrSha256": "2119a9e2949696cecd77d8cc43a3e250ec8ef210433f73a0be1fcfc44be2026d",
+      "hashBytes": { "rows": 852999, "k": 20 },
+      "verifyWebauthn": { "rows": 998980, "k": 20 },
+      "decision": "Selected for full key generation, regression tests and real proof verification."
+    }
+  ]
+}

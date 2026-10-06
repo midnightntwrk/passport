@@ -1,0 +1,134 @@
+{
+  "result": "PASS",
+  "startedAt": "2026-10-05T14:03:04.231Z",
+  "completedAt": "2026-10-05T14:07:20.263Z",
+  "suite": "all",
+  "selectedTests": [
+    "SHA-256: every length 0..256 matches independent Node/OpenSSL",
+    "SHA-256: zero messages and padding boundaries",
+    "SHA-256: dishonest length, nonzero tail and oversized input rejected",
+    "SHA-256: malicious bit witness rejected",
+    "SHA-256: malicious carry witness rejected",
+    "strict WebAuthn: varying origin lengths under one circuit",
+    "captured real Safari wa-json134 assertion accepted by new circuit",
+    "malicious JSON witness cannot invent origin or prefix length",
+    "resigned bad JSON rejected even when JSON witness returns good advice",
+    "length is bound to the raw signed message, not just a witness claim",
+    "policy, RP hash, flags and signature independently enforced",
+    "limited verifier: extra fields and SHA block boundaries accepted",
+    "limited verifier hashes unknown fields: suffix substitution rejected",
+    "evidence boundary: JSON.parse alone is not enforced by limited mode"
+  ],
+  "baseCommit": "45721e1d322357ef99a2786a3ba27d64382527d8",
+  "compiler": "0.35.0",
+  "runtime": "0.20.0",
+  "capacityBytes": 256,
+  "originCapacityBytes": 96,
+  "evidenceLayer": "compiled Compact execution with adversarial witness substitution; no ZK proof or on-node call",
+  "realBrowserEvidence": "replayed existing Safari 134-byte assertion; new lengths use software ES256",
+  "sources": {
+    "contracts/probe-webauthn-variable.compact": "ac1236612ca73e1551377008b2360c296ed9f29d66913e0a80a76eec0f8be654",
+    "contracts/webauthn.compact": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb",
+    "src/tests/webauthn-variable/offline.ts": "48a5bdf2f4ec2e450f93a75d2c172304286fdae541ab980f2ee871b56a8849b0",
+    "src/tests/webauthn-variable/witnesses.ts": "f4f48d6be8985974fa03cc4fe144c366cee8f9c63458e18668b4ef5ff771ad1f"
+  },
+  "observed": [
+    {
+      "originBytes": 14,
+      "clientBytes": 127,
+      "splitWordCalls": 1001
+    },
+    {
+      "originBytes": 21,
+      "clientBytes": 134,
+      "splitWordCalls": 1001
+    },
+    {
+      "originBytes": 27,
+      "clientBytes": 140,
+      "splitWordCalls": 1001
+    },
+    {
+      "originBytes": 69,
+      "clientBytes": 182,
+      "splitWordCalls": 1001
+    },
+    {
+      "originBytes": 96,
+      "clientBytes": 209,
+      "splitWordCalls": 1001
+    }
+  ],
+  "tests": [
+    {
+      "name": "SHA-256: every length 0..256 matches independent Node/OpenSSL",
+      "result": "PASS",
+      "milliseconds": 108344.114291
+    },
+    {
+      "name": "SHA-256: zero messages and padding boundaries",
+      "result": "PASS",
+      "milliseconds": 58985.205833
+    },
+    {
+      "name": "SHA-256: dishonest length, nonzero tail and oversized input rejected",
+      "result": "PASS",
+      "milliseconds": 4296.673249999993
+    },
+    {
+      "name": "SHA-256: malicious bit witness rejected",
+      "result": "PASS",
+      "milliseconds": 113.61350000000675
+    },
+    {
+      "name": "SHA-256: malicious carry witness rejected",
+      "result": "PASS",
+      "milliseconds": 64.58249999998952
+    },
+    {
+      "name": "strict WebAuthn: varying origin lengths under one circuit",
+      "result": "PASS",
+      "milliseconds": 20689.213707999996
+    },
+    {
+      "name": "captured real Safari wa-json134 assertion accepted by new circuit",
+      "result": "PASS",
+      "milliseconds": 5022.132540999999
+    },
+    {
+      "name": "malicious JSON witness cannot invent origin or prefix length",
+      "result": "PASS",
+      "milliseconds": 318.0461249999935
+    },
+    {
+      "name": "resigned bad JSON rejected even when JSON witness returns good advice",
+      "result": "PASS",
+      "milliseconds": 928.5179169999901
+    },
+    {
+      "name": "length is bound to the raw signed message, not just a witness claim",
+      "result": "PASS",
+      "milliseconds": 4575.882958000002
+    },
+    {
+      "name": "policy, RP hash, flags and signature independently enforced",
+      "result": "PASS",
+      "milliseconds": 4799.006041000015
+    },
+    {
+      "name": "limited verifier: extra fields and SHA block boundaries accepted",
+      "result": "PASS",
+      "milliseconds": 37787.387583
+    },
+    {
+      "name": "limited verifier hashes unknown fields: suffix substitution rejected",
+      "result": "PASS",
+      "milliseconds": 4911.80804199999
+    },
+    {
+      "name": "evidence boundary: JSON.parse alone is not enforced by limited mode",
+      "result": "PASS",
+      "milliseconds": 5189.453542000003
+    }
+  ]
+}
