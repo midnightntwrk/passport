@@ -131,7 +131,9 @@ Evidence is written under `contract/evidence/webauthn-variable-json/`:
 - `proofs.json`: real-proof test result, with the exact verification evidence layer.
 - `proof-resources.json`: dedicated proof-server resource high-water mark.
 - `transcript-checks.json`: five forged raw transcripts rejected by actual ZKIR
-  assertions, bypassing generated JavaScript checks.
+  assertions, bypassing generated JavaScript checks. Its source digest refers to
+  `check-transcripts.ts` at commit `3754f14`, before the 7 October comment-only
+  scanner exception for the loopback HTTP test call; executable code is unchanged.
 - `assessment.json`: negative experiment outcome against the previous fixed-profile
   verifier, with exact byte comparisons and receipt references.
 

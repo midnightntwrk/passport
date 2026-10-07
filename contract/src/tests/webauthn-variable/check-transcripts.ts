@@ -40,6 +40,9 @@ for (const name of ['valid', 'sha-bit', 'sha-carry', 'origin', 'prefix-length', 
   if (name === 'prefix-length') outputs[0].value[2][0] ^= 1;
   if (name === 'input-length') input.value[1][0] ^= 1;
   const preimage = proofDataIntoSerializedPreimage(input, trace.output, trace.publicTranscript, outputs, 'verify_webauthn');
+  // Captured public Safari fixture and forged transcripts; the local proof server serves HTTP.
+  // Both this fixed URL and the experiment's Compose port mapping are loopback-only.
+  // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
   const response = await fetch('http://127.0.0.1:6300/check', { method: 'POST',
     body: createCheckPayload(preimage, ir) as BodyInit, signal: AbortSignal.timeout(120_000),
     headers: { 'content-type': 'application/octet-stream' } });
