@@ -4,11 +4,12 @@ This folder holds Midnight Problem Statements (MPS) and Midnight
 Improvement Proposals (MIP) authored by this workspace, in the state they
 are in before or after submission to the canonical repository,
 [midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals).
-Editor numbers are assigned upstream at merge; files here use `xxxx`
-until then. Once a document is merged upstream, the upstream copy is
-canonical and the copy here is retired to a pointer.
+Editor numbers are assigned upstream at merge. Historical local filenames
+retain `xxxx` so existing links remain valid; publication notices point to
+the canonical numbered documents. Retained working text is not a second
+source of normative truth.
 
-Last reconciled: **1 October 2026**. See [development status](../plans/STATUS.md).
+Last reconciled: **8 October 2026**. See [development status](../plans/STATUS.md).
 
 ## Published upstream (upstream copy is canonical)
 
@@ -30,29 +31,44 @@ Last reconciled: **1 October 2026**. See [development status](../plans/STATUS.md
   Schnorr verification over JubJub (FROST-compatible, separating
   approval from proving). The DST-derivation and bootstrap errata are
   merged upstream. The local [ECDSA signing-boundary extension](mips/mip-xxxx-signature-schemes.md)
-  is prepared for Hector's review in Passport before an upstream PR.
+  has Hector's approval in [Passport #180](https://github.com/midnightntwrk/passport/pull/180)
+  before local merge and an upstream PR.
   Scoped grants are a separate successor extension.
 - `mps/mps-call-provenance.md` → upstream **MPS-0040**, Cross-Contract
   Call Provenance in Compact Circuits (Proposed). Compact 0.35 now exposes
-  immediate caller identity; open Passport #176 validates a consumer.
+  immediate caller identity; merged [Passport #176](https://github.com/midnightntwrk/passport/pull/176)
+  validates a consumer.
 - **MPS-0039**, Calling a Contract Requires Its Full Compiled Artifacts, is published
-  upstream (Proposed); the regeneration proposal below addresses it.
+  upstream (Proposed); its header now links MIP-0020.
+- `mips/mip-xxxx-prover-key-regeneration.md` → **[MIP-0020](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md)**,
+  On-Demand Prover Keys from Bundled ZKIR (Proposed), merged through
+  [#338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338).
+  Authors: **Nicolas Di Prima and Vincent Hanquez**.
+  Discussion: https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/345.
+- `mips/mip-xxxx-account-recovery.md` → **[MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md)**,
+  Recovery Paths for Custody Accounts (Proposed), merged through
+  [#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339).
+  Authors: **Nicolas Di Prima and Raphael Toledo**. MPS-0018 now lists
+  MIP-0012, MIP-0013 and MIP-0022 in its header.
+  Discussion: https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/349.
 
-The two MIP files here are retained as working mirrors while the
-reference implementation (`contract/`) and the upstream texts evolve
-together; the upstream copies are canonical.
+Publication as Proposed does not complete cryptographic review, the Path to
+Active, or SDK integration. The local MIP texts are retained for reference;
+the upstream copies are canonical.
 
-## Submitted upstream, still open
+## Related upstream proposals
 
-- [#338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338):
-  `mips/mip-xxxx-prover-key-regeneration.md`, submitted by Hector after
-  Passport #173 merged. Authors: **Nicolas Di Prima and Vincent Hanquez**.
-- [#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339):
-  `mips/mip-xxxx-account-recovery.md`, submitted by Hector after Passport
-  #165 merged.
-
-Both contain Draft-status documents. Neither is accepted/merged upstream;
-retain the local working drafts while review continues.
+- **[MIP-0021 — Domain-Separation Convention](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0021-domain-separation.md)**
+  (Jay Albert; Proposed), merged through upstream #331 under MPS-0027.
+  It rejects a central tag registry. Passport's fixed-width padding,
+  byte-encoding and existing-tag compatibility feedback remains open in
+  https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/347.
+- **[MIP-0025 — Managed Private State and Capsule Runtime](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0025-capsule-runtime.md)**
+  (Draft), merged through upstream #334. This is a proposed runtime design,
+  not a shipped private-state service. Discussion:
+  https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/355.
+- **MIP-0028 — Custom spend logic** remains a reserved number in open
+  https://github.com/midnightntwrk/midnight-improvement-proposals/pull/335.
 
 ## Working draft and evidence notes
 
@@ -84,10 +100,11 @@ retain the local working drafts while review continues.
   contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
   `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
   is exercised on node.
-- Caller-bound grants are implemented in open #176 using `kernel.caller()`
+- Caller-bound grants are implemented in merged #176 using `kernel.caller()`
   on Compact 0.35, with a fabricated-caller proof refused at node admission.
-  The extension uses schema v3 and needs reconciliation with P-256 #175;
-  earlier grant evidence and the unshielded follow-up #163 are merged.
+  The extension uses schema v3; its P-256 issuance caller argument is fixed
+  on main. Combined-build/client-ABI/P-256 caller validation remains separate
+  from the earlier caller evidence. The unshielded follow-up #163 is merged.
   Calling-circuit identity remains distinct from immediate caller identity.
 - `mips/mip-xxxx-account-recovery.md` — **Recovery Paths for Custody
   Accounts (building block three)**: total-loss recovery behind the

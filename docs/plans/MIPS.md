@@ -20,7 +20,7 @@ Each MIP names an external co-author or committed external reviewer —
 unilateral drafts become shelfware. The adoption narrative tracks who
 that counterpart is for each MIP.
 
-Last updated: 2026/10/01. See the [development-status reconciliation](STATUS.md)
+Last updated: 2026/10/08. See the [development-status reconciliation](STATUS.md)
 for implementation, ticket and release evidence.
 
 ---
@@ -33,6 +33,8 @@ for implementation, ticket and release evidence.
 | **MPS-0027** | Domain Separation for Midnight Hash Constructions | Proposed | C8 |
 | **MIP-0012** | Contract Custody of Midnight-Native Assets | Proposed | C4 · C1 |
 | **MIP-0013** | Multi-key Account Authorisation for Custody Contracts | Proposed | C1 · C5 |
+| **[MIP-0020](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md)** | On-Demand Prover Keys from Bundled ZKIR | Proposed | C6 |
+| **[MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md)** | Recovery Paths for Custody Accounts | Proposed | C13 · C14 · C15 |
 | **MPS-0039** | Calling a Contract Requires Its Full Compiled Artifacts | Proposed | C6 |
 | **MPS-0040** | Cross-Contract Call Provenance in Compact Circuits | Proposed | C1 · C12 |
 
@@ -68,10 +70,10 @@ gap fixes should land before dependents accumulate; and the seam is
 carried as co-resident arms in the reference contract, which is the
 shape the signature-schemes draft standardises.
 
-**1 October qualification:** Compact 0.35 adds compiler/runtime checks;
+**8 October qualification:** Compact 0.35 adds compiler/runtime checks;
 the older weak-key observations above are not a current accepted-proof
 admissibility map. That mapping and the normative correction remain open.
-Caller-bound grants in open #176 use schema v3; coordinate the outstanding
+Caller-bound grants in merged #176 use schema v3; coordinate the outstanding
 device-identity remedy with grants/recovery migration rather than assuming
 the earlier proposed schema-v2 remedy has shipped.
 
@@ -121,21 +123,23 @@ surfaces that need a chain identifier follow it.
 
 ---
 
-## Submitted upstream (open proposals)
+## Newly published upstream — follow-through
 
-### On-demand prover keys from bundled ZKIR
+### MIP-0020 — On-demand prover keys from bundled ZKIR (Proposed)
 
 Native regeneration evidence [#170](https://github.com/midnightntwrk/passport/pull/170)
 and solution draft [#173](https://github.com/midnightntwrk/passport/pull/173)
-are merged in Passport. Hector submitted the draft under MPS-0039 as
-[upstream #338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338).
+are merged in Passport. Hector's submission under MPS-0039,
+[upstream #338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338),
+merged on 4 October as **MIP-0020, Proposed**. MPS-0039's header now links it.
 It retains **Nicolas Di Prima and Vincent Hanquez** as authors. Package
 small ZKIR assets and regenerate/cache prover keys using on-chain verifier
 keys, without requiring a registry. Supported SDK/WASM APIs, compatible
-keygen profiles, validation vectors and integration remain. Open upstream
-submission is not acceptance.
+keygen profiles, validation vectors and integration remain. Publication is
+not completion of the Path to Active. Discussion:
+https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/345.
 
-### Recovery paths — building block three
+### MIP-0022 — Recovery paths (Proposed; building block three)
 
 **Scope.** Total-loss recovery behind the account standard's recovery
 seam, whose interface MIP-0013 fixes (epoch bump, single fresh
@@ -147,10 +151,12 @@ the paper-key format, and parameters, with DeRec and encrypted-blob
 backup as substitutable profiles behind the same seam. Draft and reference
 tranche [#165](https://github.com/midnightntwrk/passport/pull/165) are merged;
 Hector submitted [upstream #339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339),
-still open with a Draft-status document. The reference gate consumes
+merged on 4 October as **MIP-0022, Proposed**, authored by Nicolas Di Prima
+and Raphael Toledo. MPS-0018's header now includes it. The reference gate consumes
 recovery/successor signatures, not reconstructed secrets, in a two-phase
 flow with a veto window. Multi-session crypto review, wallet transport,
-interoperability and viewing-wrap lifecycle remain.
+interoperability and viewing-wrap lifecycle remain. Discussion:
+https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/349.
 
 **Maps to components.** [C14](components/C14-total-loss-recovery-flow.md) ·
 [C15](components/C15-helper-protocol.md) ·
@@ -172,9 +178,11 @@ The draft distinguishes those results from general browser interoperability
 and the negative variable-length experiment. Remaining specification choices
 and evidence gaps are listed in the extension.
 
-**Review route:** Passport PR → Hector's validation → upstream PR for the
-MIP-0013 extension. This task ends with the specification update; it does not
-require a new SDK or integration project.
+**Review route:** Hector approved https://github.com/midnightntwrk/passport/pull/180
+on 8 October; local merge and the upstream PR remain. This task ends with the
+specification update. No universal profile or k1 sunset is adopted. The separate
+https://github.com/midnightntwrk/passport/pull/179 experiment saves zero proof/VK
+bytes and substantially worsens proving cost; it is not an account replacement.
 
 **Maps to components.** [C5](components/C5-signing-primitive.md) ·
 [C9](components/C9-device-bound-authentication.md).
@@ -211,38 +219,45 @@ to `GRANTS-E3.md`). Outstanding: editors' rulings collected at the head
 of the draft, and the companion erratum to MIP-0013 AUTH-1, AUTH-2, and
 AUTH-9. Local copy: `docs/mps-mip/mips/mip-xxxx-scoped-grants.md`.
 
-The unshielded evidence follow-up #163 is now merged. Open
+The unshielded evidence follow-up #163 is merged. Merged
 [#176](https://github.com/midnightntwrk/passport/pull/176) adds optional
 immediate-contract pins through `kernel.caller()`, with accepted forwarding
 calls and a fabricated-caller proof refused at node admission. It uses
-schema v3 and needs reconciliation with #175 during integration. The
-device-wide revocation remedy is still separate unfinished work.
+schema v3 and includes the P-256 issuance caller-argument fix. Combined-build,
+client-ABI and P-256 caller validation remain separate from the earlier
+caller evidence. The device-wide revocation remedy is still unfinished work.
 
 **Maps to components.** [C10](components/C10-scoped-grant-primitive.md) ·
 [C11](components/C11-grant-lifecycle.md) ·
 [C12](components/C12-chain-side-enforcement.md) ·
 [C23](components/C23-dapp-connection-protocol.md) (issuance half).
 
-### Domain-separation registry
+## Related upstream proposals — compatibility review
 
-**Scope.** The registry MPS-0027 motivates: every `persistentHash` use
-site gets a domain prefix, recorded centrally (ADR-0001: central
-registry, compile-time enforcement deferred). The custody and
-account-authorisation MIPs already name their tags against the future
-registry (`midnight:custody:inbox:v1`, `midnight:account:device:v1`,
-`midnight:account:auth:v1:*`, `midnight:account:boot:v1`).
-Cryptographer review gates ratification. Evidence:
-`experiments/domain-separation-inventory/`. The case has sharpened:
-upstream code now ships an untagged JubJub Schnorr challenge, and the
-unpublished `persistentHash` byte framing has been raised as a gap by
-others in the upstream venues.
+### MIP-0021 — Domain-Separation Convention (Proposed)
 
-[Upstream convention #331](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/331)
-is open, with feedback posted on encoding, catalogue/source of truth and
-Passport compatibility. Transient-hash scope and benchmark corrections
-also remain review points; C8 is not complete.
+Jay Albert's [MIP-0021](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0021-domain-separation.md)
+merged through #331 on 4 October under MPS-0027. It specifies a convention
+and rejects a central tag registry, unlike Passport's earlier ADR-0001
+direction. Passport's mandatory fixed-width zero-padding, canonical encoding,
+tag/data boundary and existing-tag compatibility feedback remains open in
+https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/347.
+Existing cryptographic bytes must not be silently migrated. C8 remains open;
+publication has not settled those questions or the lightweight catalogue proposal.
 
 **Maps to component.** [C8](components/C8-domain-separation-registry.md).
+
+### MIP-0025 — Managed Private State and Capsule Runtime (Draft)
+
+[MIP-0025](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0025-capsule-runtime.md)
+is published through #334 with **Draft** status. Track its proposed private-state
+boundary in C16 and the SDK review; it is not a shipped storage or backup service.
+Discussion: https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/355.
+Custom spend logic remains open as
+https://github.com/midnightntwrk/midnight-improvement-proposals/pull/335;
+**MIP-0028 is reserved, not published**.
+
+## Further local proposal outlines
 
 ### dApp ↔ Wallet Connection Protocol
 
@@ -307,8 +322,8 @@ point operations.
   draft time. If none can be named, the MIP is not yet ready to
   start.
 - Earlier internal pipeline labels map to the upstream register as
-  follows: MIP-3A → MIP-0012, MIP-3B → MIP-0013, STD-03 → the
-  domain-separation registry (MPS-0027 lineage), MIP-4 → recovery
-  paths, MIP-5 / MIP-7 → connection and sign-in, MIP-6 → credentials,
+  follows: MIP-3A → MIP-0012, MIP-3B → MIP-0013, MIP-KEYGEN → MIP-0020,
+  STD-03 → MIP-0021 compatibility work (MPS-0027 lineage), MIP-4 → MIP-0022
+  recovery paths, MIP-5 / MIP-7 → connection and sign-in, MIP-6 → credentials,
   MIP-8 / STD-06 → superseded by the MIP-0007 adoption, MIP-9 →
   signature schemes, MIP-10 → scoped grants and dApp connection.

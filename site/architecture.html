@@ -582,7 +582,7 @@
         <h2>Notes for reviewers</h2>
         <ul>
           <li><strong>This is a context + container view.</strong> It shows where components live and who they talk to, not the data flow for any specific operation. The <a href="demo.html">How it works</a> page walks the account lifecycle end to end.</li>
-          <li><strong>How authority flows.</strong> A device signs a call-bound challenge; the account circuit verifies it against enrolled authority (C1, C5, C9). Main supports JubJub and k256; open #175 adds profiled passkey P-256. Local proving keeps witnesses on-device; delegated proving exposes the required witnesses and one-call signature, never the device signing key (C6, C7). Recovery uses the merged two-phase signature gate and an epoch bump (C14, C15). See the <a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">1 October development status</a> for evidence and integration boundaries.</li>
+          <li><strong>How authority flows.</strong> A device signs a call-bound challenge; the account circuit verifies it against enrolled authority (C1, C5, C9). Main supports JubJub, k256 and profiled passkey P-256 (#175), plus caller-bound grants (#176). Local proving keeps witnesses on-device; delegated proving exposes the required witnesses and one-call signature, never the device signing key (C6, C7). Recovery uses the merged two-phase signature gate and an epoch bump (C14, C15). See the <a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">8 October standards follow-up</a> for evidence and integration boundaries.</li>
           <li><strong>Workstreams are explicitly unresolved.</strong> C3 (DID surface), C22 (intent surface), C24 (fee model — mechanism confirmed, sponsor operator open), and C25 (cross-chain interface) are dashed because a live decision remains. C4 (asset custody) has resolved to stateless contract custody, normative in MIP-0012. Placement may shift once a workstream resolves.</li>
           <li><strong>C3 sits inside the on-chain zone</strong> as the primary architectural element, but the workstream's resolution runs through engagement with the external <em>midnight-did</em> repository — drawn alongside in the external identity ecosystem.</li>
           <li><strong>C8 (domain separation) is cross-cutting</strong> and shown as an annotation rather than placed in any single zone — every <code>persistentHash</code> use site needs a registered prefix.</li>
@@ -785,7 +785,7 @@
     crosscutHost.innerHTML =
       `<span class="crosscut-label">Cross-cutting →</span>` +
       makeChip(componentById['C8']) +
-      `<span class="crosscut-note">C8 applies wherever <code>persistentHash</code> is used — namehash (C2), Schnorr Fiat-Shamir (C5), attestation leaf (C18), nullifier (C21). Registry document plus cryptographer review.</span>`;
+      `<span class="crosscut-note">C8 applies wherever <code>persistentHash</code> is used — namehash (C2), Schnorr Fiat-Shamir (C5), attestation leaf (C18), nullifier (C21). MIP-0021 compatibility and cryptographer review remain open.</span>`;
   }
 
   // ---------- Category filter pills ----------
