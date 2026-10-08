@@ -29,8 +29,9 @@ Last reconciled: **1 October 2026**. See [development status](../plans/STATUS.md
   and revocation epochs, with the seam instantiated by in-circuit
   Schnorr verification over JubJub (FROST-compatible, separating
   approval from proving). The DST-derivation and bootstrap errata are
-  merged upstream. Scoped grants are deferred to a successor
-  extension.
+  merged upstream. The local [ECDSA signing-boundary extension](mips/mip-xxxx-signature-schemes.md)
+  is prepared for Hector's review in Passport before an upstream PR.
+  Scoped grants are a separate successor extension.
 - `mps/mps-call-provenance.md` → upstream **MPS-0040**, Cross-Contract
   Call Provenance in Compact Circuits (Proposed). Compact 0.35 now exposes
   immediate caller identity; open Passport #176 validates a consumer.
@@ -55,20 +56,15 @@ retain the local working drafts while review continues.
 
 ## Working draft and evidence notes
 
-- `mips/mip-xxxx-signature-schemes.md` — **Signature Schemes for
-  Custody-Account Authorisation (C5 signing primitive)**: the scheme
-  registry MIP-0013's Versioning section anticipates (schemes as
-  arm-marked DST tag families: v1 JubJub Schnorr, k1 interim, r1
-  WebAuthn ECDSA over secp256r1), the per-scheme dedicated-circuit
-  pattern with the scheme-generic challenge core and its ECDSA
-  deltas, the r1 envelope binding, and the SIG invariant family.
-  Filled from the evidence base (the P-256 in-circuit experiment and
-  the k1 arm). Compact 0.35 supplies the r1 surface and open #175 implements
-  the bounded `wa-json134` profile; reconcile the draft's [DEP] marker.
-  Remaining tags: [CIRCUIT]
-  length-agnostic client-data hashing, [CRYPTO] envelope-binding and
-  malleability-inertness review, [RULING] the k1 Interim-status
-  registration. Tracked by passport issue #51 and PR #146.
+- `mips/mip-xxxx-signature-schemes.md` — **ECDSA Authorisation for Custody
+  Accounts (C5 signing primitive)**: a narrow MIP-0013 successor-extension
+  working draft aligning wallet signing bytes with k1/r1 verification.
+  Records current envelope and commitment recipes, permits named bounded
+  WebAuthn profiles, and requires policy enforcement across every reachable
+  verifier accepting a credential. `wa-json134` and one live Safari account
+  operation provide bounded evidence. Remaining specification work covers
+  exact recipe references, the common UV requirement and evidence mapping. Tracking:
+  https://github.com/midnightntwrk/passport/issues/51.
 - `mips/mip-xxxx-scoped-grants.md` — **Scoped Grants and dApp Connection
   for Custody Accounts (C10, C11, C12, C23)**: the successor extension
   MIP-0013 reserves behind `require_authorised()`. A grant is a

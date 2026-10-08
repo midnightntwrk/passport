@@ -158,32 +158,23 @@ interoperability and viewing-wrap lifecycle remain.
 
 ## Local drafts awaiting upstream submission
 
-### Signature schemes (building block: the C5 signing primitive)
+### MIP-0013 signing-boundary extension (C5)
 
-**Scope.** Drafted. The successor document MIP-0013's Versioning
-section anticipates: a scheme registry (schemes named by arm marker and
-identified by their domain-separation tag families under the MPS-0027
-registry), per-scheme dedicated circuits sharing one challenge core
-with the ECDSA deltas made structural, the **r1 arm** (WebAuthn ECDSA
-over secp256r1, the credential never existing outside the
-authenticator, the circuit verifying the assertion together with its
-signing envelope), the **k1 arm** (ECDSA over secp256k1) registered as
-Interim with a named sunset and a per-device signing envelope that
-admits dApp-connector, MPC, and HSM signers, the SIG invariant family
-refining MIP-0013's AUTH family per scheme, and **BIP-340 over
-secp256k1** recorded as a named candidate so that a regular Midnight
-wallet key can authorise the account directly. Evidence: the P-256
-in-circuit experiment (k=15, sub-second, real platform passkey), the
-co-resident arms on the reference contract with both suites green on
-node, and the wallet-gate experiment (BIP-340 verified in-circuit on
-real wallet vectors at k=15 to k=16). Gates to submission: a
-cryptographer pass on the envelope binding and the accept-both-s
-policy, and the Interim-status ruling. Compact 0.35 now exposes native
-P-256 verification; open [#175](https://github.com/midnightntwrk/passport/pull/175)
-implements the bounded `wa-json134` profile and includes a real Safari
-account-key rotation accepted on localnet. Profile/spec alignment remains;
-the older k=15 midnight-zk measurements are not the new Compact account cost.
-Local copy: `docs/mps-mip/mips/mip-xxxx-signature-schemes.md`.
+**8 October update.** The [local extension](../mps-mip/mips/mip-xxxx-signature-schemes.md)
+is a concise account of ECDSA signing bytes and verification requirements:
+k1 envelope hashes and v2 device commitments, r1 WebAuthn policy binding,
+named bounded profiles, and device versus grant replay state. It preserves
+existing hash encodings and uses the implementation and evidence already available.
+
+The reference `wa-json134` profile and its live Safari account-key rotation
+are evidenced by merged https://github.com/midnightntwrk/passport/pull/175.
+The draft distinguishes those results from general browser interoperability
+and the negative variable-length experiment. Remaining specification choices
+and evidence gaps are listed in the extension.
+
+**Review route:** Passport PR → Hector's validation → upstream PR for the
+MIP-0013 extension. This task ends with the specification update; it does not
+require a new SDK or integration project.
 
 **Maps to components.** [C5](components/C5-signing-primitive.md) ·
 [C9](components/C9-device-bound-authentication.md).
