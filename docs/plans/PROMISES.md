@@ -26,6 +26,10 @@ to v1.0 in full.
 | **P9** | Selective disclosure | The user can prove a property without revealing more. |
 | **P10** | Chain abstraction | A single Passport account can transact across every chain Passport supports; chain identity is not a precondition for authorising. |
 
+Alongside these, [security properties](#security-properties) records the
+adversarial and integrity properties the ten promises leave implicit —
+numbered from P11.
+
 ---
 
 ## The ten promises
@@ -260,6 +264,158 @@ and selective disclosure — not the cross-chain machinery itself.
 
 ---
 
+## Security properties
+
+The ten promises above state what the user is offered. This section
+records the adversarial and integrity properties those promises leave
+implicit — what the system must *not* permit, however it is
+built. They are numbered from P11 and carry their own invariants in
+the same form. One of them, P5′, is a strengthening of an existing
+promise rather than a new one.
+
+They come from the Agda formal specification, where each is stated as a
+machine-level property over the architecture; the formal statements, and the
+setting they are stated in, live in
+[`arc-passport-formal-spec/docs/security-properties.md`](https://github.com/input-output-hk/arc-passport-formal-spec/blob/main/docs/security-properties.md).
+
+| ID | Name | One-line statement |
+|----|------|--------------------|
+| **P5′** | Recovery-authorised | No key rotation happens that the user did not authorise. |
+| **P11** | Transaction safety | Only a holder of the account's keys can move its funds. |
+| **P12** | Value integrity | The balance changes only through incoming and outgoing transactions. |
+| **P13** | Funds availability | With key access and funds above the fee threshold, the user can move all their funds. |
+| **P14** | Private proving | The proof service learns only what proving requires, and total leakage is bounded by the prover view plus the chain. |
+| **P15** | Guardian privacy | No one but a guardian itself can learn it is your guardian, and a guardian learns nothing beyond its own request. |
+| **P16** | Upgrade safety | Upgrades are account-gated and preserve devices, balances, and identity observations. |
+
+### P5′ · Recovery authorisation (recovery-authorised)
+
+P5 promises that recovery *works* (liveness), this is its safety:
+every rotation of the account's keys is authorised by the user through
+the recovery mechanism.
+
+**Invariants.**
+
+- **I-5′.1** Every key rotation the chain adopts is accompanied by a
+  recovery exchange authenticated under the account's out-of-band recovery
+  secret.
+- **I-5′.2** A rotation without such an authenticated exchange is rejected by
+  chain-side verification.
+
+### P11 · Transaction safety
+
+Only a holder of the account's keys can move its funds.
+
+**Invariants.**
+
+- **I-11.1** Every spend from the account that the chain adopts carries a
+  valid signature under a key registered to that account at the time of
+  adoption.
+- **I-11.2** The signature requirement is enforced chain-side, at
+  verification.
+- **I-11.3** A signature under a revoked key does not authorise a spend, even
+  if the key material is intact.
+- **I-11.4** No party other than the key holder can produce a signature that
+  verifies.
+
+### P12 · Value integrity
+
+The account balance changes only through incoming and outgoing transactions.
+The statement is more than a single equality, because the balance the user
+sees is an *answer the system gives*, and a client can be offline or behind
+the chain: what must hold is that the reported balance is never an
+overstatement, and that it converges eventually.
+
+**Invariants.**
+
+- **I-12.1** A reported balance never exceeds the account's real balance.
+- **I-12.2** After a period in which nothing enters or leaves the account,
+  the reported balance equals the real balance.
+- **I-12.3** No operation other than an incoming or outgoing transaction
+  changes the real balance. Things like adding or revoking a device, recovering,
+  renaming, etc. are all value-neutral.
+- **I-12.4** Any divergence between reported and real balance is
+  explained by staleness alone. It can never be a transaction that was
+  lost, double-counted, or attributed to the wrong account.
+
+### P13 · Funds availability
+
+With access to the account's keys and a balance above the fee threshold, the
+user can move all of their funds. This is the liveness dual of P11: safety
+alone is satisfied by a wallet that never releases anything.
+
+**Invariants.**
+
+- **I-13.1** From any authorised device, the user can construct, authorise,
+  and settle transactions that move the account's entire spendable balance,
+  less fees.
+- **I-13.2** No party can withhold this: no operator, helper, indexer, or
+  proof service is on the critical path of a spend (the spending case of
+  I-8.3).
+- **I-13.3** The only precondition is that the balance covers transaction
+  fees, and that threshold is discoverable by the client rather than
+  implicit.
+- **I-13.4** No account state renders funds permanently unspendable.
+
+### P14 · Private proving
+
+The proof service learns only what producing the proof requires, and the
+total leakage of the architecture is bounded by two feeds: what the prover
+sees and what the chain publishes.
+
+**Invariants.**
+
+- **I-14.1** Everything the proof service observes is derivable from the
+  statement being proved — a compromised or curious prover gains nothing a
+  party holding only the statement could not have worked out itself.
+- **I-14.2** Nothing the proof service is handed links two proving requests
+  to the same account or user: no persistent identifier, no reused
+  commitment, no key or handle that survives a request.
+- **I-14.3** The combined view of every component outside the user's own
+  devices is accounted for by the prover view and the chain view together.
+  No component carries user state out through a third channel.
+
+*Not covered.* Availability of the proof service — a malicious prover may
+simply refuse to prove, which P13 covers only where proving is not on the
+spend path — and contact metadata (timing, network origin) beyond what the
+statement itself pins.
+
+### P15 · Guardian privacy
+
+No one but a guardian itself can learn that it is your guardian, and a
+guardian learns nothing beyond what answering its own request requires.
+
+**Invariants.**
+
+- **I-15.1** Chain state and network traffic do not reveal who an account's
+  guardians are. Two accounts whose guardian sets have the same shape (size
+  and threshold) are indistinguishable to a third party.
+- **I-15.2** A guardian's view does not reveal the identity or the
+  participation of any other guardian.
+- **I-15.3** A guardian learns exactly the account address, the
+  session nonce, its own share index, and its own reply and nothing
+  else.
+
+### P16 · Upgrade safety
+
+Upgrades are gated by the account, and an upgrade preserves devices,
+balances, and identity observations. MIP-0013 permits in-place circuit
+replacement and records the device-orphaning risk that comes with it; these
+invariants are what bounds that risk.
+
+**Invariants.**
+
+- **I-16.1** No upgrade takes effect without authorisation from the account
+  itself. No operator, deployer, or circuit author can upgrade an account
+  unilaterally.
+- **I-16.2** An upgrade preserves the set of authorised devices.
+- **I-16.3** An upgrade preserves balances.
+- **I-16.4** An upgrade preserves identity observations: every attribute
+  question answerable before the upgrade is answerable after, with the same
+  answer.
+
+---
+
 ## Out of scope for v1.0 promises
 
 Recorded so the omission is not later mistaken for an oversight.
@@ -291,6 +447,18 @@ A summary view including the invariant ranges for each promise.
 | **P8** | Chain-only | I-8.1 … I-8.4 |
 | **P9** | Selective disclosure | I-9.1 … I-9.5 (I-9.3 tentative) |
 | **P10** | Chain abstraction | I-10.1 … I-10.5 |
+
+And the security properties:
+
+| ID | Name | Invariants |
+|----|------|------------|
+| **P5′** | Recovery-authorised | I-5′.1 … I-5′.3 |
+| **P11** | Transaction safety | I-11.1 … I-11.4 |
+| **P12** | Value integrity | I-12.1 … I-12.4 |
+| **P13** | Funds availability | I-13.1 … I-13.4 |
+| **P14** | Private proving | I-14.1 … I-14.3 |
+| **P15** | Guardian privacy | I-15.1 … I-15.3 |
+| **P16** | Upgrade safety | I-16.1 … I-16.4 |
 
 ### Merge candidates considered and rejected
 
@@ -353,6 +521,31 @@ design must respect these edges; component-level dependency analysis lives in
   the upstream layer, distinct from Passport's per-device keys at the user
   layer. P6 governs both layers — neither leaks key material.
 
+The security properties attach to the same map. Each is the safety or
+liveness counterpart of a promise that states only the other half:
+
+- **P5′ ↔ P5.** P5 is recovery liveness (the user *can* recover); P5′ is
+  recovery safety (nobody else can). A recovery mechanism satisfying P5
+  alone is compatible with an unauthorised rotation.
+- **P11 ↔ P4, P6.** I-4.2 (a revoked device cannot operate) and the I-6.x
+  family (keys do not leave their holder) are only meaningful because P11
+  requires a key for a spend in the first place.
+- **P13 ↔ P11.** The liveness dual: P11 alone is satisfied by a wallet that
+  never releases anything, P13 alone by one that releases to anybody.
+- **P13 ↔ P8.** I-13.2 (nobody can withhold a spend) is the spending case of
+  I-8.3 (no operator on the critical path).
+- **P12 ↔ P16.** I-16.3 (upgrades preserve balances) is the upgrade case of
+  I-12.3 (only transactions move value).
+- **P14 ↔ P9.** P9 bounds what a *proof* reveals to its verifier; P14 bounds
+  what producing the proof reveals to the prover, and what the architecture
+  as a whole reveals to everything off the user's devices.
+- **P15 ↔ P5, P6.** P5 admits recovery helpers and I-6.4 governs the share
+  material they hold; P15 governs what their participation reveals — about
+  the account, and about each other.
+- **P16 ↔ P8.** I-16.1 (upgrades are account-gated) is the upgrade case of
+  I-8.3: an operator-gated upgrade would put a named party back on the
+  critical path.
+
 ---
 
 ## Open questions
@@ -361,6 +554,29 @@ design must respect these edges; component-level dependency analysis lives in
   issuer contact" is achievable as a v1.0 invariant — or whether it
   constrains us to a narrower class of credential schemes — needs
   cryptographer / DID expert review.
+
+Three further guarantee-shaped obligations were surfaced alongside the
+security properties. Each is statable in the same vocabulary; none is
+committed to yet, and they are recorded here so the omission is deliberate
+rather than an oversight.
+
+- **Non-griefability.** Whether to promise that no outsider action degrades
+  an authorised device's availability. The standards name the attack surface
+  — deposit spam (`mip-0013:646`), inbox spam (`mip-0012:797`), contention
+  on the global `round` counter — without promising resistance to it. A
+  promise here would read: for any authorised device and operation, no
+  action by a party outside the account can take that operation from
+  available to unavailable.
+- **Deployment authenticity.** Whether to promise that clients attach only
+  to canonical, ratified bytecode — P2's namespace-forking failure mode one
+  level down, applied to the account contract itself. The conformance check
+  is decidable, so this is a question of committing to it, not of
+  feasibility.
+- **Reorg and finality.** How the promises should treat finality at all.
+  Every invariant above that says "the chain adopts" or "chain state shows"
+  currently reads as if adoption were final. There are several options and
+  the choice is open; for now the promises are to be read under the
+  assumption that adopted means final.
 
 ---
 
