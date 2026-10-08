@@ -178,8 +178,8 @@ The draft distinguishes those results from general browser interoperability
 and the negative variable-length experiment. Remaining specification choices
 and evidence gaps are listed in the extension.
 
-**Review route:** Hector approved https://github.com/midnightntwrk/passport/pull/180
-on 8 October; local merge and the upstream PR remain. This task ends with the
+**Review route:** Hector approved https://github.com/midnightntwrk/passport/pull/180,
+merged on 8 October as `d315208`; the upstream PR remains. This task ends with the
 specification update. No universal profile or k1 sunset is adopted. The separate
 https://github.com/midnightntwrk/passport/pull/179 experiment saves zero proof/VK
 bytes and substantially worsens proving cost; it is not an account replacement.

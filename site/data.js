@@ -295,7 +295,7 @@ window.PASSPORT_DATA = {
     {
       id: 'C5', name: 'Signing primitive', category: 'crypto',
       status: 'specified',
-      status_note: 'JubJub Schnorr is the MIP-0013 trunk; main also carries k256 and native P-256 (#175) under wa-json134, with real Safari account-key rotation accepted on localnet. Hector approved the narrow ECDSA signing-boundary update in #180; local merge and upstream submission remain. Cryptographic admissibility review remains; no k1 sunset or universal WebAuthn profile is adopted.',
+      status_note: 'JubJub Schnorr is the MIP-0013 trunk; main also carries k256 and native P-256 (#175) under wa-json134, with real Safari account-key rotation accepted on localnet. The narrow ECDSA signing-boundary update #180 is merged after Hector\'s approval; upstream submission remains. Cryptographic admissibility review remains; no k1 sunset or universal WebAuthn profile is adopted.',
       serves: ['P6'],
       outcome: 'Set in stone by the account-authorisation MIP (upstream MIP-0013): Schnorr on JubJub per device, verified in-circuit against a persistentHash (SHA-256) challenge that binds the account address, the circuit, its arguments, the witness values the call consumes, and an authorisation counter — so a signature authorises exactly one call with exactly those inputs. Per-device keys are independent (no derivation tree). The signer needs only JubJub arithmetic and SHA-256 — no Midnight stack — which separates approval from proving and makes the scheme FROST-compatible by construction. Validated end-to-end across language boundaries: TypeScript and pure-Rust signers produce interchangeable signatures against the same deployed verifier, and the reference implementation\'s independent Rust signer reproduces bit-exact challenges against the standard contract.',
       hard_deps: ['C4', 'C8', 'C9'],
@@ -1145,8 +1145,8 @@ window.PASSPORT_DATA = {
     },
     {
       when: '2026/10/08', kind: 'standard',
-      title: 'Narrow ECDSA extension approved for local integration',
-      detail: 'Hector approved #180, aligning existing k1/r1 signing recipes and bounded WebAuthn policy with MIP-0013. Local merge and upstream submission remain. The separate #179 variable-length experiment saves zero proof/VK bytes and worsens proving cost.',
+      title: 'Narrow ECDSA extension merged locally',
+      detail: '#180 merged after Hector\'s approval, aligning existing k1/r1 signing recipes and bounded WebAuthn policy with MIP-0013. Upstream submission remains. The separate #179 variable-length experiment saves zero proof/VK bytes and worsens proving cost.',
       components: ['C1', 'C5', 'C9'],
     },
   ],
@@ -1173,7 +1173,7 @@ window.PASSPORT_DATA = {
     {
       lane: 'Standards',
       title: 'Signature-schemes and scoped-grants MIPs to submission',
-      detail: 'Hector approved the narrow MIP-0013 ECDSA extension in #180; local merge and upstream submission remain. Scoped grants remain a separate draft. Native P-256 (#175) and caller-bound grants (#176) are merged; cryptographic review, editor decisions, authorisation amendments and combined ABI/P-256 caller validation remain.',
+      detail: 'The narrow MIP-0013 ECDSA extension #180 is merged after Hector\'s approval; upstream submission remains. Scoped grants remain a separate draft. Native P-256 (#175) and caller-bound grants (#176) are merged; cryptographic review, editor decisions, authorisation amendments and combined ABI/P-256 caller validation remain.',
       components: ['C5', 'C10', 'C11', 'C12', 'C23'],
     },
     {
@@ -1402,12 +1402,12 @@ window.PASSPORT_DATA = {
     {
       id: 'MIP-9', kind: 'mip',
       title: 'ECDSA authorisation for custody accounts',
-      detail: 'A narrow MIP-0013 signing-boundary extension recording existing k1/r1 signing recipes, replay distinctions and bounded WebAuthn verification requirements. Named profiles are permitted without adopting wa-json134 as a universal baseline, a common UV floor or a k1 sunset. Hector approved the local-record update in #180.',
+      detail: 'A narrow MIP-0013 signing-boundary extension recording existing k1/r1 signing recipes, replay distinctions and bounded WebAuthn verification requirements. Named profiles are permitted without adopting wa-json134 as a universal baseline, a common UV floor or a k1 sunset. The local-record update #180 is merged after Hector\'s approval.',
       components: ['C5', 'C9'],
       evidence: ['p256-webauthn-account', 'account-custody-reference'],
       co_author: 'Cryptographer review; wallet-provider review invited',
       lifecycle: 'Not yet filed',
-      status: 'Local revision #180 approved, awaiting merge; P-256 #175 merged; upstream submission and cryptographic review remain',
+      status: 'Local revision #180 and P-256 #175 merged; upstream submission and cryptographic review remain',
       promises: ['P6', 'P8'],
     },
     {

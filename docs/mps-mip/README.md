@@ -31,8 +31,8 @@ Last reconciled: **8 October 2026**. See [development status](../plans/STATUS.md
   Schnorr verification over JubJub (FROST-compatible, separating
   approval from proving). The DST-derivation and bootstrap errata are
   merged upstream. The local [ECDSA signing-boundary extension](mips/mip-xxxx-signature-schemes.md)
-  has Hector's approval in [Passport #180](https://github.com/midnightntwrk/passport/pull/180)
-  before local merge and an upstream PR.
+  was approved by Hector and merged in [Passport #180](https://github.com/midnightntwrk/passport/pull/180);
+  upstream submission remains.
   Scoped grants are a separate successor extension.
 - `mps/mps-call-provenance.md` → upstream **MPS-0040**, Cross-Contract
   Call Provenance in Compact Circuits (Proposed). Compact 0.35 now exposes
