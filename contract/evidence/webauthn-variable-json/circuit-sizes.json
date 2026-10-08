@@ -1,0 +1,410 @@
+{
+  "measuredAt": "2026-10-05T14:09:39.418Z",
+  "baseCommit": "45721e1d322357ef99a2786a3ba27d64382527d8",
+  "compilerInfo": {
+    "compiler-version": "0.35.0",
+    "compiler-commit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
+    "language-version": "0.27.0",
+    "runtime-version": "0.20.0",
+    "circuits": [
+      {
+        "name": "policy_commitment",
+        "pure": true,
+        "proof": false,
+        "arguments": [
+          {
+            "name": "rp_hash",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "origin",
+            "type": {
+              "type-name": "Bytes",
+              "length": 96
+            }
+          },
+          {
+            "name": "origin_length",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          },
+          {
+            "name": "pk",
+            "type": {
+              "type-name": "Secp256r1Point"
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      },
+      {
+        "name": "hash_bytes",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "data",
+            "type": {
+              "type-name": "Bytes",
+              "length": 256
+            }
+          },
+          {
+            "name": "length",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      },
+      {
+        "name": "verify_webauthn",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "data",
+            "type": {
+              "type-name": "Bytes",
+              "length": 256
+            }
+          },
+          {
+            "name": "length",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          },
+          {
+            "name": "rp_hash",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "authenticator_data",
+            "type": {
+              "type-name": "Bytes",
+              "length": 37
+            }
+          },
+          {
+            "name": "sig",
+            "type": {
+              "type-name": "Struct",
+              "name": "Secp256r1EcdsaSignature",
+              "elements": [
+                {
+                  "name": "r",
+                  "type": {
+                    "type-name": "Secp256r1Scalar"
+                  }
+                },
+                {
+                  "name": "s",
+                  "type": {
+                    "type-name": "Secp256r1Scalar"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "pk",
+            "type": {
+              "type-name": "Secp256r1Point"
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      }
+    ],
+    "witnesses": [
+      {
+        "name": "split_word",
+        "arguments": [
+          {
+            "name": "value",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 68719476735
+            }
+          }
+        ],
+        "result type": {
+          "type-name": "Struct",
+          "name": "SplitWord",
+          "elements": [
+            {
+              "name": "bits",
+              "type": {
+                "type-name": "Vector",
+                "length": 32,
+                "type": {
+                  "type-name": "Boolean"
+                }
+              }
+            },
+            {
+              "name": "carry",
+              "type": {
+                "type-name": "Uint",
+                "maxval": 15
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "inspect_json",
+        "arguments": [
+          {
+            "name": "data",
+            "type": {
+              "type-name": "Bytes",
+              "length": 256
+            }
+          },
+          {
+            "name": "length",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          }
+        ],
+        "result type": {
+          "type-name": "Struct",
+          "name": "JsonAdvice",
+          "elements": [
+            {
+              "name": "origin",
+              "type": {
+                "type-name": "Bytes",
+                "length": 96
+              }
+            },
+            {
+              "name": "origin_length",
+              "type": {
+                "type-name": "Uint",
+                "maxval": 65535
+              }
+            },
+            {
+              "name": "prefix_length",
+              "type": {
+                "type-name": "Uint",
+                "maxval": 65535
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "contracts": [],
+    "ledger": [
+      {
+        "name": "expected_challenge",
+        "index": 0,
+        "exported": true,
+        "storage": "Cell",
+        "type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      },
+      {
+        "name": "enrolled_policy",
+        "index": 1,
+        "exported": true,
+        "storage": "Cell",
+        "type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      },
+      {
+        "name": "limited_verification",
+        "index": 2,
+        "exported": true,
+        "storage": "Cell",
+        "type": {
+          "type-name": "Boolean"
+        }
+      },
+      {
+        "name": "accepted",
+        "index": 3,
+        "exported": true,
+        "storage": "Cell",
+        "type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      }
+    ]
+  },
+  "zkirVersion": "midnight-zkir 3.1.0-rc.1",
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4 Max",
+    "memoryBytes": 68719476736
+  },
+  "capacityBytes": 256,
+  "maxSha256Blocks": 5,
+  "originCapacityBytes": 96,
+  "note": "Circuit/key sizes only. No proof timing, memory peak, deployment or browser-interoperability claim.",
+  "sources": {
+    "probe": {
+      "bytes": 128693,
+      "sha256": "ac1236612ca73e1551377008b2360c296ed9f29d66913e0a80a76eec0f8be654"
+    },
+    "webauthn": {
+      "bytes": 4778,
+      "sha256": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb"
+    },
+    "generator": {
+      "bytes": 10006,
+      "sha256": "091dc5633e38d57b0dfcc580976192ee68e8b88ac840f8e3cbdbbfed7b672a3a"
+    }
+  },
+  "fixedProfileBaseline": {
+    "source": "evidence/p256-webauthn/circuit-sizes.json",
+    "measurement": {
+      "contract": "probe-p256",
+      "circuit": "verify_webauthn",
+      "k": 17,
+      "rows": 112156,
+      "assets": {
+        "zkir": {
+          "bytes": 259279,
+          "sha256": "c762b11ba1874232b7fdcbba94a75173852145d7072d16d9e6a6b3b5085920db"
+        },
+        "prover": {
+          "bytes": 234971079,
+          "sha256": "3634cc126d3c3767c02eb80c223457c9f36750f66585082a105e3e9188480106"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "962f6c2329475033b30bdd0302befab101af6d2e0d21eec5abf953e848eafec0"
+        }
+      }
+    },
+    "comparisonNote": "Combined probe comparison, not isolated SHA overhead: the new probe also commits policy in constructor state and checks variable-position fields."
+  },
+  "initialVariableBaseline": {
+    "source": "evidence/webauthn-variable-json/baseline/circuit-sizes.json",
+    "circuits": [
+      {
+        "name": "hash_bytes",
+        "k": 20,
+        "rows": 972563,
+        "assets": {
+          "zkir": {
+            "bytes": 45240891,
+            "sha256": "e4503bef65fc81d7c659c569af44444038c706416b532099bed0bade92d8ffc2"
+          },
+          "prover": {
+            "bytes": 921888348,
+            "sha256": "60bd91c3bc1490c136a5b4d2d1daa3c2798f871ce9989b2424e8f9580846c017"
+          },
+          "verifier": {
+            "bytes": 1353,
+            "sha256": "67ea434341b0bd848ee0e9b71fa0164f27c7c9f63d487b4968e425b83113d51e"
+          }
+        },
+        "verifierFitsSingle15000ByteWave": true
+      },
+      {
+        "name": "verify_webauthn",
+        "k": 21,
+        "rows": 1118544,
+        "assets": {
+          "zkir": {
+            "bytes": 46247925,
+            "sha256": "03d5b971492dbfa1c98a4d4bd8c0e4f3a0049cb35ed08d68516078c6caad54ac"
+          },
+          "prover": {
+            "bytes": 3774377857,
+            "sha256": "f00fa78c2e4bf121f3ad6d8ba3cf5579611ee513dc7da770f63487b5090a07b6"
+          },
+          "verifier": {
+            "bytes": 2745,
+            "sha256": "2054b1d58c5c54b940bfb2fe849811d2642b9c7f2ee290b93e6de7e10a88cb7d"
+          }
+        },
+        "verifierFitsSingle15000ByteWave": true
+      }
+    ]
+  },
+  "circuits": [
+    {
+      "name": "hash_bytes",
+      "k": 20,
+      "rows": 852999,
+      "assets": {
+        "zkir": {
+          "bytes": 37836116,
+          "sha256": "a25dff40de43ac85617717ebcc0b2a4597e91e7a6de0161d1a57f519b25c8ac9"
+        },
+        "bzkir": {
+          "bytes": 13949347,
+          "sha256": "a4f479b54147783ff8e463e13d75348bf8fe07081d99812361cf0bebd3b5de47"
+        },
+        "prover": {
+          "bytes": 919921781,
+          "sha256": "fd6980682d66346b42aefaa502e87ca77d107a90b44ad7a6bb8ad704135ff649"
+        },
+        "verifier": {
+          "bytes": 1353,
+          "sha256": "710d7104e9c9145f4d1fd4dbd8d24539ebfdf9e3d944e05b388d79d9dad29d3d"
+        }
+      },
+      "verifierFitsSingle15000ByteWave": true
+    },
+    {
+      "name": "verify_webauthn",
+      "k": 20,
+      "rows": 998980,
+      "assets": {
+        "zkir": {
+          "bytes": 38843987,
+          "sha256": "2119a9e2949696cecd77d8cc43a3e250ec8ef210433f73a0be1fcfc44be2026d"
+        },
+        "bzkir": {
+          "bytes": 14310072,
+          "sha256": "f5af06421883e866c49b3c2f7777c3ba4ce58300c29164c3c1397ca53276e3bc"
+        },
+        "prover": {
+          "bytes": 1893363935,
+          "sha256": "061d6285c0b09b211f3eb4e520796e64b46ff9318811e9dd58d481401128d437"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "63fee307fd7c9b080a52a5dc7f76a9c00967fae5b8c6090acbe78eb3ed5c93f0"
+        }
+      },
+      "verifierFitsSingle15000ByteWave": true
+    }
+  ]
+}

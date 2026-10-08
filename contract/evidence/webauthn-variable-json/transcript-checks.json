@@ -1,0 +1,41 @@
+{
+  "result": "PASS",
+  "startedAt": "2026-10-05T14:15:46.845Z",
+  "completedAt": "2026-10-05T14:15:49.565Z",
+  "evidenceLayer": "proof-server ZKIR evaluator checks; not negative proof generation",
+  "positive": "Existing captured Safari assertion accepted by ZKIR check",
+  "tests": [
+    {
+      "name": "sha-bit",
+      "result": "REJECTED",
+      "status": 400,
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "sha-carry",
+      "result": "REJECTED",
+      "status": 400,
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "origin",
+      "result": "REJECTED",
+      "status": 400,
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "prefix-length",
+      "result": "REJECTED",
+      "status": 400,
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "input-length",
+      "result": "REJECTED",
+      "status": 400,
+      "reason": "bad input: `Failed direct assertion`"
+    }
+  ],
+  "irSha256": "f5af06421883e866c49b3c2f7777c3ba4ce58300c29164c3c1397ca53276e3bc",
+  "sourceSha256": "cc4fbd12a64f740e4f9400855e0eab2189b934cfd9978305c9875f3baa1555a4"
+}

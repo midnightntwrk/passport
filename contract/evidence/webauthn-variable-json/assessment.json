@@ -1,0 +1,45 @@
+{
+  "recordedAt": "2026-10-06",
+  "experiment": "witness-assisted bounded variable-length WebAuthn",
+  "outcome": "NEGATIVE_SIZE_AND_PROVING_COST",
+  "decision": "Record as an experiment; not a recommended replacement for the previous fixed-profile verifier.",
+  "comparisonReference": "Previous wa-json134 standalone WebAuthn verifier, not the first variable-length prototype",
+  "metrics": {
+    "proofBytes": { "previous": 6364, "experiment": 6364, "bytesSaved": 0 },
+    "verifierKeyBytes": { "previous": 2745, "experiment": 2745, "bytesSaved": 0 },
+    "proverKeyBytes": { "previous": 234971079, "experiment": 1893363935 },
+    "circuitRows": { "previous": 112156, "experiment": 998980 },
+    "recordedProvingRequestSeconds": {
+      "previousRepeatedMean": 11.978,
+      "experimentSamples": [201.621182042, 171.019010708],
+      "comparableControlledBenchmark": false
+    },
+    "transactionByteSavingsEstablished": false,
+    "memorySavingsEstablished": false
+  },
+  "functionalEvidence": {
+    "compiledExecutionGroups": "14/14 PASS",
+    "realProofs": "140-byte strict and 256-byte limited; verified and applied in memory",
+    "rawTranscriptMutations": "Five rejected by direct ZKIR assertions",
+    "doesNotChangeNegativeSizeCostOutcome": true
+  },
+  "interpretation": [
+    "No proof-byte or verifier-key-byte saving over the previous approach.",
+    "The 49.8% prover-key reduction is within the variable-length experiment only; the final key is still about 8.1 times the previous fixed-profile key.",
+    "Witness-side JSON parsing supplies advice; security-critical checks still execute in the circuit.",
+    "New proof requests include streamed key material and proving; first sample also fetched public parameters and overlapped other work.",
+    "New transactions are fee-unbalanced laboratory samples, not funded node submissions.",
+    "24.50 GB is the new server-container lifetime memory high-water mark including cache; no equivalent old peak exists.",
+    "Native variable-length SHA support through Compact is separate, unmeasured research."
+  ],
+  "evidencePathsRelativeToContract": {
+    "previousCircuitSizes": "evidence/p256-webauthn/circuit-sizes.json",
+    "previousProofs": "evidence/p256-webauthn/conformance-and-proving.json",
+    "previousMethodology": "P256-MEASUREMENTS.md",
+    "experimentCircuitSizes": "evidence/webauthn-variable-json/circuit-sizes.json",
+    "experimentProofs": "evidence/webauthn-variable-json/proofs.json",
+    "experimentExecution": "evidence/webauthn-variable-json/offline.json",
+    "experimentConstraints": "evidence/webauthn-variable-json/transcript-checks.json",
+    "experimentResources": "evidence/webauthn-variable-json/proof-resources.json"
+  }
+}
