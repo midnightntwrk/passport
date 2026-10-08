@@ -29,6 +29,12 @@ License: Apache-2.0
  limitations under the License.
 -->
 
+> **Published as MIP-0020 (Proposed), 4 October 2026.** The
+> [numbered upstream text](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md)
+> is canonical; the pre-publication working text below is retained for local
+> references. Authors remain Nicolas Di Prima and Vincent Hanquez.
+> Continue review in https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/345.
+
 ## Abstract
 
 Applications should distribute a circuit's small ZKIR file instead of its
