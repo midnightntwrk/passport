@@ -29,12 +29,16 @@ this profile. Supporting another length requires compiling another
 profile and measuring its keys; this implementation does not claim
 general variable-length WebAuthn support.
 
-This is a profile-specific reference implementation, not full conformance
-to the signature-schemes draft's length-agnostic section 3.5. It also keeps
-key/RP/origin private and binds policy per device, rather than using the
-standalone experiment's public key/RP inputs. Those specification deltas
-remain subject to review. Policy-bearing boot/device recipes use **r1:v2**
-tags to distinguish them from the draft's policy-free r1:v1 recipes.
+This is an implementation-specific profile. The
+[ECDSA Authorisation for Custody Accounts draft](../docs/mps-mip/mips/mip-xxxx-signature-schemes.md)
+records the signing boundary and permits named bounded profiles; complete
+recipe references, the common UV requirement and evidence mapping remain
+specification work. `wa-json134` is not an adopted
+W3C/FIDO or MIP baseline. This implementation keeps key/RP/origin private,
+binds policy per device and requires UP+UV on every call. The draft requires
+every reachable verifier accepting a credential to enforce its authorised
+policy, without mandating a stored profile ID. Boot/device recipes use
+**r1:v2**; operation challenges retain **r1:v1**.
 
 `authenticatorData` is exactly 37 bytes. The circuit checks:
 

@@ -784,10 +784,16 @@ order:
    `secp256k1EcdsaVerify(envelope_digest(envelope, h), sig, pk)`, both
    `s` forms accepted. `jubjub`:
    `ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(pk, h as Field))` with
-   the grinding rule of the authorisation MIP section 5.2. `p256`, the
-   WebAuthn envelope: `client_data_json` begins with the exact 36-byte
-   prefix `{"type":"webauthn.get","challenge":"` followed by the 43-byte
-   unpadded base64url encoding of `h` and a closing quote;
+   the grinding rule of the authorisation MIP section 5.2. `p256` MUST
+   enforce its authorised WebAuthn profile's type, challenge, origin,
+   boundary and length checks as specified in the
+   [signature-schemes draft](mip-xxxx-signature-schemes.md). The signed
+   origin MUST match the browser `client_id` committed by `origin_hash`
+   using section 4.4's recipe; checking the RP hash alone is insufficient.
+   The WebAuthn request challenge is the 32-byte `h`; the signed
+   `clientDataJSON.challenge` field is its unpadded base64url encoding. The reference
+   reconstructs the complete supported JSON envelope; a supplied type/
+   challenge prefix alone does not establish profile conformance.
    `authenticator_data` is exactly 37 bytes (ED flag clear, so an
    extension-bearing assertion cannot verify) with
    `authenticator_data[0..32] == rp_id_hash` and the user-present and

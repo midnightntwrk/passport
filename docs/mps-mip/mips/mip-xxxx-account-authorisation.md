@@ -28,6 +28,12 @@ Replaces: none
  limitations under the License.
 -->
 
+> **MIP-0013 local record — 8 October 2026.** This file retains the earlier
+> working text; the [published MIP-0013 (Proposed)](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013-account-authorisation.md)
+> is canonical. The proposed [ECDSA signing-boundary extension](mip-xxxx-signature-schemes.md)
+> records the implemented k1/r1 recipes and bounded WebAuthn requirements.
+> Hector's validation in Passport precedes a PR to update the upstream proposal.
+
 ## Abstract
 
 This MIP specifies the multi-key account standard for Midnight custody
