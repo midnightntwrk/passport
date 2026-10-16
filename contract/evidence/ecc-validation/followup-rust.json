@@ -1,0 +1,31 @@
+{
+  "completed": true,
+  "scope": "38 Rust signer tests, including 64 identical device requests with distinct announcements; sampling is not an RNG audit",
+  "command": "cargo +1.95 test --offline --locked",
+  "passed": 38,
+  "versions": {
+    "k256": [
+      "0.13.4"
+    ],
+    "midnight-base-crypto": [
+      "1.0.0"
+    ],
+    "midnight-curves": [
+      "0.2.1"
+    ],
+    "midnight-transient-crypto": [
+      "2.1.0"
+    ],
+    "rand": [
+      "0.8.7",
+      "0.9.5",
+      "0.10.2"
+    ]
+  },
+  "logSha256": "ab85888cf9a5cd7636d7418a6ac86995be84ed9f6dc64c32f900add02a2298df",
+  "sourceSha256": {
+    "signer-rs/src/main.rs": "2724aa63d2a1bab86d95609b52fe44ad4b22959837f52c70989f04ceaf92bdf2",
+    "signer-rs/src/grants.rs": "e7e7270922611e691761a959964c3b446e5fa972f51797b61028c4cb9ffbd406",
+    "signer-rs/Cargo.lock": "ce20389e3f69c6e49611742eb76a3df50c1e1d7dd7cbb13effd74fcf0464039b"
+  }
+}

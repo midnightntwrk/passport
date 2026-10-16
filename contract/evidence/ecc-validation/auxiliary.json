@@ -1,0 +1,94 @@
+{
+  "reviewDate": "2026-10-15",
+  "scope": "Additional targeted suites; not a full repository test run",
+  "node": "22.23.3",
+  "suites": [
+    {
+      "suite": "recovery-offline",
+      "cwd": "contract",
+      "reproduce": "node --import tsx src/tests/recovery-offline.ts",
+      "result": "PASS",
+      "passed": null,
+      "logSha256": "860639fa21132bc96879e3ba6b7990db60982a54806dcf59cc04660b9dccb0d2",
+      "sourceSha256": {
+        "src/tests/recovery-offline.ts": "e18a74a1ae4afa484b40192ed3d161af4a37c4006ac658e1528f5ac9c5f08634"
+      }
+    },
+    {
+      "suite": "p256-offline",
+      "cwd": "contract",
+      "reproduce": "node --import tsx src/tests/p256-offline.ts",
+      "result": "PASS",
+      "passed": null,
+      "logSha256": "26a8204a647a19dc54a7ba01f82942bbef542aa5e582ff7ed9f2146ee3c14a11",
+      "sourceSha256": {
+        "src/tests/p256-offline.ts": "617ec5db04e8ed057c9d9d4cf57b9a6c04887c8f35f79d0962c6f15addbae2cf",
+        "src/tests/sim.ts": "e8ce1ebf990133b4277047b3c82eb1f8babd783fdc31a9b85a2eff34194ad572"
+      }
+    },
+    {
+      "suite": "recovery-sim",
+      "cwd": "contract",
+      "reproduce": "node --import tsx src/tests/recovery-sim.ts",
+      "result": "PASS",
+      "passed": null,
+      "logSha256": "ccd2097a3372c9e3dc85c27cd0d81d5c1c48a0e37b28c52e0e5ffc850167fea1",
+      "sourceSha256": {
+        "src/tests/recovery-sim.ts": "7db602c64737863398f591c10eadb30c9edf34c1d57740ae7a03b6c070e1c194",
+        "src/tests/sim.ts": "e8ce1ebf990133b4277047b3c82eb1f8babd783fdc31a9b85a2eff34194ad572"
+      }
+    },
+    {
+      "suite": "grants-offline",
+      "cwd": "contract",
+      "reproduce": "node --import tsx src/tests/grants-offline.ts",
+      "result": "PASS",
+      "passed": 127,
+      "logSha256": "acb95a55716cd0aba95e48ed2d1c8730cd7decb3b27af4caa37b5d4fdf180d55",
+      "sourceSha256": {
+        "src/tests/grants-offline.ts": "ee69ecc786443f219db72b674b175add1ad2522931e1207471d33d8d8ac64277"
+      }
+    },
+    {
+      "suite": "rust-signer",
+      "cwd": ".",
+      "reproduce": "cargo test --locked --manifest-path contract/signer-rs/Cargo.toml",
+      "result": "PASS",
+      "passed": 38,
+      "logSha256": "e1122f197de83cc2a26a78a8f9cce1814b8d3ebc9b5e13720dd776514c2aa067",
+      "sourceSha256": {
+        "signer-rs/src/main.rs": "8eab4061ceef7ae21567530ad25066e010c872e5886271b876313e247aba2749",
+        "signer-rs/src/grants.rs": "e7e7270922611e691761a959964c3b446e5fa972f51797b61028c4cb9ffbd406",
+        "signer-rs/Cargo.lock": "ce20389e3f69c6e49611742eb76a3df50c1e1d7dd7cbb13effd74fcf0464039b"
+      }
+    },
+    {
+      "suite": "backend-proofs-0.8.3",
+      "cwd": ".",
+      "reproduce": "cargo test --offline --locked --manifest-path research/ecc-validation-checks/Cargo.toml",
+      "result": "PASS",
+      "passed": 5,
+      "logSha256": "b570132c6437be60a010629d2a2a4a7a89f571ab82a08a119d9438c236bf8d85",
+      "sourceSha256": {}
+    },
+    {
+      "suite": "backend-proofs-0.8.2",
+      "cwd": ".",
+      "reproduce": "python3 research/ecc-validation-checks/run.py consumer",
+      "result": "PASS",
+      "passed": 5,
+      "logSha256": "107b79368fe84f79395189d50aa8269d7b700cefb297dea943972022ab156bf8",
+      "sourceSha256": {}
+    },
+    {
+      "suite": "ledger-native-rc.5",
+      "cwd": ".",
+      "reproduce": "python3 research/ecc-validation-checks/run.py ledger /path/to/pinned-ledger",
+      "result": "PASS",
+      "passed": 3,
+      "logSha256": "c46f99b7734283c41a32923cdfb925a135070d08203f87f773714757f89dfd76",
+      "sourceSha256": {},
+      "executionNote": "Executed Cargo directly in the isolated rc.5 archive harness created earlier in this review, using its locked manifest and research/ecc-validation-checks/ledger-api.rs; the reproduce command creates the equivalent harness from a clean checkout."
+    }
+  ]
+}

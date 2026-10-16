@@ -1,0 +1,110 @@
+{
+  "completed": true,
+  "rows": [
+    {
+      "accepted": true,
+      "boundary": "compiled input assignment projection",
+      "detail": "constraints satisfied",
+      "expectedAccepted": true,
+      "input": "valid subgroup"
+    },
+    {
+      "accepted": true,
+      "boundary": "compiled bootstrap with fixed public commitments",
+      "detail": "constraints satisfied",
+      "expectedAccepted": true,
+      "input": "valid subgroup"
+    },
+    {
+      "accepted": true,
+      "boundary": "compiled input assignment projection",
+      "detail": "constraints satisfied",
+      "expectedAccepted": true,
+      "input": "identity"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled bootstrap with fixed public commitments",
+      "detail": "synthesis rejected: Synthesis error: Relation::circuit error: Synthesis(\"error_if_known_and\")",
+      "expectedAccepted": false,
+      "input": "identity"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled input assignment projection",
+      "detail": "unsatisfied constraints: [Equality constraint not satisfied by cell (Column('Advice', 0 - ), in Region 5 ('assign_many (native)') at offset 0), Equality constraint not satisfied by cell (Column('Advice', 6 - ), in Region 3 ('assign mul') at offset 3)]",
+      "expectedAccepted": false,
+      "input": "order-two"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled bootstrap with fixed public commitments",
+      "detail": "synthesis rejected: Synthesis error: Relation::circuit error: Synthesis(\"error_if_known_and\")",
+      "expectedAccepted": false,
+      "input": "order-two"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled input assignment projection",
+      "detail": "unsatisfied constraints: [Equality constraint not satisfied by cell (Column('Advice', 0 - ), in Region 4 ('assign_many (native)') at offset 0), Equality constraint not satisfied by cell (Column('Advice', 0 - ), in Region 5 ('assign_many (native)') at offset 0), Equality constraint not satisfied by cell (Column('Advice', 5 - ), in Region 3 ('assign mul') at offset 3), Equality constraint not satisfied by cell (Column('Advice', 6 - ), in Region 3 ('assign mul') at offset 3)]",
+      "expectedAccepted": false,
+      "input": "mixed torsion"
+    },
+    {
+      "accepted": true,
+      "boundary": "compiled bootstrap with fixed public commitments",
+      "detail": "constraints satisfied",
+      "expectedAccepted": true,
+      "input": "mixed torsion"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled input assignment projection",
+      "detail": "host arithmetic panicked on unchecked invalid point; not a constraint-rejection result",
+      "expectedAccepted": false,
+      "input": "off-curve (0,0)"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled bootstrap with fixed public commitments",
+      "detail": "host arithmetic panicked on unchecked invalid point; not a constraint-rejection result",
+      "expectedAccepted": false,
+      "input": "off-curve (0,0)"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled input assignment projection",
+      "detail": "unsatisfied constraints: [ConstraintCaseDebug {\n    constraint: Constraint {\n        gate: Gate {\n            index: 4,\n            name: \"conditional add\",\n        },\n        index: 0,\n        name: \"rx constraint for r = q + b * s\",\n    },\n    location: InRegion {\n        region: Region 3 ('assign mul'),\n        offset: 0,\n    },\n    cell_values: [\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 0,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 1,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"1\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 2,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x639b4de820286096b1ae163a9409c3e7d0fdb4832e9145057972fa1b7674e8d2\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 3,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x4dac916bf4be635b5eacc32bd290ff45f0327944c231e3645190027424fc1eef\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 4,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"1\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 5,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x14287f037fef22476e30c967790c13cf93c12a45e7675f34b780ae4e30b849c0\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 8,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0\",\n        ),\n    ],\n}, ConstraintCaseDebug {\n    constraint: Constraint {\n        gate: Gate {\n            index: 4,\n            name: \"conditional add\",\n        },\n        index: 2,\n        name: \"constraint for xq_yq_xs_ys = xq * yq * xs * ys\",\n    },\n    location: InRegion {\n        region: Region 3 ('assign mul'),\n        offset: 1,\n    },\n    cell_values: [\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 0,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x5fcba5e51d0fddaaf4992e2e7fc5e0a56b149f22e022a0fc799f32b3e2652296\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 1,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x651f5ac9e0b0f7022b28d29cd8ca6d9cc40017caf6d049d82f9a43b6f847c878\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 2,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x639b4de820286096b1ae163a9409c3e7d0fdb4832e9145057972fa1b7674e8d2\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 3,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x4dac916bf4be635b5eacc32bd290ff45f0327944c231e3645190027424fc1eef\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 8,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x597fd65d91fbe2b69c95fc0e4b8ae9391a111c935a0c3aecb20a6019ab9b33d2\",\n        ),\n    ],\n}, ConstraintCaseDebug {\n    constraint: Constraint {\n        gate: Gate {\n            index: 4,\n            name: \"conditional add\",\n        },\n        index: 2,\n        name: \"constraint for xq_yq_xs_ys = xq * yq * xs * ys\",\n    },\n    location: InRegion {\n        region: Region 3 ('assign mul'),\n        offset: 2,\n    },\n    cell_values: [\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 0,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x23217f8592a4b3b3bb514902c54a4dd91ba1fb0032818c2d77f95ccda474214a\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 1,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x919d74bbb8cf9255f578f9ed49fe334a05002608c23bf12e8bea89213ca95e3\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 2,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x639b4de820286096b1ae163a9409c3e7d0fdb4832e9145057972fa1b7674e8d2\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 3,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x4dac916bf4be635b5eacc32bd290ff45f0327944c231e3645190027424fc1eef\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 8,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x4c4fc90d4628cc3d705cfe1e510583c7b81d8168c4547733b872c3ec6f702f85\",\n        ),\n    ],\n}, ConstraintCaseDebug {\n    constraint: Constraint {\n        gate: Gate {\n            index: 4,\n            name: \"conditional add\",\n        },\n        index: 2,\n        name: \"constraint for xq_yq_xs_ys = xq * yq * xs * ys\",\n    },\n    location: InRegion {\n        region: Region 3 ('assign mul'),\n        offset: 3,\n    },\n    cell_values: [\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 0,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x30692625ae265e3f0ff771d036e8dc65f9fe356dbd3a3e2886e29c2dcf0c26ae\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 1,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x198bf6964dfafd3be912237930ae68dd08de0e8fdc18e18ee5de4d58868beb45\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 2,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x639b4de820286096b1ae163a9409c3e7d0fdb4832e9145057972fa1b7674e8d2\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 3,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x4dac916bf4be635b5eacc32bd290ff45f0327944c231e3645190027424fc1eef\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 8,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x47068e6f76225b843ff5fb4d34bcc642089bb8b3c114078be6d92b7906d1644e\",\n        ),\n    ],\n}, ConstraintCaseDebug {\n    constraint: Constraint {\n        gate: Gate {\n            index: 5,\n            name: \"witness point\",\n        },\n        index: 0,\n        name: \"curve equation\",\n    },\n    location: InRegion {\n        region: Region 0 ('assign point without subgroup check'),\n        offset: 0,\n    },\n    cell_values: [\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 0,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x639b4de820286096b1ae163a9409c3e7d0fdb4832e9145057972fa1b7674e8d2\",\n        ),\n        (\n            DebugVirtualCell {\n                name: \"\",\n                column: DebugColumn {\n                    column_type: Advice,\n                    index: 1,\n                    annotation: \"\",\n                },\n                rotation: 0,\n            },\n            \"0x4dac916bf4be635b5eacc32bd290ff45f0327944c231e3645190027424fc1eef\",\n        ),\n    ],\n}, Equality constraint not satisfied by cell (Column('Advice', 0 - ), in Region 4 ('assign_many (native)') at offset 0), Equality constraint not satisfied by cell (Column('Advice', 0 - ), in Region 5 ('assign_many (native)') at offset 0), Equality constraint not satisfied by cell (Column('Advice', 5 - ), in Region 3 ('assign mul') at offset 3), Equality constraint not satisfied by cell (Column('Advice', 6 - ), in Region 3 ('assign mul') at offset 3)]",
+      "expectedAccepted": false,
+      "input": "altered x+2 same y"
+    },
+    {
+      "accepted": false,
+      "boundary": "compiled bootstrap with fixed public commitments",
+      "detail": "synthesis rejected: Synthesis error: Relation::circuit error: Synthesis(\"error_if_known_and\")",
+      "expectedAccepted": false,
+      "input": "altered x+2 same y"
+    }
+  ],
+  "runtimeGeneratedSha256": "055ff3357d7c89b84967f2babca7f3657b802dc3072f54daf3d18cb148c90f5c",
+  "scope": "Unchecked typed Jubjub input witnesses bypass preprocessing. Coordinate-bound assignment projection plus actual compiled bootstrap with fixed public commitments. MockProver only; not arbitrary Halo2 advice-cell injection or full proofs. Host panics are not constraint rejection.",
+  "zkirRevision": "e82d81d25aabcc5f5092e2bd559083487f577914",
+  "testSourceSha256": "de4f65a4d307e9874a9587ec7f082123eed17cc4598fd56f2990ae3c69a72e83",
+  "runnerSha256": "6c68634cb8e05e1d4ffa0ae41c39204774f91a3318e9fafce2060c4309265ca1",
+  "runtimeEvidenceSha256": "b0b52a23265cb4c91f00a68e6a7cf89844131d7d122f27f3fe2da8aa3ed87573",
+  "zkirSha256": {
+    "activate_initial_device_with_jubjub": "aa57039b114151e1889e8ae86afcc3aa2ca0e5929275bcc75061b28088eb868b",
+    "activate_initial_device_with_k256": "b197e27eaa0b96c3e320a65c238ff662ce3e6cb0be7d56a5e1dabba0e7db8662",
+    "activate_initial_device_with_p256": "a6c4420309515190f2f93ff5ceb3caf8faf32c1a277c249456a7db6520cf8510",
+    "add_device_with_jubjub": "d6086a4bcd2f3d6c0c891657121df7ad753f4b5c52f9843c68e9c927471e6c5f",
+    "issue_grant_with_jubjub": "5a375421790a8e1e2c7ee2a6a04bc45b59af6d3e5fd39ceac047605178bed0e8",
+    "publish_recovery_session_with_jubjub": "b3c9ba85558a6114552f1ccf3a0a8f5a3ad2931be27ec588ba8a80768500a23b",
+    "recover_submit": "383f701d09f5c763f17b5821c41944f3f5681a5b9cf9e39e525dded79e13e6d3",
+    "rotate_enc_key_with_jubjub": "c9e1e5f58c19179f290face9c90935a20c28938c4c8db2bbf0bf1fc0d10999ab",
+    "rotate_enc_key_with_k256": "7f22b917111f9de789a5da7d7b2c1182c8c5578b9d06bb7c11b5339ac829052f",
+    "rotate_enc_key_with_p256": "2b056dde43dc3e75a651b3f19f48abf8d0fe48c6a167a561b58c5a8ee714ea5f",
+    "withdraw_unshielded_with_grant_jubjub": "c3694f8f2c42693d9b3ab45605194d4a3dc31ba6664985902c1e64fa3b5c5f40",
+    "withdraw_unshielded_with_grant_k256": "b0ec72d2b80131da5caa38715865048ca6d27938b85263f2afff0670c9ef6328",
+    "withdraw_unshielded_with_grant_p256": "0a02e65b7f4a34e93f62c92604394a2352a42090b34fd965078ab8d49602c683"
+  }
+}

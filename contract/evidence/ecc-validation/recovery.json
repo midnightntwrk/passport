@@ -1,0 +1,45 @@
+{
+  "completed": true,
+  "runAt": "2026-10-15T11:33:52.472Z",
+  "node": "v22.23.3",
+  "scope": "Generated JavaScript and real client signers; no new proof or live-node claims; RNG faults explicitly injected only in named tests",
+  "sourceSha256": "d1e4f9cbc5dbd85050ed461127047ea19122709f6b723957bd6e2fc424fde054",
+  "clientSourceSha256": {
+    "wallet/signer.ts": "4c3d593c0947641a116bfca059de399c1fcff24d37c430a38bbbf493c8e3cc8b",
+    "wallet/signer-p256.ts": "5a2b9e646283425fefcdf2f70dd058976aa772b1c11a10522df0eaa059787c76",
+    "wallet/recovery-gate.ts": "4367c68b64d12ab7216e4c9aabe4686a65835ca873b4f1d4842ff62398180389",
+    "wallet/recovery.ts": "8a92114a7d9c3e1b4f5188b8d660d1459c58b70b715992c4b5d144a1bf7baf2c",
+    "wallet/inbox.ts": "3c4bce6dd5e92eda4b8e2dda15fc4aef91003300c4296cb3794a1d8d695a5922",
+    "wallet/contract.ts": "1f7afef8d4fa921d5f2431e61d8cec7570c242c130435a4bfd894b88183eea66",
+    "wallet/witnesses.ts": "7eadb415ac132fa06670633539573d83904e3d6b126cda020b7244cb2d2f89c0",
+    "tests/sim.ts": "e8ce1ebf990133b4277047b3c82eb1f8babd783fdc31a9b85a2eff34194ad572"
+  },
+  "generatedSha256": "055ff3357d7c89b84967f2babca7f3657b802dc3072f54daf3d18cb148c90f5c",
+  "lockfileSha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51",
+  "rows": [
+    {
+      "test": "invalid successor submission is atomic; original device still works",
+      "result": "passed"
+    },
+    {
+      "test": "dead enrolled entry cannot let authoriser remove itself",
+      "result": "passed"
+    },
+    {
+      "test": "pending recovery permits encryption rotation and device veto",
+      "result": "passed"
+    },
+    {
+      "test": "finalisation retires old device and successor repairs an unusable inbox key",
+      "result": "passed"
+    },
+    {
+      "test": "mismatched recovery wrap/key is accepted but fails subsequent inbox decryption",
+      "result": "authorised inconsistent setup; no proof of wrap/key correspondence"
+    },
+    {
+      "test": "valid key rotation leaves a previously matching recovery wrap stale",
+      "result": "authorised lifecycle inconsistency: old entries readable, new entries require the rotated secret"
+    }
+  ]
+}
