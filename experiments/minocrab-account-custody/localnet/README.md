@@ -1,17 +1,21 @@
 # Local-network validation
 
-The recorded run on **2026-10-16 passed**, with **116 successful indexed
-transactions, all 52 native entrypoints, and three native accounts**. The
+The fresh run on **2026-10-16**, after integrating contributor PR #185 and
+regenerating every key with Minocrab `79b2add`, **passed**: **112 successful
+indexed transactions, all 52 native entrypoints, and three native accounts**. The
 read-back audit passed for every transaction and installed verifier key. It also
 confirmed the recovered account has device epoch 1, one device and no pending
 recovery, and matched the forged-caller rejection to the node's ledger-read
 mismatch diagnostic. Evidence is in [`../evidence/localnet.json`](../evidence/localnet.json).
 
-This was an incremental development run: the journal retains two failed suite
-attempts (individual-root composition and stale callee fingerprints), followed by
-successful retries after the harness fixes. The final gate requires all 52
-entrypoints to be accepted and independently audited. The normal command below
-starts new accounts and exits on the first failure.
+This run used the normal command, with fresh accounts and no suite restarts.
+The source, executable, IR and verifier-key hashes captured before the run still
+matched after the audit. The earlier pre-helper development run, including its
+two failed suite attempts and successful retries, is retained in
+[`../evidence/before-minocrab-helpers/`](../evidence/before-minocrab-helpers/).
+The final gate requires all 52 entrypoints to be accepted and independently
+audited. The normal command below starts new accounts and exits on the first
+suite failure.
 
 This harness deploys the independently written Minocrab account to the reference's
 ledger-9 local network and checks indexed transaction results. It reuses the

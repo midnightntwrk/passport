@@ -146,7 +146,9 @@ impl RecoveryCalls {
         let mut tag = [0u8; 64];
         let name = b"midnight:account:recovery:submit:v1";
         tag[..name.len()].copy_from_slice(name);
-        let dst = minocrab_std::v3::hash::Preimage::<Private>::new().blob_const(&tag).hash(c);
+        let dst = minocrab_std::v3::hash::Preimage::<Private>::new()
+            .blob_const(&tag)
+            .hash(c);
         let me = kernel::self_address(c).bytes().private();
         let challenge = Preimage::default()
             .bytes(dst)

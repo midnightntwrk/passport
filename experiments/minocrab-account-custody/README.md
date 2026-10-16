@@ -13,7 +13,7 @@ No files in the live `contract/` tree are changed.
 The reference is compiled with **Compact 0.35.0** and runtime **0.20.0**.
 Both implementations are checked, costed, proved, and cryptographically verified
 using **ZKIR 3.1.0-rc.1**, at the backend revision bundled with that compiler.
-The Minocrab frontend is pinned to `79b2add` (see "Row counts with the
+The Minocrab frontend is pinned to `79b2add` (see "Current costs with the
 Minocrab helpers" below); its older ZKIR output is
 loaded through the current backend's supported legacy reader. The original
 reference artifacts are consumed unchanged. Exact revisions and source hashes
@@ -23,25 +23,71 @@ are in [reference provenance](reference/provenance.json) and
 The paired benchmark measures isolated circuits. A separate
 [local-network harness](localnet/README.md) installs the native verifier keys,
 constructs funded transactions through an SDK adapter, and checks their indexed
-results. The **2026-10-16 run passed: 116 successful transactions covering all
-52 native entrypoints across three accounts**. The independent read-back audit
+results. The **fresh 2026-10-16 run after integrating PR #185 passed: 112
+successful transactions covering all 52 native entrypoints across three
+accounts**, with no suite restarts. The independent read-back audit
 verified indexed transaction bytes/hashes, installed native keys and retired
 authorities, recovery state, and the node's forged-caller rejection. See the
 [audited journal](evidence/localnet.json) and [reproduction instructions](localnet/README.md).
+The earlier incremental run is retained under
+[evidence/before-minocrab-helpers/](evidence/before-minocrab-helpers/).
 
-## Current comparison
+## Current costs with the Minocrab helpers
 
-Minocrab lowers **`k` by one on 17 of 52 entrypoints**, with **no increases**:
+Minocrab `79b2add` (sig-net/minocrab#17) adds `kernel::caller`, a hash
+preimage builder that hashes constant domain tags off-circuit, `base64url_32`
+in 62 byte splits instead of 286, and a JubJub small-order check by three
+doublings. The port now uses these helpers. The regenerated
+[static costs](evidence/costs.json) use the same cost model.
+Proving times have not been re-measured for this revision. **31 of 52 circuits
+now have lower `k` than Compact**, with no increases: the 17 listed in the
+historical timing table below plus the following 14 improvements from PR #185. Ordinary rows decrease on 50
+circuits, increase on one and tie on one.
+
+Entrypoints whose `k` moves with the helper update (none rise):
+
+| Circuit | Compact `k` | Minocrab before helpers `k` | Current Minocrab `k` |
+|---|---|---|---|
+| `append_inbox_with_jubjub` | 16 | 16 | 15 |
+| `issue_grant_with_p256` | 18 | 18 | 17 |
+| `publish_recovery_session_with_jubjub` | 16 | 16 | 15 |
+| `publish_recovery_session_with_p256` | 18 | 18 | 17 |
+| `recover_finalise` | 12 | 12 | 11 |
+| `remove_device_with_jubjub` | 16 | 16 | 15 |
+| `remove_device_with_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_to_contract_with_grant_jubjub` | 17 | 17 | 16 |
+| `withdraw_shielded_to_contract_with_grant_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_to_contract_with_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_with_grant_jubjub` | 17 | 17 | 16 |
+| `withdraw_shielded_with_grant_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_with_p256` | 18 | 18 | 17 |
+| `withdraw_unshielded_with_grant_p256` | 18 | 18 | 17 |
+
+| Total rows, 52 circuits | Rows | Change to current Minocrab |
+|---|---|---|
+| Compact | 4,010,944 | −26.5% |
+| Minocrab before helpers | 3,656,014 | −19.3% |
+| Current Minocrab | 2,948,966 | |
+
+## Paired benchmark before the helper update
+
+The timings below were measured with Minocrab `537721a`, before contributor
+PR #185. They remain historical measurements; they are not timings for the
+current `79b2add` circuits. Current static costs are reported above.
+
+At that revision, Minocrab lowered **`k` by one on 17 of 52 entrypoints**,
+with **no increases**:
 10 k256 operations go from 17 to 16, and 7 P256 operations go from 18 to 17.
 The other 35 retain their reference `k`. Ordinary rows decrease on 42 circuits,
 increase on 8, and tie on 2. In particular, recovery submission/finalisation
 use slightly more rows in Rust while retaining their reference `k`. The
-[paired report](evidence/report.md) lists every circuit's `k`, rows, proof bytes,
+[paired report](evidence/before-minocrab-helpers/report.md) lists every circuit's `k`, rows, proof bytes,
 median proving time, and median verification time. The
-[raw samples](evidence/benchmark.json) also retain key-generation timings;
-[static costs](evidence/costs.json) include separately labelled ZKIR JSON sizes.
+[raw samples](evidence/before-minocrab-helpers/benchmark.json) also retain key-generation timings;
+[historical static costs](evidence/before-minocrab-helpers/costs.json) include
+separately labelled ZKIR JSON sizes.
 
-All 17 circuits with improved `k` are listed below. Proving times in parentheses
+All 17 improvements from that benchmark are listed below. Proving times in parentheses
 are medians of three measured proofs after one warm-up, from the paired Apple M4 Max run.
 
 | Circuit | Compact `k` (proving time) | Minocrab `k` (proving time) |
@@ -84,9 +130,9 @@ The native implementation retains these optimisations:
 The new recovery and caller checks preserve the reference conditions and
 bindings. P256 verifies the reference's `wa-json134` WebAuthn profile in-circuit,
 including canonical challenge encoding, RP/origin binding, authenticator flags,
-and ECDSA. The pinned Minocrab convenience API lacks P256 argument wrappers and
-`kernel.caller`; the experiment supplies typed wrappers and the public ledger
-caller query. The caller is never accepted as a private witness.
+and ECDSA. The experiment supplies typed P256 argument wrappers and now uses
+Minocrab's public ledger `kernel::caller` helper. The caller is never accepted
+as a private witness.
 
 These optimisations are not exclusive to Minocrab. Coordinate reuse and grant
 envelope specialisation can also be expressed in Compact. Improving the live
@@ -100,39 +146,6 @@ smaller proof or faster verification. The historical v2 results are retained in
 [evidence/baseline/](evidence/baseline/) and
 [evidence/historical-v2-optimised/](evidence/historical-v2-optimised/).
 They use a different reference/backend and are not the current comparison.
-
-## Row counts with the Minocrab helpers
-
-Minocrab `79b2add` (sig-net/minocrab#17) adds `kernel::caller`, a hash
-preimage builder that hashes constant domain tags off-circuit, `base64url_32`
-in 62 byte splits instead of 286, and a JubJub small-order check by three
-doublings. This revision uses them; arguments, ledger, disclosures and
-transcripts are unchanged. Static `k` and rows from the same cost model as
-[static costs](evidence/costs.json); proving times are not re-measured.
-Entrypoints whose `k` moves (none rise):
-
-| Circuit | Compact `k` | #184 `k` | this PR `k` |
-|---|---|---|---|
-| `append_inbox_with_jubjub` | 16 | 16 | 15 |
-| `issue_grant_with_p256` | 18 | 18 | 17 |
-| `publish_recovery_session_with_jubjub` | 16 | 16 | 15 |
-| `publish_recovery_session_with_p256` | 18 | 18 | 17 |
-| `recover_finalise` | 12 | 12 | 11 |
-| `remove_device_with_jubjub` | 16 | 16 | 15 |
-| `remove_device_with_p256` | 18 | 18 | 17 |
-| `withdraw_shielded_to_contract_with_grant_jubjub` | 17 | 17 | 16 |
-| `withdraw_shielded_to_contract_with_grant_p256` | 18 | 18 | 17 |
-| `withdraw_shielded_to_contract_with_p256` | 18 | 18 | 17 |
-| `withdraw_shielded_with_grant_jubjub` | 17 | 17 | 16 |
-| `withdraw_shielded_with_grant_p256` | 18 | 18 | 17 |
-| `withdraw_shielded_with_p256` | 18 | 18 | 17 |
-| `withdraw_unshielded_with_grant_p256` | 18 | 18 | 17 |
-
-| Total rows, 52 circuits | rows | vs this PR |
-|---|---|---|
-| Compact | 4,010,944 | −26.5% |
-| #184 | 3,656,014 | −19.3% |
-| this PR | 2,948,966 | |
 
 ## Parity evidence
 
@@ -171,8 +184,8 @@ Funded transactions also carry transcripts, offers/shielded proofs, fees, and
 signatures. Verification samples measure cryptographic proof verification,
 excluding ledger replay, full transaction validation, and network latency.
 
-Each pair uses a release build in separate subprocesses, alternating which
-implementation runs first. Parameter loading precedes the key-generation timer.
+In the historical paired benchmark, each pair uses a release build in separate
+subprocesses, alternating which implementation runs first. Parameter loading precedes the key-generation timer.
 Key generation is timed separately, then one proof warms the process and three
 proofs are timed. Every verification sample is retained; the report uses medians.
 Avoid concurrent CPU-heavy work. Three samples cannot establish small timing
@@ -216,7 +229,8 @@ ignored by Git, as are generated circuits, preimages, keys, and build outputs.
 - `reference/`: pinned Compact contracts, signers, and software authenticator.
 - `scripts/fixtures.ts`: reference execution capture with synthetic accounts.
 - `bin/measure/`: ABI/parity checks, costs, proving and verification measurements.
-- `evidence/`: current results; subdirectories retain the two historical v2 runs.
+- `evidence/`: current validation and costs; subdirectories retain the two
+  historical v2 runs and the pre-helper paired benchmark/localnet run.
 
 `bin/measure/src/executor.rs` and `simulator.rs` adapt Minocrab `537721a` under
 its [MIT licence](vendor/LICENSE-MIT). The executor normalises padded FAB atoms

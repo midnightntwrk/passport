@@ -91,7 +91,10 @@ pub fn verify(
     // leftover limb, split once (5 splits instead of 36).
     let limbs = data.limbs();
     let top = minocrab_std::v3::explode_limb(c, limbs[0], 6);
-    let rp = B32 { lo: limbs[1], hi: top[0] };
+    let rp = B32 {
+        lo: limbs[1],
+        hi: top[0],
+    };
     let matches = crate::auth::bytes_eq(c, rp, policy.rp_id_hash);
     c.assert(matches);
     let flags = top[1];

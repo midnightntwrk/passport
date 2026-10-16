@@ -62,9 +62,15 @@ impl Preimage {
         let mut bytes = [0u8; 32];
         bytes[..tag.len()].copy_from_slice(tag.as_bytes());
         let mut p = Self::default();
-        p.atoms.push(AlignmentSegment::Atom(AlignmentAtom::Bytes { length: 32 }));
-        p.slots.push(AnyWire3::immediate(minocrab::Fr::from(u64::from(bytes[31]))));
-        p.slots.push(AnyWire3::immediate(minocrab::Fr::from_le_bytes(&bytes[..31]).unwrap()));
+        p.atoms
+            .push(AlignmentSegment::Atom(AlignmentAtom::Bytes { length: 32 }));
+        p.slots
+            .push(AnyWire3::immediate(minocrab::Fr::from(u64::from(
+                bytes[31],
+            ))));
+        p.slots.push(AnyWire3::immediate(
+            minocrab::Fr::from_le_bytes(&bytes[..31]).unwrap(),
+        ));
         p
     }
 }
