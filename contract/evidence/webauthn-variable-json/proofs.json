@@ -1,0 +1,54 @@
+{
+  "result": "PASS",
+  "startedAt": "2026-10-05T14:06:15.651Z",
+  "completedAt": "2026-10-05T14:12:32.418Z",
+  "baseCommit": "45721e1d322357ef99a2786a3ba27d64382527d8",
+  "evidenceLayer": "local proof server plus ledger-v9 wellFormed(verifyContractProofs=true) and in-memory apply; fee balancing disabled; no node submission",
+  "signer": "Node/OpenSSL software ES256",
+  "compiler": "0.35.0",
+  "proofServerImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+  "sources": {
+    "contracts/probe-webauthn-variable.compact": "ac1236612ca73e1551377008b2360c296ed9f29d66913e0a80a76eec0f8be654",
+    "src/tests/webauthn-variable/prove.ts": "33ca9d78328bf38c8143eb94c2508c8839029f5d5cea66fa86c07df247bd4121",
+    "src/tests/webauthn-variable/proof-provider.ts": "f37142697ea954ae841bd1b37f6294ff11dce586ff45087edd6fc9b3d65f8746",
+    "src/tests/webauthn-variable/witnesses.ts": "f4f48d6be8985974fa03cc4fe144c366cee8f9c63458e18668b4ef5ff771ad1f"
+  },
+  "verifierKeySha256": "63fee307fd7c9b080a52a5dc7f76a9c00967fae5b8c6090acbe78eb3ed5c93f0",
+  "irSha256": "f5af06421883e866c49b3c2f7777c3ba4ce58300c29164c3c1397ca53276e3bc",
+  "checks": [
+    {
+      "name": "forged SHA bit rejected by ZKIR check, bypassing JS",
+      "result": "PASS"
+    },
+    {
+      "name": "140-byte strict WebAuthn real proof",
+      "result": "PASS",
+      "transactionBytes": 7022,
+      "endToEndMilliseconds": 202628.996417,
+      "verificationMilliseconds": 3.189875000010943,
+      "transactionSha256": "090909fc72a20629caf14769b3eab3cab2e3f6367f56a84f96a16ded217a7ca5"
+    },
+    {
+      "name": "256-byte limited WebAuthn real proof",
+      "result": "PASS",
+      "transactionBytes": 7022,
+      "endToEndMilliseconds": 172054.561083,
+      "verificationMilliseconds": 7.466041999985464,
+      "transactionSha256": "4b1d5509861621b84fd7f0f0780c7712fea53968e7d481da11c2b6d5b794ce62"
+    }
+  ],
+  "samples": [
+    {
+      "proofBytes": 6364,
+      "proveRequestMilliseconds": 201621.182042,
+      "requestBytes": 1907710593,
+      "proofSha256": "7f92d29d709230c463d83d6a18bd059389bb65eb90f7da7467094e11a782fd3d"
+    },
+    {
+      "proofBytes": 6364,
+      "proveRequestMilliseconds": 171019.01070800002,
+      "requestBytes": 1907710700,
+      "proofSha256": "66cd4ef8e2b4fe21f8332c647db7bef2674dcee613956c6f2803bd0f51407f74"
+    }
+  ]
+}
