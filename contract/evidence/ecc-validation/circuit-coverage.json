@@ -1,0 +1,264 @@
+{
+  "completed": true,
+  "runAt": "2026-10-16T13:26:02.575479+00:00",
+  "scope": "Static review of repo-owned non-Compact Rust Relation/Circuit implementations and artifact adapters. Tracked plus unignored Rust source inventory; no builds, proof runs or exploit construction. Historical experimental relations are distinct from current reference Compact account.",
+  "inventoryCommand": "git ls-files --cached --others --exclude-standard *.rs; source search for impl Relation / impl Circuit, including generic impls",
+  "rustSourceCount": 39,
+  "rustSourcePaths": [
+    "contract/buss-rs/src/lib.rs",
+    "contract/buss-rs/src/v1.rs",
+    "contract/buss-rs/tests/v1_vectors.rs",
+    "contract/signer-rs/src/grants.rs",
+    "contract/signer-rs/src/main.rs",
+    "contract/src/tests/ecc-constraints.rs",
+    "contract/src/tests/ecc-malicious-witnesses.rs",
+    "experiments/account-custody-prototype/buss-wasm/src/lib.rs",
+    "experiments/bip340-wallet-gate/bin/bip340-gate-measure/build.rs",
+    "experiments/bip340-wallet-gate/bin/bip340-gate-measure/src/main.rs",
+    "experiments/bip340-wallet-gate/crates/bip340-gate-circuit/src/lib.rs",
+    "experiments/cross-contract-calls/rust/caller-context/src/main.rs",
+    "experiments/nearfall-evaluation/experiments/near-exploration/src/lib.rs",
+    "experiments/nearfall-evaluation/experiments/near-exploration/tests/test_basics.rs",
+    "experiments/p256-in-circuit/bin/p256-gate-measure/build.rs",
+    "experiments/p256-in-circuit/bin/p256-gate-measure/src/main.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/ed25519.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/envelope.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/jubjub_schnorr.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/lib.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/relations.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/vectors.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/witness_preimage.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/wrapper.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/tests/mock.rs",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/tests/wrapper.rs",
+    "experiments/proving-key-regeneration/pk-from-vk/src/main.rs",
+    "experiments/redjubjub-wallet-rs/src/circuits.rs",
+    "experiments/redjubjub-wallet-rs/src/contract.rs",
+    "experiments/redjubjub-wallet-rs/src/indexer.rs",
+    "experiments/redjubjub-wallet-rs/src/main.rs",
+    "experiments/redjubjub-wallet-rs/src/node.rs",
+    "experiments/redjubjub-wallet-rs/src/proof_client.rs",
+    "experiments/redjubjub-wallet-rs/src/prover.rs",
+    "experiments/redjubjub-wallet-rs/src/schnorr.rs",
+    "experiments/redjubjub-wallet-rs/src/wallet.rs",
+    "experiments/redjubjub-wallet/signer/src/main.rs",
+    "research/ecc-validation-checks/ledger-api.rs",
+    "research/ecc-validation-checks/src/lib.rs"
+  ],
+  "reviewedSourceSha256": {
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/lib.rs": "e4319acb1ff85fa34f21016727ef6e7f3878a1e318188f0964901575cf1da277",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/relations.rs": "788d89e820faa460b26876b5586df2eeb12963131250227e1ba6aa5fb3e78f46",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/envelope.rs": "61c64688da637a1ab7cb8081ff9813e4ce055c34f18d2a497fd3a5e3022fd3b8",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/ed25519.rs": "df56a066bebce9227de09ed2af9fb3cfb149ab02246c7d1f209ecfaa6a24e1a5",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/jubjub_schnorr.rs": "1c40e5618691482be17f2e6e43b670a0afb87c1da4a7adb9c3f40bdc3b532535",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/witness_preimage.rs": "ce3606cb98106c7104e935a1948e956a17b4fbbef196e124c3c1685b569cefdf",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/wrapper.rs": "fdabc904dd07e8ef48c46a9dc70e4c5e0debc00d22699d34b11228d25117fb6a",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/src/vectors.rs": "dc92aae5aeac7287c8702f53aba0caae42f5f4e02e233e0e518105250ba421ce",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/tests/mock.rs": "6920b588844bc982afac2ab482e578c95c9290242536bfe8ab4007f6e28c284a",
+    "experiments/p256-in-circuit/crates/p256-gate-circuit/tests/wrapper.rs": "ca9e553fc4c80478e253263adda90e689d128d9822d19af5ce36c93120f6cbaa",
+    "experiments/bip340-wallet-gate/crates/bip340-gate-circuit/src/lib.rs": "afbd1f41ec61e67fda5afc611712170e9d85418fe1b3f14839f471da2d6aec4d",
+    "experiments/bip340-wallet-gate/bin/bip340-gate-measure/src/main.rs": "4682526b345c3c1719e66250341b463ae985049c3cd6e0559b0270d7ae334540",
+    "experiments/redjubjub-wallet-rs/src/circuits.rs": "60b07b66f56c45f6295e63df224a3c1da53f3ce24f45399fb4fa531056613739",
+    "experiments/redjubjub-wallet-rs/src/prover.rs": "1c3ef5f03641230d36b345739564482be7bf5676952169c35dcf790afac7916c",
+    "experiments/redjubjub-wallet-rs/src/contract.rs": "4fe66eee2bca66e209372bb5279c2af695d771a87d418b45b681dd9937c23c93",
+    "research/ecc-validation-checks/src/lib.rs": "956cd602a4077c33c8a3a2386b2c67dc58771bdce8ec41a7b729cc0c41f9ed7a"
+  },
+  "discoveredRelationDeclarations": [
+    {
+      "source": "experiments/bip340-wallet-gate/crates/bip340-gate-circuit/src/lib.rs",
+      "line": 182,
+      "declaration": "impl Relation for Bip340WalletGate {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/ed25519.rs",
+      "line": 77,
+      "declaration": "impl Relation for Ed25519Verify {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/envelope.rs",
+      "line": 160,
+      "declaration": "impl Relation for P256EcdsaWebAuthnEnvelope {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/jubjub_schnorr.rs",
+      "line": 58,
+      "declaration": "impl Relation for JubjubSchnorrVerify {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/relations.rs",
+      "line": 136,
+      "declaration": "impl Relation for P256EcdsaPreHashed {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/relations.rs",
+      "line": 203,
+      "declaration": "impl Relation for P256EcdsaWebAuthn {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/relations.rs",
+      "line": 286,
+      "declaration": "impl Relation for P256EcdsaPrivatePk {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/witness_preimage.rs",
+      "line": 66,
+      "declaration": "impl Relation for PoseidonPreimage {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/witness_preimage.rs",
+      "line": 121,
+      "declaration": "impl Relation for Sha256Preimage {"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/wrapper.rs",
+      "line": 147,
+      "declaration": "impl<R> Relation for ProofWrap<R>"
+    },
+    {
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/tests/wrapper.rs",
+      "line": 219,
+      "declaration": "impl Relation for AltSameShapeInner {"
+    },
+    {
+      "source": "research/ecc-validation-checks/src/lib.rs",
+      "line": 22,
+      "declaration": "impl Relation for Coordinates {"
+    },
+    {
+      "source": "research/ecc-validation-checks/src/lib.rs",
+      "line": 57,
+      "declaration": "impl Relation for RawAssignment {"
+    }
+  ],
+  "reusableExperimentalRelationCount": 10,
+  "rows": [
+    {
+      "relations": [
+        "P256EcdsaPreHashed",
+        "P256EcdsaWebAuthn",
+        "P256EcdsaPrivatePk"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/relations.rs",
+      "sourceLines": [
+        68,
+        80,
+        99,
+        136,
+        163,
+        203,
+        231,
+        286,
+        311
+      ],
+      "pointBoundary": "Typed P256 public or private key assigned via backend curve.assign[_as_public_input]; scalar-field assignment; explicit nonzero r,s and computed verification point; bit-based MSM and x-coordinate reduction equality.",
+      "limitations": "No explicit local nonidentity assertion on public key; validity/identity semantics depend on backend assignment. PrivatePk proves possession for some private key, without account commitment or enrolled-key membership. WebAuthn variant receives client-data hash and does not itself bind browser origin/challenge. Existing tests cover valid/wrong keys, r/s zero and high-s; not a complete malicious-point witness audit."
+    },
+    {
+      "relations": [
+        "P256EcdsaWebAuthnEnvelope"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/envelope.rs",
+      "sourceLines": [
+        160,
+        196,
+        255
+      ],
+      "pointBoundary": "Backend P256 public-key assignment and shared ecdsa_assert_valid; in-circuit fixed ceremony prefix, base64url challenge, RP ID, flags and both SHA256 layers.",
+      "limitations": "Same key-validity/backend dependency as other P256 relations; this experiment is not the current reference wa-json134 implementation. No new proof or malformed-point test run performed for this inventory."
+    },
+    {
+      "relations": [
+        "Ed25519Verify"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/ed25519.rs",
+      "sourceLines": [
+        45,
+        77,
+        109,
+        132
+      ],
+      "pointBoundary": "Canonical compressed byte and subgroup gadgets for public A and private R; s<L check; SHA512 and cofactorless equation. Host decompression also demands subgroup membership.",
+      "limitations": "No explicit nonidentity A/R guard; identity is in the subgroup. Host malformed decompression uses expect and can panic; host rejection alone is not evidence of malicious-witness constraint soundness. Do not describe this primitive as enforcing a live device key."
+    },
+    {
+      "relations": [
+        "JubjubSchnorrVerify"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/jubjub_schnorr.rs",
+      "sourceLines": [
+        58,
+        90,
+        111
+      ],
+      "pointBoundary": "Typed JubjubSubgroup public key assigned by backend; scalar assignment, computed R and Poseidon challenge byte equality.",
+      "limitations": "No explicit nonidentity public-key guard. This historical upstream-style Poseidon/minus-sign signature differs from Passport custom SHA256/grinding signing; neither interoperability nor current-reference gate guarantees follow from its tests."
+    },
+    {
+      "relations": [
+        "PoseidonPreimage",
+        "Sha256Preimage"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/witness_preimage.rs",
+      "sourceLines": [
+        66,
+        121
+      ],
+      "pointBoundary": "No user ECC public key; secret byte packing and hash equality statements.",
+      "limitations": "Hash-preimage relations, not ECC signer-key validation. Any curve use through proof verification is backend functionality."
+    },
+    {
+      "relations": [
+        "ProofWrap<R>"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/src/wrapper.rs",
+      "sourceLines": [
+        147,
+        210,
+        360,
+        385,
+        406
+      ],
+      "pointBoundary": "Recursively verifies inner proof and exposes accumulator/inner statement. verify_wrapped checks outer proof, inner verifying-key transcript binding, resolvable fixed-base labels, and native deferred accumulator pairing.",
+      "limitations": "Outer proof verification alone is insufficient; callers must preserve verify_wrapped native checks. Does not add application key enrollment or nonidentity policies to wrapped inner statement. Existing wrapper tests include test-only AltSameShapeInner for VK-binding checks."
+    },
+    {
+      "relations": [
+        "Bip340WalletGate"
+      ],
+      "source": "experiments/bip340-wallet-gate/crates/bip340-gate-circuit/src/lib.rs",
+      "sourceLines": [
+        182,
+        217,
+        233,
+        267,
+        298
+      ],
+      "pointBoundary": "Typed secp256k1 witness key assigned by backend and bound to public x bytes with even y; scalar s assignment; in-circuit SHA256 tagged challenge; explicitly nonidentity reconstructed R with even y and canonical x=r bytes. Host lift_x_even uses RustCrypto verifying-key parser.",
+      "limitations": "No explicit local nonidentity assertion on key itself; identity handling depends on backend assignment/coordinate constraints, not host lift alone. Host helper rejects invalid x, but a custom prover need not use host helper. Source review only; no new malformed-point proof run."
+    },
+    {
+      "relations": [
+        "AltSameShapeInner",
+        "Coordinates",
+        "RawAssignment"
+      ],
+      "source": "experiments/p256-in-circuit/crates/p256-gate-circuit/tests/wrapper.rs",
+      "additionalSources": [
+        "research/ecc-validation-checks/src/lib.rs"
+      ],
+      "pointBoundary": "Test-only relations for wrapper-key binding and original platform ECC characterization.",
+      "limitations": "Deliberately narrow test statements; not shipped authentication circuits. Counts exclude these from reusable experimental relations."
+    },
+    {
+      "relations": [],
+      "source": "experiments/redjubjub-wallet-rs/src/circuits.rs",
+      "additionalSources": [
+        "experiments/redjubjub-wallet-rs/src/prover.rs",
+        "experiments/redjubjub-wallet-rs/src/contract.rs"
+      ],
+      "pointBoundary": "Despite filename, circuits.rs executes onchain VM queries and computes challenges/signatures. Adjacent files load/prove generated Compact ZKIR; no repo-owned Relation/Circuit implementation here.",
+      "limitations": "Covered as client/artifact adapter; do not double-count as separately authored constraint system."
+    }
+  ],
+  "remainingWork": "Pin and independently test malformed/identity witnesses for historical relations before claiming their live-key enforcement. This source inventory is not an audit of external proof backend gadgets or arbitrary prover advice."
+}

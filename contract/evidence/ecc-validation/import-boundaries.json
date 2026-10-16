@@ -1,0 +1,146 @@
+{
+  "completed": true,
+  "runAt": "2026-10-16T13:25:13.237Z",
+  "node": "v22.23.3",
+  "scope": "Current reference client import characterization with valid controls. No contract changes, proofs, live node, browser-wallet or authorization-bypass claims. Reader null results are marked as accepted API calls, not accepted malformed credentials.",
+  "sourceSha256": {
+    "src/tests/ecc-import-boundaries.ts": "e6af02ffc1c4dc38c22824250b4d328284cdcc5dc0d8bb4fb94d2eecbc646b32",
+    "src/wallet/inbox.ts": "3c4bce6dd5e92eda4b8e2dda15fc4aef91003300c4296cb3794a1d8d695a5922",
+    "src/wallet/hex.ts": "606025c12369015fcf20660e1e10cd9188939340677914cad66e006c78f00c34",
+    "src/wallet/signer.ts": "4c3d593c0947641a116bfca059de399c1fcff24d37c430a38bbbf493c8e3cc8b",
+    "src/wallet/contract.ts": "1f7afef8d4fa921d5f2431e61d8cec7570c242c130435a4bfd894b88183eea66",
+    "contracts/account.compact": "a5a05eef67399856dc9d25ae9989a3972b4695f1f2fe6a25bfd68ee51669d3d5",
+    "contracts/account-p256.compact": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4",
+    "contracts/webauthn.compact": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb"
+  },
+  "generatedSha256": "055ff3357d7c89b84967f2babca7f3657b802dc3072f54daf3d18cb148c90f5c",
+  "lockfileSha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51",
+  "rows": [
+    {
+      "boundary": "X25519 sealing",
+      "input": "32-byte generated recipient",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Generated recipient and original secret round-trip the complete coin."
+    },
+    {
+      "boundary": "X25519 sealing",
+      "input": "31-byte truncated recipient",
+      "accepted": false,
+      "expectedAccepted": false,
+      "detail": "Error: Failed to read asymmetric key"
+    },
+    {
+      "boundary": "X25519 sealing",
+      "input": "33-byte recipient with trailing 0x63",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Trailing byte is ignored by DER import; original 32-byte secret decrypts."
+    },
+    {
+      "boundary": "X25519 opening",
+      "input": "33-byte secret with trailing 0x63",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Trailing secret byte is ignored by DER import."
+    },
+    {
+      "boundary": "X25519 opening",
+      "input": "31-byte truncated secret returns null",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Invalid secret is skipped."
+    },
+    {
+      "boundary": "X25519 opening",
+      "input": "unrelated generated secret returns null",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Independent-key authentication control."
+    },
+    {
+      "boundary": "hex import",
+      "input": "00a1ff",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Current decoded bytes: [0,161,255]; malformed cases characterize permissive parsing."
+    },
+    {
+      "boundary": "hex import",
+      "input": "0x00a1ff",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Current decoded bytes: [0,161,255]; malformed cases characterize permissive parsing."
+    },
+    {
+      "boundary": "hex import",
+      "input": "zz",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Current decoded bytes: [0]; malformed cases characterize permissive parsing."
+    },
+    {
+      "boundary": "hex import",
+      "input": "1z",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Current decoded bytes: [1]; malformed cases characterize permissive parsing."
+    },
+    {
+      "boundary": "hex import",
+      "input": "z1",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Current decoded bytes: [0]; malformed cases characterize permissive parsing."
+    },
+    {
+      "boundary": "hex import",
+      "input": "odd-length abc",
+      "accepted": false,
+      "expectedAccepted": false,
+      "detail": "Error: odd-length hex: abc"
+    },
+    {
+      "boundary": "secp256k1 secret import",
+      "input": "K256Device: zero",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Constructor accepts zero and produces flagged identity."
+    },
+    {
+      "boundary": "secp256k1 commitment derivation",
+      "input": "K256Device: identity",
+      "accepted": false,
+      "expectedAccepted": false,
+      "detail": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "secp256k1 commitment derivation",
+      "input": "K256Device: valid scalar 5",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Valid nonzero-secret commitment control succeeds."
+    },
+    {
+      "boundary": "secp256k1 secret import",
+      "input": "K256Grantee: zero",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Constructor accepts zero and produces flagged identity."
+    },
+    {
+      "boundary": "secp256k1 commitment derivation",
+      "input": "K256Grantee: identity",
+      "accepted": false,
+      "expectedAccepted": false,
+      "detail": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "secp256k1 commitment derivation",
+      "input": "K256Grantee: valid scalar 5",
+      "accepted": true,
+      "expectedAccepted": true,
+      "detail": "Valid nonzero-secret commitment control succeeds."
+    }
+  ]
+}

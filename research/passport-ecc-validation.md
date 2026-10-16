@@ -1,9 +1,10 @@
 # Passport elliptic-curve and public-key validation review
 
-Reviewed **15 October 2026**, Passport revision `2b60da77a00de69d04456c291fd213f827966cde`.
+Updated **16 October 2026**, Passport revision `2b60da77a00de69d04456c291fd213f827966cde`
+plus the local test/report additions.
 This report applies the platform findings in
 [ecc-validation.md](ecc-validation.md) to Passport's reference contracts, wallet
-clients, foundations demo, and specifications. Confidence: high for the cited
+clients, demos, historical experiments, and specifications. Confidence: high for the cited
 source paths and reproduced backend/native/SDK behavior; limited for browser-wallet
 and live-node acceptance. [Follow-up tests](#4-evidence-and-remaining-checks) now
 exercise the compiled account and its native ZKIR preprocessing.
@@ -39,8 +40,10 @@ records successful issuance to weak/invalid keys, with rejection deferred to use
 This misses the issuance obligation in [mip-xxxx-scoped-grants.md, §3.3](../docs/mps-mip/mips/mip-xxxx-scoped-grants.md#33-key-validation).
 
 Device enrolment similarly accepts an opaque derived entry. The
-`JubjubDevice` and `JubjubGrantee` constructors (source: [contract/src/wallet/signer.ts](../contract/src/wallet/signer.ts))
-do not reject secret scalar zero, although their normal generators exclude it.
+`JubjubDevice`, `JubjubGrantee`, `K256Device` and `K256Grantee` constructors
+(source: [contract/src/wallet/signer.ts](../contract/src/wallet/signer.ts)) accept
+secret scalar zero, although their normal generators exclude it. K256's
+resulting identity key is rejected when deriving its commitment or using it.
 The constructor in [contract/contracts/account.compact](../contract/contracts/account.compact) also accepts
 an identity birth recovery key; the recovery gate subsequently refuses it.
 Tests also reuse the same valid key as owner and grantee successfully: key-role
@@ -104,8 +107,9 @@ and `recover_submit` (source: [contract/contracts/account.compact](../contract/c
 
 If nonce zero is emitted, `R = O` and `s = c·sk`; for nonzero `c`, the signature
 reveals `sk = s/c mod r` to anyone who receives the response and challenge,
-including a delegated prover. Passport keeps signatures private in proofs, so
-this does not establish public-chain key leakage. With a healthy uniform RNG,
+including a delegated prover. Direct reference calls keep signatures as private
+proof inputs, so this does not establish public-chain key leakage. Cross-contract
+argument disclosure is a separate boundary; see §6. With a healthy uniform RNG,
 the zero-nonce probability is approximately `1/r` per sample. Runtime tests now
 accept identity `R` at device, grant, and recovery gates, including either or
 both recovery announcements. A damaged-response recovery control is rejected.
@@ -120,10 +124,30 @@ SHA-256/grinding challenge; the platform's Poseidon/native signature comparison
 in [ecc-validation.md, §4.2](ecc-validation.md#42-schnorr-with-poseidon-challenge-on-jubjub)
 does not itself test Passport signature interoperability.
 
-### D. Security documentation is stale or too broad
+### D. Client imports are permissive — low, input consistency
+
+The [18-case import-boundaries.json](../contract/evidence/ecc-validation/import-boundaries.json),
+produced by [contract/src/tests/ecc-import-boundaries.ts](../contract/src/tests/ecc-import-boundaries.ts),
+confirms two additional current-client issues:
+
+- `x25519` in [contract/src/wallet/inbox.ts](../contract/src/wallet/inbox.ts)
+  accepts a 33-byte recipient key and ignores its trailing byte through DER
+  parsing. `openInboxEntry` similarly accepts a 33-byte secret. Normal controls
+  decrypt; 31-byte recipients reject and unrelated/short secrets fail cleanly.
+  The contract's `Bytes<32>` prevents installing a 33-byte on-chain key, so this
+  is an import-boundary discrepancy, not a demonstrated contract bypass.
+- `hexToBytes` in [contract/src/wallet/hex.ts](../contract/src/wallet/hex.ts)
+  accepts malformed hex: `zz` becomes byte `00` and `1z` becomes `01`.
+  Even-length validation does not establish valid encoding.
+
+**Action:** enforce exact raw key lengths and strict hexadecimal syntax before
+key derivation or commitment calculation. Retain backend curve/agreement checks.
+
+### E. Security documentation is stale or too broad
 
 - [contract/README.md](../contract/README.md) describes secp256k1 rejection as
   `pk != default<Secp256k1Point>`; the implementation checks extracted coordinates.
+  [docs/plans/MIPS.md](../docs/plans/MIPS.md) repeats the older non-default wording.
 - [mip-xxxx-scoped-grants.md, §3.3](../docs/mps-mip/mips/mip-xxxx-scoped-grants.md#33-key-validation)
   says P-256 does not ship, although the repository includes its account arm and
   [browser-flow.md transaction evidence](../contract/evidence/p256-webauthn/browser-flow.md).
@@ -133,6 +157,27 @@ does not itself test Passport signature interoperability.
   claims that runtime arithmetic rejects malformed Jubjub pairs. This needs
   qualification: the platform's altered-`x` decoder discrepancy is reproduced,
   even though the corresponding coordinate proof is rejected.
+- The subgroup discussion in [mip-xxxx-account-recovery.md, §6 and implementation notes](../docs/mps-mip/mips/mip-xxxx-account-recovery.md#6-the-recovery-operation)
+  should distinguish original coordinates, native decoding, assigned subgroup
+  representatives and commitment binding. The mixed-torsion normalisation in
+  §5 is not acceptance of its original coordinates. [contract/GRANTS-E1.md](../contract/GRANTS-E1.md)
+  likewise records older toolchain behavior, not a current validation guarantee.
+- Historical research labels `persistentHash` as Poseidon in
+  [research/stack.md](stack.md), [research/architecture.md](architecture.md),
+  [research/summary.md](summary.md), [research/pitfalls.md](pitfalls.md), and
+  [secure-onboarding-design.md](../docs/reference/machine-investigation/key-flows/secure-onboarding-design.md).
+  Current Passport challenges use SHA-256/grinding; see the hash distinction in
+  [ecc-validation.md](ecc-validation.md), rather than carrying old labels forward.
+- The delegated-prover claims in [site/architecture.html](../site/architecture.html)
+  and [site/demo.html](../site/demo.html) should say the scalar need not be
+  supplied, with correct nonce generation required to prevent disclosure through
+  signatures. The word “never” overstates the guarantee in light of §2.C.
+- [docs/KNOWLEDGE_BASE.md](../docs/KNOWLEDGE_BASE.md) incorrectly describes FROST
+  as reconstructing the full signing key. Threshold signing uses signature
+  shares without reconstructing that key; see [RFC 9591, §5](https://www.rfc-editor.org/rfc/rfc9591.html#section-5)
+  and the repository's [C5-signing-primitive.md](../docs/plans/components/C5-signing-primitive.md).
+  This is documentation misinformation, not evidence of key reconstruction in
+  the current reference signer.
 
 **Action:** distinguish historical observations, client checks, application
 assertions, and proof constraints. Record the toolchain version for each claim.
