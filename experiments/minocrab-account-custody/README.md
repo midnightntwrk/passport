@@ -13,7 +13,8 @@ No files in the live `contract/` tree are changed.
 The reference is compiled with **Compact 0.35.0** and runtime **0.20.0**.
 Both implementations are checked, costed, proved, and cryptographically verified
 using **ZKIR 3.1.0-rc.1**, at the backend revision bundled with that compiler.
-The Minocrab frontend remains pinned to `537721a`; its older ZKIR output is
+The Minocrab frontend is pinned to `79b2add` (see "Row counts with the
+Minocrab helpers" below); its older ZKIR output is
 loaded through the current backend's supported legacy reader. The original
 reference artifacts are consumed unchanged. Exact revisions and source hashes
 are in [reference provenance](reference/provenance.json) and
@@ -99,6 +100,39 @@ smaller proof or faster verification. The historical v2 results are retained in
 [evidence/baseline/](evidence/baseline/) and
 [evidence/historical-v2-optimised/](evidence/historical-v2-optimised/).
 They use a different reference/backend and are not the current comparison.
+
+## Row counts with the Minocrab helpers
+
+Minocrab `79b2add` (sig-net/minocrab#17) adds `kernel::caller`, a hash
+preimage builder that hashes constant domain tags off-circuit, `base64url_32`
+in 62 byte splits instead of 286, and a JubJub small-order check by three
+doublings. This revision uses them; arguments, ledger, disclosures and
+transcripts are unchanged. Static `k` and rows from the same cost model as
+[static costs](evidence/costs.json); proving times are not re-measured.
+Entrypoints whose `k` moves (none rise):
+
+| Circuit | Compact `k` | #184 `k` | this PR `k` |
+|---|---|---|---|
+| `append_inbox_with_jubjub` | 16 | 16 | 15 |
+| `issue_grant_with_p256` | 18 | 18 | 17 |
+| `publish_recovery_session_with_jubjub` | 16 | 16 | 15 |
+| `publish_recovery_session_with_p256` | 18 | 18 | 17 |
+| `recover_finalise` | 12 | 12 | 11 |
+| `remove_device_with_jubjub` | 16 | 16 | 15 |
+| `remove_device_with_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_to_contract_with_grant_jubjub` | 17 | 17 | 16 |
+| `withdraw_shielded_to_contract_with_grant_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_to_contract_with_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_with_grant_jubjub` | 17 | 17 | 16 |
+| `withdraw_shielded_with_grant_p256` | 18 | 18 | 17 |
+| `withdraw_shielded_with_p256` | 18 | 18 | 17 |
+| `withdraw_unshielded_with_grant_p256` | 18 | 18 | 17 |
+
+| Total rows, 52 circuits | rows | vs this PR |
+|---|---|---|
+| Compact | 4,010,944 | −26.5% |
+| #184 | 3,656,014 | −19.3% |
+| this PR | 2,948,966 | |
 
 ## Parity evidence
 

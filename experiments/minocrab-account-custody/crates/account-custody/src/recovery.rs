@@ -14,18 +14,8 @@ pub fn point_preimage(c: &mut Circuit3, p: JubjubPoint) -> Preimage {
     Preimage::default().field(x).field(y)
 }
 pub fn live(c: &mut Circuit3, p: JubjubPoint) {
-    let zero = c.constant(0u64).private();
-    let zero = c.jubjub_scalar_from_native(zero);
-    let identity = c.ec_mul_generator(zero);
-    let weak = c.test_eq(p.point(), identity);
-    let good = c.not(weak);
-    c.assert(good);
-    let eight = c.constant(8u64).private();
-    let eight = c.jubjub_scalar_from_native(eight);
-    let cleared = c.ec_mul(p.point(), eight);
-    let weak = c.test_eq(cleared, identity);
-    let good = c.not(weak);
-    c.assert(good);
+    // [8]O = O, so the cofactor test rejects the identity as well.
+    p.assert_not_small_order(c);
 }
 
 #[derive(CircuitArg)]
@@ -156,8 +146,7 @@ impl RecoveryCalls {
         let mut tag = [0u8; 64];
         let name = b"midnight:account:recovery:submit:v1";
         tag[..name.len()].copy_from_slice(name);
-        let tag = BytesN::<Private, 64>::literal(c, &tag);
-        let dst = Preimage::default().blob(&tag).hash(c);
+        let dst = minocrab_std::v3::hash::Preimage::<Private>::new().blob_const(&tag).hash(c);
         let me = kernel::self_address(c).bytes().private();
         let challenge = Preimage::default()
             .bytes(dst)

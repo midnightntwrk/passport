@@ -76,50 +76,7 @@ impl GrantAuth {
 }
 
 fn base64(c: &mut Circuit3, challenge: B32<Private>) -> BytesN<Private, 43> {
-    let bytes = BytesN::from(challenge).to_le_bytes(c);
-    let mut bits = Vec::with_capacity(258);
-    for byte in bytes {
-        let mut value = byte;
-        let mut little = Vec::with_capacity(8);
-        for _ in 0..8 {
-            let (q, r) = c.div_mod_power_of_two(value, 1);
-            little.push(r);
-            value = q;
-        }
-        bits.extend(little.into_iter().rev());
-    }
-    bits.extend([c.constant(0u64).private(); 2]);
-    let out: Vec<_> = bits
-        .as_chunks::<6>()
-        .0
-        .iter()
-        .map(|bits| {
-            let mut index = c.constant(0u64).private();
-            for bit in bits {
-                let doubled = c.mul(index, 2u64);
-                index = c.add(doubled, *bit);
-            }
-            let bound = c.constant(26u64).private();
-            let less26 = c.less_than(index, bound, 6);
-            let bound = c.constant(52u64).private();
-            let less52 = c.less_than(index, bound, 6);
-            let bound = c.constant(62u64).private();
-            let less62 = c.less_than(index, bound, 6);
-            let eq62 = c.test_eq(index, 62u64);
-            let upper = c.add(index, 65u64);
-            let lower = c.add(index, 71u64);
-            let four = c.constant(4u64).private();
-            let minus4 = c.neg(four);
-            let digit = c.add(index, minus4);
-            let dash = c.constant(45u64).private();
-            let underscore = c.constant(95u64).private();
-            let tail = c.cond_select(eq62, dash, underscore);
-            let tail = c.cond_select(less62, digit, tail);
-            let tail = c.cond_select(less52, lower, tail);
-            c.cond_select(less26, upper, tail)
-        })
-        .collect();
-    BytesN::from_le_bytes(c, &out)
+    minocrab_std::v3::base64url_32(c, &challenge)
 }
 
 pub fn verify(
@@ -130,11 +87,14 @@ pub fn verify(
     sig: Signature,
     pk: Point,
 ) {
-    let bytes = data.to_le_bytes(c);
-    let rp = BytesN::<Private, 32>::from_le_bytes(c, &bytes[..32]).to_b32();
+    // Bytes 0..30 are the low limb as-is; bytes 31..36 are the 6-byte
+    // leftover limb, split once (5 splits instead of 36).
+    let limbs = data.limbs();
+    let top = minocrab_std::v3::explode_limb(c, limbs[0], 6);
+    let rp = B32 { lo: limbs[1], hi: top[0] };
     let matches = crate::auth::bytes_eq(c, rp, policy.rp_id_hash);
     c.assert(matches);
-    let flags = bytes[32];
+    let flags = top[1];
     let f5 = c.test_eq(flags, 5u64);
     let f13 = c.test_eq(flags, 13u64);
     let f29 = c.test_eq(flags, 29u64);

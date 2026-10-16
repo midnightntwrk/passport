@@ -51,10 +51,21 @@ impl Preimage {
         self
     }
     pub fn hash(self, c: &mut Circuit3) -> B32<Private> {
-        hash::persistent_hash_compact(c, Alignment(self.atoms), &self.slots)
+        let imm: Option<Vec<minocrab::Fr>> = self.slots.iter().map(|w| w.as_immediate()).collect();
+        match imm {
+            Some(limbs) => hash::constant_persistent_hash(c, &Alignment(self.atoms), &limbs),
+            None => hash::persistent_hash_compact(c, Alignment(self.atoms), &self.slots),
+        }
     }
-    pub fn tag(c: &mut Circuit3, tag: &str) -> Self {
-        Self::default().bytes(B32::pad(c, tag).private())
+    pub fn tag(_c: &mut Circuit3, tag: &str) -> Self {
+        assert!(tag.len() <= 32);
+        let mut bytes = [0u8; 32];
+        bytes[..tag.len()].copy_from_slice(tag.as_bytes());
+        let mut p = Self::default();
+        p.atoms.push(AlignmentSegment::Atom(AlignmentAtom::Bytes { length: 32 }));
+        p.slots.push(AnyWire3::immediate(minocrab::Fr::from(u64::from(bytes[31]))));
+        p.slots.push(AnyWire3::immediate(minocrab::Fr::from_le_bytes(&bytes[..31]).unwrap()));
+        p
     }
 }
 
@@ -149,17 +160,7 @@ impl Auth {
     pub fn live_key(&self, c: &mut Circuit3) {
         match self {
             Self::P256 { .. } => {} // coordinate extraction rejects identity; cofactor is one
-            Self::Jubjub { pk, .. } => {
-                let eight = c.constant(8u64).private();
-                let scalar = c.jubjub_scalar_from_native(eight);
-                let cleared = c.ec_mul(pk.point(), scalar);
-                let zero = c.constant(0u64).private();
-                let zero = c.jubjub_scalar_from_native(zero);
-                let identity = c.ec_mul_generator(zero);
-                let weak = c.test_eq(cleared, identity);
-                let live = c.not(weak);
-                c.assert(live);
-            }
+            Self::Jubjub { pk, .. } => pk.assert_not_small_order(c),
             Self::K256 { x, y, .. } => {
                 let zero = B32::pad(c, "").private();
                 let xzero = bytes_eq(c, *x, zero);
@@ -215,8 +216,7 @@ impl Auth {
         assert!(tag.len() <= 64);
         let mut padded = [0u8; 64];
         padded[..tag.len()].copy_from_slice(tag.as_bytes());
-        let tag = BytesN::<Private, 64>::literal(c, &padded);
-        let tag = Preimage::default().blob(&tag).hash(c);
+        let tag = hash::Preimage::<Private>::new().blob_const(&padded).hash(c);
         let me = kernel::self_address(c).bytes().private();
         let p = Preimage::default().bytes(tag).bytes(me);
         let p = if let Self::Jubjub { r, .. } = self {

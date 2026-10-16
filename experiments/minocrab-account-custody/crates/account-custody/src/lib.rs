@@ -1,6 +1,5 @@
 //! Minocrab implementation of the account custody reference.
 pub mod auth;
-pub mod caller;
 pub mod constructor;
 pub mod custody;
 pub mod entrypoints;
@@ -15,7 +14,7 @@ use minocrab::{Private, Public};
 use minocrab_std::v3::{
     B32, Bool, BytesN, CircuitArg, CoinColor, CoinNonce, Disclose, Discloses, Ledger, LedgerCell,
     LedgerMap, LedgerSet, ShieldedCoinInfo3, Uint, coin_commitment_to_contract, contract, is_true,
-    kernel, label, not,
+    kernel, label,
 };
 
 #[derive(Clone, Copy, minocrab_std::v3::LedgerRepr)]
@@ -123,8 +122,8 @@ impl Deposits {
             let sum = c.add(prior.field(), amount.field());
             let sum = Uint::<128, Public>::from_field_checked(c, sum);
             ACCOUNT.unshielded_balances.insert(c, &color, &sum);
-        });
-        c.when(not(is_true(exists)), |c| {
+        })
+        .otherwise(|c| {
             ACCOUNT.unshielded_balances.insert(c, &color, &amount);
         });
         increment(c, &ACCOUNT.round);
