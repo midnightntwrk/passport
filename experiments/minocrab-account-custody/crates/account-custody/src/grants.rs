@@ -277,13 +277,10 @@ pub fn check_scope(
     let unrestricted = c.mul(hi, lo);
     let restricted = c.not(unrestricted);
     c.when(restricted, |c| {
-        let caller = crate::caller::caller(c);
-        c.assert(caller[0]);
-        c.assert(caller[1]);
-        let address = B32 {
-            hi: caller[2].private(),
-            lo: caller[3].private(),
-        };
+        let caller = kernel::caller(c);
+        c.assert(caller.is_some.field());
+        c.assert(caller.value.is_left.field());
+        let address = caller.value.left.bytes().private();
         let present = c.constant(1u64).private();
         let commitment = caller_commit(c, opening.salt, present, address);
         let valid = bytes_eq(c, commitment, g.scope.caller_commit.private());

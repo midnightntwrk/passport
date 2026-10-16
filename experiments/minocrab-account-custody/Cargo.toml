@@ -16,10 +16,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-minocrab = { git = "https://github.com/sig-net/minocrab", rev = "537721ae7cd43ca7b3db09db784eb0f35ff437f4" }
-minocrab-std = { git = "https://github.com/sig-net/minocrab", rev = "537721ae7cd43ca7b3db09db784eb0f35ff437f4" }
-minocrab-zkir = { git = "https://github.com/sig-net/minocrab", rev = "537721ae7cd43ca7b3db09db784eb0f35ff437f4" }
-minocrab-sim = { git = "https://github.com/sig-net/minocrab", rev = "537721ae7cd43ca7b3db09db784eb0f35ff437f4", features = ["unstable"] }
+minocrab = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0" }
+minocrab-std = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0" }
+minocrab-zkir = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0" }
+minocrab-sim = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0", features = ["unstable"] }
 midnight-base-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
 midnight-transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
 midnight-serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
