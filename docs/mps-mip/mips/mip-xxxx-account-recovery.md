@@ -34,6 +34,12 @@ Replaces: N/A
      [EXP: met: ...] = an acceptance criterion whose evidence run has
      completed on the reference implementation (contract/). -->
 
+> **Published as MIP-0022 (Proposed), 4 October 2026.** The
+> [numbered upstream text](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md)
+> is canonical; the pre-publication working text below is retained for local
+> references. Authors remain Nicolas Di Prima and Raphael Toledo.
+> Continue review in https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/349.
+
 ## Table of contents
 
 - [Abstract](#abstract)

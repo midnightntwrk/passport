@@ -498,12 +498,12 @@
       <header class="section-head">
         <div class="section-kind">Pipeline</div>
         <h2>The MIP pipeline</h2>
-        <p>Sequenced by dependency. Every MIP names an external co-author or committed reviewer from the start — that is what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. Each card carries its upstream lifecycle state and links its evidence.</p>
+        <p>Each card links the canonical proposal and distinguishes publication from acceptance, implementation and client integration. MIP-0020, MIP-0021 and MIP-0022 are Proposed; MIP-0025 is Draft. Domain-separation compatibility and cryptographic review remain open.</p>
       </header>
 
       <div class="mips" id="mipsList"></div>
 
-      <p class="id-footnote">A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0008, MIP-0012, MIP-0013) are upstream-assigned numbers. Short ids (MIP-4 to MIP-10) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge. <code>STD-03</code> is likewise a workspace label: the domain-separation registry deliverable, whose problem statement is upstream as MPS-0027.</p>
+      <p class="id-footnote">Four-digit IDs are upstream-assigned numbers. Remaining short IDs are workspace pipeline labels. Historical mappings: <a id="MIP-KEYGEN" href="#MIP-0020">MIP-KEYGEN → MIP-0020</a>, <a id="STD-03" href="#MIP-0021">STD-03 → MIP-0021 compatibility work</a>, <a id="MIP-4" href="#MIP-0022">MIP-4 → MIP-0022</a>. MIP-0021 rejects a central registry; existing Passport tag bytes still need explicit compatibility decisions. MIP-0028 is reserved in <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/pull/335" target="_blank" rel="noopener">open PR #335</a>, not yet published.</p>
     </div>
   </section>
 
@@ -549,7 +549,7 @@
       <header class="section-head">
         <div class="section-kind">Symbiosis</div>
         <h2>Shared with the MVP</h2>
-        <p>The demo consumes pinned contract builds while reference implementation and standards work continue. Use the <a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">1 October status report</a> for merged work, open upstream submissions (#338/#339), feature PRs and release evidence. The <a href="demo.html#picks">original demo picks</a> are retained as planning history.</p>
+        <p>The demo consumes pinned contract builds while reference implementation and standards work continue. Use the <a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">8 October standards follow-up</a> for numbered proposals, merged P-256/caller work and remaining evidence gaps. Demo release observations remain dated 1 October. The <a href="demo.html#picks">original demo picks</a> are retained as planning history.</p>
       </header>
 
       <div class="crossovers-grid" id="crossovers"></div>
@@ -616,16 +616,19 @@
           : escapeHtml(cid);
       }).join(' · ') || '—';
       const badge = m.kind === 'prerequisite' ? '<span class="mip-prereq-badge">Prerequisite</span>'
-        : m.kind === 'upstream' ? `<span class="mip-upstream-badge">${(m.upstream || '').includes('/mps/') ? 'Published problem statement' : 'Adopted upstream'}</span>`
+        : m.kind === 'upstream' ? `<span class="mip-upstream-badge">${(m.upstream || '').includes('/mps/') ? 'Published problem statement' : 'Upstream proposal'}</span>`
         : '';
       const secondMeta = m.kind === 'upstream'
         ? `<dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream || '#')}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd>`
-        : `<dt>Co-author target</dt><dd>${escapeHtml(m.co_author || '—')}</dd>`;
+        : `<dt>Authors / review</dt><dd>${escapeHtml(m.co_author || '—')}</dd>`;
       const upstreamExtra = (m.kind !== 'upstream' && m.upstream)
         ? `<div><dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream)}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd></div>`
         : '';
       const lifecycleExtra = m.lifecycle
         ? `<div><dt>Upstream lifecycle</dt><dd>${escapeHtml(m.lifecycle)}</dd></div>`
+        : '';
+      const discussionExtra = m.discussion
+        ? `<div><dt>Discussion</dt><dd><a href="${escapeHtml(m.discussion)}" target="_blank" rel="noopener">Continue upstream review</a></dd></div>`
         : '';
       const evidenceExtra = (m.evidence && m.evidence.length)
         ? `<div><dt>Evidence</dt><dd>${m.evidence.map(eid => {
@@ -654,6 +657,7 @@
               ${secondMeta}
             </div>
             ${upstreamExtra}
+            ${discussionExtra}
             ${evidenceExtra}
             <div>
               <dt>Component</dt>

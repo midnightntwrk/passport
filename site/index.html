@@ -631,7 +631,7 @@
         <a class="fact" href="demo.html#recover">
           <span class="fact-kicker">Validated</span>
           <h3>Losing every device is survivable</h3>
-          <p>The recovery reference tranche is merged. Guardians retain their own keys, with no per-account shares to store; a two-phase signature gate and veto window precede finalisation. Upstream proposal #339 and integration review remain open.</p>
+          <p>The recovery reference tranche is merged and MIP-0022 is published as Proposed. Guardians retain their own keys, with no per-account shares to store; a two-phase signature gate and veto window precede finalisation. Cryptographic review, transport and integration remain.</p>
           <span class="fact-foot">How recovery works →</span>
         </a>
         <a class="fact" href="demo.html#demo">
@@ -686,14 +686,14 @@
         <h2>Where the work stands</h2>
         <p>A component is <b>specified</b> when a standard or draft documents its design, <b>decided</b> when a choice is recorded, an <b>open decision</b> when the design space is still live, and <b>in design</b> otherwise. These labels do not imply implementation, release or completed review; the linked evidence and upstream lifecycle record those separately.</p>
         <p class="status-updated" id="statusUpdated"></p>
-        <p><a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">Full 1 October reconciliation: issues, PRs, releases and next actions ↗</a></p>
+        <p><a href="https://github.com/midnightntwrk/passport/blob/main/docs/plans/STATUS.md" target="_blank" rel="noopener">8 October follow-up: numbered MIPs, merged reference work and next actions ↗</a></p>
       </header>
 
       <div class="facts">
         <a class="fact" href="https://github.com/midnightntwrk/passport/pull/174" target="_blank" rel="noopener"><span class="fact-kicker">Merged</span><h3>Compact 0.35 baseline</h3><p>Recovery, unshielded grant evidence and key-regeneration drafts are also on main. Deployment waves retain the 15,000-byte verifier budget.</p></a>
-        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/175" target="_blank" rel="noopener"><span class="fact-kicker plan">Open PR #175</span><h3>Real passkey account control</h3><p>A Safari passkey approved an account-key rotation on localnet under the bounded WebAuthn profile. Broader browser and PRF support remain.</p></a>
-        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/176" target="_blank" rel="noopener"><span class="fact-kicker plan">Open PR #176</span><h3>Caller-bound grants</h3><p>Immediate-caller pins passed on-node checks, including refusal of a fabricated-caller proof. Schema v3 and P-256 integration need review.</p></a>
-        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/177" target="_blank" rel="noopener"><span class="fact-kicker plan">Draft PR #177</span><h3>Viewing-key sharing</h3><p>192-byte inbox envelopes restored test devices that spent before and after rotation. Automated PASS with software credentials and synthetic PRF. Nicolas reviews the draft first; a dApp/grant journey is separate work.</p></a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/175" target="_blank" rel="noopener"><span class="fact-kicker">Merged PR #175</span><h3>Real passkey account control</h3><p>A Safari passkey approved an account-key rotation on localnet under the bounded WebAuthn profile. Broader browser and PRF support remain.</p></a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/176" target="_blank" rel="noopener"><span class="fact-kicker">Merged PR #176</span><h3>Caller-bound grants</h3><p>Schema v3 and the P-256 issuance caller argument are on main. Earlier on-node caller evidence remains distinct from fresh combined-build and P-256 caller validation.</p></a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/pull/177" target="_blank" rel="noopener"><span class="fact-kicker plan">Draft PR #177</span><h3>Viewing-key sharing</h3><p>192-byte inbox envelopes restored test devices with software credentials and synthetic PRF. Feedback is received; follow-through includes owner-authorised JubJub grants for Lace and separate viewing delivery.</p></a>
       </div>
 
       <div class="status-tiles" id="statusTiles"></div>
