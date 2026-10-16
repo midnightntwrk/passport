@@ -1,0 +1,8 @@
+{
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "node": "v22.22.2",
+  "npm": "10.9.7",
+  "compact_compiler": "0.35.0 --feature-zkir-v3 --skip-zk (all 52 output hashes verified)",
+  "proof_backend": "midnight-zkir 3.1.0-rc.1 e82d81d25aabcc5f5092e2bd559083487f577914"
+}

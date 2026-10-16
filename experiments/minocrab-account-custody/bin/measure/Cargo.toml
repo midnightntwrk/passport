@@ -1,0 +1,32 @@
+[package]
+name = "project-custody-measure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+reference-zkir.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+midnight-zkir-v3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+tokio.workspace = true
+minocrab-zkir.workspace = true
+midnight-base-crypto.workspace = true
+midnight-transient-crypto.workspace = true
+midnight-serialize.workspace = true
+project-account-custody.workspace = true
+
+minocrab-sim.workspace = true
+midnight-onchain-state.workspace = true
+midnight-storage.workspace = true
+midnight-onchain-runtime.workspace = true
+midnight-onchain-vm.workspace = true
+midnight-coin-structure.workspace = true
+
+group = "0.13"
+midnight-curves = "0.3.1"
+sha2 = "0.11"
+sha3 = "0.11"

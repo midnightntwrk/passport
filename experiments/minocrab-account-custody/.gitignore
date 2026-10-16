@@ -1,0 +1,9 @@
+/target
+
+/artifacts/
+/fixtures/private/
+__pycache__/
+/node_modules/
+/reference/contracts/managed/
+
+/midnight-level-db/

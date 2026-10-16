@@ -1,0 +1,2813 @@
+{
+  "started_at": "2026-10-16T12:40:20.251Z",
+  "status": "passed",
+  "transactions": [
+    {
+      "label": "deployment",
+      "hash": "919b0b11033a73aeccef282b6a309fa2bfda903e947580708ac17cd9ae5afc3f",
+      "bytes": 19427,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:40:46.390Z",
+      "id": "0056ffa1789265697215ac9cece80072a029b6dbf81c03414359c159be38c83b86",
+      "status": "SUCCESS",
+      "block_height": 10843,
+      "serialized_sha256": "919b0b11033a73aeccef282b6a309fa2bfda903e947580708ac17cd9ae5afc3f",
+      "block_hash": "8ab542ea6cc41944e25c56955f6e29c6bf713eb81bb96d75cc527540ec8bae2d"
+    },
+    {
+      "label": "deployment",
+      "hash": "e8e2f12e7f25b74bd6a3481cd39a912520b1280ec75c0d850f1c32136ae24c4b",
+      "bytes": 16968,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:41:02.709Z",
+      "id": "0013750b61b30d21f86364b97b6f8dd0c233240de820f19987fa0a38772affd400",
+      "status": "SUCCESS",
+      "block_height": 10846,
+      "serialized_sha256": "e8e2f12e7f25b74bd6a3481cd39a912520b1280ec75c0d850f1c32136ae24c4b",
+      "block_hash": "0cbc7385235b9d31379da3af17d650ea3d7c2c9a080f52b2e867c295e9955608"
+    },
+    {
+      "label": "deployment",
+      "hash": "954506e712c1f7f36417fd90a12380fbec47eba76003b7d8b9b2c0c05d9ee905",
+      "bytes": 17570,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:41:21.315Z",
+      "id": "006fb217a2935d83b22bc915e33b77e3dd934aa63043ef862f45c5c1edd1e4ae01",
+      "status": "SUCCESS",
+      "block_height": 10849,
+      "serialized_sha256": "954506e712c1f7f36417fd90a12380fbec47eba76003b7d8b9b2c0c05d9ee905",
+      "block_hash": "fc7df29b2de8f3f2eb70da27dcf39a690be9c0a0f1c6597732b6b7c1c9754965"
+    },
+    {
+      "label": "deployment",
+      "hash": "ebc2b071312e64e0f8856c546f552d44f01b3bd417f1d24b87ed8e41d10ed1cc",
+      "bytes": 16963,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:41:38.726Z",
+      "id": "002089ef465352f7039fc28198a389389ea97c51677a47532998537808b5d4aec9",
+      "status": "SUCCESS",
+      "block_height": 10852,
+      "serialized_sha256": "ebc2b071312e64e0f8856c546f552d44f01b3bd417f1d24b87ed8e41d10ed1cc",
+      "block_hash": "9bd9a96a367bb968decae389d6fb68965cc70bb65f722d2e8eb1704c7d56e31d"
+    },
+    {
+      "label": "deployment",
+      "hash": "c79808219bfea22d9cc9e6f671a50666f2034018a12d9fa7149bb3f4e13278c1",
+      "bytes": 17400,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:41:57.421Z",
+      "id": "00f80f63367260ddc8735038af84590a09312ea23fb7cea5cd1f0bbafcf2a14e91",
+      "status": "SUCCESS",
+      "block_height": 10855,
+      "serialized_sha256": "c79808219bfea22d9cc9e6f671a50666f2034018a12d9fa7149bb3f4e13278c1",
+      "block_hash": "660c7f3f62a0c9373acd1eec4150e003f125afbec804aa6d88b75663a26609f3"
+    },
+    {
+      "label": "deployment",
+      "hash": "095b62da2e85403b93dbc133c8ec818bce2aa84bb3d825835839f8d0faf1cb6f",
+      "bytes": 17407,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:42:14.852Z",
+      "id": "008e8f08038d64717e6143773153a3fe575021930f704f4c0c87160228cdcc4497",
+      "status": "SUCCESS",
+      "block_height": 10858,
+      "serialized_sha256": "095b62da2e85403b93dbc133c8ec818bce2aa84bb3d825835839f8d0faf1cb6f",
+      "block_hash": "5f362d1b6cff2091f1421c405a8b2f83e6712fb1a88eff72c0122ce8becbef87"
+    },
+    {
+      "label": "deployment",
+      "hash": "791d2731968ecb232272bea9a8d285b8fb23f512d7ada6a2b5e20be281dfeed2",
+      "bytes": 17592,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:42:32.237Z",
+      "id": "00667b08a258799a3f27ee89ad890547cff52bfc8d523830050aabf96c919a9dce",
+      "status": "SUCCESS",
+      "block_height": 10861,
+      "serialized_sha256": "791d2731968ecb232272bea9a8d285b8fb23f512d7ada6a2b5e20be281dfeed2",
+      "block_hash": "e82c48313375990b1a1e037eebe2139a29a52975c3cbb87eec1212a9a032a502"
+    },
+    {
+      "label": "deployment",
+      "hash": "4f632a9ecb0cf4185afdaed8942f4360d84a75a17ae9d2a0cd9bc54387fd5895",
+      "bytes": 17415,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:42:50.949Z",
+      "id": "00a9649a620ddc20ca02fe262ddc1263d6df69be73a7f5e10a8aed97be6c09b16f",
+      "status": "SUCCESS",
+      "block_height": 10864,
+      "serialized_sha256": "4f632a9ecb0cf4185afdaed8942f4360d84a75a17ae9d2a0cd9bc54387fd5895",
+      "block_hash": "47e7407f986311f47a47d4da1c8904d172720ce9b4c4cd095703b535f586b98b"
+    },
+    {
+      "label": "deployment",
+      "hash": "a02af8225bbb8b22da204da0282e8897ea1e03132a0f24f8788cc22cdffc6e1e",
+      "bytes": 18412,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:43:08.317Z",
+      "id": "00e5b64043bb12d56fb6c81f992255d20728f04a5ecac2bfb85cc41dd60d3f2f5b",
+      "status": "SUCCESS",
+      "block_height": 10867,
+      "serialized_sha256": "a02af8225bbb8b22da204da0282e8897ea1e03132a0f24f8788cc22cdffc6e1e",
+      "block_hash": "2abd37903098f8ee7bb284d7693857ece9ce06f53ef584e1f92dbd4646afc316"
+    },
+    {
+      "label": "deployment",
+      "hash": "3baa1e67dbcef0e8f4ddcd2973d3af3012d41eadc617b2c90f2d2c9f9b0151b7",
+      "bytes": 11750,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:43:27.095Z",
+      "id": "007722418e98729f6e74e19e0a52f8257a32104ed8988a2b95a364195dc6239ad1",
+      "status": "SUCCESS",
+      "block_height": 10870,
+      "serialized_sha256": "3baa1e67dbcef0e8f4ddcd2973d3af3012d41eadc617b2c90f2d2c9f9b0151b7",
+      "block_hash": "4b86f57ec8ed97ec6889b296ff6167057f21c4deb90503f37652ec5703371686"
+    },
+    {
+      "label": "deployment",
+      "hash": "bf0e2ae47031813eb6e1bd14fa48d1c8cd6fce97b3bd707ca3c19ab1f8e5ef85",
+      "bytes": 10567,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "activate_initial_device_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:43:46.631Z",
+      "id": "00727672f81e86ca16c85b412034e1177fa0c7e0e8cb23011a1be2c933cfada0b0",
+      "status": "SUCCESS",
+      "block_height": 10873,
+      "serialized_sha256": "bf0e2ae47031813eb6e1bd14fa48d1c8cd6fce97b3bd707ca3c19ab1f8e5ef85",
+      "block_hash": "60e89948ce162ce2ec58b7feb0327b5e28c49dbe4c9c5991c2dcd72121647018"
+    },
+    {
+      "label": "deployment",
+      "hash": "79aebd03311da484c0813b24e3d79c912a7a5485c8924df32865d6378c442859",
+      "bytes": 10773,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "add_device_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:44:10.202Z",
+      "id": "006a2ac9d5edc978474ed95ec1b3807e8cdaff108f335e11e123ebb44b48bd979f",
+      "status": "SUCCESS",
+      "block_height": 10877,
+      "serialized_sha256": "79aebd03311da484c0813b24e3d79c912a7a5485c8924df32865d6378c442859",
+      "block_hash": "8eac7b761fb42b7a5a5c907bf76341924d302e83446a4f000d5ce0e39e1d5ac7"
+    },
+    {
+      "label": "deployment",
+      "hash": "586de2594bb47cb7e466173a1818908d0059fdf839fe4f2541b39b5d2388ea62",
+      "bytes": 10773,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "add_device_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:44:33.029Z",
+      "id": "006d141d7c4bea23cc6e179d9fc60fab18281a156c7760ba97721488514868e68b",
+      "status": "SUCCESS",
+      "block_height": 10881,
+      "serialized_sha256": "586de2594bb47cb7e466173a1818908d0059fdf839fe4f2541b39b5d2388ea62",
+      "block_hash": "1eb15885bf4ff1d44bdde585596cffa4ec9d54e8adfb2d15aad8011bd819bf43"
+    },
+    {
+      "label": "deployment",
+      "hash": "78e434efdbf3ae525b52983706ccbc7091e0f25f7c75b831352feee0c633f716",
+      "bytes": 10773,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "add_device_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:44:57.009Z",
+      "id": "00245280fe063a02e7714dc04ebf4b8a7550b3bea1867432944e3c2550fc49e685",
+      "status": "SUCCESS",
+      "block_height": 10885,
+      "serialized_sha256": "78e434efdbf3ae525b52983706ccbc7091e0f25f7c75b831352feee0c633f716",
+      "block_hash": "a872379f73d03a94f9db02c5d5cd50697f0d7a668af2dcce816c70c121a7fc34"
+    },
+    {
+      "label": "deployment",
+      "hash": "820033ce8fca73f7612b6da0334a4d80c788000aa3af779d40ec53507b8a9aa7",
+      "bytes": 10766,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "remove_device_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:45:22.252Z",
+      "id": "00526e3463f18366a33b747fb64d5744feffbc87044e81a654994fe3cedeb93869",
+      "status": "SUCCESS",
+      "block_height": 10889,
+      "serialized_sha256": "820033ce8fca73f7612b6da0334a4d80c788000aa3af779d40ec53507b8a9aa7",
+      "block_hash": "834f5c10abf141996b6d9ef3953a0d4f870613074a82565d8c5ab3d1e97959d7"
+    },
+    {
+      "label": "deployment",
+      "hash": "3cb2073a112a645d724691151584cbd8897f4f346840cf1be71e6e6baca4cfd6",
+      "bytes": 10952,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "append_inbox_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:45:46.291Z",
+      "id": "00f0c81903d78d64e54b42b08227288926811f4516a0367f25e213db7ebd5413b1",
+      "status": "SUCCESS",
+      "block_height": 10893,
+      "serialized_sha256": "3cb2073a112a645d724691151584cbd8897f4f346840cf1be71e6e6baca4cfd6",
+      "block_hash": "dbea122345f8492229d0acd7af90ab032aad45f6ec7ef3c5cb56307b4c9aa5c0"
+    },
+    {
+      "label": "deployment",
+      "hash": "0600711f2d8465f0ae6c3d013895a074d6bbc315f6de478ffc11b73a172bbe14",
+      "bytes": 10696,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "rotate_enc_key_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:46:09.080Z",
+      "id": "001cd3068f9f40019d74f662fa3330d7b24f5b99d03a3862765828414de55ac7f3",
+      "status": "SUCCESS",
+      "block_height": 10897,
+      "serialized_sha256": "0600711f2d8465f0ae6c3d013895a074d6bbc315f6de478ffc11b73a172bbe14",
+      "block_hash": "ce0914a95446f096a217a7427b7d5778a590a41a6aae9ebfd770ddc9750acb42"
+    },
+    {
+      "label": "deployment",
+      "hash": "207132fdcdd3c534ef9ac8ad2b5a1c5ef4b3b67521021dd5030b258a0b771e3d",
+      "bytes": 10183,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "add_device_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:46:29.306Z",
+      "id": "00644af7e552e59ea50d2186d5b08c4487ec2ca0edc9a6c89c5e37a23e24640734",
+      "status": "SUCCESS",
+      "block_height": 10901,
+      "serialized_sha256": "207132fdcdd3c534ef9ac8ad2b5a1c5ef4b3b67521021dd5030b258a0b771e3d",
+      "block_hash": "fc6cd21a6395b5a093fcbd0bb505a7eacd0c100132e81313a292b5d0bdc4e076"
+    },
+    {
+      "label": "deployment",
+      "hash": "d089af3b0b44b14560a223d5072c98cc1639f55bb7e103b6f0f76cfb5155641c",
+      "bytes": 10182,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "remove_device_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:46:53.446Z",
+      "id": "00ce684908b0542d182e54182cfcd69e9b0c63dc00e81818592518d7088b4c5d26",
+      "status": "SUCCESS",
+      "block_height": 10905,
+      "serialized_sha256": "d089af3b0b44b14560a223d5072c98cc1639f55bb7e103b6f0f76cfb5155641c",
+      "block_hash": "d1772d97c3efec20e3679f121a875d7d7a727e76b8ad4dd4afc0a5470dcfed3c"
+    },
+    {
+      "label": "deployment",
+      "hash": "165b0ad6f23ac9d4fbf7370345ab14586a5a729c2ee66d25b38de142d790dff5",
+      "bytes": 10363,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "append_inbox_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:47:17.403Z",
+      "id": "00e69e4640cd49a03210e7004991d867437b5738649cae115d1749ac73a10bd994",
+      "status": "SUCCESS",
+      "block_height": 10909,
+      "serialized_sha256": "165b0ad6f23ac9d4fbf7370345ab14586a5a729c2ee66d25b38de142d790dff5",
+      "block_hash": "8ca0ba483f74fc9b40371cb0b10b898453f97d8800ca81475b1a634e00002ce2"
+    },
+    {
+      "label": "deployment",
+      "hash": "ea1c845b06cc1e9ffd46e4e921c83e93c9092d6f294a3c2f4ef9379f4c358254",
+      "bytes": 10069,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "rotate_enc_key_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:47:41.443Z",
+      "id": "00b6268143f262ecc366cfb4b4eeadf1e5074fb556d3c37c5f937f4b8372b7e710",
+      "status": "SUCCESS",
+      "block_height": 10913,
+      "serialized_sha256": "ea1c845b06cc1e9ffd46e4e921c83e93c9092d6f294a3c2f4ef9379f4c358254",
+      "block_hash": "4da6d4ed1f9cc4a293df39bb3b1b233888f0d64b939d95085d27d9b7a652b221"
+    },
+    {
+      "label": "deployment",
+      "hash": "c79918081a315ba76b9e32a6abfd8397d8ac1d60e7d101ae2457b7155207b117",
+      "bytes": 10774,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "add_device_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:48:16.606Z",
+      "id": "00bbdefd731ffaa253b2f6af709c2e3f48ee20d3e97ff5304abbb1eb6e2f2dace6",
+      "status": "SUCCESS",
+      "block_height": 10918,
+      "serialized_sha256": "c79918081a315ba76b9e32a6abfd8397d8ac1d60e7d101ae2457b7155207b117",
+      "block_hash": "c2189e4f8f58c8f96041deaf05e13b610ac94f9c2ea309be301f79aeebd1c16a"
+    },
+    {
+      "label": "deployment",
+      "hash": "2496f78dc9dbc365d74ff1b5417019d5c3fc87c44a30aaa46c1742af3f841127",
+      "bytes": 10804,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "remove_device_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:48:47.224Z",
+      "id": "00c51a14f26aae276457f1034f3666f7cde0ab7fff80c09ee21b48b4122a337572",
+      "status": "SUCCESS",
+      "block_height": 10924,
+      "serialized_sha256": "2496f78dc9dbc365d74ff1b5417019d5c3fc87c44a30aaa46c1742af3f841127",
+      "block_hash": "cc3709681af127529137cfc87bf29b8a6dcd7c9870297c96ba840645ac85bc4e"
+    },
+    {
+      "label": "deployment",
+      "hash": "ca162a35a47cc70afbdaf5e175089a6ecaad45b515890a0c202fb582d9ad0ae3",
+      "bytes": 10953,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "append_inbox_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:49:23.280Z",
+      "id": "00eb9e868d9627d8f68e0d88c13568d277e95e4af8df20eace39bfcc6266fbd35c",
+      "status": "SUCCESS",
+      "block_height": 10930,
+      "serialized_sha256": "ca162a35a47cc70afbdaf5e175089a6ecaad45b515890a0c202fb582d9ad0ae3",
+      "block_hash": "890981859a8901d65e52d937faa99c5525986d54acf103eedb1f543ac2b53c4d"
+    },
+    {
+      "label": "deployment",
+      "hash": "bee6628beaf085097b9788ae0fdd0591ecb70764114d0477b8b3e962c367aa0c",
+      "bytes": 10659,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "rotate_enc_key_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:49:59.296Z",
+      "id": "003be42dc567fc12b1dd02e5c360d6135ad77b6f3ec2e71a6fd1c24a71d7499fc9",
+      "status": "SUCCESS",
+      "block_height": 10936,
+      "serialized_sha256": "bee6628beaf085097b9788ae0fdd0591ecb70764114d0477b8b3e962c367aa0c",
+      "block_hash": "ba208e7bfb5ee0de8e1ccadad7294a8154486da50e208942381bad79bc18cfaf"
+    },
+    {
+      "label": "mint unshielded",
+      "id": "001988cab40f54c92e91af2595afcc035dae9b393a56e97c6e5b6b2e9e3f1659c0",
+      "status": "SUCCESS",
+      "block_height": 10942,
+      "scaffolding": true,
+      "hash": "a47fe09c0c7ac2e0f4d027194b9a807d86e2876214721de054d7ee57d82038ea",
+      "bytes": 9736,
+      "serialized_sha256": "a47fe09c0c7ac2e0f4d027194b9a807d86e2876214721de054d7ee57d82038ea",
+      "block_hash": "dfee71753b50889969f821701826be61f7fcb285e7b1dc7806bf23cde9ebbb87",
+      "calls": [
+        {
+          "address": "58cc10140405d136c4279fc471bb18859569d4eac4174801ede17327171a8d9e",
+          "circuit": "mint_unshielded"
+        }
+      ]
+    },
+    {
+      "label": "mint shielded",
+      "id": "006bbbec19075e1764b19be124546810197f18e178b62451da81a4941a835573a9",
+      "status": "SUCCESS",
+      "block_height": 10945,
+      "scaffolding": true,
+      "hash": "1f4cb631fa4d433dee4669f54a2ca18e8032235ac9e8ae59d3d567fb78ed5ab6",
+      "bytes": 14749,
+      "serialized_sha256": "1f4cb631fa4d433dee4669f54a2ca18e8032235ac9e8ae59d3d567fb78ed5ab6",
+      "block_hash": "6057c6fbf2b4239db9346d07df4092b73fb2dc904efcec779803a323eb852fcd",
+      "calls": [
+        {
+          "address": "58cc10140405d136c4279fc471bb18859569d4eac4174801ede17327171a8d9e",
+          "circuit": "mint_shielded"
+        }
+      ]
+    },
+    {
+      "label": "deposit_unshielded",
+      "hash": "e7d1b458334e431c268c376cadc0a6ca0e8adf03c856ad6083524f1a55b5dd2e",
+      "bytes": 8239,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_unshielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:51:30.322Z",
+      "id": "00a75468e1dc5c2db866175cbcc25eed07f0c7433d87149ef5405de703472be600",
+      "status": "SUCCESS",
+      "block_height": 10951,
+      "serialized_sha256": "e7d1b458334e431c268c376cadc0a6ca0e8adf03c856ad6083524f1a55b5dd2e",
+      "block_hash": "446e689d9f134d2d7e2b7108d1c3a59c31bc54e2b0b01aa73f308d72d8107b10"
+    },
+    {
+      "label": "withdraw_unshielded_with_k256",
+      "hash": "ef7c28f1d91451b46689247c691185f49c6b2ea536066ce5636bece9989c9d03",
+      "bytes": 11475,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:51:57.856Z",
+      "id": "0098c038a16e2fbd00a414731acaa11db47576042522704d7c8b04b07fe9f43712",
+      "status": "SUCCESS",
+      "block_height": 10955,
+      "serialized_sha256": "ef7c28f1d91451b46689247c691185f49c6b2ea536066ce5636bece9989c9d03",
+      "block_hash": "1b6f2f227274a1b7e963c82ef4a4afc3cb48f7ea7e23004a691de36c0a1f3085"
+    },
+    {
+      "label": "withdraw_unshielded_with_jubjub",
+      "hash": "da4b2cab1749d18fe32787c1413d2c7fdb01199662d21a76c1f3c7d36d115748",
+      "bytes": 10885,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:52:18.233Z",
+      "id": "00c657673c29674d387bbacd0f9c2b19da21a59e12c7c27b3b8720cef8bf621e64",
+      "status": "SUCCESS",
+      "block_height": 10959,
+      "serialized_sha256": "da4b2cab1749d18fe32787c1413d2c7fdb01199662d21a76c1f3c7d36d115748",
+      "block_hash": "1e96cd929f9f986c91635e390bcb917d5c242042296a6c4654ffc91ce00b2d26"
+    },
+    {
+      "label": "withdraw_unshielded_with_p256",
+      "hash": "e68ddb9608ac2d2c1f36e739d9f4de758fb71185d101114bc11bdb908a009eb6",
+      "bytes": 11475,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:52:52.899Z",
+      "id": "0006fb8a9318c576de9b34eb378a0569789e5ce5dbbe38ccdde104cc8e12c3f256",
+      "status": "SUCCESS",
+      "block_height": 10964,
+      "serialized_sha256": "e68ddb9608ac2d2c1f36e739d9f4de758fb71185d101114bc11bdb908a009eb6",
+      "block_hash": "cebe4f4024fa198a0c9ef21c1d98e90274d1c16f0c35fc8c81accdb0f82fa431"
+    },
+    {
+      "label": "deployment",
+      "hash": "b9a8aa26adc29227cbe8f8a901f9b114cd9a81c0114f32cd53efe5f6e8edc257",
+      "bytes": 17740,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:53:08.766Z",
+      "id": "004607b8e3ca86f6f3547212913d2a24929fc72e94143afcdf916c45d8b9f7d101",
+      "status": "SUCCESS",
+      "block_height": 10967,
+      "serialized_sha256": "b9a8aa26adc29227cbe8f8a901f9b114cd9a81c0114f32cd53efe5f6e8edc257",
+      "block_hash": "0bf9a84b8a7f3d01ebcf5a8af0b969cd90af128927468e4b075189424562b1d0"
+    },
+    {
+      "label": "deployment",
+      "hash": "6b150a4b4e46bbdef094f8e28fc0d6c22b313b5b2e040e836ea6eaa78c5d5da4",
+      "bytes": 18436,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:53:27.419Z",
+      "id": "000f5a4d303bdb21c2bd0110ec6e98c1c09b0ed5865729b6a59d6dc07fd0fc6eba",
+      "status": "SUCCESS",
+      "block_height": 10970,
+      "serialized_sha256": "6b150a4b4e46bbdef094f8e28fc0d6c22b313b5b2e040e836ea6eaa78c5d5da4",
+      "block_hash": "e2027a730757aec385555b65eaefd0f2218c7ce6b158a20d18ae63bf7f49961e"
+    },
+    {
+      "label": "deployment",
+      "hash": "9aefc0ddaf23949968e2ba88137105f4c6861dab97259944ec1784e077a5c8a6",
+      "bytes": 17390,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:53:44.704Z",
+      "id": "00ce14968e04e2634346ee23a5120bfc9499b986dcab65e7fad77fd99f52f7ffe9",
+      "status": "SUCCESS",
+      "block_height": 10973,
+      "serialized_sha256": "9aefc0ddaf23949968e2ba88137105f4c6861dab97259944ec1784e077a5c8a6",
+      "block_hash": "ffe0eb062433f3235844e1013b7e8c1d4a75ef37b7794bbfd9d59e41b860b57e"
+    },
+    {
+      "label": "deployment",
+      "hash": "b5f7eebae68188c4c7383edb13efad0940a7b899374aac71960cba7ee501c3f7",
+      "bytes": 17393,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:54:02.082Z",
+      "id": "00f32f583f317153a6739cfd3b0e59169f1d4ab51e0d3f98a65ae7f9f46a6b3eca",
+      "status": "SUCCESS",
+      "block_height": 10976,
+      "serialized_sha256": "b5f7eebae68188c4c7383edb13efad0940a7b899374aac71960cba7ee501c3f7",
+      "block_hash": "cfba8c4b93a972304bf480546536fd418ab6a0e310be5e68952ccba82b9a4be7"
+    },
+    {
+      "label": "deployment",
+      "hash": "dd5a04a771f54b087da3821cc5746c91366c0a8baebf1125a9d74b97b0c3530f",
+      "bytes": 16970,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:54:20.871Z",
+      "id": "004724a7de5ca06822b19cb358945e9ae4b632ae4570fdf5a78f6588c59a2ea2a6",
+      "status": "SUCCESS",
+      "block_height": 10979,
+      "serialized_sha256": "dd5a04a771f54b087da3821cc5746c91366c0a8baebf1125a9d74b97b0c3530f",
+      "block_hash": "edf5285f1748dce074f1180359a44af649216890d2d16762b6c907a5c99c8338"
+    },
+    {
+      "label": "deployment",
+      "hash": "bacf2fd3f77fe0ba680bd8f9e6f408f6742192ece86c9af689d350d9ba989d5b",
+      "bytes": 18022,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:54:38.265Z",
+      "id": "00e9ab76dd258244d3be26d83c696ea33045ccef128533cf7f7654f94c4071bca9",
+      "status": "SUCCESS",
+      "block_height": 10982,
+      "serialized_sha256": "bacf2fd3f77fe0ba680bd8f9e6f408f6742192ece86c9af689d350d9ba989d5b",
+      "block_hash": "85f16dbe978ea71ca21137b2541a0d192771784fd339e0558a7eaa74ff8c988f"
+    },
+    {
+      "label": "deployment",
+      "hash": "9d7f9f2e823b712291d16d546c354c6048cae62fc518ed842feedc44667d30fe",
+      "bytes": 17407,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:54:57.039Z",
+      "id": "008d664572d977493430c7c01db17c865b70331192e19bc692a48ddfa14f3b698b",
+      "status": "SUCCESS",
+      "block_height": 10985,
+      "serialized_sha256": "9d7f9f2e823b712291d16d546c354c6048cae62fc518ed842feedc44667d30fe",
+      "block_hash": "77dad908f63821438af4873a21cb3b2902a551d551e619c939d24b1847243837"
+    },
+    {
+      "label": "deployment",
+      "hash": "5b644aba75c36079d598b7fdda82f84b05957792f11397a43ecd4cd72c187113",
+      "bytes": 17414,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:55:14.424Z",
+      "id": "00430d193ed7af208b2adb56ec0561871c4d6ef357e7f09e2aafeaf010b545db17",
+      "status": "SUCCESS",
+      "block_height": 10988,
+      "serialized_sha256": "5b644aba75c36079d598b7fdda82f84b05957792f11397a43ecd4cd72c187113",
+      "block_hash": "c2dc95cfb7ee434a479e6fe70673c347e24c08bc5a6d494845ac697199597538"
+    },
+    {
+      "label": "deployment",
+      "hash": "91bf1b3fa1d61cba7e668a17dbf9f4c61c4ba6255cba2c072b804bba28218c6b",
+      "bytes": 17838,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:55:33.159Z",
+      "id": "00c7f14d0583b3fa3e56882892b25a328a7a75dded2d6ddceaa0e3bcdc6196b559",
+      "status": "SUCCESS",
+      "block_height": 10991,
+      "serialized_sha256": "91bf1b3fa1d61cba7e668a17dbf9f4c61c4ba6255cba2c072b804bba28218c6b",
+      "block_hash": "3831ce76ce1378146bbc6e40596b33a6487c1d8d0eba8d66281c71ea292a0758"
+    },
+    {
+      "label": "deployment",
+      "hash": "7fbdbe96e0520875bb3e6f80285453b97bfad76f98962a83aec115d8fdb32d96",
+      "bytes": 12324,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:55:50.539Z",
+      "id": "0053672e0096de7684af92817f6c75d13b7a9c7d9d6568adbdf067e634bedb0339",
+      "status": "SUCCESS",
+      "block_height": 10994,
+      "serialized_sha256": "7fbdbe96e0520875bb3e6f80285453b97bfad76f98962a83aec115d8fdb32d96",
+      "block_hash": "eb7d604d5b26ca816a068b23743fb7327cc406d386b2bea99627d844d823b4c7"
+    },
+    {
+      "label": "deployment",
+      "hash": "8ee73dd66af0ee4d9aaa7d954930cfa69a4160d8883ecfb371b96dd9cd377979",
+      "bytes": 9977,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "activate_initial_device_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:56:11.015Z",
+      "id": "0021dfc50cb1a3882d7c1184a8af332c9ba2a5f7e504cc9ee7776143c27bb8288c",
+      "status": "SUCCESS",
+      "block_height": 10998,
+      "serialized_sha256": "8ee73dd66af0ee4d9aaa7d954930cfa69a4160d8883ecfb371b96dd9cd377979",
+      "block_hash": "ddfcb30bfe150ebb613bff7fd9bb794e058697dee166bef2c101ed8f8a9d75e0"
+    },
+    {
+      "label": "deployment",
+      "hash": "90cd9d966f7c06aa928df6a93f77db965c9738477f4d3f626e7e9672b6ee3769",
+      "bytes": 19451,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:56:33.440Z",
+      "id": "000235f33d5c8eee86e7c7633e9e507e93c8264caaaa9c1960228d6183e1de9772",
+      "status": "SUCCESS",
+      "block_height": 11001,
+      "serialized_sha256": "90cd9d966f7c06aa928df6a93f77db965c9738477f4d3f626e7e9672b6ee3769",
+      "block_hash": "a1615af151dc7f81b08b0dc7d8a72b69ec2f61b107ad7e66e7fd50c17d86871d"
+    },
+    {
+      "label": "deployment",
+      "hash": "299ee061d19367566e369ec857c52972b3c232271dac0bd4d66010ed5d459783",
+      "bytes": 17398,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:56:50.784Z",
+      "id": "001bab0c92b0411e49c40626d2f9d6bba9da4d9fcfd8feb7cad4d86606223526ad",
+      "status": "SUCCESS",
+      "block_height": 11004,
+      "serialized_sha256": "299ee061d19367566e369ec857c52972b3c232271dac0bd4d66010ed5d459783",
+      "block_hash": "a25def1563010219ed63a824852570675ab4030c807f07ffd47febb96518505c"
+    },
+    {
+      "label": "deployment",
+      "hash": "f8797a4c8422bfa7c1d6d80484a867f65214c7ff1a3d8ee56151dbc10501d2fc",
+      "bytes": 17400,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:57:09.440Z",
+      "id": "0075b4a439ce772379519092c112cbc54d6c4846f6e864651b1441a2c45458ba19",
+      "status": "SUCCESS",
+      "block_height": 11007,
+      "serialized_sha256": "f8797a4c8422bfa7c1d6d80484a867f65214c7ff1a3d8ee56151dbc10501d2fc",
+      "block_hash": "232c17f96b914ca40952d8dfc3459da83565025ef1a57cb717ef9ff0d8dc3a31"
+    },
+    {
+      "label": "deployment",
+      "hash": "a37c7415db2a1d93b338aaa620ba0bfa4cb4002df6ef9b2519930bd989e3bf80",
+      "bytes": 18423,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:57:26.827Z",
+      "id": "00452214d1b41a42abd67cf8a8a03461f24e919f1103b1154c7bfa08216bd3be15",
+      "status": "SUCCESS",
+      "block_height": 11010,
+      "serialized_sha256": "a37c7415db2a1d93b338aaa620ba0bfa4cb4002df6ef9b2519930bd989e3bf80",
+      "block_hash": "f1686a9d13498f38a6aacc584672e839e2d28c9360b880b8c9372bf93ef18e61"
+    },
+    {
+      "label": "deployment",
+      "hash": "25eaffcf34376a124e5faeaad803a49dd6211f62ee9ff455505dd9bc75212388",
+      "bytes": 18442,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:57:44.173Z",
+      "id": "00f9d0acecfff28c28b2b877953d1b8b4c167dde9c536937d5f59dab2308e5bd66",
+      "status": "SUCCESS",
+      "block_height": 11013,
+      "serialized_sha256": "25eaffcf34376a124e5faeaad803a49dd6211f62ee9ff455505dd9bc75212388",
+      "block_hash": "586f8f8d815e4e6b82d86634d3b394038d164f1f200ac565b2d80f3ab200e854"
+    },
+    {
+      "label": "deployment",
+      "hash": "694721b33e7e0825ab2d8abb48e1b62f4143b4220b0cfa9d62e5d80e18e872b0",
+      "bytes": 17408,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:58:02.951Z",
+      "id": "00cf2888a1818fee7ab3364d1529061d0d1ce0376356465cec0edeb7db54abea9f",
+      "status": "SUCCESS",
+      "block_height": 11016,
+      "serialized_sha256": "694721b33e7e0825ab2d8abb48e1b62f4143b4220b0cfa9d62e5d80e18e872b0",
+      "block_hash": "fb2357f55b6086bc97e4410178d6779c16b8e485b8f601df8d784e9ad5419274"
+    },
+    {
+      "label": "deployment",
+      "hash": "ce9b85d41d95bc104edb9c2ea789fa9d8c0eb201475a4faf5b07c9e48a1bb257",
+      "bytes": 17407,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:58:20.336Z",
+      "id": "00a04f71c98c309603d6c79ebdbf7135291a07ab18fd0f29e8946423d96fd49c6c",
+      "status": "SUCCESS",
+      "block_height": 11019,
+      "serialized_sha256": "ce9b85d41d95bc104edb9c2ea789fa9d8c0eb201475a4faf5b07c9e48a1bb257",
+      "block_hash": "f078367c9ed6441b9f989519c9b8aee34c00fc3c92d9e24ee391340c7de288b3"
+    },
+    {
+      "label": "deployment",
+      "hash": "58b393671aa389294ad63b8a64720d924517b1d543154c04f2decbf508c150b0",
+      "bytes": 17592,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:58:39.085Z",
+      "id": "00edd5ca62e1158a4ec395a744f584dfb3fb1cf7efcdcc43b157a0896e9d41b311",
+      "status": "SUCCESS",
+      "block_height": 11022,
+      "serialized_sha256": "58b393671aa389294ad63b8a64720d924517b1d543154c04f2decbf508c150b0",
+      "block_hash": "2bf921c065dad3b861d3d7b9f543485d59f81c1b4cdc81324e720c168fb426bb"
+    },
+    {
+      "label": "deployment",
+      "hash": "5504344c97806373f1e01488d7efaaac14a7ad91b3a7b7e9bfb2447d232a608e",
+      "bytes": 16229,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:58:56.467Z",
+      "id": "0041d01afc8cce44bd9c2b0076fa6674301faa644bf30870e91e2228e7b1a03b94",
+      "status": "SUCCESS",
+      "block_height": 11025,
+      "serialized_sha256": "5504344c97806373f1e01488d7efaaac14a7ad91b3a7b7e9bfb2447d232a608e",
+      "block_hash": "925d0d3d176ff0d0884fa06e76c03bed31d41e03afca3643b9f6e9cdbdbb7148"
+    },
+    {
+      "label": "deployment",
+      "hash": "c94cfa6990e79aa874d6a3e429dc1874c98beacc9a5d498a556036d155b6b720",
+      "bytes": 11176,
+      "calls": [],
+      "submitted_at": "2026-10-16T12:59:15.227Z",
+      "id": "00084a92538b7bc3bf6f07e06660b7801f3d816949c6357d24692fc49e0100b654",
+      "status": "SUCCESS",
+      "block_height": 11028,
+      "serialized_sha256": "c94cfa6990e79aa874d6a3e429dc1874c98beacc9a5d498a556036d155b6b720",
+      "block_hash": "1291404457a8a00c720a30112810a9f84d339bb1c0dfd8d304a7a45b03f9ffa7"
+    },
+    {
+      "label": "deployment",
+      "hash": "9a870c46f0865728ded131241d28bb9cda190737835933403fb43338986a94a3",
+      "bytes": 10567,
+      "calls": [
+        {
+          "address": "883c712ab051af5406603205751d4a66fc69ff78790b505d50d2819e4a351de6",
+          "circuit": "activate_initial_device_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:59:34.685Z",
+      "id": "00f0529473917d9c41c59d5363eafd7ec4d8dc3339eb9ee145993ad02d7006c7b6",
+      "status": "SUCCESS",
+      "block_height": 11031,
+      "serialized_sha256": "9a870c46f0865728ded131241d28bb9cda190737835933403fb43338986a94a3",
+      "block_hash": "62706a78bada94bc6578bfc2afc52b18287a9d0dda41d4e44a7e2c12c9b520c9"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "d56477f82b14b0fab6e7ff72a74ad4c9be6a88cc9da9a263325d6f00d5a6497c",
+      "bytes": 24781,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T12:59:54.225Z",
+      "id": "0043f3819c590cb81f4e3b27586521b047a7c91b6415126ba65fe4d022c1084925",
+      "status": "SUCCESS",
+      "block_height": 11036,
+      "serialized_sha256": "d56477f82b14b0fab6e7ff72a74ad4c9be6a88cc9da9a263325d6f00d5a6497c",
+      "block_hash": "2c098c4b496fe9be10a23723f763f8bd139983d4c74bb9560664ada1ddad61a3"
+    },
+    {
+      "label": "withdraw_shielded_with_k256",
+      "hash": "5ca5dad7a143207e6bd74d393e214b3a406e866c0c0516795abbcef7948d5890",
+      "bytes": 21078,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:00:46.274Z",
+      "id": "003c011335ea3b16504bd8a5fc49804b4b48df41ba9553349cdabec1164f695387",
+      "status": "SUCCESS",
+      "block_height": 11043,
+      "serialized_sha256": "5ca5dad7a143207e6bd74d393e214b3a406e866c0c0516795abbcef7948d5890",
+      "block_hash": "5437ed3d9b580d1f502258abb0f431a4011af8a9c92a407cfeb6b15e3e4e1966"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "d2d67db0f2cfe9008ec4a2063af624e8033c195002ec8d6c2bc1d67a2f8b5287",
+      "bytes": 19624,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:01:04.284Z",
+      "id": "009e26155733924ce835577fc421665c81967c7df5e7ee78e688a1c00855ee40d5",
+      "status": "SUCCESS",
+      "block_height": 11046,
+      "serialized_sha256": "d2d67db0f2cfe9008ec4a2063af624e8033c195002ec8d6c2bc1d67a2f8b5287",
+      "block_hash": "978eb01741018443420ba9e9009bffb6c3dd2135529a9914c64c7401507cd0be"
+    },
+    {
+      "label": "withdraw_shielded_with_jubjub",
+      "hash": "f93eb54700c8bcfcab8a497a533c66e32fefec4c1d70b280d466f1ca4c944242",
+      "bytes": 20488,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:01:27.774Z",
+      "id": "0018d651b902012a0d92daf734c7ef0c60bf45915b16ebc16bb1a81b96104ead1f",
+      "status": "SUCCESS",
+      "block_height": 11050,
+      "serialized_sha256": "f93eb54700c8bcfcab8a497a533c66e32fefec4c1d70b280d466f1ca4c944242",
+      "block_hash": "f8de62024ac5866d870bb6da4bd23050138a7e55a790a8fd6cf642a5439d7afe"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "51b9ab2ccca858aa7eb93ebbfb19498ccf28d44b5e7bfc335f644131deaf5a12",
+      "bytes": 19625,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:01:46.989Z",
+      "id": "00e691e0fdb545b2ee00d59cfe14c182ff5b81c4bee79f51ea90e1f2dd285c05cc",
+      "status": "SUCCESS",
+      "block_height": 11054,
+      "serialized_sha256": "51b9ab2ccca858aa7eb93ebbfb19498ccf28d44b5e7bfc335f644131deaf5a12",
+      "block_hash": "0d06adc213874c25f2e82803c39d57263d6b42a78b7d961e240a4c296560f511"
+    },
+    {
+      "label": "withdraw_shielded_with_p256",
+      "hash": "043a827087b85a59d49342150f5dfd4f3b1ffdac72cc255ccc401fe5b6d97d23",
+      "bytes": 21076,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:02:23.744Z",
+      "id": "00098dcc8f227ea27985eb3c0ab2fa454e3216b917b3aea24f36f0c556e4309d28",
+      "status": "SUCCESS",
+      "block_height": 11060,
+      "serialized_sha256": "043a827087b85a59d49342150f5dfd4f3b1ffdac72cc255ccc401fe5b6d97d23",
+      "block_hash": "ca8c6b80a63899b12b00370174aaf8e465cb082cc1a4f788df7d5987655149f3"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "f0aee4c39bae37b72e2c95de965759ab31c8a9f09adda9a4b294d42807f223b8",
+      "bytes": 19625,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:02:47.218Z",
+      "id": "00b4d13d25dc00a03bcb32c58a902f20efea1d2915cfce9f7e814ae054ed1c0e71",
+      "status": "SUCCESS",
+      "block_height": 11064,
+      "serialized_sha256": "f0aee4c39bae37b72e2c95de965759ab31c8a9f09adda9a4b294d42807f223b8",
+      "block_hash": "42fbd534357d619438805e4fd93de1651b9111a346a25d8b9156706199301e4b"
+    },
+    {
+      "label": "withdraw_shielded_to_contract_with_k256 + receiver.deposit_shielded",
+      "hash": "8167f512794a68d7ed040c455ffb14d0f00f1400f7e35d0925b3620aff9c5d48",
+      "bytes": 26909,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_to_contract_with_k256"
+        },
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:03:23.609Z",
+      "id": "009df0aa81632939a9fc73e726f686f3304a35d81a29a9b02e27d4d5b9105e8689",
+      "status": "SUCCESS",
+      "block_height": 11070,
+      "serialized_sha256": "8167f512794a68d7ed040c455ffb14d0f00f1400f7e35d0925b3620aff9c5d48",
+      "block_hash": "44df84c8be93cacfb4ce2c3a3f2ef5921a88671ea5b7e8a5da6bf531b11591d2"
+    },
+    {
+      "label": "receiver onward spend",
+      "hash": "5ab20567335917cafd2b50fff81b73382265a7c66c90c7a882c293c8f3d43ecc",
+      "bytes": 20487,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:03:51.296Z",
+      "id": "0018007271bdbd94f64795b8ac0cf6aec91f0fcb71be90f93d1cd2b25fcc9019ae",
+      "status": "SUCCESS",
+      "block_height": 11074,
+      "serialized_sha256": "5ab20567335917cafd2b50fff81b73382265a7c66c90c7a882c293c8f3d43ecc",
+      "block_hash": "6bac04fdcbcf1957a1d600cd4ed91032612532c1141bc4b711a5d66d70c983e0"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "8bf5a9e17546190d177eb2faacbba4111f500626840fb9b312f988bcd0c47c38",
+      "bytes": 19625,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:04:11.460Z",
+      "id": "0079004fc3c2209baf28813c21f0f4c344d4681fe4206d49eb2355c5fcbf1bc335",
+      "status": "SUCCESS",
+      "block_height": 11078,
+      "serialized_sha256": "8bf5a9e17546190d177eb2faacbba4111f500626840fb9b312f988bcd0c47c38",
+      "block_hash": "c9951f70765e6a28da590f3003a0bc45273bd5395f218f12c971093cd9e32c07"
+    },
+    {
+      "label": "withdraw_shielded_to_contract_with_jubjub + receiver.deposit_shielded",
+      "hash": "df609d0f33f383ee538ac170910b59bb7aeea44e56c5bcf56de52992494a76bb",
+      "bytes": 26318,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_to_contract_with_jubjub"
+        },
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:04:40.467Z",
+      "id": "00f3f0a61a47388fdde96ec316f95c86bbba54f29ca16cdbe54908f3e7bcb8e60a",
+      "status": "SUCCESS",
+      "block_height": 11082,
+      "serialized_sha256": "df609d0f33f383ee538ac170910b59bb7aeea44e56c5bcf56de52992494a76bb",
+      "block_hash": "e21aebbabd741e85fd18696e51256df4ef7bc7dfed962022134f794312b6c337"
+    },
+    {
+      "label": "receiver onward spend",
+      "hash": "16b57cf0e8f466160538976381c1f18263d3b38f20147ad81a18509080fe4dc1",
+      "bytes": 20487,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:05:02.122Z",
+      "id": "006dd60c96b08bd5de1b81fb75401411d4a3c00fbaf783571f6419eacf99c22d5b",
+      "status": "SUCCESS",
+      "block_height": 11086,
+      "serialized_sha256": "16b57cf0e8f466160538976381c1f18263d3b38f20147ad81a18509080fe4dc1",
+      "block_hash": "89575773a1a951340334819870eff1ed8e93794fbf503d281dce7304a77483d7"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "f4ab5f9792ef4204842794d7fb553628b44675ec28168dc64635e7b23becb891",
+      "bytes": 19625,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:05:22.273Z",
+      "id": "00145f8bb063d3669c4d8fb90cb64d3985d18d2d2399e5ff3821425c228453353d",
+      "status": "SUCCESS",
+      "block_height": 11089,
+      "serialized_sha256": "f4ab5f9792ef4204842794d7fb553628b44675ec28168dc64635e7b23becb891",
+      "block_hash": "3eeb766ba2ff0b16ff6a4baf873df818d9b61090fff9d41eb167cbf11d8a9205"
+    },
+    {
+      "label": "withdraw_shielded_to_contract_with_p256 + receiver.deposit_shielded",
+      "hash": "464c2fb8efa2434b8b1645fbca4f6ba1ef6f11478e666d3cf361755372461835",
+      "bytes": 26909,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_to_contract_with_p256"
+        },
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:05:53.893Z",
+      "id": "0015d16bd33c99b46ceae40cf6b1301a9a9ab7252f57581be41ad2a7ebf8c35996",
+      "status": "SUCCESS",
+      "block_height": 11095,
+      "serialized_sha256": "464c2fb8efa2434b8b1645fbca4f6ba1ef6f11478e666d3cf361755372461835",
+      "block_hash": "1cd3952e46044fef332f87ad26a20f7a08151e1439fdf2c9b2ddf536b7bc4394"
+    },
+    {
+      "label": "receiver onward spend",
+      "hash": "04a2bce0848b186e892f83a75aa8b85931c90272a4ce6de96d89ff18aad3857b",
+      "bytes": 20487,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:06:21.016Z",
+      "id": "005e232300ccbfd6486d3686ea0c1cd4f56774c8c095c21990388c7ce71d139d6a",
+      "status": "SUCCESS",
+      "block_height": 11099,
+      "serialized_sha256": "04a2bce0848b186e892f83a75aa8b85931c90272a4ce6de96d89ff18aad3857b",
+      "block_hash": "0d8451a012c894ace30c3b93a4ce99928e8f20d469b505ade80ec394110a54b7"
+    },
+    {
+      "label": "issue_grant_with_k256",
+      "hash": "20784c7453c8888843eb6d36907b1f901c5750ba61606bfc64e704ef50a1b269",
+      "bytes": 11010,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "issue_grant_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:06:51.823Z",
+      "id": "000b13cb686a8ae3eff74f9b99523e60f9924703026a731c9b9909c7a18cfb6b2b",
+      "status": "SUCCESS",
+      "block_height": 11104,
+      "serialized_sha256": "20784c7453c8888843eb6d36907b1f901c5750ba61606bfc64e704ef50a1b269",
+      "block_hash": "372fdbeb2d3936cefcf6da5f5c8ffcfaa880be72896b19f09113e16904c0f208"
+    },
+    {
+      "label": "withdraw_unshielded_with_grant_k256",
+      "hash": "5cf27a10d014be982069f0d0aecb0fb9c4bd973e3a6413917b2d0eebd2815990",
+      "bytes": 11825,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_grant_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:07:15.071Z",
+      "id": "00ca742b086af01c2f751fc2387f00d619fcba3bddb1cda3ae53733f8a7ad8fa26",
+      "status": "SUCCESS",
+      "block_height": 11108,
+      "serialized_sha256": "5cf27a10d014be982069f0d0aecb0fb9c4bd973e3a6413917b2d0eebd2815990",
+      "block_hash": "89cf8f018399ce8bfe5ab02e502da290adc853de77caecda7a919eebc421bb07"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "cf49da8b87c99a6c7abc92cf692f5b89529fe5b8e2e65fc33f486375283ef9bd",
+      "bytes": 19626,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:07:34.662Z",
+      "id": "00f02f9829c0cf60e39f0bbf666b9a09961e85efc5cb141a65d6d951b9259c3c3d",
+      "status": "SUCCESS",
+      "block_height": 11111,
+      "serialized_sha256": "cf49da8b87c99a6c7abc92cf692f5b89529fe5b8e2e65fc33f486375283ef9bd",
+      "block_hash": "05229aafba24ca599908afa690e611001b8defbee78f59336c14800eab13c8fe"
+    },
+    {
+      "label": "withdraw_shielded_with_grant_k256",
+      "hash": "890885ed84e148cd0d9e3b418b3e05e9e1332543b2669bcceb677b9f4cdb48e8",
+      "bytes": 21504,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_with_grant_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:08:05.127Z",
+      "id": "00a8cc8c0b2e6d5c9f3b72631c90104ca0b9979985142eadc529ac5920ac0797c9",
+      "status": "SUCCESS",
+      "block_height": 11117,
+      "serialized_sha256": "890885ed84e148cd0d9e3b418b3e05e9e1332543b2669bcceb677b9f4cdb48e8",
+      "block_hash": "dedf90d49b1f214b655c206380839c59d009c6608e57b49f47eeee17eb8d9442"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "2d38d4b65a0c4d144f1c978500aa8f95f416820ba37fa2c6ee3b6e41a8694a85",
+      "bytes": 19627,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:08:29.355Z",
+      "id": "002c8cc6b346c46973aaa5a5d41743492d756a80f83bc664158c5497c2535fcb61",
+      "status": "SUCCESS",
+      "block_height": 11121,
+      "serialized_sha256": "2d38d4b65a0c4d144f1c978500aa8f95f416820ba37fa2c6ee3b6e41a8694a85",
+      "block_hash": "642590880db3e1dafe133b6042016bb58068654e45f059b03ef0774b3a7f7dde"
+    },
+    {
+      "label": "withdraw_shielded_to_contract_with_grant_k256 + receiver.deposit_shielded",
+      "hash": "f2cabc894e0ddc8fbc9573c00e7c305a528ccfcb4afa4c0a9cd7efea1c298aa0",
+      "bytes": 27300,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_to_contract_with_grant_k256"
+        },
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:09:05.473Z",
+      "id": "009ea359c12219b0ea8195e03acc6d1beb370395543a70baa11a0169d380a64eec",
+      "status": "SUCCESS",
+      "block_height": 11127,
+      "serialized_sha256": "f2cabc894e0ddc8fbc9573c00e7c305a528ccfcb4afa4c0a9cd7efea1c298aa0",
+      "block_hash": "65d34ba15f766319500408dbb1a06e6c2c404210451459fc656b96e3cb45dc81"
+    },
+    {
+      "label": "receiver onward spend",
+      "hash": "74046354f2e44a9bcea96a8bfb03b1c4de958efcef318022f2786ddb23c17f1d",
+      "bytes": 20492,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:09:32.935Z",
+      "id": "00c46f69ce9d55f0ec273841608c634e22c0dda1005e952159a406befc5dc560bc",
+      "status": "SUCCESS",
+      "block_height": 11131,
+      "serialized_sha256": "74046354f2e44a9bcea96a8bfb03b1c4de958efcef318022f2786ddb23c17f1d",
+      "block_hash": "1553bfe860722336a7edc7263c0aeccca76f80db716d01e5bff9f398e0d2a2d9"
+    },
+    {
+      "label": "revoke_grant_with_k256",
+      "hash": "566dc7401f9bc92e23f1166fe4a24f05a1b6338e6f3f3e473adfd172f7bc64f7",
+      "bytes": 11195,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "revoke_grant_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:09:56.867Z",
+      "id": "003f6301426821a46396d31c90831c0b9014220b127f0c33213411f02703880cac",
+      "status": "SUCCESS",
+      "block_height": 11135,
+      "serialized_sha256": "566dc7401f9bc92e23f1166fe4a24f05a1b6338e6f3f3e473adfd172f7bc64f7",
+      "block_hash": "aa1b4c3421cc3bae4ee02ecfc29224807229875f973a7737e8e639c571bc660d"
+    },
+    {
+      "label": "revoke_all_grants_with_k256",
+      "hash": "66c42876cf5ed92a98f6891b9f830812f98ff9ac6e5c51767e5fb5e801b4a29d",
+      "bytes": 10730,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "revoke_all_grants_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:10:20.907Z",
+      "id": "00296bc25aae99602ff8c2e120bd8ae00a46cf0b41278145e8284dd6c9fa332735",
+      "status": "SUCCESS",
+      "block_height": 11139,
+      "serialized_sha256": "66c42876cf5ed92a98f6891b9f830812f98ff9ac6e5c51767e5fb5e801b4a29d",
+      "block_hash": "610eed123bf6969d55452e3d23eeb804d11bc18a3d7107f4e67efe764448e1d6"
+    },
+    {
+      "label": "issue_grant_with_jubjub",
+      "hash": "41de17f725366ab2d8a06681dfdb36e84e8e0bc9a6c3465ab244a8d852b4fe96",
+      "bytes": 10436,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "issue_grant_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:10:44.062Z",
+      "id": "000f3d9f05a404f938c14ff2e724c79d8e2b80af697c14b2ebd2bb111cb5397c9c",
+      "status": "SUCCESS",
+      "block_height": 11143,
+      "serialized_sha256": "41de17f725366ab2d8a06681dfdb36e84e8e0bc9a6c3465ab244a8d852b4fe96",
+      "block_hash": "27042c6ab88377b255578a0198d3cdfbffda57f68efb1c5ec1ba86eba89ad5ef"
+    },
+    {
+      "label": "withdraw_unshielded_with_grant_jubjub",
+      "hash": "130908a086cda0386569522b55719e92f2fa627e52b49f7742c072695c169389",
+      "bytes": 11247,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_grant_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:11:07.899Z",
+      "id": "003f361c0aeeed017d4f4af2265ae85934db8857e4b4cc6f775623e4dd85bedc66",
+      "status": "SUCCESS",
+      "block_height": 11147,
+      "serialized_sha256": "130908a086cda0386569522b55719e92f2fa627e52b49f7742c072695c169389",
+      "block_hash": "c606c733d12af17de155bfb3678015b2a34ddda3cf177c43770410b9394be331"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "ff9681a4de4a40d84e31f26b97a47c48e31c06db9b1389bc70e4c24ce55a6fed",
+      "bytes": 19627,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:11:28.676Z",
+      "id": "000e5bcc29d18fac48cdf56b15e3552e6dca97498cb220739ae8cd8ac0fb044e2d",
+      "status": "SUCCESS",
+      "block_height": 11150,
+      "serialized_sha256": "ff9681a4de4a40d84e31f26b97a47c48e31c06db9b1389bc70e4c24ce55a6fed",
+      "block_hash": "11b1c5bf57d71051a57d394d8ea2ebaa6fcefad32b11b4e545baac2b7ae88c6f"
+    },
+    {
+      "label": "withdraw_shielded_with_grant_jubjub",
+      "hash": "8d0053d11378691e86c99c0279b27b37e277d379803b1e9924744c407517f38d",
+      "bytes": 20963,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_with_grant_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:11:52.285Z",
+      "id": "005ce99211827791e6f085371d83fafec00f34eaea570560aec8b66a02df41b8c5",
+      "status": "SUCCESS",
+      "block_height": 11154,
+      "serialized_sha256": "8d0053d11378691e86c99c0279b27b37e277d379803b1e9924744c407517f38d",
+      "block_hash": "bfc8186e224c9dd40f898d51ba2acdddc08f90e236cab7ee5353958b86b37988"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "8cf6a11057eece2482d1f6fefba6bde26b8631e9a6f3eebe14d0ae7c622c7799",
+      "bytes": 19627,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:12:11.368Z",
+      "id": "00976bda69e100f1e625427fb5a516fcd21c0d455bbb6b2fc3160d2fbc6ad59b59",
+      "status": "SUCCESS",
+      "block_height": 11158,
+      "serialized_sha256": "8cf6a11057eece2482d1f6fefba6bde26b8631e9a6f3eebe14d0ae7c622c7799",
+      "block_hash": "0d8116b23063a7cc9fbc6891b2b10aefa2a518b96435d6339ac3b706761f41e4"
+    },
+    {
+      "label": "withdraw_shielded_to_contract_with_grant_jubjub + receiver.deposit_shielded",
+      "hash": "c3d2286247ea4b944e4784b85456c7ec1a46a95657dd42e2319b21aa8a7794c5",
+      "bytes": 26757,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_to_contract_with_grant_jubjub"
+        },
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:12:39.016Z",
+      "id": "004b8dd70ca3fd05ed82a6839be0209eb272a9e4ba7626ceb3486385c473160d9d",
+      "status": "SUCCESS",
+      "block_height": 11162,
+      "serialized_sha256": "c3d2286247ea4b944e4784b85456c7ec1a46a95657dd42e2319b21aa8a7794c5",
+      "block_hash": "06305ff320fa936c4a39e1ee986bfe1fca1cbe7dd18e39a3023353557fc0cba1"
+    },
+    {
+      "label": "receiver onward spend",
+      "hash": "79d99acaead8a4fd6acc0a50e6e5043a82441abe321b831483002f048faaf89e",
+      "bytes": 20486,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:13:03.089Z",
+      "id": "00150fa234d4a54548f94eb375254c3ec0bccd7bb71fbe0a2d8e2ce4bf5e5a3969",
+      "status": "SUCCESS",
+      "block_height": 11166,
+      "serialized_sha256": "79d99acaead8a4fd6acc0a50e6e5043a82441abe321b831483002f048faaf89e",
+      "block_hash": "389daf7992e527fb2ecd9e8d4672e091be289eb86114889966185f9701a6898b"
+    },
+    {
+      "label": "revoke_grant_with_jubjub",
+      "hash": "de40613463157cb10b932e252cb688b8c895cf78451ad3f1d401b8c93d54c9e9",
+      "bytes": 10569,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "revoke_grant_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:13:23.228Z",
+      "id": "000265d79ee25da632ac3122da1fcab7ad1910a261ad1f7930647e3a1895f1ea07",
+      "status": "SUCCESS",
+      "block_height": 11170,
+      "serialized_sha256": "de40613463157cb10b932e252cb688b8c895cf78451ad3f1d401b8c93d54c9e9",
+      "block_hash": "40e67300ef41ba2722022ff89ef66c0882407b58ebf41c86cf4574f3351b20f2"
+    },
+    {
+      "label": "revoke_all_grants_with_jubjub",
+      "hash": "f115f1dbe5dbaa9d1dea8117977b658804732b5ebf120991a068440a807b33d1",
+      "bytes": 10184,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "revoke_all_grants_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:13:47.255Z",
+      "id": "0077b9399d93940d87aee6f8813adccb321b025b40b29e9e261b1d0e58d7271a0d",
+      "status": "SUCCESS",
+      "block_height": 11174,
+      "serialized_sha256": "f115f1dbe5dbaa9d1dea8117977b658804732b5ebf120991a068440a807b33d1",
+      "block_hash": "6efbad44452788b27a1121aca2d714bb418dd9fd15d6bbf2da5290e163ff608f"
+    },
+    {
+      "label": "issue_grant_with_p256",
+      "hash": "ada192c9eefdb3bd562de436e6a09bf6b1f9907f7898adbe3d157033ffaa76d9",
+      "bytes": 11026,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "issue_grant_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:14:22.091Z",
+      "id": "00058658b92b6afef07e5b5329e503ee672c1db131425dc5f2cef241de9c94af68",
+      "status": "SUCCESS",
+      "block_height": 11179,
+      "serialized_sha256": "ada192c9eefdb3bd562de436e6a09bf6b1f9907f7898adbe3d157033ffaa76d9",
+      "block_hash": "00558553d6be56832df396259a0565079c9bce833b4984a78b4765e04af7072e"
+    },
+    {
+      "label": "withdraw_unshielded_with_grant_p256",
+      "hash": "81bf8ae402882d327f376eb7bb50cb098d8b482f57f9187fa66fdbca98e59859",
+      "bytes": 11838,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_grant_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:14:52.699Z",
+      "id": "002a8aafd2fa2f23e6df0f101d32c4b31e09b7cc4d3cab803dfa1f8fd536add315",
+      "status": "SUCCESS",
+      "block_height": 11184,
+      "serialized_sha256": "81bf8ae402882d327f376eb7bb50cb098d8b482f57f9187fa66fdbca98e59859",
+      "block_hash": "b94233afc20fe6eb584cae4142ec9f99a273010eeaf78f9999914baf90ed6061"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "727f16b2bbe00d76b2f5041b19827a7ac0a33c7d3bf923c097f5fa8df9fc9f40",
+      "bytes": 19627,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:15:10.764Z",
+      "id": "00d11f1b5455733cb4a5a89913e16ecad066761e23aaf9c8d31bd17ef9dcc49787",
+      "status": "SUCCESS",
+      "block_height": 11187,
+      "serialized_sha256": "727f16b2bbe00d76b2f5041b19827a7ac0a33c7d3bf923c097f5fa8df9fc9f40",
+      "block_hash": "467b53186cf456e21ad4b3e192edc2c186ac11eb362d200d9f9d6fca4eff8448"
+    },
+    {
+      "label": "withdraw_shielded_with_grant_p256",
+      "hash": "144cdaa29e9c7c804629c81d0730e10461bce4cb94997987cc6f2892f0dfb39b",
+      "bytes": 21517,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_with_grant_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:15:42.632Z",
+      "id": "00782d4e3d25d1deff91742ed55b3e6ce30e7c2f483c331c26ebe949d6d07c13d6",
+      "status": "SUCCESS",
+      "block_height": 11193,
+      "serialized_sha256": "144cdaa29e9c7c804629c81d0730e10461bce4cb94997987cc6f2892f0dfb39b",
+      "block_hash": "ec9cecbfc0013157aba207ffe246daa08f5bd10749741fcf867cc28bb27533cb"
+    },
+    {
+      "label": "deposit_shielded",
+      "hash": "4bf17ce59f37dc660350ff429d230bb2848b07bbe98deac89df85f5d7a33d719",
+      "bytes": 19627,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:16:05.477Z",
+      "id": "0051bc02e9a8969702014d7f2e8cf45f162f516659b35e56473efb4e699c5a4e2c",
+      "status": "SUCCESS",
+      "block_height": 11197,
+      "serialized_sha256": "4bf17ce59f37dc660350ff429d230bb2848b07bbe98deac89df85f5d7a33d719",
+      "block_hash": "f0619bbb0c1a4043e74dc423a8e35232df83ba86c84456a8d1de03ba3d108560"
+    },
+    {
+      "label": "withdraw_shielded_to_contract_with_grant_p256 + receiver.deposit_shielded",
+      "hash": "d9d1777ea3e59b408ec9c388848f12d589befb99dde4c86f429c9b7b29c0fd47",
+      "bytes": 27347,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_shielded_to_contract_with_grant_p256"
+        },
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "deposit_shielded"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:16:42.833Z",
+      "id": "00426a0a770f23ad7376b8069acf2208cc0cef76fd9e72d4e46dc57b4fa0fc0755",
+      "status": "SUCCESS",
+      "block_height": 11203,
+      "serialized_sha256": "d9d1777ea3e59b408ec9c388848f12d589befb99dde4c86f429c9b7b29c0fd47",
+      "block_hash": "9b91f07fe0455a1c3d2471388fac080379939b74713c62efdcdfdfa79f24555f"
+    },
+    {
+      "label": "receiver onward spend",
+      "hash": "520fd4be4f40fd4e6da70c3049a97cf4e5fe5eb5802a051acecbf2351112843f",
+      "bytes": 20488,
+      "calls": [
+        {
+          "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+          "circuit": "withdraw_shielded_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:17:09.121Z",
+      "id": "00aa10da3f6b8a3bc79fc00295b1484b63c45a0ae55552e27bc5b7636733005b33",
+      "status": "SUCCESS",
+      "block_height": 11207,
+      "serialized_sha256": "520fd4be4f40fd4e6da70c3049a97cf4e5fe5eb5802a051acecbf2351112843f",
+      "block_hash": "5486c78784ea632e0012d9cdc03d6ed566e83ec925714cdc0bae7cd72cbda5eb"
+    },
+    {
+      "label": "revoke_grant_with_p256",
+      "hash": "58cee29aa4bbc3278945e1960e2677cb279f9be4cf7c23d00c3cc86f6a7cba66",
+      "bytes": 11188,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "revoke_grant_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:17:39.813Z",
+      "id": "00f39a38bd87cbfb3720a2b610abc48b00b86918a86368981f27a6d27bcb413616",
+      "status": "SUCCESS",
+      "block_height": 11212,
+      "serialized_sha256": "58cee29aa4bbc3278945e1960e2677cb279f9be4cf7c23d00c3cc86f6a7cba66",
+      "block_hash": "c0294f5625069264ac59c0032458510296a675177985c38f03b04aaaab8ab44d"
+    },
+    {
+      "label": "revoke_all_grants_with_p256",
+      "hash": "2f8d9ad7dca6a3123926f6c1af7e68b6423d6c60fd03ce7789d589b3b174c7f2",
+      "bytes": 10775,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "revoke_all_grants_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:18:10.588Z",
+      "id": "00342205d9089763503edd5490b127f007fb9bf31d63ca433252b419ae87f2f55b",
+      "status": "SUCCESS",
+      "block_height": 11217,
+      "serialized_sha256": "2f8d9ad7dca6a3123926f6c1af7e68b6423d6c60fd03ce7789d589b3b174c7f2",
+      "block_hash": "243474765f6d61d045126ea73f89b9952c655d7873919a6cfdbdc2ad42664d62"
+    },
+    {
+      "label": "deployment",
+      "hash": "3bf42a60a2bc476cc51010a07330688d42a457ee13ceb3442885ce424160a646",
+      "bytes": 6414,
+      "calls": [],
+      "submitted_at": "2026-10-16T13:18:26.374Z",
+      "id": "00c09cb6627100bc0de0f34d634cc5dd486fa89388b650ac26047601e3260e4ec0",
+      "status": "SUCCESS",
+      "block_height": 11220,
+      "serialized_sha256": "3bf42a60a2bc476cc51010a07330688d42a457ee13ceb3442885ce424160a646",
+      "block_hash": "44d7e3e4bd5feb049166c741b3f50b8ac773a34d82560fb475048599185966d7"
+    },
+    {
+      "label": "deployment",
+      "hash": "983e2c72b187377a8f33cc02a00df42fda622406ebd97336086e3e9c80f0d1e8",
+      "bytes": 6414,
+      "calls": [],
+      "submitted_at": "2026-10-16T13:18:45.125Z",
+      "id": "00452f5bf30ffd67e794f689456bfbb6f4315678c89f1d7f71c9b54be7ac72b801",
+      "status": "SUCCESS",
+      "block_height": 11223,
+      "serialized_sha256": "983e2c72b187377a8f33cc02a00df42fda622406ebd97336086e3e9c80f0d1e8",
+      "block_hash": "c70d6b196517039530884ae6fe5e5111a8acb4e03da31e4b986cded8cbfba5c5"
+    },
+    {
+      "label": "issue caller-bound grant",
+      "hash": "54cfa8bb21876379fee61cbc82006ab465a51c0a09dffaaac049029e18e7b36a",
+      "bytes": 11026,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "issue_grant_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:19:16.018Z",
+      "id": "001859dd752ef3108918bac0227b6e58090c29d4992fd561a96b91215704c9dca5",
+      "status": "SUCCESS",
+      "block_height": 11228,
+      "serialized_sha256": "54cfa8bb21876379fee61cbc82006ab465a51c0a09dffaaac049029e18e7b36a",
+      "block_hash": "b0a29c7483ec254b01fa3c0fd606143046ee336b673686699ef98ac53cf3a420"
+    },
+    {
+      "label": "B -> native account",
+      "hash": "7b4f9d0d1b51b2a533461edcbdf1b66cfce16a82ed4a423bee4ace0efcaf2740",
+      "bytes": 14850,
+      "calls": [
+        {
+          "address": "fbef282c505264c421ab86a28becec95a322a925023ef0b64c1af8caa6ea8eae",
+          "circuit": "forward_jubjub"
+        },
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_grant_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:19:38.918Z",
+      "id": "0005a173d79fd06abc3925db139f8aa66f64fcdc20fd11063377abf0706592c55f",
+      "status": "SUCCESS",
+      "block_height": 11232,
+      "serialized_sha256": "7b4f9d0d1b51b2a533461edcbdf1b66cfce16a82ed4a423bee4ace0efcaf2740",
+      "block_hash": "3693431606f0aa90a245ff291277b207018b91791e8749c97211571eb44884dc"
+    },
+    {
+      "label": "A -> B -> native account",
+      "hash": "0aa3f6f1d7f5eaff3e6a9172de2c1e6110f748c9d17c28acf63a339e0963050a",
+      "bytes": 18209,
+      "calls": [
+        {
+          "address": "d4ddf692df9cf37aa1bbb0cd90838f8435ac03017cc18f957570b3a86666b5c1",
+          "circuit": "relay_jubjub"
+        },
+        {
+          "address": "fbef282c505264c421ab86a28becec95a322a925023ef0b64c1af8caa6ea8eae",
+          "circuit": "forward_jubjub"
+        },
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "withdraw_unshielded_with_grant_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:20:01.867Z",
+      "id": "00c8e337efbd384451a9c606f14f3967b6c6d0f18426ceb2eb7498340eb7cd145a",
+      "status": "SUCCESS",
+      "block_height": 11236,
+      "serialized_sha256": "0aa3f6f1d7f5eaff3e6a9172de2c1e6110f748c9d17c28acf63a339e0963050a",
+      "block_hash": "6be757eeae699ddcf68f3a04ce29af6b87b043ba53a8c3b7e7655b4b04ed0f91"
+    },
+    {
+      "label": "publish_recovery_session_with_k256",
+      "hash": "8601fd58fecec317b58e1c79fe890b2d39b0b813b28ce11ab1a482981e5cf2f7",
+      "bytes": 11555,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "publish_recovery_session_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:20:34.266Z",
+      "id": "004a0e599bd8c97f54b881ef06fbb407b04b928b5a444d991440d4877515c095b8",
+      "status": "SUCCESS",
+      "block_height": 11241,
+      "serialized_sha256": "8601fd58fecec317b58e1c79fe890b2d39b0b813b28ce11ab1a482981e5cf2f7",
+      "block_hash": "2d32ae1023998851eb5ffecaefa0913bd58f2aaf7181ea2f994e3afa86c58308"
+    },
+    {
+      "label": "recover_submit",
+      "hash": "56d361158976123468d07e4204a0c55c509634a620f21e05b35de1ea8d501501",
+      "bytes": 10319,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_submit"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:20:53.973Z",
+      "id": "00443c96725260f9fba106b82950dc80389d29ddd020d025def908d2363818e601",
+      "status": "SUCCESS",
+      "block_height": 11245,
+      "serialized_sha256": "56d361158976123468d07e4204a0c55c509634a620f21e05b35de1ea8d501501",
+      "block_hash": "d5057456e2932c9f69d16fa9c3395338e962a24fd04744c076b9404fd3da98f9"
+    },
+    {
+      "label": "recover_cancel_with_k256",
+      "hash": "061dfc28b4cacb3983bd88568d64a3ebcbd08044901f094d56f945a5cba46b18",
+      "bytes": 11075,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_cancel_with_k256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:21:22.066Z",
+      "id": "00941e9b601e747fd0696833747c40fbcfb7383cc6ad55c4fa9cb2c632307f1446",
+      "status": "SUCCESS",
+      "block_height": 11249,
+      "serialized_sha256": "061dfc28b4cacb3983bd88568d64a3ebcbd08044901f094d56f945a5cba46b18",
+      "block_hash": "68fc14f6934b53817d10919ff99331b56d40cfda7bcaf723442888dd3a008507"
+    },
+    {
+      "label": "publish_recovery_session_with_jubjub",
+      "hash": "63554cf6ba4327a285fee55c4804b63a5869e2685a0233e1a7b85ceb77847e46",
+      "bytes": 10873,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "publish_recovery_session_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:21:41.945Z",
+      "id": "007864425f217034cca8b0a16fdf013dde366179646541199a3de1a11c56548598",
+      "status": "SUCCESS",
+      "block_height": 11253,
+      "serialized_sha256": "63554cf6ba4327a285fee55c4804b63a5869e2685a0233e1a7b85ceb77847e46",
+      "block_hash": "861df8d69fef1236e586b4b4ca90bdf0be01f820a8640d0862829748662ed93e"
+    },
+    {
+      "label": "recover_submit",
+      "hash": "f0a711a22d5687f17cce834513e3159738213990021aa2bb963cb63e3c882ade",
+      "bytes": 10355,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_submit"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:22:05.652Z",
+      "id": "00c476cb076bfd6a3c378dfd5a4a2f77b5c205c75225fb7be2e9faa3f18db011b4",
+      "status": "SUCCESS",
+      "block_height": 11257,
+      "serialized_sha256": "f0a711a22d5687f17cce834513e3159738213990021aa2bb963cb63e3c882ade",
+      "block_hash": "bdd0594b75b741c9adae9b91785b790461d654bb756ab47bcf6c52ee0fbf131e"
+    },
+    {
+      "label": "recover_cancel_with_jubjub",
+      "hash": "ae626f7a9cd73db096123b8e66671bbf6710ca0f23c329b620afff6cc75094a7",
+      "bytes": 10422,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_cancel_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:22:30.118Z",
+      "id": "00e58c7a7f9bcf2c93fb0e7fb1c334274107f897806ccb009bc927494958f277bd",
+      "status": "SUCCESS",
+      "block_height": 11261,
+      "serialized_sha256": "ae626f7a9cd73db096123b8e66671bbf6710ca0f23c329b620afff6cc75094a7",
+      "block_hash": "1d24b4a39f8df67fc444d33515627eaf8af078b0e9f2db91750ea6376fac7050"
+    },
+    {
+      "label": "publish_recovery_session_with_p256",
+      "hash": "a9f337586f9d351ce29016316571a8592bab6356f7c6b525ae22048074003c22",
+      "bytes": 11552,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "publish_recovery_session_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:23:05.480Z",
+      "id": "004e17f08e4e6c09f0114d33d3fd93591bdac7548057b2fb2883e2d8b946bad79e",
+      "status": "SUCCESS",
+      "block_height": 11267,
+      "serialized_sha256": "a9f337586f9d351ce29016316571a8592bab6356f7c6b525ae22048074003c22",
+      "block_hash": "5ffc242ebbe60e2c6f705a95a1550a822a7866cc49c28cfe73177a6ede982543"
+    },
+    {
+      "label": "recover_submit",
+      "hash": "31b4ebf410d5973fe2d0fe533f2038845d98dda08bc32db512418fb0d30de2cc",
+      "bytes": 10321,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_submit"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:23:29.792Z",
+      "id": "00424d2fe0452d3293a4013b333eafcc2bbd04d4b20597a573727de29b9a132aca",
+      "status": "SUCCESS",
+      "block_height": 11271,
+      "serialized_sha256": "31b4ebf410d5973fe2d0fe533f2038845d98dda08bc32db512418fb0d30de2cc",
+      "block_hash": "b13386b945ad56a8ab3b2350654fd849b83242746db5c1c3585af5166626dde7"
+    },
+    {
+      "label": "recover_cancel_with_p256",
+      "hash": "1153aad83352072f723e115bbb6b34fde0fc55204f73360c3487044f5fca58de",
+      "bytes": 11076,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_cancel_with_p256"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:24:05.249Z",
+      "id": "009a50a738349f12e8198cdf70f94ee72218738252de1aac6135f3bd7de4fb48e2",
+      "status": "SUCCESS",
+      "block_height": 11277,
+      "serialized_sha256": "1153aad83352072f723e115bbb6b34fde0fc55204f73360c3487044f5fca58de",
+      "block_hash": "0f18e1f9ed31e2b69001db1697a786532571ffe601e4ede40bdeb29b301f90d0"
+    },
+    {
+      "label": "recover_submit final",
+      "hash": "3c552dcf677c697a00d6f3e3ed29f06f353fab8e58be914566a6e566bcd056b5",
+      "bytes": 10321,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_submit"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:24:29.973Z",
+      "id": "00e719140efd4265a77f71da49da7304467bf079570a185a85bf54876f195f4ed1",
+      "status": "SUCCESS",
+      "block_height": 11281,
+      "serialized_sha256": "3c552dcf677c697a00d6f3e3ed29f06f353fab8e58be914566a6e566bcd056b5",
+      "block_hash": "a2638a73e0cc399477c5dceeda9c8832f53813ba2f8181ca00572c24a625414b"
+    },
+    {
+      "label": "recover_finalise",
+      "hash": "0cdf4aa3416fd2010a21446031c45a9db8237d3400014d28f4c419d70fd4cac3",
+      "bytes": 9111,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "recover_finalise"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:27:06.830Z",
+      "id": "00fc064c92a3c73ecb401d202abe825da913f7f08009277820ca7db28eb734c621",
+      "status": "SUCCESS",
+      "block_height": 11307,
+      "serialized_sha256": "0cdf4aa3416fd2010a21446031c45a9db8237d3400014d28f4c419d70fd4cac3",
+      "block_hash": "bcf17d2fffd09eb03e8ca27441609663a8e6fd56b31480c13fd1d455df480ea4"
+    },
+    {
+      "label": "successor controls recovered account",
+      "hash": "ac9fe0c2545c32da9ee04c01c1c4f93cff7bab91da209de2e1be86b400fac20d",
+      "bytes": 10366,
+      "calls": [
+        {
+          "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+          "circuit": "append_inbox_with_jubjub"
+        }
+      ],
+      "submitted_at": "2026-10-16T13:27:33.439Z",
+      "id": "00d5ad7f3ec9042b583e1b310094aa1a4ed9579f4f4da662466a2363d58a792435",
+      "status": "SUCCESS",
+      "block_height": 11311,
+      "serialized_sha256": "ac9fe0c2545c32da9ee04c01c1c4f93cff7bab91da209de2e1be86b400fac20d",
+      "block_hash": "59c037f1ea7924754db6a70ece95fef8dae14f4921204cca430050e747259104"
+    }
+  ],
+  "accounts": [
+    {
+      "role": "primary",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2"
+    },
+    {
+      "role": "receiver",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0"
+    },
+    {
+      "role": "p256-bootstrap",
+      "address": "883c712ab051af5406603205751d4a66fc69ff78790b505d50d2819e4a351de6"
+    }
+  ],
+  "checks": [
+    "all 52 on-chain Minocrab keys match; authority retired: 80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+    "k256, JubJub and P256 device lifecycle accepted",
+    "funded unshielded deposit and device withdrawals under all three arms",
+    "all 52 on-chain Minocrab keys match; authority retired: 84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+    "all 52 on-chain Minocrab keys match; authority retired: 883c712ab051af5406603205751d4a66fc69ff78790b505d50d2819e4a351de6",
+    "all three bootstrap arms activated with native keys",
+    "funded shielded device withdrawals under all three arms",
+    "device contract-to-contract transfers claimed and spent by receiver under all three arms",
+    "all grant issuance, funded spend, composition and revocation arms",
+    "caller-bound grants observe the immediate caller through one and two hops; direct/wrong/replay refused",
+    "recovery publication/cancel under every arm, real veto wait, epoch change and successor control"
+  ],
+  "negatives": [
+    {
+      "label": "caller-bound direct root",
+      "stage": "construction",
+      "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant requires a contract caller"
+    },
+    {
+      "label": "wrong immediate caller",
+      "stage": "construction",
+      "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant caller mismatch"
+    },
+    {
+      "label": "caller-bound replay",
+      "stage": "construction",
+      "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 2018 char 13: byte vector [149,175,218,118,31,115,208,42,177,152,131,63,30,99,95,96,149,42,163,66,96,42,72,102,210,216,225,107,238,188,186,232] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type"
+    },
+    {
+      "label": "forged caller with valid native proof",
+      "stage": "node-submit",
+      "hash": "22560a9e46adc84391127e94944a95fef153e70b79b5d48e6e8f5fde7ba812c8",
+      "message": "Error: Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error\n    at file:///private/tmp/passport-minocrab-pr/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/private/tmp/passport-minocrab-pr/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///private/tmp/passport-minocrab-pr/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:120:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]: RpcError: 1010: Invalid Transaction: Custom error: 104\n        at checkError (file:///private/tmp/passport-minocrab-pr/contract/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)\n        at RpcCoder.decodeResponse (file:///private/tmp/passport-minocrab-pr/contract/node_modules/@polkadot/rpc-provider/coder/index.js:35:9)\n        at #onSocketMessageResult (file:///private/tmp/passport-minocrab-pr/contract/node_modules/@polkadot/rpc-provider/ws/index.js:429:40)\n        at #onSocketMessage (file:///private/tmp/passport-minocrab-pr/contract/node_modules/@polkadot/rpc-provider/ws/index.js:418:42)\n        at [nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)\n        at WebSocket.dispatchEvent (node:internal/event_target:776:26)\n        at fireEvent (node:internal/deps/undici/undici:11883:14)\n        at websocketMessageReceived (node:internal/deps/undici/undici:11905:7)\n        at ByteParser.run (node:internal/deps/undici/undici:12573:19)\n        at ByteParser._write (node:internal/deps/undici/undici:12466:14)\n  }\n}",
+      "node_rejection": "2026-10-16 13:20:27 🚫 Rejected transaction 22560a9e46adc84391127e94944a95fef153e70b79b5d48e6e8f5fde7ba812c8 from mempool: guaranteed execution would fail: mismatch between expected (<[01, 01, fbef282c505264c421ab86a28becec95a322a925023ef0b64c1af8caa6ea8eae, -]: b1b1b32b32>) and actual (<[-, -, -, -]: b1b1b32b32>) read    "
+    },
+    {
+      "label": "early recovery finalise",
+      "stage": "construction",
+      "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: veto window still open"
+    },
+    {
+      "label": "early recovery finalise",
+      "stage": "construction",
+      "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: veto window still open"
+    },
+    {
+      "label": "early recovery finalise",
+      "stage": "construction",
+      "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: veto window still open"
+    },
+    {
+      "label": "old owner after recovery",
+      "stage": "construction",
+      "message": "Error: device entry not found on-ledger (rescan limit reached) — not a registered device?"
+    }
+  ],
+  "executions": [
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 40,
+      "reference_ops": 40
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 66,
+      "reference_ops": 66
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 66,
+      "reference_ops": 66
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 66,
+      "reference_ops": 66
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 74,
+      "reference_ops": 74
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 64,
+      "reference_ops": 64
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 53,
+      "reference_ops": 53
+    },
+    {
+      "circuit": "add_device_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 66,
+      "reference_ops": 66
+    },
+    {
+      "circuit": "remove_device_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 74,
+      "reference_ops": 74
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 64,
+      "reference_ops": 64
+    },
+    {
+      "circuit": "rotate_enc_key_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 53,
+      "reference_ops": 53
+    },
+    {
+      "circuit": "add_device_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 66,
+      "reference_ops": 66
+    },
+    {
+      "circuit": "remove_device_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 74,
+      "reference_ops": 74
+    },
+    {
+      "circuit": "append_inbox_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 64,
+      "reference_ops": 64
+    },
+    {
+      "circuit": "rotate_enc_key_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 53,
+      "reference_ops": 53
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 34,
+      "reference_ops": 34
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 94,
+      "reference_ops": 94
+    },
+    {
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 94,
+      "reference_ops": 94
+    },
+    {
+      "circuit": "withdraw_unshielded_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 94,
+      "reference_ops": 94
+    },
+    {
+      "circuit": "activate_initial_device_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 40,
+      "reference_ops": 40
+    },
+    {
+      "circuit": "activate_initial_device_with_p256",
+      "address": "883c712ab051af5406603205751d4a66fc69ff78790b505d50d2819e4a351de6",
+      "native_ops": 40,
+      "reference_ops": 40
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 67,
+      "reference_ops": 67
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 80,
+      "reference_ops": 80
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 52,
+      "reference_ops": 52
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 52,
+      "reference_ops": 52
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 62,
+      "reference_ops": 62
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 61,
+      "reference_ops": 61
+    },
+    {
+      "circuit": "issue_grant_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 67,
+      "reference_ops": 67
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 80,
+      "reference_ops": 80
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 52,
+      "reference_ops": 52
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 52,
+      "reference_ops": 52
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "revoke_grant_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 62,
+      "reference_ops": 62
+    },
+    {
+      "circuit": "revoke_all_grants_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 61,
+      "reference_ops": 61
+    },
+    {
+      "circuit": "issue_grant_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 67,
+      "reference_ops": 67
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 80,
+      "reference_ops": 80
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 52,
+      "reference_ops": 52
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 52,
+      "reference_ops": 52
+    },
+    {
+      "circuit": "deposit_shielded",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 33,
+      "reference_ops": 33
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "address": "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0",
+      "native_ops": 63,
+      "reference_ops": 63
+    },
+    {
+      "circuit": "revoke_grant_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 62,
+      "reference_ops": 62
+    },
+    {
+      "circuit": "revoke_all_grants_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 61,
+      "reference_ops": 61
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 67,
+      "reference_ops": 67
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 94,
+      "reference_ops": 94
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 94,
+      "reference_ops": 94
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 94,
+      "reference_ops": 94
+    },
+    {
+      "circuit": "publish_recovery_session_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 102,
+      "reference_ops": 102
+    },
+    {
+      "circuit": "recover_submit",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 51,
+      "reference_ops": 69
+    },
+    {
+      "circuit": "recover_cancel_with_k256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 74,
+      "reference_ops": 74
+    },
+    {
+      "circuit": "publish_recovery_session_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 102,
+      "reference_ops": 102
+    },
+    {
+      "circuit": "recover_submit",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 51,
+      "reference_ops": 69
+    },
+    {
+      "circuit": "recover_cancel_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 74,
+      "reference_ops": 74
+    },
+    {
+      "circuit": "publish_recovery_session_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 102,
+      "reference_ops": 102
+    },
+    {
+      "circuit": "recover_submit",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 51,
+      "reference_ops": 69
+    },
+    {
+      "circuit": "recover_cancel_with_p256",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 74,
+      "reference_ops": 74
+    },
+    {
+      "circuit": "recover_submit",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 51,
+      "reference_ops": 69
+    },
+    {
+      "circuit": "recover_finalise",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 89,
+      "reference_ops": 92
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "native_ops": 64,
+      "reference_ops": 64
+    }
+  ],
+  "account": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+  "coin_candidate_retries": [
+    {
+      "address": "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2",
+      "index": "66",
+      "reason": "proof failure"
+    }
+  ],
+  "coverage": {
+    "accepted": [
+      "activate_initial_device_with_jubjub",
+      "activate_initial_device_with_k256",
+      "activate_initial_device_with_p256",
+      "add_device_with_jubjub",
+      "add_device_with_k256",
+      "add_device_with_p256",
+      "append_inbox_with_jubjub",
+      "append_inbox_with_k256",
+      "append_inbox_with_p256",
+      "deposit_shielded",
+      "deposit_unshielded",
+      "issue_grant_with_jubjub",
+      "issue_grant_with_k256",
+      "issue_grant_with_p256",
+      "publish_recovery_session_with_jubjub",
+      "publish_recovery_session_with_k256",
+      "publish_recovery_session_with_p256",
+      "recover_cancel_with_jubjub",
+      "recover_cancel_with_k256",
+      "recover_cancel_with_p256",
+      "recover_finalise",
+      "recover_submit",
+      "remove_device_with_jubjub",
+      "remove_device_with_k256",
+      "remove_device_with_p256",
+      "revoke_all_grants_with_jubjub",
+      "revoke_all_grants_with_k256",
+      "revoke_all_grants_with_p256",
+      "revoke_grant_with_jubjub",
+      "revoke_grant_with_k256",
+      "revoke_grant_with_p256",
+      "rotate_enc_key_with_jubjub",
+      "rotate_enc_key_with_k256",
+      "rotate_enc_key_with_p256",
+      "withdraw_shielded_to_contract_with_grant_jubjub",
+      "withdraw_shielded_to_contract_with_grant_k256",
+      "withdraw_shielded_to_contract_with_grant_p256",
+      "withdraw_shielded_to_contract_with_jubjub",
+      "withdraw_shielded_to_contract_with_k256",
+      "withdraw_shielded_to_contract_with_p256",
+      "withdraw_shielded_with_grant_jubjub",
+      "withdraw_shielded_with_grant_k256",
+      "withdraw_shielded_with_grant_p256",
+      "withdraw_shielded_with_jubjub",
+      "withdraw_shielded_with_k256",
+      "withdraw_shielded_with_p256",
+      "withdraw_unshielded_with_grant_jubjub",
+      "withdraw_unshielded_with_grant_k256",
+      "withdraw_unshielded_with_grant_p256",
+      "withdraw_unshielded_with_jubjub",
+      "withdraw_unshielded_with_k256",
+      "withdraw_unshielded_with_p256"
+    ],
+    "missing": []
+  },
+  "completed_at": "2026-10-16T13:27:50.475Z",
+  "installed_keys": {
+    "80a5fa215cf50dc1909ce866459f55285baba621d696750021fe4476043e12e2": {
+      "maintenance_authority_retired": true,
+      "verifier_key_sha256": {
+        "deposit_unshielded": "62b927ea8f38a57bcef0ebed399f049d33a087d7848b195b3deb88b41a4c48af",
+        "deposit_shielded": "18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+        "activate_initial_device_with_k256": "12e0e078b95ab4239317b79fd9ff12a920aeac6acdee5d21b68b970c95ad22f2",
+        "withdraw_unshielded_with_k256": "4134c50c08155541ed1f14cf386bf388ba605205130c5b1ac4759618800fad30",
+        "append_inbox_with_k256": "13f007dbc09ccb24c9dcce9f51e45d28e5cee1dad837dc8d73877964785923a1",
+        "withdraw_shielded_with_k256": "1ff68dd7815d97823164d67ce64435596e163e2fc629dbc5f473f32e90be02f6",
+        "withdraw_shielded_to_contract_with_k256": "2b8d1c0fe94c9da89bfc76da748390450e6c77407ab1c4a400880f9d4d7dd80c",
+        "rotate_enc_key_with_k256": "f64cc257048f263f336a7acc17873d262ecbf98b9662811d8921a0d64f41a9d9",
+        "add_device_with_k256": "820a4befe8ca82e69078b096802c40f6ed0442b08cb92e945844b9119b31ec5c",
+        "remove_device_with_k256": "d9cb3482eb717edb4e4a3c10a97da88ab7e96673dbcd9d1204822b3b25e5a037",
+        "activate_initial_device_with_jubjub": "cabba4cb6a927cb2097dcc0dbb23a4bf774fe03c5b77b75335c0335ef4a1a108",
+        "withdraw_unshielded_with_jubjub": "3aabd4e90531c66323648a1478382ab2782de70a1750a09b3a26fb53a844ec91",
+        "append_inbox_with_jubjub": "191a9f6ce2aad7aceb7711ae3675939bc6aeca1601cef7b87cd1cd68cc2ba0dd",
+        "withdraw_shielded_with_jubjub": "9ad695e3e5c5e8395b377b5a78c3a02cc2b239909b0b5b94b6d32665f393c3f7",
+        "withdraw_shielded_to_contract_with_jubjub": "6e90f64fbe455f695e63ee3d3c5c8436a5b3f0a104d09d2495a34948687a7f43",
+        "rotate_enc_key_with_jubjub": "d170c5f05a7ddc63247da084225ad6a861d826e81eed1f9aa889e3f7f1ccf64b",
+        "add_device_with_jubjub": "2634d81aa80a9dbb334aba9598ff2a21d4a320ffed22301c1998421efecdb081",
+        "remove_device_with_jubjub": "ec2126a1f33138c4150108c30d75446f51840f5e024fc2b85faebf53bf18c571",
+        "activate_initial_device_with_p256": "d10eee54fda87065ee5ed3ae60bc2979f314591a797f6b08d28718f13626b8f2",
+        "withdraw_unshielded_with_p256": "55b8c86d4abe8695e68a67a48dd8521eee16681c69c9aa833f91b49908bc725a",
+        "append_inbox_with_p256": "19b56c4596104295e5506855ec43e0c2c881575ccdb1eb0e947db4c10fa42808",
+        "withdraw_shielded_with_p256": "bb0ad98f0a40a8aef4b79d73f25dd10bed30b82c1aaf0395e67fa515ee5e688c",
+        "withdraw_shielded_to_contract_with_p256": "6931fcd79b4ad125ba044ba028684f19a02b8a389e3a9461b6fb6fa33ad1dece",
+        "rotate_enc_key_with_p256": "1f8455a53558ecd21d6c07b33840e70a3c51744bd8cb4953be823ed9282fceef",
+        "add_device_with_p256": "e6a3e913bb2aeaa5ff347f2736dd89cd664348ac693e483b99e56be426f4228d",
+        "remove_device_with_p256": "8c7e44143cf6ca915b6793121b3a6300376290fad96a4af54ba8a584a3de87f5",
+        "withdraw_unshielded_with_grant_k256": "7615160d2f424458a0765844843ff411a5902ab70ab8dcb7411b9a0530895f9c",
+        "withdraw_shielded_with_grant_k256": "54e7d3986321e02b9dfe0a85a4ac9c82a8404e2fd148828f84c79f4b3b56343b",
+        "withdraw_shielded_to_contract_with_grant_k256": "2535ff7e5ca924b603981a66a71ad1b6576d3e6b03aca6796215225f9d42e236",
+        "issue_grant_with_k256": "a4164fde134c9c83bb9ccb76c0aa5078f3513857a756caf09867c4f37a31f5d9",
+        "revoke_grant_with_k256": "15a23db537cc7dbd975c3aa660f2ea4856f55f376886c8f43d64bbdc5bc4c6f4",
+        "revoke_all_grants_with_k256": "83f2f0a4c0714585c56d99e09651e7aa6adb49a3a0841ea7276c7b81eb214e2a",
+        "withdraw_unshielded_with_grant_jubjub": "8b3adfa04fe065921c49cdb0ec0328d37fb186cb4dafd12931383b531a64db4f",
+        "withdraw_shielded_with_grant_jubjub": "f794e08ecd0f121fc5a305812ff614481fb60af9f8ae9923a50a887842ce192f",
+        "withdraw_shielded_to_contract_with_grant_jubjub": "ce5eea531b3d62c6e19b5a32ce807ca17663fa2a31f112efc538e9f6a7ad83f6",
+        "issue_grant_with_jubjub": "a1582236c82ab8016e117667042dd5184815e10dfd25a0827302d147da98ece8",
+        "revoke_grant_with_jubjub": "6e568dd1c418ec3fae6b87026d5a97350185724ff6d66c7e59063afd2f26e99a",
+        "revoke_all_grants_with_jubjub": "fcae6d18ac0160c714193a13c2ee1ec9411442db2c22307a0750eeaa1309ff14",
+        "withdraw_unshielded_with_grant_p256": "2bd476ce6ebe82082d88d5e8b487edbd2fe64d17dff39e9979693a1af87a8594",
+        "withdraw_shielded_with_grant_p256": "07ae1af9bbb0734df9a858091ae613acd9c6d38011846a8e7935b457576f9127",
+        "withdraw_shielded_to_contract_with_grant_p256": "4de736e7ed42852d4714859e2c6cd09d9c93ee27467a359144df6ec8b4b00287",
+        "issue_grant_with_p256": "5e38a3389a7290fe26b277887416e99555b4b3cea68b69ea26d6124095be4962",
+        "revoke_grant_with_p256": "80188d559bf1a220c5604b76064c6c855bbd5f95a458704146dc3dcb5c8d6cb3",
+        "revoke_all_grants_with_p256": "40f51ba2e85e572e2d9a06d1403e3ffbcc6d8ef09d0d056acda424440c6af4c1",
+        "recover_submit": "c6867848137b66d8018788f22b2ccc82a315fd7f27e41584ec3158f6490fb003",
+        "recover_finalise": "29b9274fd40580c9ab05bd993ed221269dd1402724e0f33705b242494193897a",
+        "publish_recovery_session_with_k256": "85346494bf4c1c1991f929bef89439a60be9ae44cbf81242a1e980c2d2edb310",
+        "recover_cancel_with_k256": "18d81accf42e2a1ead845bfe7ad3167dd34d799cc7ebf3662b6946f0b9f6e240",
+        "publish_recovery_session_with_jubjub": "3f73cb1c1b351e0d917212af4dea92b033a086651318b185cce84bb6dff897f3",
+        "recover_cancel_with_jubjub": "6894f301956fcad93822de70cba3744499674636e861a4fe5d9ffe4399e80eed",
+        "publish_recovery_session_with_p256": "805ed4bfe0853f89bd8a82ced74a62f42dae896c1638b29af223def425a7fb85",
+        "recover_cancel_with_p256": "10e4dfa1ac1feeedf411bdc06826baa6ecec07fa22208a14407eb913c5fe436a"
+      }
+    },
+    "84af5d936644bd416f230eb1630db9a0c2cb7b7241787fd400d07ed8ec0bb4a0": {
+      "maintenance_authority_retired": true,
+      "verifier_key_sha256": {
+        "deposit_unshielded": "62b927ea8f38a57bcef0ebed399f049d33a087d7848b195b3deb88b41a4c48af",
+        "deposit_shielded": "18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+        "activate_initial_device_with_k256": "12e0e078b95ab4239317b79fd9ff12a920aeac6acdee5d21b68b970c95ad22f2",
+        "withdraw_unshielded_with_k256": "4134c50c08155541ed1f14cf386bf388ba605205130c5b1ac4759618800fad30",
+        "append_inbox_with_k256": "13f007dbc09ccb24c9dcce9f51e45d28e5cee1dad837dc8d73877964785923a1",
+        "withdraw_shielded_with_k256": "1ff68dd7815d97823164d67ce64435596e163e2fc629dbc5f473f32e90be02f6",
+        "withdraw_shielded_to_contract_with_k256": "2b8d1c0fe94c9da89bfc76da748390450e6c77407ab1c4a400880f9d4d7dd80c",
+        "rotate_enc_key_with_k256": "f64cc257048f263f336a7acc17873d262ecbf98b9662811d8921a0d64f41a9d9",
+        "add_device_with_k256": "820a4befe8ca82e69078b096802c40f6ed0442b08cb92e945844b9119b31ec5c",
+        "remove_device_with_k256": "d9cb3482eb717edb4e4a3c10a97da88ab7e96673dbcd9d1204822b3b25e5a037",
+        "activate_initial_device_with_jubjub": "cabba4cb6a927cb2097dcc0dbb23a4bf774fe03c5b77b75335c0335ef4a1a108",
+        "withdraw_unshielded_with_jubjub": "3aabd4e90531c66323648a1478382ab2782de70a1750a09b3a26fb53a844ec91",
+        "append_inbox_with_jubjub": "191a9f6ce2aad7aceb7711ae3675939bc6aeca1601cef7b87cd1cd68cc2ba0dd",
+        "withdraw_shielded_with_jubjub": "9ad695e3e5c5e8395b377b5a78c3a02cc2b239909b0b5b94b6d32665f393c3f7",
+        "withdraw_shielded_to_contract_with_jubjub": "6e90f64fbe455f695e63ee3d3c5c8436a5b3f0a104d09d2495a34948687a7f43",
+        "rotate_enc_key_with_jubjub": "d170c5f05a7ddc63247da084225ad6a861d826e81eed1f9aa889e3f7f1ccf64b",
+        "add_device_with_jubjub": "2634d81aa80a9dbb334aba9598ff2a21d4a320ffed22301c1998421efecdb081",
+        "remove_device_with_jubjub": "ec2126a1f33138c4150108c30d75446f51840f5e024fc2b85faebf53bf18c571",
+        "activate_initial_device_with_p256": "d10eee54fda87065ee5ed3ae60bc2979f314591a797f6b08d28718f13626b8f2",
+        "withdraw_unshielded_with_p256": "55b8c86d4abe8695e68a67a48dd8521eee16681c69c9aa833f91b49908bc725a",
+        "append_inbox_with_p256": "19b56c4596104295e5506855ec43e0c2c881575ccdb1eb0e947db4c10fa42808",
+        "withdraw_shielded_with_p256": "bb0ad98f0a40a8aef4b79d73f25dd10bed30b82c1aaf0395e67fa515ee5e688c",
+        "withdraw_shielded_to_contract_with_p256": "6931fcd79b4ad125ba044ba028684f19a02b8a389e3a9461b6fb6fa33ad1dece",
+        "rotate_enc_key_with_p256": "1f8455a53558ecd21d6c07b33840e70a3c51744bd8cb4953be823ed9282fceef",
+        "add_device_with_p256": "e6a3e913bb2aeaa5ff347f2736dd89cd664348ac693e483b99e56be426f4228d",
+        "remove_device_with_p256": "8c7e44143cf6ca915b6793121b3a6300376290fad96a4af54ba8a584a3de87f5",
+        "withdraw_unshielded_with_grant_k256": "7615160d2f424458a0765844843ff411a5902ab70ab8dcb7411b9a0530895f9c",
+        "withdraw_shielded_with_grant_k256": "54e7d3986321e02b9dfe0a85a4ac9c82a8404e2fd148828f84c79f4b3b56343b",
+        "withdraw_shielded_to_contract_with_grant_k256": "2535ff7e5ca924b603981a66a71ad1b6576d3e6b03aca6796215225f9d42e236",
+        "issue_grant_with_k256": "a4164fde134c9c83bb9ccb76c0aa5078f3513857a756caf09867c4f37a31f5d9",
+        "revoke_grant_with_k256": "15a23db537cc7dbd975c3aa660f2ea4856f55f376886c8f43d64bbdc5bc4c6f4",
+        "revoke_all_grants_with_k256": "83f2f0a4c0714585c56d99e09651e7aa6adb49a3a0841ea7276c7b81eb214e2a",
+        "withdraw_unshielded_with_grant_jubjub": "8b3adfa04fe065921c49cdb0ec0328d37fb186cb4dafd12931383b531a64db4f",
+        "withdraw_shielded_with_grant_jubjub": "f794e08ecd0f121fc5a305812ff614481fb60af9f8ae9923a50a887842ce192f",
+        "withdraw_shielded_to_contract_with_grant_jubjub": "ce5eea531b3d62c6e19b5a32ce807ca17663fa2a31f112efc538e9f6a7ad83f6",
+        "issue_grant_with_jubjub": "a1582236c82ab8016e117667042dd5184815e10dfd25a0827302d147da98ece8",
+        "revoke_grant_with_jubjub": "6e568dd1c418ec3fae6b87026d5a97350185724ff6d66c7e59063afd2f26e99a",
+        "revoke_all_grants_with_jubjub": "fcae6d18ac0160c714193a13c2ee1ec9411442db2c22307a0750eeaa1309ff14",
+        "withdraw_unshielded_with_grant_p256": "2bd476ce6ebe82082d88d5e8b487edbd2fe64d17dff39e9979693a1af87a8594",
+        "withdraw_shielded_with_grant_p256": "07ae1af9bbb0734df9a858091ae613acd9c6d38011846a8e7935b457576f9127",
+        "withdraw_shielded_to_contract_with_grant_p256": "4de736e7ed42852d4714859e2c6cd09d9c93ee27467a359144df6ec8b4b00287",
+        "issue_grant_with_p256": "5e38a3389a7290fe26b277887416e99555b4b3cea68b69ea26d6124095be4962",
+        "revoke_grant_with_p256": "80188d559bf1a220c5604b76064c6c855bbd5f95a458704146dc3dcb5c8d6cb3",
+        "revoke_all_grants_with_p256": "40f51ba2e85e572e2d9a06d1403e3ffbcc6d8ef09d0d056acda424440c6af4c1",
+        "recover_submit": "c6867848137b66d8018788f22b2ccc82a315fd7f27e41584ec3158f6490fb003",
+        "recover_finalise": "29b9274fd40580c9ab05bd993ed221269dd1402724e0f33705b242494193897a",
+        "publish_recovery_session_with_k256": "85346494bf4c1c1991f929bef89439a60be9ae44cbf81242a1e980c2d2edb310",
+        "recover_cancel_with_k256": "18d81accf42e2a1ead845bfe7ad3167dd34d799cc7ebf3662b6946f0b9f6e240",
+        "publish_recovery_session_with_jubjub": "3f73cb1c1b351e0d917212af4dea92b033a086651318b185cce84bb6dff897f3",
+        "recover_cancel_with_jubjub": "6894f301956fcad93822de70cba3744499674636e861a4fe5d9ffe4399e80eed",
+        "publish_recovery_session_with_p256": "805ed4bfe0853f89bd8a82ced74a62f42dae896c1638b29af223def425a7fb85",
+        "recover_cancel_with_p256": "10e4dfa1ac1feeedf411bdc06826baa6ecec07fa22208a14407eb913c5fe436a"
+      }
+    },
+    "883c712ab051af5406603205751d4a66fc69ff78790b505d50d2819e4a351de6": {
+      "maintenance_authority_retired": true,
+      "verifier_key_sha256": {
+        "deposit_unshielded": "62b927ea8f38a57bcef0ebed399f049d33a087d7848b195b3deb88b41a4c48af",
+        "deposit_shielded": "18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+        "activate_initial_device_with_k256": "12e0e078b95ab4239317b79fd9ff12a920aeac6acdee5d21b68b970c95ad22f2",
+        "withdraw_unshielded_with_k256": "4134c50c08155541ed1f14cf386bf388ba605205130c5b1ac4759618800fad30",
+        "append_inbox_with_k256": "13f007dbc09ccb24c9dcce9f51e45d28e5cee1dad837dc8d73877964785923a1",
+        "withdraw_shielded_with_k256": "1ff68dd7815d97823164d67ce64435596e163e2fc629dbc5f473f32e90be02f6",
+        "withdraw_shielded_to_contract_with_k256": "2b8d1c0fe94c9da89bfc76da748390450e6c77407ab1c4a400880f9d4d7dd80c",
+        "rotate_enc_key_with_k256": "f64cc257048f263f336a7acc17873d262ecbf98b9662811d8921a0d64f41a9d9",
+        "add_device_with_k256": "820a4befe8ca82e69078b096802c40f6ed0442b08cb92e945844b9119b31ec5c",
+        "remove_device_with_k256": "d9cb3482eb717edb4e4a3c10a97da88ab7e96673dbcd9d1204822b3b25e5a037",
+        "activate_initial_device_with_jubjub": "cabba4cb6a927cb2097dcc0dbb23a4bf774fe03c5b77b75335c0335ef4a1a108",
+        "withdraw_unshielded_with_jubjub": "3aabd4e90531c66323648a1478382ab2782de70a1750a09b3a26fb53a844ec91",
+        "append_inbox_with_jubjub": "191a9f6ce2aad7aceb7711ae3675939bc6aeca1601cef7b87cd1cd68cc2ba0dd",
+        "withdraw_shielded_with_jubjub": "9ad695e3e5c5e8395b377b5a78c3a02cc2b239909b0b5b94b6d32665f393c3f7",
+        "withdraw_shielded_to_contract_with_jubjub": "6e90f64fbe455f695e63ee3d3c5c8436a5b3f0a104d09d2495a34948687a7f43",
+        "rotate_enc_key_with_jubjub": "d170c5f05a7ddc63247da084225ad6a861d826e81eed1f9aa889e3f7f1ccf64b",
+        "add_device_with_jubjub": "2634d81aa80a9dbb334aba9598ff2a21d4a320ffed22301c1998421efecdb081",
+        "remove_device_with_jubjub": "ec2126a1f33138c4150108c30d75446f51840f5e024fc2b85faebf53bf18c571",
+        "activate_initial_device_with_p256": "d10eee54fda87065ee5ed3ae60bc2979f314591a797f6b08d28718f13626b8f2",
+        "withdraw_unshielded_with_p256": "55b8c86d4abe8695e68a67a48dd8521eee16681c69c9aa833f91b49908bc725a",
+        "append_inbox_with_p256": "19b56c4596104295e5506855ec43e0c2c881575ccdb1eb0e947db4c10fa42808",
+        "withdraw_shielded_with_p256": "bb0ad98f0a40a8aef4b79d73f25dd10bed30b82c1aaf0395e67fa515ee5e688c",
+        "withdraw_shielded_to_contract_with_p256": "6931fcd79b4ad125ba044ba028684f19a02b8a389e3a9461b6fb6fa33ad1dece",
+        "rotate_enc_key_with_p256": "1f8455a53558ecd21d6c07b33840e70a3c51744bd8cb4953be823ed9282fceef",
+        "add_device_with_p256": "e6a3e913bb2aeaa5ff347f2736dd89cd664348ac693e483b99e56be426f4228d",
+        "remove_device_with_p256": "8c7e44143cf6ca915b6793121b3a6300376290fad96a4af54ba8a584a3de87f5",
+        "withdraw_unshielded_with_grant_k256": "7615160d2f424458a0765844843ff411a5902ab70ab8dcb7411b9a0530895f9c",
+        "withdraw_shielded_with_grant_k256": "54e7d3986321e02b9dfe0a85a4ac9c82a8404e2fd148828f84c79f4b3b56343b",
+        "withdraw_shielded_to_contract_with_grant_k256": "2535ff7e5ca924b603981a66a71ad1b6576d3e6b03aca6796215225f9d42e236",
+        "issue_grant_with_k256": "a4164fde134c9c83bb9ccb76c0aa5078f3513857a756caf09867c4f37a31f5d9",
+        "revoke_grant_with_k256": "15a23db537cc7dbd975c3aa660f2ea4856f55f376886c8f43d64bbdc5bc4c6f4",
+        "revoke_all_grants_with_k256": "83f2f0a4c0714585c56d99e09651e7aa6adb49a3a0841ea7276c7b81eb214e2a",
+        "withdraw_unshielded_with_grant_jubjub": "8b3adfa04fe065921c49cdb0ec0328d37fb186cb4dafd12931383b531a64db4f",
+        "withdraw_shielded_with_grant_jubjub": "f794e08ecd0f121fc5a305812ff614481fb60af9f8ae9923a50a887842ce192f",
+        "withdraw_shielded_to_contract_with_grant_jubjub": "ce5eea531b3d62c6e19b5a32ce807ca17663fa2a31f112efc538e9f6a7ad83f6",
+        "issue_grant_with_jubjub": "a1582236c82ab8016e117667042dd5184815e10dfd25a0827302d147da98ece8",
+        "revoke_grant_with_jubjub": "6e568dd1c418ec3fae6b87026d5a97350185724ff6d66c7e59063afd2f26e99a",
+        "revoke_all_grants_with_jubjub": "fcae6d18ac0160c714193a13c2ee1ec9411442db2c22307a0750eeaa1309ff14",
+        "withdraw_unshielded_with_grant_p256": "2bd476ce6ebe82082d88d5e8b487edbd2fe64d17dff39e9979693a1af87a8594",
+        "withdraw_shielded_with_grant_p256": "07ae1af9bbb0734df9a858091ae613acd9c6d38011846a8e7935b457576f9127",
+        "withdraw_shielded_to_contract_with_grant_p256": "4de736e7ed42852d4714859e2c6cd09d9c93ee27467a359144df6ec8b4b00287",
+        "issue_grant_with_p256": "5e38a3389a7290fe26b277887416e99555b4b3cea68b69ea26d6124095be4962",
+        "revoke_grant_with_p256": "80188d559bf1a220c5604b76064c6c855bbd5f95a458704146dc3dcb5c8d6cb3",
+        "revoke_all_grants_with_p256": "40f51ba2e85e572e2d9a06d1403e3ffbcc6d8ef09d0d056acda424440c6af4c1",
+        "recover_submit": "c6867848137b66d8018788f22b2ccc82a315fd7f27e41584ec3158f6490fb003",
+        "recover_finalise": "29b9274fd40580c9ab05bd993ed221269dd1402724e0f33705b242494193897a",
+        "publish_recovery_session_with_k256": "85346494bf4c1c1991f929bef89439a60be9ae44cbf81242a1e980c2d2edb310",
+        "recover_cancel_with_k256": "18d81accf42e2a1ead845bfe7ad3167dd34d799cc7ebf3662b6946f0b9f6e240",
+        "publish_recovery_session_with_jubjub": "3f73cb1c1b351e0d917212af4dea92b033a086651318b185cce84bb6dff897f3",
+        "recover_cancel_with_jubjub": "6894f301956fcad93822de70cba3744499674636e861a4fe5d9ffe4399e80eed",
+        "publish_recovery_session_with_p256": "805ed4bfe0853f89bd8a82ced74a62f42dae896c1638b29af223def425a7fb85",
+        "recover_cancel_with_p256": "10e4dfa1ac1feeedf411bdc06826baa6ecec07fa22208a14407eb913c5fe436a"
+      }
+    }
+  },
+  "recovered_account": {
+    "device_epoch": "1",
+    "device_count": "1",
+    "pending_recovery": false
+  },
+  "audited_at": "2026-10-16T13:28:32.155Z",
+  "provenance": {
+    "reference_commit": "0d7bb0bc834f2d45d9fe2d84c4d022a30d648423",
+    "node_version": "v22.22.2",
+    "platform": "darwin/arm64",
+    "images": [
+      {
+        "container": "minocrab-account-custody-node-1",
+        "tag": "midnightntwrk/midnight-node:2.1.0-rc.4",
+        "id": "sha256:2ebd05b1f6b79e861848cd24f5e4b308de96c749a71fe6a3a39b2808bd95d9fc",
+        "digests": [
+          "midnightntwrk/midnight-node@sha256:9040c346c27f569b72dfbbad9420cf38fc7cc6a13b38adf814a925bbe9311678"
+        ],
+        "architecture": "arm64"
+      },
+      {
+        "container": "minocrab-account-custody-indexer-1",
+        "tag": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+        "id": "sha256:bac5561cd984e0a15de63c2bf5c4444826d4acb80ea23bfb68cb6ea35d5c1ff5",
+        "digests": [
+          "ghcr.io/midnightntwrk/indexer-standalone@sha256:ecfec6a26b9f8f89b7531e8f7c390f841661fb079bdf0bc57fa2cf8bb3f99c2f"
+        ],
+        "architecture": "arm64"
+      },
+      {
+        "container": "minocrab-account-custody-proof-server-1",
+        "tag": "midnightntwrk/proof-server:9.0.0-rc.8",
+        "id": "sha256:2c9b9917d3dd81b6f47ccdab333064eb6bad0fa0f7b5a0c9087fc7cd1d26cade",
+        "digests": [
+          "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf"
+        ],
+        "architecture": "arm64"
+      }
+    ],
+    "audited_sources_sha256": {
+      "localnet/adapter.ts": "091b6d8d00cf5ebb72cca2c13372785fad9c9b34fe059b687e681d100bacc5ec",
+      "localnet/audit.ts": "bd6c40e4e5a22f5dafc0e685e4933bb33ff7219f80ef1cf6a1001f41cf1d1799",
+      "localnet/check.ts": "7bcb06b2aba5e1b6f7a9414a43eb370d553c4e0cd43217f82afc2fcc3e769381",
+      "localnet/compose.ts": "7012de8030aedd35be88fc6690dc4ae00b3cab8e9d5082cd4710319aac92ab92",
+      "localnet/offline.ts": "2b399ac841e67f1e83f1e94ee08aff40314b7d3d2bf2f69807b114838e6c971a",
+      "localnet/run.ts": "886c9c2ca5c0dcdaa81cc9cdf97dbc3f8ab1bc4c930c32b9858095c9077d9703",
+      "localnet/suite.ts": "086965578839f67769d5bd0a64030a273f4d1bcff093eb2e8d9c69ca82ad54e2",
+      "bin/measure/src/executor.rs": "a03e8d1ec8147703cadc4b7aa5db32da92498645da8d8356e1a6bdfe49213be3",
+      "bin/measure/src/localnet.rs": "efc3297423d558e462014d77034a3bf16a17101c25f1aa3d3cf0e5aa74c0ed2f",
+      "bin/measure/src/main.rs": "382c341745f90d7664647f20a9c9ba500cfded7823e00fcd697703fea1461274",
+      "bin/measure/src/simulator.rs": "2f84a93714e3fc9ef8ae136b38450942795eecb2d09f240cc120f533e373d94c",
+      "crates/account-custody/src/auth.rs": "bd4fe725df259271281838c9680719f06c8273a847dd5abb85436e78ee71439d",
+      "crates/account-custody/src/constructor.rs": "4887a7fb248d1122a7e8dc982a1632af9af5f3aef2889ff8237a009cc7adb165",
+      "crates/account-custody/src/custody.rs": "b20d99e2a5f24767642f79a4778c2e7928154a269fc2f0eebd12ec33fcbcecf6",
+      "crates/account-custody/src/entrypoints.rs": "baa4888dd2c7abb6569ad605cc3a7f747eacd599b7e45d1c83d4d76b490ad9b8",
+      "crates/account-custody/src/grant_entrypoints.rs": "92b60a81472505e930a93b0b4c0c44dac51f38bfffe8ee07924269fbeb038d09",
+      "crates/account-custody/src/grants.rs": "b34f2b54520cd04556f328624f1e8c8eb186e1735f665d70a27d9e12c5261cae",
+      "crates/account-custody/src/lib.rs": "4c9f69ac8345008a9f5e78b87bfe146c625c6774ac96e424e015013942e5f13c",
+      "crates/account-custody/src/p256.rs": "a59e6b6b8c23f023dc1132cebb766ec875c138b88e8181500dc9cca979ad798e",
+      "crates/account-custody/src/p256_entrypoints.rs": "8e18520356f751a1a5cdaf11b180074f65cc9a75ab78576908bfbd5e860aba73",
+      "crates/account-custody/src/recovery.rs": "2e17df999ed1a7e7cc92fa9b32369068e767a56e2603eb2a5d8b769160b09261",
+      "../../contract/src/index.ts": "fceb17b29b2a1ac75305ce74ea9891de8f9f565527fda78e733bfd262e1cb5db",
+      "../../contract/src/node/setup.ts": "437e12a9412ac196ab862e5438ea88b8924776f74b6ba03e7d13820336c5dd49",
+      "../../contract/src/node/wallet.ts": "89d7137a8422b1cf1dc1a6ed35d86fb041dace48628b5c3e05fd6372e4bfa84a",
+      "../../contract/src/tests/auth-coinless.ts": "4cbf468c343de5e4684f498fb373090f2933a24c9d1e2073324ad47703819a3f",
+      "../../contract/src/tests/auth-conformance.ts": "bd38fbf6fac87e301f24c2120fe38366502ad13fab8001b7bb33862f88d9e14f",
+      "../../contract/src/tests/auth-crossimpl.ts": "a96702e29bd586b0347e961e2dc90b00eece9adb570a6650a1930b8d35711164",
+      "../../contract/src/tests/auth-lifecycle.ts": "160f2049f94474b7559d0c30a624d0c52207861113a42f1e9a8898a93a646bb2",
+      "../../contract/src/tests/auth-replay.ts": "f5ab3c6ead636c521b0378b55affce96fde539e376bb5fbdaf6ebd38645ea4c7",
+      "../../contract/src/tests/crossimpl-offline.ts": "3ac6589882f397f8dbe0d43488cddd1c94775302cab8d173ac56053b22584cef",
+      "../../contract/src/tests/custody-discovery.ts": "13f7a69da56cd4ce0e2b089d640f2f9cffb3efa494872a35a5489a39094a0a6a",
+      "../../contract/src/tests/custody-payments.ts": "b504cef6a54fa1a9b8f34f3e3f503bd29c453e09fcdb65080c43ccc644c247e9",
+      "../../contract/src/tests/custody-shielded.ts": "c6a2df321b71e647889afa93952118241d1f1c629f2647b88ca7e2ff56025aa5",
+      "../../contract/src/tests/custody-unshielded.ts": "7101b53d15cac28e4c450bb7a0a3e6a3494fad865c0a89cf8c5f31b719a16287",
+      "../../contract/src/tests/evidence.ts": "42f0541549aae0b71348d8409d477e8d11327de158246a9b61d407291ee206ed",
+      "../../contract/src/tests/flow.ts": "7d5f3e696490a19ff800c15f2323a712666f5b1bbf51f98c9290de856be62f2d",
+      "../../contract/src/tests/grants-caller-offline.ts": "be326ffd88a1e45b91200263828940e2d530651d44f07d458628ffb774811f11",
+      "../../contract/src/tests/grants-caller.ts": "0c2a46ddf77c12984ffe16734db4b4bbe4e9f85cc0eeae8f549610dd438fb63e",
+      "../../contract/src/tests/grants-conformance.ts": "c6205d5dfd96c2b686abf5dd7ae41f0fb4009045064c57fd54535ebefd96ccd2",
+      "../../contract/src/tests/grants-offline.ts": "e7e89950d379a8aa34d862ffe5c2a2ac6b65bda02dc5191be81b6c5f737011dd",
+      "../../contract/src/tests/grants-unshielded.ts": "43e9e10d7c8d1e8ff10037bae0f35b13301310a9c1f76c3e6463f5838e76323b",
+      "../../contract/src/tests/k256-fixtures.ts": "bbc6dd0af14da24c42912c088e572402326e35163f21817ae2773fca2dd811b5",
+      "../../contract/src/tests/leak-audit.ts": "fab0a65c887e4230650a7296bc37f5523a5a5c979998c416ee7a05ce20278618",
+      "../../contract/src/tests/observer.ts": "a2b6441037dfe9c1eb9f23818a907c6711b41c03d054ed01a7d0815c034e72b0",
+      "../../contract/src/tests/p256-browser/client.ts": "155a16d828698618cafe0dde05bb8872b3c5dcaec2d273abe60346a5765e11fb",
+      "../../contract/src/tests/p256-browser/index.html": "3fbdc115250187a7be268bfb995b6f8488f3c8e34c01c7aa7368dc0e2db0cedd",
+      "../../contract/src/tests/p256-browser-evidence.ts": "869a25e03f953344fe74fea78199684f7e8e2c485f55604c0754b469f7c4df86",
+      "../../contract/src/tests/p256-browser.ts": "203f7ea9cc484f16444ea447c97bd2f0fb1bb5d6a8ba7a67a68be65e2c56b8cd",
+      "../../contract/src/tests/p256-conformance.ts": "7bcc3bbeb0947e1bdf57e4e3ac154ef1d496fcf34c09d045001811469db6683a",
+      "../../contract/src/tests/p256-fixtures.ts": "2e381e5cece4814b2e71de9920649851191e73b6ac997c72addcb94c8c2995ee",
+      "../../contract/src/tests/p256-measure.ts": "bf0c0095d8d166349ee5d7716d84bfd0bbee5e48b88456a0b9362f8409b13eec",
+      "../../contract/src/tests/p256-offline.ts": "617ec5db04e8ed057c9d9d4cf57b9a6c04887c8f35f79d0962c6f15addbae2cf",
+      "../../contract/src/tests/p256-report.ts": "c8eb5f477b334832053ed67b065655beea75f0407986f46e79b8a2dbf321dc3a",
+      "../../contract/src/tests/probe-block-time.ts": "86c60861109ac8358295187d42da3c7ca7be670a73d0ab3b6f6b05db8b381d7c",
+      "../../contract/src/tests/probe-dismiss-cost.ts": "ef9deb89c48548b2f40860af6433ec0f416b686fffc39c1911558f6931731981",
+      "../../contract/src/tests/probe-onchain-vk.ts": "2b2656c5f72fa09f36a01889ebfbcf46aada92d844e3d15ece6cb783714c9d3f",
+      "../../contract/src/tests/probe-revocation.ts": "1d1218e82a92617b2d831825e72e74a2f690efe3d33cb6062f6b8d8e017cd80e",
+      "../../contract/src/tests/probe-vk-derived-pk.ts": "75677ee4cbb18f7065d28ec72fdaa1b2fbde8b17e7da3b55221f906bae58491a",
+      "../../contract/src/tests/probe-wave-ceiling.ts": "cc1be64f273a70730bb9b736d28f5937419a714e58e18248c71460e45330dda2",
+      "../../contract/src/tests/recovery-conformance.ts": "ddbda067076d43429a22fd2596da1231c1fd834b006df37ca3ea93213bb8105b",
+      "../../contract/src/tests/recovery-offline.ts": "e18a74a1ae4afa484b40192ed3d161af4a37c4006ac658e1528f5ac9c5f08634",
+      "../../contract/src/tests/recovery-sim.ts": "676d31dc436e40035218d6317f573d9b99a190e3ed830eaf2e56772e9bbfd857",
+      "../../contract/src/tests/runner.ts": "afaa6e9b685402b3f31ff943326b70a294e3793b72b93a42bc3ecad4c01b1299",
+      "../../contract/src/tests/sim.ts": "8f6552f4731ec9d7ee8dca3562c9a389bdf0feca3acfe049b9be084103f77df9",
+      "../../contract/src/tests/toolchain-offline.ts": "f75529e895a5e244f68519c5010b8e386d11e4b6798311c5804bf88b7b4cf0c0",
+      "../../contract/src/tests/unit-offline.ts": "be0b660a35835681e8bc15ad7bfd9c8a030449b5e86ba92c0a500c7165c84a2f",
+      "../../contract/src/tests/vectors/grants-e1.json": "6693f6b5507f240c58efabb89f12cb57a282505ad681e325df532762d23c0e9f",
+      "../../contract/src/tests/vectors/grants-v3.json": "5703d72e3e0937d0d72398251fa23e40c1e66195dc17088d5d66d4a3c9344bc7",
+      "../../contract/src/wallet/account.ts": "4280bbffe324e4da18f22c33d50169d8b5261fefec389697d2868706c7a53bc7",
+      "../../contract/src/wallet/capture.ts": "d4b40b8562ea645e38f4ccd24d6277dd281f14cefc70f058f498846984d1b2b0",
+      "../../contract/src/wallet/contract.ts": "1f7afef8d4fa921d5f2431e61d8cec7570c242c130435a4bfd894b88183eea66",
+      "../../contract/src/wallet/discovery.ts": "d2ce9ce8ede982fbcac1aa91c295f34925e7e40201cb1c2d95a24f371730bf9c",
+      "../../contract/src/wallet/hex.ts": "606025c12369015fcf20660e1e10cd9188939340677914cad66e006c78f00c34",
+      "../../contract/src/wallet/inbox.ts": "3c4bce6dd5e92eda4b8e2dda15fc4aef91003300c4296cb3794a1d8d695a5922",
+      "../../contract/src/wallet/recovery-gate.ts": "4367c68b64d12ab7216e4c9aabe4686a65835ca873b4f1d4842ff62398180389",
+      "../../contract/src/wallet/recovery.ts": "8a92114a7d9c3e1b4f5188b8d660d1459c58b70b715992c4b5d144a1bf7baf2c",
+      "../../contract/src/wallet/signer-p256.ts": "5a2b9e646283425fefcdf2f70dd058976aa772b1c11a10522df0eaa059787c76",
+      "../../contract/src/wallet/signer.ts": "4c3d593c0947641a116bfca059de399c1fcff24d37c430a38bbbf493c8e3cc8b",
+      "../../contract/src/wallet/wave-deploy.ts": "6d1de9aa21b1cc772df3ce9dd6759a5100c85f11f6fa4bf99453853810be8f9a",
+      "../../contract/src/wallet/webauthn.ts": "7470841b5899239c5f2ade0da0bf6008012549a47620371a0902f37b03a4363c",
+      "../../contract/src/wallet/witnesses.ts": "7eadb415ac132fa06670633539573d83904e3d6b126cda020b7244cb2d2f89c0",
+      "Cargo.toml": "37047f5f8176479dc4eec248a399a46cac1ebf5e5e95a3ccafb619de429e9bcd",
+      "Cargo.lock": "41fd5cd38c798b2441f83414d5c2423d74b3db5831f43063148942a7f04b284f",
+      "bin/measure/Cargo.toml": "c16babfc789328e801c083d5b5399658a115c54bed1ad03ed81cb2f28ff31f8f",
+      "crates/account-custody/Cargo.toml": "5c951248ff7ed7f09a3768d978a784241c98682c811a59dd4a52ac485b0fff2a",
+      "package.json": "7497ab251cfddad4080f6bde44fa76a161c40d8c6e268dca560afba3827c1b04",
+      "package-lock.json": "834f28e3cf305169e54ea7ec977f3b2741d82175a37de76897427e442a9867ae",
+      "../../contract/package.json": "ed122ba9646137c7a833a7ea6c42d3d98460d9332e11d7c00c5d64acc36cf4e1",
+      "../../contract/package-lock.json": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51",
+      "../../contract/infra/docker-compose.yml": "9216038eedf9d5c2bd783e4bd3a8f3875835aea538641e9397f0b666e27199a3",
+      "../../contract/infra/docker-compose.macos.yml": "5d13a8016762fd34723f5d6c36d6246c459ea92a9801e7847deb3efb345da809",
+      "reference/provenance.json": "191e7e1da65e1ee8471914fa34aec3f1cfbd9862d68019973aa49d840a1baacf",
+      "../../contract/contracts/managed/account/contract/index.js": "1824d7fef8b864b2bc97d697f4a70aab1ac00750ba8c8cc68a5381651ce86e15"
+    },
+    "sdk_entry_modules_sha256": {
+      "@midnight-ntwrk/midnight-js-contracts": "16a0f7566e9b27761cb34f256f005c7e8e757689bf273358d588b5c71ff26d7e",
+      "@midnight-ntwrk/midnight-js-types": "f658eb4881a82fdd5804f94b544220a610dddb376638bdff2e272de14ca80fb4",
+      "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "9dd210a50a2e0b96d20d62ef03394a27ac26e231caffdbb1e055692f497446f7",
+      "@midnight-ntwrk/midnight-js-http-client-proof-provider": "c2a6a7f3bc901c5b4789f253a62aa542fda70e6d09df59b71bdfc5c92c9f085d",
+      "@midnight-ntwrk/compact-js": "9929fcdc257df83fa5dbe608d5a517ef033333d540c3bb8d7a752c0f13d27309",
+      "@midnight-ntwrk/compact-runtime": "f59514c653cc7f267b44e898a11aa0f81f7fbc7418011cb3513ae4b7119ca10f",
+      "@midnightntwrk/ledger-v9": "effa3b1ad14755663904500a5ababa86fd02bdd4c0f52b5bd73e94253e592675"
+    },
+    "rust_bridge_binary_sha256": "21de6a9c65f05b32eaf0a3f110cf59feb5aa1e0987883437c1d3b01793cfa277",
+    "native_zkir_sha256": {
+      "deposit_unshielded": "bc15d4468314e27fc710c8c81655f0362e3cdba0c49a23d2409f00ddb596002b",
+      "deposit_shielded": "4e99e5a98ab73571821fd6db10ad147285a37ed6363979f38839adf7292e0e39",
+      "activate_initial_device_with_k256": "8846ab073b5736652f3549f5c5e5ad60821afe49b973f912a311a563259122e7",
+      "withdraw_unshielded_with_k256": "caac5f0eca92b9028de1b3c38ed0e658aad2db766e8c3d3c3612e05967e2caa8",
+      "append_inbox_with_k256": "94adb57ca2458bf2bf7e82ea83cf9e8414893a483b16e3c72be9eb850d8a31f4",
+      "withdraw_shielded_with_k256": "7cb00aa18731d4cd7dd94eb2ed37d77e9c762fa00ac2cfe718a3117a54ab445c",
+      "withdraw_shielded_to_contract_with_k256": "2d5efbd39a62345b4231d9f6bd9e619467a5848e27e3981fb6d62cebf56ba9ef",
+      "rotate_enc_key_with_k256": "0c95f1cfd536cafada62b15330815c9c5ed6aac7fd298bf49e79b5cfef9f02cc",
+      "add_device_with_k256": "906ece53a05ee87b94f402387130b8ea69a71a8bcd3daf768c579b7fd6112734",
+      "remove_device_with_k256": "2c564ad1f3af6ce83038765c1e10c2c41612e6483d9d1342b542f67eb7ca2ec2",
+      "activate_initial_device_with_jubjub": "4ceb0b96a00227f43c341a9e7fcc7d03b44b3459138eb578a51cac748cbe3f98",
+      "withdraw_unshielded_with_jubjub": "1e1d1fca379b6d59628c33699abb37c12fe8477ea3f6cbdd670924d934663ff1",
+      "append_inbox_with_jubjub": "899a0b629616b66fdfd54911559b77fcf476a5c55464a87dac521ca1422f6295",
+      "withdraw_shielded_with_jubjub": "be8bf7d194ac0a218f9173c6e789b65bedbe5c174b244da69de1def6682989b0",
+      "withdraw_shielded_to_contract_with_jubjub": "f6cc1bfa5618cd4f52dfef09990d21f53bf91021199c5fe43abfd67ebd925138",
+      "rotate_enc_key_with_jubjub": "ace803edec17f99210d38430e55a000ea02c8a61d698ad61c9899bc5ca8d9f7b",
+      "add_device_with_jubjub": "dfbc854a00751acfdd2d1297bc4659967e0870be3a90b37817cc63f5acd9aa74",
+      "remove_device_with_jubjub": "ca9c15dd89185ec607bddbed123dfe7ca87ff5969882bfd3fcba4bc4c0ad828a",
+      "activate_initial_device_with_p256": "810ea829046734e8ba304af5dadcdaf0941036a51baccc920fae7e890c3383f7",
+      "withdraw_unshielded_with_p256": "289496fa7fbeaf42825002d09ebb6573f08c0e3ca6e6785cafb668aa131d0e72",
+      "append_inbox_with_p256": "764ba2e8d61c95a2c2dc0d71ae776efc0fe35ff653ee66db6784585b01d95d80",
+      "withdraw_shielded_with_p256": "5d9e6d94631ef420fc98df9a96060e614799e33658f7bb29e7aac7413fa89682",
+      "withdraw_shielded_to_contract_with_p256": "86c3fc11013c2c0ce191ace6a66c6bb2aba7e290abc7ad8ea48df2534ab26e4c",
+      "rotate_enc_key_with_p256": "887c381ee3b17690134a778e3c530ef6bd008ac5029808bb6e193b714a8ca4ef",
+      "add_device_with_p256": "28dceb8a0228d0a25b718d04ba91912c83a780e8aefc2da02ebbd97f55e89b8f",
+      "remove_device_with_p256": "17d77e3c7b11b39e8df43fc443da076237f18a7f5bcc990fc2bf3858480232cf",
+      "withdraw_unshielded_with_grant_k256": "d3373ea9d56de9a90f1fe0d940fcce326713819180c727687ded3af56772590b",
+      "withdraw_shielded_with_grant_k256": "2ab53a77c71169c8b872e544deda9715a125fe8647d24dd10309104d6ecf1cb9",
+      "withdraw_shielded_to_contract_with_grant_k256": "f49055bc28c98aa62a33da0adb9a7941ed472eee4ed90e5c81c9ed185db1eab6",
+      "issue_grant_with_k256": "f573c6cff22808b98f46c5ae2d69ead2834bf2c686bf0010734a6ff180725ded",
+      "revoke_grant_with_k256": "c2658c91ed67c0bd567a450560c89a69571b0319d713cf96bf6fc96152fffe09",
+      "revoke_all_grants_with_k256": "366ec8d758f55545d1bc7ceb3105bcc6dff49d7fdcb351dde89ea3123f9ea117",
+      "withdraw_unshielded_with_grant_jubjub": "92fbaf63fb381fe45b237de6ac1d7c0eff7c868bd327c44596dc3e7dd2c63210",
+      "withdraw_shielded_with_grant_jubjub": "36353b4c5784345ff2543827ca8acd982a476da75a698ee9f141d14927fd6976",
+      "withdraw_shielded_to_contract_with_grant_jubjub": "fa568a3852bda085bd8d18f54df427ffcd39733f04d957041958872e0a6c2d02",
+      "issue_grant_with_jubjub": "347ada4698aaac6125a445e7ef67690d043e2f995bc6be69e42f82a0387d9879",
+      "revoke_grant_with_jubjub": "856af34573733116aa117a2d60d0a75f9522b42180f7ad13a784bd281756e8db",
+      "revoke_all_grants_with_jubjub": "d71dd79a63c2afa52f805672770782dfd80c82793fb295b7fe53f3c594b7e426",
+      "withdraw_unshielded_with_grant_p256": "39136f337e6d8c8eefe705d66a126f3ee69ac936063f00cad17626bd8d4b949a",
+      "withdraw_shielded_with_grant_p256": "065e7c0c09a3f878a0d26b3657300bcd61bb72169c72cc2b41afbb60006b3f3f",
+      "withdraw_shielded_to_contract_with_grant_p256": "d5ceabc61b1bae40115b6ad348c1b2e0e0baf6c434e265cf2de8ed7c36991266",
+      "issue_grant_with_p256": "33cfa99674877d40906aeb9f67fd45af2edb3e75fb586f22508d59e095add4f5",
+      "revoke_grant_with_p256": "82407d46d0671a1840a4f72ea6f1bbe5c9f0d9ea24ccd9c3000b756ee86e8a72",
+      "revoke_all_grants_with_p256": "5e95dc014df62393e6cf944d5b9eeb58861fcae7f730ae18eb4ac46bbf6ac062",
+      "recover_submit": "09b504c1d4a1dd2665e0d40e1255cf6549e23904ec0f1eabf1354faddd314d01",
+      "recover_finalise": "83e56b0e8f05399b5750223250a9ad83f9b9c1646d86af2cd648dd93a3d9a71c",
+      "publish_recovery_session_with_k256": "e8e82b3d92d9331b5b81ed3ff34da05a82c194e96e9ec4bf945c9c6397baaf96",
+      "recover_cancel_with_k256": "ae4f982414d8386691a5f4dc1b9b34208c7680ed9fb17cd2e5c378ab6d085dfa",
+      "publish_recovery_session_with_jubjub": "4454bac5ec5389e7a89ff9e2b112e6f72fd8ef568af57a4d0a1049b14bdc2bef",
+      "recover_cancel_with_jubjub": "ae3ba3705c320f54b537c96f213160a155fbe287246b9456d63c5e83cda53d03",
+      "publish_recovery_session_with_p256": "891bf27d735c077d484e381f0cc82b76df03bd36f9f7c190cb059cfbd6219559",
+      "recover_cancel_with_p256": "8d604f76c3217d854864e3d8846f4ddb03338b8e136b1bbd1d784a3cea6400c5"
+    }
+  }
+}

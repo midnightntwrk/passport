@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = ["crates/account-custody", "bin/measure"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+reference-zkir = { package = "midnight-zkir", git = "https://github.com/midnightntwrk/midnight-zkir", rev = "e82d81d25aabcc5f5092e2bd559083487f577914" }
+anyhow = "1"
+thiserror = "2"
+midnight-zkir-v3 = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+minocrab = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0" }
+minocrab-std = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0" }
+minocrab-zkir = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0" }
+minocrab-sim = { git = "https://github.com/sig-net/minocrab", rev = "79b2addcb9704c3a5916f2fec8e5c85f29e628c0", features = ["unstable"] }
+midnight-base-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-onchain-state = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-storage = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-onchain-runtime = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-onchain-vm = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-coin-structure = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+project-account-custody = { path = "crates/account-custody" }
+
+[patch.crates-io]
+midnight-transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-transient-crypto-v2 = { package = "midnight-transient-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", tag = "transient-crypto-2.2.0-rc.1" }
+midnight-serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+midnight-base-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "04c9c5d9bcebb8d4427d8589fb54d58a55599c14" }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 3

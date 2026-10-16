@@ -1,0 +1,23 @@
+{
+  "name": "minocrab-account-custody-experiment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile:reference": "compact compile +0.35.0 --feature-zkir-v3 --skip-zk reference/contracts/account.compact reference/contracts/managed/account && python3 scripts/check-reference.py",
+    "fixtures": "tsx scripts/fixtures.ts",
+    "localnet:keys": "cargo run --release -p project-custody-measure -- localnet-keys",
+    "test:localnet-offline": "node ../../contract/node_modules/tsx/dist/cli.mjs localnet/offline.ts",
+    "test:localnet-prover": "node ../../contract/node_modules/tsx/dist/cli.mjs localnet/check.ts",
+    "test:localnet": "node ../../contract/node_modules/tsx/dist/cli.mjs localnet/run.ts",
+    "audit:localnet": "node ../../contract/node_modules/tsx/dist/cli.mjs localnet/audit.ts"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@noble/curves": "2.2.0",
+    "@noble/hashes": "2.2.0"
+  },
+  "devDependencies": {
+    "tsx": "4.21.0"
+  }
+}

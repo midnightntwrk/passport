@@ -1,0 +1,1156 @@
+{
+  "configuration": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4 Max",
+    "rayon_threads": "default",
+    "iterations": 3,
+    "warmup_proofs": 1,
+    "binary_sha256": "c9e5d3b80a26885c11098ac866904bf0916685b3c76b060851152ddd715e946e",
+    "cargo_lock_sha256": "5b1e2bd8704be903c97dfb5f177d1b8c7ec43e63c5ec8bec90f6173d7c684ff9"
+  },
+  "started_at": "2026-10-15T09:33:05.047817+00:00",
+  "measurements": [
+    {
+      "circuit": "activate_initial_device_with_jubjub",
+      "side": "compactc",
+      "k": 14,
+      "rows": 13412,
+      "keygen_s": 0.500263,
+      "prove_s": [
+        0.616387708,
+        0.630096833,
+        0.600133042
+      ],
+      "verify_s": [
+        0.002921292,
+        0.002666542,
+        0.00274425
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "activate_initial_device_with_jubjub",
+      "side": "minocrab",
+      "k": 14,
+      "rows": 13412,
+      "keygen_s": 0.501736334,
+      "prove_s": [
+        0.6033685,
+        0.610538792,
+        0.607759541
+      ],
+      "verify_s": [
+        0.002691292,
+        0.002923167,
+        0.002856083
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "side": "minocrab",
+      "k": 14,
+      "rows": 14371,
+      "keygen_s": 0.551278166,
+      "prove_s": [
+        0.662524833,
+        0.671232834,
+        0.666025791
+      ],
+      "verify_s": [
+        0.002881458,
+        0.0028825,
+        0.0030045
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "side": "compactc",
+      "k": 14,
+      "rows": 14094,
+      "keygen_s": 0.541375,
+      "prove_s": [
+        0.670971791,
+        0.699922958,
+        0.644092959
+      ],
+      "verify_s": [
+        0.002987042,
+        0.002887584,
+        0.002896167
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "add_device_with_jubjub",
+      "side": "compactc",
+      "k": 15,
+      "rows": 26771,
+      "keygen_s": 1.030577167,
+      "prove_s": [
+        1.1190319579999999,
+        1.124716542,
+        1.107228959
+      ],
+      "verify_s": [
+        0.00294125,
+        0.00285675,
+        0.002888834
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "add_device_with_jubjub",
+      "side": "minocrab",
+      "k": 15,
+      "rows": 26765,
+      "keygen_s": 1.018099667,
+      "prove_s": [
+        1.116286083,
+        1.104516584,
+        1.108140334
+      ],
+      "verify_s": [
+        0.002854834,
+        0.002907292,
+        0.002911625
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 54396,
+      "keygen_s": 2.356257375,
+      "prove_s": [
+        2.372526084,
+        2.354095583,
+        2.338576708
+      ],
+      "verify_s": [
+        0.003112917,
+        0.00310525,
+        0.003231667
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 58897,
+      "keygen_s": 2.6154691249999997,
+      "prove_s": [
+        2.371365208,
+        2.422407541,
+        2.412141667
+      ],
+      "verify_s": [
+        0.003156791,
+        0.003134,
+        0.003082208
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "side": "compactc",
+      "k": 16,
+      "rows": 32790,
+      "keygen_s": 1.5446811660000002,
+      "prove_s": [
+        1.945169875,
+        1.942753541,
+        1.9634607910000001
+      ],
+      "verify_s": [
+        0.003140958,
+        0.002912834,
+        0.002883166
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 32784,
+      "keygen_s": 1.552680166,
+      "prove_s": [
+        1.946654291,
+        1.9582265410000002,
+        1.989437167
+      ],
+      "verify_s": [
+        0.002943666,
+        0.003079542,
+        0.003139709
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 60423,
+      "keygen_s": 2.44672375,
+      "prove_s": [
+        2.411243875,
+        2.458206709,
+        2.491210042
+      ],
+      "verify_s": [
+        0.003312041,
+        0.003117709,
+        0.0033685
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 64924,
+      "keygen_s": 2.697288542,
+      "prove_s": [
+        2.476913875,
+        2.478295416,
+        2.487206042
+      ],
+      "verify_s": [
+        0.003306708,
+        0.003189959,
+        0.00339475
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "deposit_shielded",
+      "side": "compactc",
+      "k": 13,
+      "rows": 6484,
+      "keygen_s": 0.194275833,
+      "prove_s": [
+        0.277108333,
+        0.272031,
+        0.301690042
+      ],
+      "verify_s": [
+        0.002566083,
+        0.002522125,
+        0.002616292
+      ],
+      "proof_bytes": 5392,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "deposit_shielded",
+      "side": "minocrab",
+      "k": 13,
+      "rows": 6484,
+      "keygen_s": 0.194047834,
+      "prove_s": [
+        0.27349625,
+        0.276008333,
+        0.275751083
+      ],
+      "verify_s": [
+        0.002643333,
+        0.002546625,
+        0.00251425
+      ],
+      "proof_bytes": 5392,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "side": "minocrab",
+      "k": 9,
+      "rows": 320,
+      "keygen_s": 0.018390458,
+      "prove_s": [
+        0.038926167,
+        0.03874125,
+        0.039791584
+      ],
+      "verify_s": [
+        0.002436834,
+        0.002262334,
+        0.002234542
+      ],
+      "proof_bytes": 3824,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "side": "compactc",
+      "k": 9,
+      "rows": 311,
+      "keygen_s": 0.019952417,
+      "prove_s": [
+        0.04019775,
+        0.041845041,
+        0.040491959
+      ],
+      "verify_s": [
+        0.002519042,
+        0.002410875,
+        0.002270584
+      ],
+      "proof_bytes": 3824,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "issue_grant_with_jubjub",
+      "side": "compactc",
+      "k": 16,
+      "rows": 52227,
+      "keygen_s": 1.806134041,
+      "prove_s": [
+        2.055847417,
+        2.093066583,
+        2.084854833
+      ],
+      "verify_s": [
+        0.003492541,
+        0.003601667,
+        0.0035105
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "issue_grant_with_jubjub",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 52211,
+      "keygen_s": 1.8088317919999999,
+      "prove_s": [
+        2.079433542,
+        2.076549125,
+        2.077081042
+      ],
+      "verify_s": [
+        0.003589708,
+        0.003531375,
+        0.003532708
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 74093,
+      "keygen_s": 3.752911625,
+      "prove_s": [
+        4.60429075,
+        4.712154916,
+        4.672112042
+      ],
+      "verify_s": [
+        0.003455417,
+        0.003707791,
+        0.003508
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "side": "compactc",
+      "k": 17,
+      "rows": 78604,
+      "keygen_s": 4.047881666,
+      "prove_s": [
+        4.682450417,
+        4.652870916,
+        4.732889209
+      ],
+      "verify_s": [
+        0.003435209,
+        0.003464625,
+        0.003448334
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "remove_device_with_jubjub",
+      "side": "compactc",
+      "k": 15,
+      "rows": 32730,
+      "keygen_s": 1.104667083,
+      "prove_s": [
+        1.1708375,
+        1.165872667,
+        1.161374292
+      ],
+      "verify_s": [
+        0.003107542,
+        0.003613167,
+        0.003351583
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "remove_device_with_jubjub",
+      "side": "minocrab",
+      "k": 15,
+      "rows": 32741,
+      "keygen_s": 1.10477975,
+      "prove_s": [
+        1.22544675,
+        1.200980709,
+        1.23358825
+      ],
+      "verify_s": [
+        0.003230833,
+        0.003159708,
+        0.003688083
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 60920,
+      "keygen_s": 2.531228333,
+      "prove_s": [
+        2.48216725,
+        2.4509155,
+        2.449949542
+      ],
+      "verify_s": [
+        0.003286167,
+        0.003345458,
+        0.003344417
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 65404,
+      "keygen_s": 2.723401167,
+      "prove_s": [
+        2.472975916,
+        2.5076695,
+        2.477471333
+      ],
+      "verify_s": [
+        0.003392541,
+        0.003590583,
+        0.003557541
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_all_grants_with_jubjub",
+      "side": "compactc",
+      "k": 15,
+      "rows": 26645,
+      "keygen_s": 1.028188041,
+      "prove_s": [
+        1.150269917,
+        1.130534666,
+        1.15992675
+      ],
+      "verify_s": [
+        0.00300275,
+        0.003164125,
+        0.002989375
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_all_grants_with_jubjub",
+      "side": "minocrab",
+      "k": 15,
+      "rows": 26639,
+      "keygen_s": 1.015399208,
+      "prove_s": [
+        1.139959916,
+        1.1295676669999999,
+        1.134696833
+      ],
+      "verify_s": [
+        0.002893875,
+        0.002982334,
+        0.002938416
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 54270,
+      "keygen_s": 2.367166875,
+      "prove_s": [
+        2.389749542,
+        2.385604667,
+        2.4032653330000002
+      ],
+      "verify_s": [
+        0.003173833,
+        0.003377334,
+        0.003025167
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 58771,
+      "keygen_s": 2.599202458,
+      "prove_s": [
+        2.440613875,
+        2.477444791,
+        2.441766083
+      ],
+      "verify_s": [
+        0.003436708,
+        0.003103791,
+        0.00308225
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_grant_with_jubjub",
+      "side": "compactc",
+      "k": 15,
+      "rows": 26871,
+      "keygen_s": 1.03538,
+      "prove_s": [
+        1.123975375,
+        1.125420334,
+        1.138279209
+      ],
+      "verify_s": [
+        0.0030815,
+        0.003400792,
+        0.003295875
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_grant_with_jubjub",
+      "side": "minocrab",
+      "k": 15,
+      "rows": 26865,
+      "keygen_s": 1.0559165,
+      "prove_s": [
+        1.121224375,
+        1.144277208,
+        1.124558334
+      ],
+      "verify_s": [
+        0.003128,
+        0.003306625,
+        0.003416959
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 54496,
+      "keygen_s": 2.37243625,
+      "prove_s": [
+        2.383513625,
+        2.385056958,
+        2.401310875
+      ],
+      "verify_s": [
+        0.003489084,
+        0.003400833,
+        0.003560292
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 58997,
+      "keygen_s": 2.6097043749999997,
+      "prove_s": [
+        2.422402708,
+        2.493480291,
+        2.435932917
+      ],
+      "verify_s": [
+        0.003334958,
+        0.003835375,
+        0.003747166
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "rotate_enc_key_with_jubjub",
+      "side": "compactc",
+      "k": 15,
+      "rows": 26725,
+      "keygen_s": 1.028778584,
+      "prove_s": [
+        1.1175275,
+        1.111655042,
+        1.1317537500000001
+      ],
+      "verify_s": [
+        0.002933125,
+        0.002940209,
+        0.002975292
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "rotate_enc_key_with_jubjub",
+      "side": "minocrab",
+      "k": 15,
+      "rows": 26719,
+      "keygen_s": 1.027304542,
+      "prove_s": [
+        1.193214833,
+        1.253191625,
+        1.160218333
+      ],
+      "verify_s": [
+        0.00304825,
+        0.003134166,
+        0.003294375
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 54350,
+      "keygen_s": 2.353362292,
+      "prove_s": [
+        2.428950208,
+        2.413103125,
+        2.429865875
+      ],
+      "verify_s": [
+        0.003248042,
+        0.003081375,
+        0.003270625
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 58851,
+      "keygen_s": 2.614754833,
+      "prove_s": [
+        2.422797708,
+        2.469490167,
+        2.452672542
+      ],
+      "verify_s": [
+        0.003154625,
+        0.003291125,
+        0.00308525
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "side": "compactc",
+      "k": 17,
+      "rows": 71717,
+      "keygen_s": 3.020315458,
+      "prove_s": [
+        3.879147417,
+        3.91761225,
+        3.896197375
+      ],
+      "verify_s": [
+        0.003390458,
+        0.00340825,
+        0.003445625
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 71711,
+      "keygen_s": 3.039142625,
+      "prove_s": [
+        3.854288875,
+        3.852504916,
+        3.8945751250000002
+      ],
+      "verify_s": [
+        0.003382292,
+        0.003497917,
+        0.003367125
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 93064,
+      "keygen_s": 4.095807292,
+      "prove_s": [
+        4.693364584,
+        4.706893625,
+        4.657470417
+      ],
+      "verify_s": [
+        0.003828625,
+        0.003703125,
+        0.003662875
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "side": "compactc",
+      "k": 17,
+      "rows": 97568,
+      "keygen_s": 4.332521958,
+      "prove_s": [
+        4.836590083,
+        4.703858042,
+        4.68640075
+      ],
+      "verify_s": [
+        0.003851167,
+        0.003555958,
+        0.003562875
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "side": "compactc",
+      "k": 16,
+      "rows": 55758,
+      "keygen_s": 1.8364720829999999,
+      "prove_s": [
+        2.096516417,
+        2.062325,
+        2.096025166
+      ],
+      "verify_s": [
+        0.003080208,
+        0.003130917,
+        0.003004708
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 55756,
+      "keygen_s": 1.83423025,
+      "prove_s": [
+        2.055739584,
+        2.047136,
+        2.063390083
+      ],
+      "verify_s": [
+        0.003092292,
+        0.003065334,
+        0.003117583
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 75793,
+      "keygen_s": 3.7683106669999997,
+      "prove_s": [
+        4.537755541,
+        4.5522613750000005,
+        4.535627708
+      ],
+      "verify_s": [
+        0.003217125,
+        0.00315125,
+        0.003282458
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "side": "compactc",
+      "k": 17,
+      "rows": 80290,
+      "keygen_s": 4.0245035,
+      "prove_s": [
+        4.537739333,
+        4.531662917,
+        4.578384084
+      ],
+      "verify_s": [
+        0.003436375,
+        0.003265083,
+        0.003472459
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "side": "compactc",
+      "k": 17,
+      "rows": 66014,
+      "keygen_s": 2.9213665,
+      "prove_s": [
+        3.815004166,
+        3.8183842500000003,
+        3.849608583
+      ],
+      "verify_s": [
+        0.003320667,
+        0.003481458,
+        0.003656334
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 71666,
+      "keygen_s": 2.997780916,
+      "prove_s": [
+        3.8269962079999997,
+        3.851651333,
+        3.911502458
+      ],
+      "verify_s": [
+        0.003355333,
+        0.003419292,
+        0.003517333
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 93019,
+      "keygen_s": 4.033913375,
+      "prove_s": [
+        4.622354333,
+        4.604327792,
+        4.642045208
+      ],
+      "verify_s": [
+        0.0035865,
+        0.003927375,
+        0.003515125
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "side": "compactc",
+      "k": 17,
+      "rows": 91865,
+      "keygen_s": 4.2275314999999996,
+      "prove_s": [
+        4.610879791,
+        4.598603709,
+        4.645066292
+      ],
+      "verify_s": [
+        0.003784875,
+        0.003641584,
+        0.003685875
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "side": "compactc",
+      "k": 16,
+      "rows": 50055,
+      "keygen_s": 1.76132425,
+      "prove_s": [
+        2.019721292,
+        2.045672334,
+        2.026392666
+      ],
+      "verify_s": [
+        0.003219959,
+        0.003176459,
+        0.00299075
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 55711,
+      "keygen_s": 1.81979325,
+      "prove_s": [
+        2.052641125,
+        2.059610125,
+        2.062480667
+      ],
+      "verify_s": [
+        0.003013167,
+        0.003163542,
+        0.003064583
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 75748,
+      "keygen_s": 3.771789917,
+      "prove_s": [
+        4.501759875,
+        4.523360333,
+        4.500917375
+      ],
+      "verify_s": [
+        0.003212959,
+        0.003224208,
+        0.003151417
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "side": "compactc",
+      "k": 17,
+      "rows": 74587,
+      "keygen_s": 3.945543959,
+      "prove_s": [
+        4.524475375,
+        4.600626166,
+        4.607984375
+      ],
+      "verify_s": [
+        0.003213625,
+        0.003435166,
+        0.003262542
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "side": "compactc",
+      "k": 16,
+      "rows": 38514,
+      "keygen_s": 1.605626292,
+      "prove_s": [
+        1.965389625,
+        1.992668,
+        1.972598667
+      ],
+      "verify_s": [
+        0.003497541,
+        0.003274042,
+        0.003461458
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 38555,
+      "keygen_s": 1.611666958,
+      "prove_s": [
+        1.970481875,
+        1.99621125,
+        1.982236541
+      ],
+      "verify_s": [
+        0.003383125,
+        0.003485875,
+        0.003731041
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "side": "minocrab",
+      "k": 17,
+      "rows": 59898,
+      "keygen_s": 3.53403675,
+      "prove_s": [
+        4.413401167,
+        4.450182042,
+        4.465565375
+      ],
+      "verify_s": [
+        0.003958292,
+        0.003838291,
+        0.003584375
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "side": "compactc",
+      "k": 17,
+      "rows": 64355,
+      "keygen_s": 3.80504,
+      "prove_s": [
+        4.48426125,
+        4.412352,
+        4.453479833
+      ],
+      "verify_s": [
+        0.003427916,
+        0.003389042,
+        0.003652708
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "side": "compactc",
+      "k": 15,
+      "rows": 28877,
+      "keygen_s": 1.055418125,
+      "prove_s": [
+        1.129503958,
+        1.128734583,
+        1.135248583
+      ],
+      "verify_s": [
+        0.003144417,
+        0.003115792,
+        0.003226625
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "side": "minocrab",
+      "k": 15,
+      "rows": 28925,
+      "keygen_s": 1.04253775,
+      "prove_s": [
+        1.120674958,
+        1.148133,
+        1.131940708
+      ],
+      "verify_s": [
+        0.003241834,
+        0.003390542,
+        0.003252208
+      ],
+      "proof_bytes": 5744,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "side": "minocrab",
+      "k": 16,
+      "rows": 56556,
+      "keygen_s": 2.376870584,
+      "prove_s": [
+        2.348678166,
+        2.371627875,
+        2.353880583
+      ],
+      "verify_s": [
+        0.003417292,
+        0.003518333,
+        0.00344725
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "side": "compactc",
+      "k": 16,
+      "rows": 61003,
+      "keygen_s": 2.60888025,
+      "prove_s": [
+        2.383314667,
+        2.393978084,
+        2.41112075
+      ],
+      "verify_s": [
+        0.003488333,
+        0.003301958,
+        0.003452375
+      ],
+      "proof_bytes": 6336,
+      "transaction_bytes": null
+    }
+  ],
+  "completed_at": "2026-10-15T09:45:57.832195+00:00"
+}

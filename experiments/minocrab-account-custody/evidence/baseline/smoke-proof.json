@@ -1,0 +1,19 @@
+{
+  "circuit": "withdraw_unshielded_with_jubjub",
+  "side": "minocrab",
+  "k": 15,
+  "rows": 28925,
+  "keygen_s": 1.02137075,
+  "prove_s": [
+    1.109474958,
+    1.119061792,
+    1.1499891660000001
+  ],
+  "verify_s": [
+    0.003378541,
+    0.003202042,
+    0.003175291
+  ],
+  "proof_bytes": 5744,
+  "transaction_bytes": null
+}

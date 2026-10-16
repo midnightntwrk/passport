@@ -1,0 +1,422 @@
+[
+  {
+    "circuit": "activate_initial_device_with_jubjub",
+    "side": "compactc",
+    "k": 14,
+    "rows": 13412,
+    "zkir_bytes": 5045
+  },
+  {
+    "circuit": "activate_initial_device_with_jubjub",
+    "side": "minocrab",
+    "k": 14,
+    "rows": 13412,
+    "zkir_bytes": 4976
+  },
+  {
+    "circuit": "activate_initial_device_with_k256",
+    "side": "compactc",
+    "k": 14,
+    "rows": 14094,
+    "zkir_bytes": 6637
+  },
+  {
+    "circuit": "activate_initial_device_with_k256",
+    "side": "minocrab",
+    "k": 14,
+    "rows": 14371,
+    "zkir_bytes": 6459
+  },
+  {
+    "circuit": "add_device_with_jubjub",
+    "side": "compactc",
+    "k": 15,
+    "rows": 26771,
+    "zkir_bytes": 9929
+  },
+  {
+    "circuit": "add_device_with_jubjub",
+    "side": "minocrab",
+    "k": 15,
+    "rows": 26765,
+    "zkir_bytes": 9599
+  },
+  {
+    "circuit": "add_device_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 58897,
+    "zkir_bytes": 18822
+  },
+  {
+    "circuit": "add_device_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 54396,
+    "zkir_bytes": 12463
+  },
+  {
+    "circuit": "append_inbox_with_jubjub",
+    "side": "compactc",
+    "k": 16,
+    "rows": 32790,
+    "zkir_bytes": 10297
+  },
+  {
+    "circuit": "append_inbox_with_jubjub",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 32784,
+    "zkir_bytes": 10019
+  },
+  {
+    "circuit": "append_inbox_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 64924,
+    "zkir_bytes": 19201
+  },
+  {
+    "circuit": "append_inbox_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 60423,
+    "zkir_bytes": 12895
+  },
+  {
+    "circuit": "deposit_shielded",
+    "side": "compactc",
+    "k": 13,
+    "rows": 6484,
+    "zkir_bytes": 4525
+  },
+  {
+    "circuit": "deposit_shielded",
+    "side": "minocrab",
+    "k": 13,
+    "rows": 6484,
+    "zkir_bytes": 4594
+  },
+  {
+    "circuit": "deposit_unshielded",
+    "side": "compactc",
+    "k": 9,
+    "rows": 311,
+    "zkir_bytes": 3918
+  },
+  {
+    "circuit": "deposit_unshielded",
+    "side": "minocrab",
+    "k": 9,
+    "rows": 320,
+    "zkir_bytes": 3717
+  },
+  {
+    "circuit": "issue_grant_with_jubjub",
+    "side": "compactc",
+    "k": 16,
+    "rows": 52227,
+    "zkir_bytes": 22946
+  },
+  {
+    "circuit": "issue_grant_with_jubjub",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 52211,
+    "zkir_bytes": 22856
+  },
+  {
+    "circuit": "issue_grant_with_k256",
+    "side": "compactc",
+    "k": 17,
+    "rows": 78604,
+    "zkir_bytes": 31953
+  },
+  {
+    "circuit": "issue_grant_with_k256",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 74093,
+    "zkir_bytes": 25816
+  },
+  {
+    "circuit": "remove_device_with_jubjub",
+    "side": "compactc",
+    "k": 15,
+    "rows": 32730,
+    "zkir_bytes": 11903
+  },
+  {
+    "circuit": "remove_device_with_jubjub",
+    "side": "minocrab",
+    "k": 15,
+    "rows": 32741,
+    "zkir_bytes": 11629
+  },
+  {
+    "circuit": "remove_device_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 65404,
+    "zkir_bytes": 21308
+  },
+  {
+    "circuit": "remove_device_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 60920,
+    "zkir_bytes": 14950
+  },
+  {
+    "circuit": "revoke_all_grants_with_jubjub",
+    "side": "compactc",
+    "k": 15,
+    "rows": 26645,
+    "zkir_bytes": 8982
+  },
+  {
+    "circuit": "revoke_all_grants_with_jubjub",
+    "side": "minocrab",
+    "k": 15,
+    "rows": 26639,
+    "zkir_bytes": 8659
+  },
+  {
+    "circuit": "revoke_all_grants_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 58771,
+    "zkir_bytes": 17866
+  },
+  {
+    "circuit": "revoke_all_grants_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 54270,
+    "zkir_bytes": 11514
+  },
+  {
+    "circuit": "revoke_grant_with_jubjub",
+    "side": "compactc",
+    "k": 15,
+    "rows": 26871,
+    "zkir_bytes": 12234
+  },
+  {
+    "circuit": "revoke_grant_with_jubjub",
+    "side": "minocrab",
+    "k": 15,
+    "rows": 26865,
+    "zkir_bytes": 11904
+  },
+  {
+    "circuit": "revoke_grant_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 58997,
+    "zkir_bytes": 21189
+  },
+  {
+    "circuit": "revoke_grant_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 54496,
+    "zkir_bytes": 14832
+  },
+  {
+    "circuit": "rotate_enc_key_with_jubjub",
+    "side": "compactc",
+    "k": 15,
+    "rows": 26725,
+    "zkir_bytes": 8678
+  },
+  {
+    "circuit": "rotate_enc_key_with_jubjub",
+    "side": "minocrab",
+    "k": 15,
+    "rows": 26719,
+    "zkir_bytes": 8409
+  },
+  {
+    "circuit": "rotate_enc_key_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 58851,
+    "zkir_bytes": 17558
+  },
+  {
+    "circuit": "rotate_enc_key_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 54350,
+    "zkir_bytes": 11262
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+    "side": "compactc",
+    "k": 17,
+    "rows": 71717,
+    "zkir_bytes": 26191
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 71711,
+    "zkir_bytes": 26056
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+    "side": "compactc",
+    "k": 17,
+    "rows": 97568,
+    "zkir_bytes": 34774
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 93064,
+    "zkir_bytes": 28603
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_jubjub",
+    "side": "compactc",
+    "k": 16,
+    "rows": 55758,
+    "zkir_bytes": 16641
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_jubjub",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 55756,
+    "zkir_bytes": 16537
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_k256",
+    "side": "compactc",
+    "k": 17,
+    "rows": 80290,
+    "zkir_bytes": 25641
+  },
+  {
+    "circuit": "withdraw_shielded_to_contract_with_k256",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 75793,
+    "zkir_bytes": 19466
+  },
+  {
+    "circuit": "withdraw_shielded_with_grant_jubjub",
+    "side": "compactc",
+    "k": 17,
+    "rows": 66014,
+    "zkir_bytes": 24813
+  },
+  {
+    "circuit": "withdraw_shielded_with_grant_jubjub",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 71666,
+    "zkir_bytes": 25805
+  },
+  {
+    "circuit": "withdraw_shielded_with_grant_k256",
+    "side": "compactc",
+    "k": 17,
+    "rows": 91865,
+    "zkir_bytes": 33398
+  },
+  {
+    "circuit": "withdraw_shielded_with_grant_k256",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 93019,
+    "zkir_bytes": 28354
+  },
+  {
+    "circuit": "withdraw_shielded_with_jubjub",
+    "side": "compactc",
+    "k": 16,
+    "rows": 50055,
+    "zkir_bytes": 15276
+  },
+  {
+    "circuit": "withdraw_shielded_with_jubjub",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 55711,
+    "zkir_bytes": 16291
+  },
+  {
+    "circuit": "withdraw_shielded_with_k256",
+    "side": "compactc",
+    "k": 17,
+    "rows": 74587,
+    "zkir_bytes": 24263
+  },
+  {
+    "circuit": "withdraw_shielded_with_k256",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 75748,
+    "zkir_bytes": 19215
+  },
+  {
+    "circuit": "withdraw_unshielded_with_grant_jubjub",
+    "side": "compactc",
+    "k": 16,
+    "rows": 38514,
+    "zkir_bytes": 18179
+  },
+  {
+    "circuit": "withdraw_unshielded_with_grant_jubjub",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 38555,
+    "zkir_bytes": 19794
+  },
+  {
+    "circuit": "withdraw_unshielded_with_grant_k256",
+    "side": "compactc",
+    "k": 17,
+    "rows": 64355,
+    "zkir_bytes": 26762
+  },
+  {
+    "circuit": "withdraw_unshielded_with_grant_k256",
+    "side": "minocrab",
+    "k": 17,
+    "rows": 59898,
+    "zkir_bytes": 22344
+  },
+  {
+    "circuit": "withdraw_unshielded_with_jubjub",
+    "side": "compactc",
+    "k": 15,
+    "rows": 28877,
+    "zkir_bytes": 12436
+  },
+  {
+    "circuit": "withdraw_unshielded_with_jubjub",
+    "side": "minocrab",
+    "k": 15,
+    "rows": 28925,
+    "zkir_bytes": 13844
+  },
+  {
+    "circuit": "withdraw_unshielded_with_k256",
+    "side": "compactc",
+    "k": 16,
+    "rows": 61003,
+    "zkir_bytes": 21338
+  },
+  {
+    "circuit": "withdraw_unshielded_with_k256",
+    "side": "minocrab",
+    "k": 16,
+    "rows": 56556,
+    "zkir_bytes": 16747
+  }
+]

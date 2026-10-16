@@ -1,0 +1,1014 @@
+{
+  "cases": [
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "effects_equal": true,
+      "file": "000-activate_initial_device_with_k256.json",
+      "label": "k256-e1-jubjub-activate_initial_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "001-k256-deposit-new.json",
+      "label": "k256-e1-jubjub-k256-deposit-new",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "002-k256-deposit-existing.json",
+      "label": "k256-e1-jubjub-k256-deposit-existing",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_shielded",
+      "effects_equal": true,
+      "file": "003-k256-deposit-shielded.json",
+      "label": "k256-e1-jubjub-k256-deposit-shielded",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "effects_equal": true,
+      "file": "004-append_inbox_with_k256.json",
+      "label": "k256-e1-jubjub-append_inbox_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "effects_equal": true,
+      "file": "005-rotate_enc_key_with_k256.json",
+      "label": "k256-e1-jubjub-rotate_enc_key_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "effects_equal": true,
+      "file": "006-add_device_with_k256.json",
+      "label": "k256-e1-jubjub-add_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "effects_equal": true,
+      "file": "007-remove_device_with_k256.json",
+      "label": "k256-e1-jubjub-remove_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "effects_equal": true,
+      "file": "008-withdraw_unshielded_with_k256.json",
+      "label": "k256-e1-jubjub-withdraw_unshielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "009-withdraw_shielded_with_k256.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "010-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "011-withdraw_shielded_with_k256.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "012-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "effects_equal": true,
+      "file": "013-issue_grant_with_k256.json",
+      "label": "k256-e1-jubjub-issue_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "014-withdraw_unshielded_with_grant_jubjub.json",
+      "label": "k256-e1-jubjub-withdraw_unshielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "015-withdraw_shielded_with_grant_jubjub.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "016-withdraw_shielded_with_grant_jubjub.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "017-withdraw_shielded_to_contract_with_grant_jubjub.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_to_contract_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "018-withdraw_shielded_to_contract_with_grant_jubjub.json",
+      "label": "k256-e1-jubjub-withdraw_shielded_to_contract_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "effects_equal": true,
+      "file": "019-revoke_grant_with_k256.json",
+      "label": "k256-e1-jubjub-revoke_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "effects_equal": true,
+      "file": "020-revoke_all_grants_with_k256.json",
+      "label": "k256-e1-jubjub-revoke_all_grants_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "effects_equal": true,
+      "file": "021-activate_initial_device_with_k256.json",
+      "label": "k256-e1-k256-activate_initial_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "022-k256-deposit-new.json",
+      "label": "k256-e1-k256-k256-deposit-new",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "023-k256-deposit-existing.json",
+      "label": "k256-e1-k256-k256-deposit-existing",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_shielded",
+      "effects_equal": true,
+      "file": "024-k256-deposit-shielded.json",
+      "label": "k256-e1-k256-k256-deposit-shielded",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "effects_equal": true,
+      "file": "025-append_inbox_with_k256.json",
+      "label": "k256-e1-k256-append_inbox_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "effects_equal": true,
+      "file": "026-rotate_enc_key_with_k256.json",
+      "label": "k256-e1-k256-rotate_enc_key_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "effects_equal": true,
+      "file": "027-add_device_with_k256.json",
+      "label": "k256-e1-k256-add_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "effects_equal": true,
+      "file": "028-remove_device_with_k256.json",
+      "label": "k256-e1-k256-remove_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "effects_equal": true,
+      "file": "029-withdraw_unshielded_with_k256.json",
+      "label": "k256-e1-k256-withdraw_unshielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "030-withdraw_shielded_with_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "031-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "032-withdraw_shielded_with_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "033-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "effects_equal": true,
+      "file": "034-issue_grant_with_k256.json",
+      "label": "k256-e1-k256-issue_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "035-withdraw_unshielded_with_grant_k256.json",
+      "label": "k256-e1-k256-withdraw_unshielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "036-withdraw_shielded_with_grant_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "037-withdraw_shielded_with_grant_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "effects_equal": true,
+      "file": "038-withdraw_shielded_to_contract_with_grant_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_to_contract_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "effects_equal": true,
+      "file": "039-withdraw_shielded_to_contract_with_grant_k256.json",
+      "label": "k256-e1-k256-withdraw_shielded_to_contract_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "effects_equal": true,
+      "file": "040-revoke_grant_with_k256.json",
+      "label": "k256-e1-k256-revoke_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "effects_equal": true,
+      "file": "041-revoke_all_grants_with_k256.json",
+      "label": "k256-e1-k256-revoke_all_grants_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "activate_initial_device_with_jubjub",
+      "effects_equal": true,
+      "file": "042-activate_initial_device_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-activate_initial_device_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "043-jubjub-deposit-new.json",
+      "label": "jubjub-e0-jubjub-jubjub-deposit-new",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "044-jubjub-deposit-existing.json",
+      "label": "jubjub-e0-jubjub-jubjub-deposit-existing",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_shielded",
+      "effects_equal": true,
+      "file": "045-jubjub-deposit-shielded.json",
+      "label": "jubjub-e0-jubjub-jubjub-deposit-shielded",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "effects_equal": true,
+      "file": "046-append_inbox_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-append_inbox_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "rotate_enc_key_with_jubjub",
+      "effects_equal": true,
+      "file": "047-rotate_enc_key_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-rotate_enc_key_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "add_device_with_jubjub",
+      "effects_equal": true,
+      "file": "048-add_device_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-add_device_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "remove_device_with_jubjub",
+      "effects_equal": true,
+      "file": "049-remove_device_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-remove_device_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "effects_equal": true,
+      "file": "050-withdraw_unshielded_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_unshielded_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "effects_equal": true,
+      "file": "051-withdraw_shielded_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "effects_equal": true,
+      "file": "052-withdraw_shielded_to_contract_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_to_contract_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "effects_equal": true,
+      "file": "053-withdraw_shielded_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "effects_equal": true,
+      "file": "054-withdraw_shielded_to_contract_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_to_contract_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "issue_grant_with_jubjub",
+      "effects_equal": true,
+      "file": "055-issue_grant_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-issue_grant_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "056-withdraw_unshielded_with_grant_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_unshielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "057-withdraw_shielded_with_grant_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "058-withdraw_shielded_with_grant_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "059-withdraw_shielded_to_contract_with_grant_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_to_contract_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "060-withdraw_shielded_to_contract_with_grant_jubjub.json",
+      "label": "jubjub-e0-jubjub-withdraw_shielded_to_contract_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_grant_with_jubjub",
+      "effects_equal": true,
+      "file": "061-revoke_grant_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-revoke_grant_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_all_grants_with_jubjub",
+      "effects_equal": true,
+      "file": "062-revoke_all_grants_with_jubjub.json",
+      "label": "jubjub-e0-jubjub-revoke_all_grants_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "activate_initial_device_with_jubjub",
+      "effects_equal": true,
+      "file": "063-activate_initial_device_with_jubjub.json",
+      "label": "jubjub-e0-k256-activate_initial_device_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "064-jubjub-deposit-new.json",
+      "label": "jubjub-e0-k256-jubjub-deposit-new",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "065-jubjub-deposit-existing.json",
+      "label": "jubjub-e0-k256-jubjub-deposit-existing",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_shielded",
+      "effects_equal": true,
+      "file": "066-jubjub-deposit-shielded.json",
+      "label": "jubjub-e0-k256-jubjub-deposit-shielded",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "append_inbox_with_jubjub",
+      "effects_equal": true,
+      "file": "067-append_inbox_with_jubjub.json",
+      "label": "jubjub-e0-k256-append_inbox_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "rotate_enc_key_with_jubjub",
+      "effects_equal": true,
+      "file": "068-rotate_enc_key_with_jubjub.json",
+      "label": "jubjub-e0-k256-rotate_enc_key_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "add_device_with_jubjub",
+      "effects_equal": true,
+      "file": "069-add_device_with_jubjub.json",
+      "label": "jubjub-e0-k256-add_device_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "remove_device_with_jubjub",
+      "effects_equal": true,
+      "file": "070-remove_device_with_jubjub.json",
+      "label": "jubjub-e0-k256-remove_device_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "effects_equal": true,
+      "file": "071-withdraw_unshielded_with_jubjub.json",
+      "label": "jubjub-e0-k256-withdraw_unshielded_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "effects_equal": true,
+      "file": "072-withdraw_shielded_with_jubjub.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "effects_equal": true,
+      "file": "073-withdraw_shielded_to_contract_with_jubjub.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_to_contract_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_jubjub",
+      "effects_equal": true,
+      "file": "074-withdraw_shielded_with_jubjub.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "effects_equal": true,
+      "file": "075-withdraw_shielded_to_contract_with_jubjub.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_to_contract_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "issue_grant_with_jubjub",
+      "effects_equal": true,
+      "file": "076-issue_grant_with_jubjub.json",
+      "label": "jubjub-e0-k256-issue_grant_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "077-withdraw_unshielded_with_grant_k256.json",
+      "label": "jubjub-e0-k256-withdraw_unshielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "078-withdraw_shielded_with_grant_k256.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "079-withdraw_shielded_with_grant_k256.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "effects_equal": true,
+      "file": "080-withdraw_shielded_to_contract_with_grant_k256.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_to_contract_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "effects_equal": true,
+      "file": "081-withdraw_shielded_to_contract_with_grant_k256.json",
+      "label": "jubjub-e0-k256-withdraw_shielded_to_contract_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_grant_with_jubjub",
+      "effects_equal": true,
+      "file": "082-revoke_grant_with_jubjub.json",
+      "label": "jubjub-e0-k256-revoke_grant_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_all_grants_with_jubjub",
+      "effects_equal": true,
+      "file": "083-revoke_all_grants_with_jubjub.json",
+      "label": "jubjub-e0-k256-revoke_all_grants_with_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "effects_equal": true,
+      "file": "084-activate_initial_device_with_k256.json",
+      "label": "k256-e0-jubjub-activate_initial_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "085-k256-deposit-new.json",
+      "label": "k256-e0-jubjub-k256-deposit-new",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "086-k256-deposit-existing.json",
+      "label": "k256-e0-jubjub-k256-deposit-existing",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_shielded",
+      "effects_equal": true,
+      "file": "087-k256-deposit-shielded.json",
+      "label": "k256-e0-jubjub-k256-deposit-shielded",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "effects_equal": true,
+      "file": "088-append_inbox_with_k256.json",
+      "label": "k256-e0-jubjub-append_inbox_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "effects_equal": true,
+      "file": "089-rotate_enc_key_with_k256.json",
+      "label": "k256-e0-jubjub-rotate_enc_key_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "effects_equal": true,
+      "file": "090-add_device_with_k256.json",
+      "label": "k256-e0-jubjub-add_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "effects_equal": true,
+      "file": "091-remove_device_with_k256.json",
+      "label": "k256-e0-jubjub-remove_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "effects_equal": true,
+      "file": "092-withdraw_unshielded_with_k256.json",
+      "label": "k256-e0-jubjub-withdraw_unshielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "093-withdraw_shielded_with_k256.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "094-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "095-withdraw_shielded_with_k256.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "096-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "effects_equal": true,
+      "file": "097-issue_grant_with_k256.json",
+      "label": "k256-e0-jubjub-issue_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "098-withdraw_unshielded_with_grant_jubjub.json",
+      "label": "k256-e0-jubjub-withdraw_unshielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "099-withdraw_shielded_with_grant_jubjub.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "100-withdraw_shielded_with_grant_jubjub.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "101-withdraw_shielded_to_contract_with_grant_jubjub.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_to_contract_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "effects_equal": true,
+      "file": "102-withdraw_shielded_to_contract_with_grant_jubjub.json",
+      "label": "k256-e0-jubjub-withdraw_shielded_to_contract_with_grant_jubjub",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "effects_equal": true,
+      "file": "103-revoke_grant_with_k256.json",
+      "label": "k256-e0-jubjub-revoke_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "effects_equal": true,
+      "file": "104-revoke_all_grants_with_k256.json",
+      "label": "k256-e0-jubjub-revoke_all_grants_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "activate_initial_device_with_k256",
+      "effects_equal": true,
+      "file": "105-activate_initial_device_with_k256.json",
+      "label": "k256-e0-k256-activate_initial_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "106-k256-deposit-new.json",
+      "label": "k256-e0-k256-k256-deposit-new",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "effects_equal": true,
+      "file": "107-k256-deposit-existing.json",
+      "label": "k256-e0-k256-k256-deposit-existing",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "deposit_shielded",
+      "effects_equal": true,
+      "file": "108-k256-deposit-shielded.json",
+      "label": "k256-e0-k256-k256-deposit-shielded",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "append_inbox_with_k256",
+      "effects_equal": true,
+      "file": "109-append_inbox_with_k256.json",
+      "label": "k256-e0-k256-append_inbox_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "effects_equal": true,
+      "file": "110-rotate_enc_key_with_k256.json",
+      "label": "k256-e0-k256-rotate_enc_key_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "add_device_with_k256",
+      "effects_equal": true,
+      "file": "111-add_device_with_k256.json",
+      "label": "k256-e0-k256-add_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "remove_device_with_k256",
+      "effects_equal": true,
+      "file": "112-remove_device_with_k256.json",
+      "label": "k256-e0-k256-remove_device_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_k256",
+      "effects_equal": true,
+      "file": "113-withdraw_unshielded_with_k256.json",
+      "label": "k256-e0-k256-withdraw_unshielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "114-withdraw_shielded_with_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "115-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_k256",
+      "effects_equal": true,
+      "file": "116-withdraw_shielded_with_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "effects_equal": true,
+      "file": "117-withdraw_shielded_to_contract_with_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_to_contract_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "issue_grant_with_k256",
+      "effects_equal": true,
+      "file": "118-issue_grant_with_k256.json",
+      "label": "k256-e0-k256-issue_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "119-withdraw_unshielded_with_grant_k256.json",
+      "label": "k256-e0-k256-withdraw_unshielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "120-withdraw_shielded_with_grant_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "effects_equal": true,
+      "file": "121-withdraw_shielded_with_grant_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "effects_equal": true,
+      "file": "122-withdraw_shielded_to_contract_with_grant_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_to_contract_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "effects_equal": true,
+      "file": "123-withdraw_shielded_to_contract_with_grant_k256.json",
+      "label": "k256-e0-k256-withdraw_shielded_to_contract_with_grant_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_grant_with_k256",
+      "effects_equal": true,
+      "file": "124-revoke_grant_with_k256.json",
+      "label": "k256-e0-k256-revoke_grant_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    },
+    {
+      "circuit": "revoke_all_grants_with_k256",
+      "effects_equal": true,
+      "file": "125-revoke_all_grants_with_k256.json",
+      "label": "k256-e0-k256-revoke_all_grants_with_k256",
+      "outputs_equal": true,
+      "post_state_equal": true
+    }
+  ],
+  "context_checks": 248,
+  "input_and_witness_mutations": 2416
+}

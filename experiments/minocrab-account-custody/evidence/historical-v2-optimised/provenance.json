@@ -1,0 +1,53 @@
+{
+  "reference_commit": "55aa2876edadc5aa873b6693d563d04342e99a88",
+  "baseline_source_commit": "6f9739b1f2f2948d16da3e2f2bf788730236fcfe",
+  "minocrab_commit": "537721ae7cd43ca7b3db09db784eb0f35ff437f4",
+  "ledger_commit": "04c9c5d9bcebb8d4427d8589fb54d58a55599c14",
+  "reference_manifest": "reference/provenance.json",
+  "toolchain": "evidence/toolchain.json",
+  "completed_at": "2026-10-15T11:37:56.555897+00:00",
+  "source_sha256": {
+    "Cargo.lock": "389db6bca977a294a45c3b104f09c4c609e7204e11bf63bce49062cc60f77b17",
+    "Cargo.toml": "4104fc5d05216038bef59d34ba495d238aa28d1d291383fa32d13fb52075f6f8",
+    "bin/measure/Cargo.toml": "77230b5af0af6d3e7860cae4bcdf419b5780fc9a024987f2644339157d856a8d",
+    "bin/measure/src/executor.rs": "4698843e163a0f74dc4c233ede6ba8dbd1f094d427a562aafa79ea050e16f311",
+    "bin/measure/src/main.rs": "33c95a502ea0bb61ecb04872d869a9143b77b6c02e7a29709a8ffde72707a5bd",
+    "crates/account-custody/Cargo.toml": "5c951248ff7ed7f09a3768d978a784241c98682c811a59dd4a52ac485b0fff2a",
+    "crates/account-custody/src/auth.rs": "5f7671fd09b926b3296083d7f0830244ca257696e161d6552feb5cce45a94562",
+    "crates/account-custody/src/constructor.rs": "068d18fbca156aec4c4db9e83d2d406138d8777ffc3a4b2cbab458b61c4f82d8",
+    "crates/account-custody/src/custody.rs": "b20d99e2a5f24767642f79a4778c2e7928154a269fc2f0eebd12ec33fcbcecf6",
+    "crates/account-custody/src/entrypoints.rs": "baa4888dd2c7abb6569ad605cc3a7f747eacd599b7e45d1c83d4d76b490ad9b8",
+    "crates/account-custody/src/grant_entrypoints.rs": "92b60a81472505e930a93b0b4c0c44dac51f38bfffe8ee07924269fbeb038d09",
+    "crates/account-custody/src/grants.rs": "ba16004125c7cb7aceefa8354d2eda1f67e4814841fd91b1b29a5858a4d95a3b",
+    "crates/account-custody/src/lib.rs": "911b4293ef8ef7cb0d404e696a4d87b3dd7925ca487ba03ffbd1a2ffd7d6b7ee",
+    "package-lock.json": "36e51c1e49d717a91064bca3ea3e60baf6b61c647d2da555dc6a2103b496200f",
+    "package.json": "99a5e628e5adf6081a6ec775db4ae2a18792e9dec2f16dad07791078f4808e12",
+    "reference/provenance.json": "d1ecfaf54c3e27db98278beab794116370c4869e98a60a43f146cd15364ba16f",
+    "scripts/bench.py": "97c8981dd42d18a1f3e07fd38877884996826ccb93ac26cebf712300923d5742",
+    "scripts/check-reference.py": "42ed17949fcbb401ac477eab52cf121e0fb68a54e80e4c537de81d0aa475ec7a",
+    "scripts/fixtures.ts": "5f9637ea6e5e7ee10006de4e212b249f817757259c14fbd63f136c1835a968cb"
+  },
+  "evidence_sha256": {
+    "evidence/benchmark.json": "9856f7aaee359fb5f60ad0622c696b0d7809260cfc44293e2d239778ef3b7893",
+    "evidence/costs.json": "4784bb43086b8b39f6b29e08b5a4e07be36f58eae7478a1da5a57091e48c3240",
+    "evidence/equivalence.json": "fba4fd32cb243072d56c09b6653635222cebababd3a39ef05e7d62f8dcd80b91",
+    "evidence/report.md": "7b2f5a9b271e130ac0fd5e324ce317d6a1eb57940c0e28ee7c8cd3e80c86ec27",
+    "evidence/toolchain.json": "980ec5e1b254aebbcb0e7a4793b033745528d6afe941789f1906046985503940"
+  },
+  "binary_sha256": "0143137d7da8b964b023d97d53bf269dda590b7cf605cb4ad252f465fd085c56",
+  "validation": {
+    "reference_executions": 150,
+    "input_and_witness_mutations": 3120,
+    "context_checks": 304,
+    "rust_tests": 33,
+    "cargo_fmt_check": "passed",
+    "clippy_all_targets_warnings_denied": "passed",
+    "pinned_source_and_all_30_zkir_hashes": "passed",
+    "paired_circuits_proved_and_verified": 30,
+    "timed_proofs_per_side_per_circuit": 3,
+    "warmup_proofs_per_side_per_circuit": 1,
+    "benchmark_inputs_equal_differentially_validated_inputs": true,
+    "full_transaction_validation": false,
+    "full_transaction_bytes": null
+  }
+}
