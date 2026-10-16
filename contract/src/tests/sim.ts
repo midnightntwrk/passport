@@ -75,7 +75,7 @@ export class AccountSim {
       opts.initialWrap,
       opts.vetoWindowSeconds,
     );
-    sim.state = init.currentContractState;
+    sim.state = init.currentContractState.data;
     await sim.call('activate_initial_device_with_jubjub', sim.device.pk, salt);
     sim.counters.set(sim.device, 0n);
     return sim;

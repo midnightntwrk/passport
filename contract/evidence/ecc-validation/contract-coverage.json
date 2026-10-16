@@ -1,0 +1,3182 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-10-16",
+  "evidenceKind": "static-source-inventory",
+  "scope": "All tracked and unignored untracked repository-owned .compact sources, including hidden paths; generated/dependency/build outputs excluded. Covers curve/public-key boundaries, not a full contract audit.",
+  "enumerationCommand": "git ls-files --cached --others --exclude-standard '*.compact'",
+  "excludedPathComponents": [
+    ".compact",
+    ".git",
+    "build",
+    "dist",
+    "generated",
+    "managed",
+    "node_modules",
+    "target"
+  ],
+  "applicableInstructionsRead": [
+    "experiments/nearfall-evaluation/AGENTS.md"
+  ],
+  "limitations": [
+    "Static observations only. No compilation, contract execution, malicious witness, forged signature, attack transaction, proving, wallet UI, node submission or production deployment checked by this artifact.",
+    "No claim that every prototype compiles on the current toolchain; consult per-project compiler/version metadata.",
+    "Dependency point decoding and cryptographic primitive behavior require separate executable/source evidence in research/ecc-validation.md and existing ECC test artifacts."
+  ],
+  "counts": {
+    "files": 47,
+    "cryptoRelevant": 36,
+    "byScope": {
+      "current": 3,
+      "testscaffold": 20,
+      "prototype": 24
+    }
+  },
+  "files": [
+    {
+      "path": "contract/contracts/account-p256.compact",
+      "sha256": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4",
+      "lineCount": 393,
+      "scope": "current",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint",
+        "Secp256r1Point",
+        "Secp256r1Scalar",
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "ecMulGenerator",
+        "persistentHash",
+        "secp256r1PointX",
+        "secp256r1PointY",
+        "webauthn_verify"
+      ],
+      "explicitGuards": {
+        "identity": "No standalone identity assert: activation and commitment derivation extract P-256 coordinates; device/grant use additionally assert WebAuthn verifier success.",
+        "subgroup": "No explicit subgroup guard; P-256 has cofactor one, so native valid nonidentity curve points have prime order.",
+        "pointFormat": "Native Secp256r1Point coordinate extraction and webauthn_verify/p256_verify_digest are relied on; not a byte parser in this module."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Encryption key stored as opaque Bytes<32>; fixed byte width is not a low-order or curve-validity check.",
+        "Imports/shared definitions supply WebAuthn verification and current account state helpers. Native verifier semantics are a dependency boundary, not proven by source inventory."
+      ],
+      "sourceReferences": [
+        {
+          "line": 10,
+          "source": "pk: Secp256r1Point;"
+        },
+        {
+          "line": 18,
+          "source": "pk: Secp256r1Point;"
+        },
+        {
+          "line": 24,
+          "source": "export pure circuit compute_public_point_with_p256(scalar: Secp256r1Scalar): Secp256r1Point {"
+        },
+        {
+          "line": 25,
+          "source": "return ecMulGenerator(scalar);"
+        },
+        {
+          "line": 29,
+          "source": "salt: Bytes<32>, pk: Secp256r1Point, policy: WebAuthnPolicy"
+        },
+        {
+          "line": 38,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, policy: WebAuthnPolicy,"
+        },
+        {
+          "line": 48,
+          "source": "pk: Secp256r1Point, salt: Bytes<32>, policy: WebAuthnPolicy"
+        },
+        {
+          "line": 62,
+          "source": "assert(webauthn_verify(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk),"
+        },
+        {
+          "line": 75,
+          "source": "tag: Bytes<64>, self_addr: ContractAddress, pk: Secp256r1Point,"
+        },
+        {
+          "line": 85,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, color: Bytes<32>, amount: Uint<128>,"
+        },
+        {
+          "line": 94,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 97,
+          "source": "return p256_device_challenge<[ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo]>("
+        },
+        {
+          "line": 103,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, recipient: ContractAddress,"
+        },
+        {
+          "line": 112,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, entry: Bytes<192>, nonce_value: Uint<64>"
+        },
+        {
+          "line": 119,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, key: Bytes<32>, nonce_value: Uint<64>"
+        },
+        {
+          "line": 126,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, entry: Bytes<32>, nonce_value: Uint<64>"
+        },
+        {
+          "line": 133,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, entry: Bytes<32>, nonce_value: Uint<64>"
+        },
+        {
+          "line": 140,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, digest: Bytes<32>, nonce_value: Uint<64>"
+        },
+        {
+          "line": 147,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, nonce_value: Uint<64>"
+        },
+        {
+          "line": 154,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, nonce_value: Uint<64>"
+        },
+        {
+          "line": 161,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, new_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 165,
+          "source": "return p256_device_challenge<[JubjubPoint, Bytes<32>, Field, Field, Field, Field, Uint<8>, Bytes<64>]>("
+        },
+        {
+          "line": 171,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, nonce_value: Uint<64>"
+        },
+        {
+          "line": 186,
+          "source": "recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, auth: P256Auth"
+        },
+        {
+          "line": 255,
+          "source": "new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field,"
+        },
+        {
+          "line": 271,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, origin_hash: Bytes<32>, slot: Uint<8>"
+        },
+        {
+          "line": 279,
+          "source": "tag: Bytes<64>, self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>,"
+        },
+        {
+          "line": 288,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, issued_at: Uint<64>,"
+        },
+        {
+          "line": 297,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, issued_at: Uint<64>,"
+        },
+        {
+          "line": 298,
+          "source": "recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>,"
+        },
+        {
+          "line": 301,
+          "source": "return p256_grant_challenge<[ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo]>("
+        },
+        {
+          "line": 307,
+          "source": "self_addr: ContractAddress, pk: Secp256r1Point, id: Bytes<32>, issued_at: Uint<64>,"
+        },
+        {
+          "line": 336,
+          "source": "assert(webauthn_verify(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk), \"invalid grant signature\");"
+        },
+        {
+          "line": 360,
+          "source": "recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>,"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/account.compact",
+      "sha256": "a5a05eef67399856dc9d25ae9989a3972b4695f1f2fe6a25bfd68ee51669d3d5",
+      "lineCount": 2920,
+      "scope": "current",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint",
+        "JubjubScalar",
+        "Secp256k1Point",
+        "Secp256k1Scalar",
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "ecAdd",
+        "ecMul",
+        "ecMulGenerator",
+        "persistentHash",
+        "receiveShielded",
+        "secp256k1EcdsaVerify",
+        "secp256k1PointX",
+        "secp256k1PointY",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "Explicit non-small-order [8]P != O checks at activation and Jubjub device/grant gates. require_live_jubjub_point also checks P != O for recovery/session keys. K256 guard rejects both coordinates zero. Initial recovery constructor storage bypasses these guards.",
+        "subgroup": "[8]P != O excludes pure small-order points but is not a complete prime-subgroup test for mixed-torsion points. Native point decoding/arithmetic supplies the additional boundary described in ecc-validation.md.",
+        "pointFormat": "K256 coordinate guard and native coordinate access/arithmetic are used; no author-written full curve-equation/encoding parser. Jubjub commitment hashes and opaque encryption bytes alone do not validate keys."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Encryption key stored as opaque Bytes<32>; fixed byte width is not a low-order or curve-validity check.",
+        "Device/grant entries are opaque commitments: enrolment cannot validate the hidden key; activation/use gates do. Signature announcement R has no explicit nonidentity restriction. Recovery keys are checked when publishing sessions, submitting and finalising, but not at initial constructor storage. No executable test is implied by this inventory.",
+        "The comment immediately above require_live_jubjub_point claiming every write to recovery_pk passes the guard is overbroad: constructor assignment at line 376 does not."
+      ],
+      "sourceReferences": [
+        {
+          "line": 188,
+          "source": "export ledger enc_key: Bytes<32>;"
+        },
+        {
+          "line": 293,
+          "source": "export ledger recovery_pk: JubjubPoint;"
+        },
+        {
+          "line": 329,
+          "source": "export ledger pending_recovery_pk: JubjubPoint;"
+        },
+        {
+          "line": 355,
+          "source": "encryption_key: Bytes<32>,"
+        },
+        {
+          "line": 356,
+          "source": "initial_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 361,
+          "source": "enc_key      = disclose(encryption_key);"
+        },
+        {
+          "line": 383,
+          "source": "pending_recovery_pk = default<JubjubPoint>; // the identity (0, 1); see do_recover_cancel"
+        },
+        {
+          "line": 405,
+          "source": "export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<32>): [] {"
+        },
+        {
+          "line": 407,
+          "source": "assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),"
+        },
+        {
+          "line": 416,
+          "source": "pk:       Secp256k1Point,"
+        },
+        {
+          "line": 421,
+          "source": "require_live_k256_key(pk);"
+        },
+        {
+          "line": 433,
+          "source": "export pure circuit derive_boot_commitment_with_jubjub(salt: Bytes<32>, pk: JubjubPoint): Bytes<32> {"
+        },
+        {
+          "line": 434,
+          "source": "return persistentHash<[Bytes<32>, Bytes<32>, JubjubPoint]>("
+        },
+        {
+          "line": 446,
+          "source": "pk:       Secp256k1Point,"
+        },
+        {
+          "line": 469,
+          "source": "pk:        JubjubPoint,"
+        },
+        {
+          "line": 473,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, Uint<32>, Uint<64>]>("
+        },
+        {
+          "line": 494,
+          "source": "pk:        Secp256k1Point,"
+        },
+        {
+          "line": 522,
+          "source": "circuit require_live_k256_key(pk: Secp256k1Point): [] {"
+        },
+        {
+          "line": 554,
+          "source": "export pure circuit compute_public_point_with_jubjub(scalar: Field): JubjubPoint {"
+        },
+        {
+          "line": 555,
+          "source": "return ecMulGenerator(scalar as JubjubScalar);"
+        },
+        {
+          "line": 558,
+          "source": "export pure circuit compute_public_point_with_k256(scalar: Secp256k1Scalar): Secp256k1Point {"
+        },
+        {
+          "line": 559,
+          "source": "return ecMulGenerator(scalar);"
+        },
+        {
+          "line": 577,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 578,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 588,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 599,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 600,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 601,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 611,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 618,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 619,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 630,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ContractAddress, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 637,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 638,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 646,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<192>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 653,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 654,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 662,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 673,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 674,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 682,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 689,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 690,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 698,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 714,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 732,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 733,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 742,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>]>("
+        },
+        {
+          "line": 751,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 770,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 786,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 802,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 818,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 848,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 850,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 861,
+          "source": "assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),"
+        },
+        {
+          "line": 874,
+          "source": "ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(pk, c as JubjubScalar)),"
+        },
+        {
+          "line": 882,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 888,
+          "source": "require_live_k256_key(pk);"
+        },
+        {
+          "line": 907,
+          "source": "secp256k1EcdsaVerify(digest, sig, pk),"
+        },
+        {
+          "line": 970,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 976,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 994,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 1005,
+          "source": "enc_key = disclose(new_key);"
+        },
+        {
+          "line": 1058,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1060,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1075,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1106,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1108,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1121,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1140,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 1143,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1145,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1158,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 1161,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1192,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1194,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1210,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1231,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1233,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1246,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1326,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1328,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1341,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1361,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1363,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1380,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1441,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1455,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1459,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, Bytes<32>, Uint<8>]>("
+        },
+        {
+          "line": 1562,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1584,
+          "source": "pk:           Secp256k1Point,"
+        },
+        {
+          "line": 1587,
+          "source": "recipient:    ZswapCoinPublicKey,"
+        },
+        {
+          "line": 1598,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>]>("
+        },
+        {
+          "line": 1609,
+          "source": "pk:           Secp256k1Point,"
+        },
+        {
+          "line": 1646,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1647,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1659,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 1669,
+          "source": "sig_r:        JubjubPoint,"
+        },
+        {
+          "line": 1670,
+          "source": "pk:           JubjubPoint,"
+        },
+        {
+          "line": 1673,
+          "source": "recipient:    ZswapCoinPublicKey,"
+        },
+        {
+          "line": 1685,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 1693,
+          "source": "sig_r:        JubjubPoint,"
+        },
+        {
+          "line": 1694,
+          "source": "pk:           JubjubPoint,"
+        },
+        {
+          "line": 1709,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, ContractAddress, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 1724,
+          "source": "pk:           Secp256k1Point,"
+        },
+        {
+          "line": 1741,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1757,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1779,
+          "source": "sig_r:        JubjubPoint,"
+        },
+        {
+          "line": 1780,
+          "source": "pk:           JubjubPoint,"
+        },
+        {
+          "line": 1789,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 1796,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1797,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1805,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 1812,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1813,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1820,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 1843,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1858,
+          "source": "require_live_k256_key(pk);"
+        },
+        {
+          "line": 1937,
+          "source": "assert(enc_pk == enc_key, \"stale encryption key\");"
+        },
+        {
+          "line": 1947,
+          "source": "pk:         Secp256k1Point,"
+        },
+        {
+          "line": 1955,
+          "source": "assert(secp256k1EcdsaVerify(digest, sig, pk), \"invalid grant signature\");"
+        },
+        {
+          "line": 1978,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1987,
+          "source": "assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),"
+        },
+        {
+          "line": 2011,
+          "source": "pk:         JubjubPoint,"
+        },
+        {
+          "line": 2013,
+          "source": "sig_r:      JubjubPoint,"
+        },
+        {
+          "line": 2020,
+          "source": "ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(pk, c as JubjubScalar)),"
+        },
+        {
+          "line": 2048,
+          "source": "pk:               Secp256k1Point,"
+        },
+        {
+          "line": 2078,
+          "source": "recipient:        ZswapCoinPublicKey,"
+        },
+        {
+          "line": 2083,
+          "source": "pk:               Secp256k1Point,"
+        },
+        {
+          "line": 2125,
+          "source": "pk:               Secp256k1Point,"
+        },
+        {
+          "line": 2166,
+          "source": "pk:               JubjubPoint,"
+        },
+        {
+          "line": 2174,
+          "source": "sig_r:            JubjubPoint,"
+        },
+        {
+          "line": 2192,
+          "source": "recipient:        ZswapCoinPublicKey,"
+        },
+        {
+          "line": 2197,
+          "source": "pk:               JubjubPoint,"
+        },
+        {
+          "line": 2205,
+          "source": "sig_r:            JubjubPoint,"
+        },
+        {
+          "line": 2235,
+          "source": "pk:               JubjubPoint,"
+        },
+        {
+          "line": 2243,
+          "source": "sig_r:            JubjubPoint,"
+        },
+        {
+          "line": 2397,
+          "source": "pk:                               Secp256k1Point,"
+        },
+        {
+          "line": 2422,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 2435,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 2471,
+          "source": "pk:                               JubjubPoint,"
+        },
+        {
+          "line": 2473,
+          "source": "sig_r:                            JubjubPoint,"
+        },
+        {
+          "line": 2497,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 2499,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 2511,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 2513,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 2559,
+          "source": "circuit require_live_jubjub_point(x: JubjubPoint): [] {"
+        },
+        {
+          "line": 2560,
+          "source": "assert(x != ecMulGenerator(0 as JubjubScalar), \"recovery key is the identity\");"
+        },
+        {
+          "line": 2561,
+          "source": "assert(ecMul(x, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),"
+        },
+        {
+          "line": 2578,
+          "source": "recovery_key:          JubjubPoint,"
+        },
+        {
+          "line": 2579,
+          "source": "sig_r_recovery:        JubjubPoint,"
+        },
+        {
+          "line": 2580,
+          "source": "successor_pk:          JubjubPoint,"
+        },
+        {
+          "line": 2581,
+          "source": "sig_r_successor:       JubjubPoint,"
+        },
+        {
+          "line": 2582,
+          "source": "successor_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2591,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, JubjubPoint, JubjubPoint, JubjubPoint, Uint<32>, Uint<64>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 2602,
+          "source": "sig_r:          JubjubPoint,"
+        },
+        {
+          "line": 2603,
+          "source": "pk:             JubjubPoint,"
+        },
+        {
+          "line": 2604,
+          "source": "new_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2618,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, JubjubPoint, Bytes<32>, Field, Field, Field, Field, Uint<8>, Bytes<64>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 2626,
+          "source": "pk:             Secp256k1Point,"
+        },
+        {
+          "line": 2627,
+          "source": "new_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2640,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, JubjubPoint, Bytes<32>, Field, Field, Field, Field, Uint<8>, Bytes<64>, Uint<64>]>("
+        },
+        {
+          "line": 2653,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 2654,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 2661,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 2668,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 2690,
+          "source": "new_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2719,
+          "source": "require_live_jubjub_point(new_recovery_pk);"
+        },
+        {
+          "line": 2732,
+          "source": "new_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2740,
+          "source": "pk:             JubjubPoint,"
+        },
+        {
+          "line": 2742,
+          "source": "sig_r:          JubjubPoint,"
+        },
+        {
+          "line": 2755,
+          "source": "new_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2763,
+          "source": "pk:             Secp256k1Point,"
+        },
+        {
+          "line": 2797,
+          "source": "successor_pk:          JubjubPoint,"
+        },
+        {
+          "line": 2798,
+          "source": "successor_recovery_pk: JubjubPoint,"
+        },
+        {
+          "line": 2802,
+          "source": "sig_r_recovery:        JubjubPoint,"
+        },
+        {
+          "line": 2804,
+          "source": "sig_r_successor:       JubjubPoint,"
+        },
+        {
+          "line": 2811,
+          "source": "require_live_jubjub_point(recovery_pk);"
+        },
+        {
+          "line": 2812,
+          "source": "require_live_jubjub_point(successor_pk);"
+        },
+        {
+          "line": 2813,
+          "source": "require_live_jubjub_point(successor_recovery_pk);"
+        },
+        {
+          "line": 2827,
+          "source": "ecMulGenerator(sig_s_recovery as JubjubScalar) == ecAdd(sig_r_recovery, ecMul(recovery_pk, c as JubjubScalar)),"
+        },
+        {
+          "line": 2831,
+          "source": "ecMulGenerator(sig_s_successor as JubjubScalar) == ecAdd(sig_r_successor, ecMul(successor_pk, c as JubjubScalar)),"
+        },
+        {
+          "line": 2864,
+          "source": "pending_recovery_pk = ecMul(pending_recovery_pk, 0 as JubjubScalar);"
+        },
+        {
+          "line": 2869,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 2871,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 2883,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 2908,
+          "source": "require_live_jubjub_point(pending_recovery_pk);"
+        },
+        {
+          "line": 2916,
+          "source": "pending_recovery_pk = ecMul(pending_recovery_pk, 0 as JubjubScalar); // the identity; see do_recover_cancel"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/control.compact",
+      "sha256": "2f092f1f7955256a542f1bfea5622854b5128b038fefea16e52c4718ebd05bcb",
+      "lineCount": 71,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 38,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 44,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 51,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 58,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 65,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/faucet.compact",
+      "sha256": "1834ad2a49235cc405390f22fdd3e9480bfe66ebf88817947e4250d400b95f71",
+      "lineCount": 62,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 25,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/probe-block-time.compact",
+      "sha256": "038de93603102884036dea055aaa0d3ead165c49981be497b72b844c1c0c55f0",
+      "lineCount": 34,
+      "scope": "testscaffold",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 14,
+          "source": "export ledger passes: Counter;"
+        },
+        {
+          "line": 17,
+          "source": "export circuit before(t: Uint<64>): [] {"
+        },
+        {
+          "line": 23,
+          "source": "export circuit after(t: Uint<64>): [] {"
+        },
+        {
+          "line": 31,
+          "source": "export circuit never(t: Uint<64>): [] {"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/probe-grant-caller.compact",
+      "sha256": "e3c9a6d8429817992e80f9623c4211e6907139552601649395563fa4a8555ed1",
+      "lineCount": 46,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint"
+      ],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Forwards supplied Jubjub key/signature values through a cross-contract ABI. No local key validation; target account gate is the authentication boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 12,
+          "source": "pk: JubjubPoint, origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>,"
+        },
+        {
+          "line": 14,
+          "source": "spent_prev: Uint<128>, sig_r: JubjubPoint, sig_s: Field, grind_nonce: Uint<64>"
+        },
+        {
+          "line": 20,
+          "source": "pk: JubjubPoint; origin_hash: Bytes<32>; slot: Uint<8>; scope_salt: Bytes<32>;"
+        },
+        {
+          "line": 22,
+          "source": "spent_prev: Uint<128>; sig_r: JubjubPoint; sig_s: Field; grind_nonce: Uint<64>;"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/probe-p256.compact",
+      "sha256": "e42427fa90b3a40f7d45ce81b39dfcdbfeba078b7bb472ca79bd76cec9c6ba3e",
+      "lineCount": 25,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256r1Point"
+      ],
+      "cryptoPrimitives": [
+        "p256_verify_digest",
+        "webauthn_verify"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Both exported checks assert verification success through webauthn.compact helpers; no separate point parser in probe."
+      ],
+      "sourceReferences": [
+        {
+          "line": 6,
+          "source": "p256_verify_digest, webauthn_verify };"
+        },
+        {
+          "line": 13,
+          "source": "digest: Bytes<32>, sig: Secp256r1EcdsaSignature, pk: Secp256r1Point"
+        },
+        {
+          "line": 15,
+          "source": "assert(p256_verify_digest(digest, sig, pk), \"invalid P-256 signature\");"
+        },
+        {
+          "line": 21,
+          "source": "sig: Secp256r1EcdsaSignature, pk: Secp256r1Point"
+        },
+        {
+          "line": 23,
+          "source": "assert(webauthn_verify(challenge, policy, authenticator_data, sig, pk), \"invalid WebAuthn signature\");"
+        }
+      ]
+    },
+    {
+      "path": "contract/contracts/webauthn.compact",
+      "sha256": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb",
+      "lineCount": 111,
+      "scope": "current",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256r1Point",
+        "Secp256r1Scalar"
+      ],
+      "cryptoPrimitives": [
+        "p256_verify_digest",
+        "persistentHash",
+        "secp256r1EcdsaVerify",
+        "webauthn_verify"
+      ],
+      "explicitGuards": {
+        "identity": "No standalone point-identity assert; native P-256 verifier handles key identity.",
+        "subgroup": "No explicit subgroup guard; P-256 cofactor one and native curve validation are relied on.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "p256_verify_digest asserts r != 0 and s != 0, then returns native verifier Boolean; account and probe callers assert that result. Both high-S and low-S are intentionally accepted."
+      ],
+      "sourceReferences": [
+        {
+          "line": 83,
+          "source": "export pure circuit p256_verify_digest("
+        },
+        {
+          "line": 84,
+          "source": "digest: Bytes<32>, sig: Secp256r1EcdsaSignature, pk: Secp256r1Point"
+        },
+        {
+          "line": 91,
+          "source": "return secp256r1EcdsaVerify(digest, sig, pk);"
+        },
+        {
+          "line": 94,
+          "source": "export pure circuit webauthn_verify("
+        },
+        {
+          "line": 97,
+          "source": "pk: Secp256r1Point"
+        },
+        {
+          "line": 109,
+          "source": "return p256_verify_digest(digest, sig, pk);"
+        }
+      ]
+    },
+    {
+      "path": "demo/mn-passport-foundations/contracts/account.compact",
+      "sha256": "475c36093d4998df74651943eccae51cbf09df3bf39a60725d55ed3b77721d41",
+      "lineCount": 406,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded",
+        "sendShielded",
+        "transientHash"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Historical device/grant/recovery authentication is hash-preimage commitment based, not ECC signature verification; Jubjub verifier is explicitly deferred in comments. Do not transfer current account ECC guarantees to this prototype."
+      ],
+      "sourceReferences": [
+        {
+          "line": 254,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 260,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 267,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 275,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 281,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 287,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 297,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 305,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 311,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 317,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        }
+      ]
+    },
+    {
+      "path": "demo/mn-passport-foundations/contracts/faucet.compact",
+      "sha256": "49a9a62e511bd55f24f3ee46faa8061963d8ce90456055990ac708fa23ee3581",
+      "lineCount": 27,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 25,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "demo/mn-passport-foundations/contracts/identity_registry.compact",
+      "sha256": "eb890e8e380cf215e2134a59eb17466d944e327da5f88672da55e38f08fc81a3",
+      "lineCount": 48,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [
+        "transientHash"
+      ],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "struct IdentityRecord {"
+        },
+        {
+          "line": 26,
+          "source": "export ledger registration_count: Uint<64>;"
+        },
+        {
+          "line": 27,
+          "source": "export ledger identities: Map<Field, IdentityRecord>;"
+        },
+        {
+          "line": 29,
+          "source": "export pure circuit derive_identity_key(handle: Bytes<32>): Field {"
+        },
+        {
+          "line": 35,
+          "source": "constructor() {"
+        },
+        {
+          "line": 39,
+          "source": "export circuit register_identity(handle: Bytes<32>, account: Bytes<32>): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/account-custody-prototype/contracts/account.compact",
+      "sha256": "246d78586886180f94d3ae2875c8854eeb7cc06a6924da916415f29ff2e92ad7",
+      "lineCount": 469,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded",
+        "sendShielded",
+        "transientHash"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Historical device/grant/recovery authentication is hash-preimage commitment based, not ECC signature verification; Jubjub verifier is explicitly deferred in comments. Do not transfer current account ECC guarantees to this prototype."
+      ],
+      "sourceReferences": [
+        {
+          "line": 280,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 286,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 293,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 301,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 307,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 313,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 323,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 331,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 337,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 343,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/account-custody-prototype/contracts/faucet.compact",
+      "sha256": "49a9a62e511bd55f24f3ee46faa8061963d8ce90456055990ac708fa23ee3581",
+      "lineCount": 27,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 25,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-a-ecdsa.compact",
+      "sha256": "d0c0b453b08addf4cffadd0c9478991ff9f48d15badaff09338978dda672d6ff",
+      "lineCount": 12,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256k1Point"
+      ],
+      "cryptoPrimitives": [
+        "secp256k1EcdsaVerify"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Native ECDSA verifier Boolean return value is discarded; these are API/compilation probes, not an asserted signature authentication gate. No compile or execution claim made."
+      ],
+      "sourceReferences": [
+        {
+          "line": 9,
+          "source": "pk: Secp256k1Point"
+        },
+        {
+          "line": 11,
+          "source": "secp256k1EcdsaVerify(msg_hash, sig, pk);"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-b-sha256.compact",
+      "sha256": "6751fcdbcdd7b02356c475bfad7eb0da10e0f7da5a7187b045a8775a75c4afe5",
+      "lineCount": 8,
+      "scope": "testscaffold",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [
+        "sha256"
+      ],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 6,
+          "source": "export circuit digest(data: Bytes<64>): Bytes<32> {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-c-point-ops.compact",
+      "sha256": "92d53efbba0c095bce4ef63247200d9b3ef8ff45f3c650526b27c92fcddae7cc",
+      "lineCount": 12,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256k1Point",
+        "Secp256k1Scalar"
+      ],
+      "cryptoPrimitives": [
+        "secp256k1Add",
+        "secp256k1Mul",
+        "secp256k1MulGenerator",
+        "secp256k1PointX"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Uncompiled API candidate/arithmetic probe: no registration/authentication policy; primitive availability and native point checks must not be inferred from source presence."
+      ],
+      "sourceReferences": [
+        {
+          "line": 8,
+          "source": "p: Secp256k1Point"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-d-accessors.compact",
+      "sha256": "228d092545ed0d7ebebd70d246093b20b5cd386db37344f8edcd27e84ffe5c34",
+      "lineCount": 10,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256k1Point"
+      ],
+      "cryptoPrimitives": [
+        "secp256k1PointX",
+        "secp256k1PointY"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Uncompiled API candidate/arithmetic probe: no registration/authentication policy; primitive availability and native point checks must not be inferred from source presence."
+      ],
+      "sourceReferences": [
+        {
+          "line": 5,
+          "source": "export circuit x_of(p: Secp256k1Point): Secp256k1Base {"
+        },
+        {
+          "line": 8,
+          "source": "export circuit y_of(p: Secp256k1Point): Secp256k1Base {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-e-point-infix.compact",
+      "sha256": "a46078c6ce61c12854bc4a10e9e83554e1f577c666c4e6da5ce5c30b817cf372",
+      "lineCount": 7,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256k1Point"
+      ],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Uncompiled API candidate/arithmetic probe: no registration/authentication policy; primitive availability and native point checks must not be inferred from source presence."
+      ],
+      "sourceReferences": [
+        {
+          "line": 5,
+          "source": "export circuit sum(p: Secp256k1Point, q: Secp256k1Point): Secp256k1Point {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-f-scalarmul.compact",
+      "sha256": "d9cada7f130dcdbec5b4ae63f2f8c1e0c5d078c03062698072d2149648dd00df",
+      "lineCount": 7,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256k1Point",
+        "Secp256k1Scalar"
+      ],
+      "cryptoPrimitives": [
+        "secp256k1ScalarMul"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Uncompiled API candidate/arithmetic probe: no registration/authentication policy; primitive availability and native point checks must not be inferred from source presence."
+      ],
+      "sourceReferences": [
+        {
+          "line": 5,
+          "source": "export circuit smul(s: Secp256k1Scalar, p: Secp256k1Point): Secp256k1Point {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/bip340-wallet-gate/compact-probes/probe-g-envelope-ecdsa.compact",
+      "sha256": "54bc967a53c015e93512d771515059bcfef961c126aef856129540987daca1c2",
+      "lineCount": 18,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "Secp256k1Point"
+      ],
+      "cryptoPrimitives": [
+        "persistentHash",
+        "secp256k1EcdsaVerify"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Native ECDSA verifier Boolean return value is discarded; these are API/compilation probes, not an asserted signature authentication gate. No compile or execution claim made."
+      ],
+      "sourceReferences": [
+        {
+          "line": 14,
+          "source": "pk: Secp256k1Point"
+        },
+        {
+          "line": 17,
+          "source": "secp256k1EcdsaVerify(digest, sig, pk);"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-custody-feasibility/contracts/custody.compact",
+      "sha256": "62c524dd7e6dca80ca1d9283a2e5ba5d74a018ce912021c1db0db48508a0f77c",
+      "lineCount": 355,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken",
+        "receiveShielded",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 136,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 153,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 159,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 184,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 189,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 213,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 218,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 284,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 290,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 301,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 308,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 314,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 320,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-to-contract-transfer/contracts/c2c.compact",
+      "sha256": "1e5b87cfe5a469fe76e4f87c8b1c63464a67a692782f08c7b6625acabf87ba83",
+      "lineCount": 137,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Encryption key stored as opaque Bytes<32>; fixed byte width is not a low-order or curve-validity check."
+      ],
+      "sourceReferences": [
+        {
+          "line": 41,
+          "source": "export ledger enc_key: Bytes<32>;"
+        },
+        {
+          "line": 50,
+          "source": "constructor(encryption_key: Bytes<32>) {"
+        },
+        {
+          "line": 53,
+          "source": "enc_key     = disclose(encryption_key);"
+        },
+        {
+          "line": 87,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 94,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 129,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(disclose(target)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-to-contract-transfer/contracts/faucet.compact",
+      "sha256": "49a9a62e511bd55f24f3ee46faa8061963d8ce90456055990ac708fa23ee3581",
+      "lineCount": 27,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 25,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-to-wallet-ciphertext/contracts/faucet.compact",
+      "sha256": "49a9a62e511bd55f24f3ee46faa8061963d8ce90456055990ac708fa23ee3581",
+      "lineCount": 27,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 25,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-to-wallet-ciphertext/contracts/vault.compact",
+      "sha256": "a213494f473a9ded350bdd0b1a4d236b0d9e9ad7ad2a37166e64d872a38b50f8",
+      "lineCount": 114,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 77,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 84,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 99,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 106,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-upgradability-feasibility/contracts/upgradable_v1.compact",
+      "sha256": "1e0a4c271fecc5fb02a36e8e7fa2a37684d9785063cb5d86ad8f1bbc930834a3",
+      "lineCount": 48,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 22,
+          "source": "export ledger counter: Uint<64>;"
+        },
+        {
+          "line": 26,
+          "source": "constructor() {"
+        },
+        {
+          "line": 34,
+          "source": "export circuit increment(): [] {"
+        },
+        {
+          "line": 40,
+          "source": "export circuit bump_other(): [] {"
+        },
+        {
+          "line": 46,
+          "source": "export circuit query_counter(): Uint<64> {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/contract-upgradability-feasibility/contracts/upgradable_v2.compact",
+      "sha256": "1d3dc99798c2cd6d4f13c0e7736e6af2a0dafac3f6ae98d69079b884164e919b",
+      "lineCount": 63,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 23,
+          "source": "export ledger counter: Uint<64>;"
+        },
+        {
+          "line": 24,
+          "source": "export ledger last_op: Uint<8>;"
+        },
+        {
+          "line": 27,
+          "source": "constructor() {"
+        },
+        {
+          "line": 37,
+          "source": "export circuit increment(): [] {"
+        },
+        {
+          "line": 44,
+          "source": "export circuit decrement(): [] {"
+        },
+        {
+          "line": 50,
+          "source": "export circuit bump_other(): [] {"
+        },
+        {
+          "line": 57,
+          "source": "export circuit query_counter(): Uint<64> {"
+        },
+        {
+          "line": 61,
+          "source": "export circuit query_last_op(): Uint<8> {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/account-gate.compact",
+      "sha256": "e99832eaee34075b6dd4688d7bcc00e5a5b3c6e5838cd95bcaf99d4a52854c8c",
+      "lineCount": 77,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint"
+      ],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "Encryption key stored as opaque Bytes<32>; fixed byte width is not a low-order or curve-validity check.",
+        "Forwards supplied Jubjub key/signature values through a cross-contract ABI. No local key validation; target account gate is the authentication boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 37,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 39,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 66,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 68,
+          "source": "sig_r:       JubjubPoint,"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/account.compact",
+      "sha256": "cc388a14bdc411779450b9b9a93704a7a4559d31617b872756da3211264022b2",
+      "lineCount": 1200,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint",
+        "JubjubScalar",
+        "Secp256k1Point",
+        "Secp256k1Scalar",
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "ecAdd",
+        "ecMul",
+        "ecMulGenerator",
+        "persistentHash",
+        "receiveShielded",
+        "secp256k1EcdsaVerify",
+        "secp256k1PointX",
+        "secp256k1PointY",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "Explicit [8]P != O at Jubjub device gate; require_live_k256_key rejects zero-coordinate K256 keys.",
+        "subgroup": "Cofactor guard rejects pure small-order keys, not full mixed-torsion membership; native decoder/arithmetic is separate.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Encryption key stored as opaque Bytes<32>; fixed byte width is not a low-order or curve-validity check.",
+        "Historical account snapshot: review separately from current contract; does not contain current grant/recovery surfaces. No explicit nonidentity R guard."
+      ],
+      "sourceReferences": [
+        {
+          "line": 170,
+          "source": "export ledger enc_key: Bytes<32>;"
+        },
+        {
+          "line": 236,
+          "source": "constructor(initial_device_boot: Bytes<32>, encryption_key: Bytes<32>) {"
+        },
+        {
+          "line": 238,
+          "source": "enc_key      = disclose(encryption_key);"
+        },
+        {
+          "line": 265,
+          "source": "export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<32>): [] {"
+        },
+        {
+          "line": 267,
+          "source": "assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),"
+        },
+        {
+          "line": 275,
+          "source": "export circuit activate_initial_device_with_k256(pk: Secp256k1Point, salt: Bytes<32>): [] {"
+        },
+        {
+          "line": 277,
+          "source": "require_live_k256_key(pk);"
+        },
+        {
+          "line": 288,
+          "source": "export pure circuit derive_boot_commitment_with_jubjub(salt: Bytes<32>, pk: JubjubPoint): Bytes<32> {"
+        },
+        {
+          "line": 289,
+          "source": "return persistentHash<[Bytes<32>, Bytes<32>, JubjubPoint]>("
+        },
+        {
+          "line": 297,
+          "source": "export pure circuit derive_boot_commitment_with_k256(salt: Bytes<32>, pk: Secp256k1Point): Bytes<32> {"
+        },
+        {
+          "line": 317,
+          "source": "pk:        JubjubPoint,"
+        },
+        {
+          "line": 321,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, Uint<32>, Uint<64>]>("
+        },
+        {
+          "line": 338,
+          "source": "pk:        Secp256k1Point,"
+        },
+        {
+          "line": 365,
+          "source": "circuit require_live_k256_key(pk: Secp256k1Point): [] {"
+        },
+        {
+          "line": 377,
+          "source": "export pure circuit compute_public_point_with_jubjub(scalar: Field): JubjubPoint {"
+        },
+        {
+          "line": 378,
+          "source": "return ecMulGenerator(scalar as JubjubScalar);"
+        },
+        {
+          "line": 381,
+          "source": "export pure circuit compute_public_point_with_k256(scalar: Secp256k1Scalar): Secp256k1Point {"
+        },
+        {
+          "line": 382,
+          "source": "return ecMulGenerator(scalar);"
+        },
+        {
+          "line": 400,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 401,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 411,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 422,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 423,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 424,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 434,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 441,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 442,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 453,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ContractAddress, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 460,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 461,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 469,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<192>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 476,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 477,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 485,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 496,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 497,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 505,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 512,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 513,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 521,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 537,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 555,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 556,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 565,
+          "source": "return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>]>("
+        },
+        {
+          "line": 574,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 593,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 609,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 625,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 641,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 671,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 673,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 684,
+          "source": "assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),"
+        },
+        {
+          "line": 697,
+          "source": "ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(pk, c as JubjubScalar)),"
+        },
+        {
+          "line": 705,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 710,
+          "source": "require_live_k256_key(pk);"
+        },
+        {
+          "line": 721,
+          "source": "secp256k1EcdsaVerify(challenge, sig, pk),"
+        },
+        {
+          "line": 784,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 790,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 808,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 819,
+          "source": "enc_key = disclose(new_key);"
+        },
+        {
+          "line": 872,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 874,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 889,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 919,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 921,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 934,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 952,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 955,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 957,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 970,
+          "source": "recipient:   ZswapCoinPublicKey,"
+        },
+        {
+          "line": 973,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1003,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1005,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1021,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1041,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1043,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1056,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1135,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1137,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1150,
+          "source": "pk:          Secp256k1Point,"
+        },
+        {
+          "line": 1169,
+          "source": "pk:          JubjubPoint,"
+        },
+        {
+          "line": 1171,
+          "source": "sig_r:       JubjubPoint,"
+        },
+        {
+          "line": 1188,
+          "source": "pk:          Secp256k1Point,"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/caller.compact",
+      "sha256": "52d76788792d78318bbb51ae8b92b3549fe539a0fa25b7eac4538bb18e72bf6b",
+      "lineCount": 54,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 26,
+          "source": "circuit set(x: Uint<64>): [];"
+        },
+        {
+          "line": 27,
+          "source": "circuit get(): Uint<64>;"
+        },
+        {
+          "line": 28,
+          "source": "circuit set_guarded(expected: Uint<64>, x: Uint<64>): [];"
+        },
+        {
+          "line": 31,
+          "source": "export ledger tally: Tally;"
+        },
+        {
+          "line": 32,
+          "source": "export ledger last_observed: Uint<64>;"
+        },
+        {
+          "line": 33,
+          "source": "export ledger calls: Counter;"
+        },
+        {
+          "line": 35,
+          "source": "constructor(t: Tally) {"
+        },
+        {
+          "line": 40,
+          "source": "export circuit write_then_read(x: Uint<64>): Uint<64> {"
+        },
+        {
+          "line": 50,
+          "source": "export circuit compose_guarded(expected: Uint<64>, x: Uint<64>): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/lender.compact",
+      "sha256": "18cfd44ddaf0a286838f200090cb721472b0308ed54c7a68ace69955e607c6c7",
+      "lineCount": 43,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 38,
+          "source": "export ledger lends: Counter;"
+        },
+        {
+          "line": 40,
+          "source": "export circuit lend(addr: ContractAddress, ep_hash: Bytes<32>, comm: Field): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/payer.compact",
+      "sha256": "7ee7b6419d66cd580a0e50a3fe70011638ae4abac7b3d2e012f850d281b32875",
+      "lineCount": 189,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken",
+        "receiveShielded",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 148,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self())"
+        },
+        {
+          "line": 179,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(till_addr),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/tally.compact",
+      "sha256": "e115a49d00a6f573d6241e8a193643a0b88019a2c71b0bcd7f14d29042a4f8fc",
+      "lineCount": 45,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 21,
+          "source": "export ledger total: Uint<64>;"
+        },
+        {
+          "line": 22,
+          "source": "export ledger writes: Counter;"
+        },
+        {
+          "line": 24,
+          "source": "constructor() {"
+        },
+        {
+          "line": 28,
+          "source": "export circuit set(x: Uint<64>): [] {"
+        },
+        {
+          "line": 33,
+          "source": "export circuit get(): Uint<64> {"
+        },
+        {
+          "line": 41,
+          "source": "export circuit set_guarded(expected: Uint<64>, x: Uint<64>): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/cross-contract-calls/contracts/till.compact",
+      "sha256": "19daa81c718bf860ceb84700fc5e43688740696136c766e849b87651547aa595",
+      "lineCount": 89,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 68,
+          "source": "held.writeCoin(c, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));"
+        },
+        {
+          "line": 72,
+          "source": "held.writeCoin(merged, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));"
+        }
+      ]
+    },
+    {
+      "path": "experiments/dust-sponsorship-feasibility/contracts/counter.compact",
+      "sha256": "854208809215cc7ffb7b5d054ac2385697e3ef5e668e55cb570c0e0212047fc6",
+      "lineCount": 13,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 9,
+          "source": "export ledger round: Counter;"
+        },
+        {
+          "line": 11,
+          "source": "export circuit bump_counter(): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/nearfall-evaluation/experiments/compact-named-accounts/contracts/single-named.compact",
+      "sha256": "570a067cbf245a5e7bda78396f43a98d0361468168c6d24190b728b0c181ddf1",
+      "lineCount": 124,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "NativePoint"
+      ],
+      "cryptoPrimitives": [
+        "ecAdd",
+        "ecMulGenerator"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No subgroup guard at register; claim ties keys to generator multiples but does not exclude identity.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "register writes supplied scan/spend NativePoints with no point or ownership guard; send stores supplied P without proving its relation to registered keys. claim checks scalar-generated public coordinates and stealth-point relation. No nonzero scalar guard; unfinished escrow/payment proof of concept."
+      ],
+      "sourceReferences": [
+        {
+          "line": 20,
+          "source": "export ledger k_scan:  NativePoint;"
+        },
+        {
+          "line": 21,
+          "source": "export ledger k_spend: NativePoint;"
+        },
+        {
+          "line": 28,
+          "source": "newKScan:  NativePoint,"
+        },
+        {
+          "line": 29,
+          "source": "newKSpend: NativePoint"
+        },
+        {
+          "line": 45,
+          "source": "export ledger pending_R:      NativePoint;"
+        },
+        {
+          "line": 46,
+          "source": "export ledger pending_P:      NativePoint;"
+        },
+        {
+          "line": 63,
+          "source": "export circuit send(r: Field, P: NativePoint, amount: Uint<64>): [] {"
+        },
+        {
+          "line": 64,
+          "source": "const R        = ecMulGenerator(r);"
+        },
+        {
+          "line": 89,
+          "source": "const K_scan_check  = ecMulGenerator(k_scan_scalar);"
+        },
+        {
+          "line": 90,
+          "source": "const K_spend_check = ecMulGenerator(k_spend_scalar);"
+        },
+        {
+          "line": 97,
+          "source": "const hG         = ecMulGenerator(h);"
+        },
+        {
+          "line": 98,
+          "source": "const P_expected = ecAdd(k_spend, hG);"
+        },
+        {
+          "line": 120,
+          "source": "export ledger shielded_R: NativePoint;"
+        },
+        {
+          "line": 123,
+          "source": "shielded_R = disclose(ecMulGenerator(r));"
+        }
+      ]
+    },
+    {
+      "path": "experiments/nearfall-evaluation/experiments/local-tee-poc/contracts/compliance.compact",
+      "sha256": "9a13f5b3cbd9b77aca8851bf623a2448623c98a8750449b33b4d1debd922fc1e",
+      "lineCount": 173,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "NativePoint"
+      ],
+      "cryptoPrimitives": [
+        "ecAdd",
+        "ecMul",
+        "ecMulGenerator",
+        "persistentHash"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "Stored key derives from generator multiplication; no explicit subgroup or nonidentity guard on signature R.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "register_device derives device_pk = sk_device*G without a nonzero-secret/identity guard. update_compliance asserts Schnorr equation. Reset is explicitly unauthenticated PoC functionality. Static observation, not a deployed-contract finding."
+      ],
+      "sourceReferences": [
+        {
+          "line": 39,
+          "source": "export ledger device_pk: NativePoint;"
+        },
+        {
+          "line": 76,
+          "source": "const pk: NativePoint = ecMulGenerator(sk_device);"
+        },
+        {
+          "line": 101,
+          "source": "sig_r:                   NativePoint, // Schnorr nonce point R = r\u00b7G"
+        },
+        {
+          "line": 114,
+          "source": "const h: Bytes<32> = persistentHash<[NativePoint, NativePoint, Uint<8>, Field, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 123,
+          "source": "ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(device_pk, c)),"
+        },
+        {
+          "line": 154,
+          "source": "export pure circuit compute_nonce_point(r: Field): NativePoint {"
+        },
+        {
+          "line": 155,
+          "source": "return ecMulGenerator(r);"
+        },
+        {
+          "line": 163,
+          "source": "sig_r:                   NativePoint,"
+        },
+        {
+          "line": 164,
+          "source": "pk:                      NativePoint,"
+        },
+        {
+          "line": 170,
+          "source": "return persistentHash<[NativePoint, NativePoint, Uint<8>, Field, Uint<64>, Uint<64>]>("
+        }
+      ]
+    },
+    {
+      "path": "experiments/nearfall-evaluation/experiments/mn-tui/contracts/fungible-token.compact",
+      "sha256": "d75921b924dc504841c5a542502532395c588f7eacff28b763fa8c5306c1aed7",
+      "lineCount": 68,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 25,
+          "source": "witness get_user_shielded_address(): ZswapCoinPublicKey;"
+        },
+        {
+          "line": 64,
+          "source": "const recipient_formatted = left<ZswapCoinPublicKey, ContractAddress>(recipient);"
+        }
+      ]
+    },
+    {
+      "path": "experiments/nearfall-evaluation/experiments/shielding-contracts/contracts/fungible-token.compact",
+      "sha256": "d75921b924dc504841c5a542502532395c588f7eacff28b763fa8c5306c1aed7",
+      "lineCount": 68,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 25,
+          "source": "witness get_user_shielded_address(): ZswapCoinPublicKey;"
+        },
+        {
+          "line": 64,
+          "source": "const recipient_formatted = left<ZswapCoinPublicKey, ContractAddress>(recipient);"
+        }
+      ]
+    },
+    {
+      "path": "experiments/nearfall-evaluation/experiments/test-contract-1/contracts/hello-world.compact",
+      "sha256": "e48a27f708857b699cb992b6ee6c59f456a1400d59ed251112410168604a27cd",
+      "lineCount": 7,
+      "scope": "prototype",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 3,
+          "source": "export ledger message: Opaque<\"string\">;"
+        },
+        {
+          "line": 5,
+          "source": "export circuit storeMessage(newMessage: Opaque<\"string\">): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/redjubjub-wallet-rs/contracts/schnorr-wallet.compact",
+      "sha256": "0ee6db1ebae3485aec6b5a4981faa57db710bb258fe0a69fb178e30070b2ba07",
+      "lineCount": 151,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint"
+      ],
+      "cryptoPrimitives": [
+        "ecAdd",
+        "ecMul",
+        "ecMulGenerator",
+        "persistentHash"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "Stored owner key derives from generator multiplication (subgroup origin); no explicit subgroup or nonidentity guard on signature R.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "register_owner derives owner_pk = sk*G but has no sk != 0 or owner_pk != identity guard. Withdraw asserts the Schnorr equation; deriving a generator multiple ensures subgroup origin, not nonzero-secret validation. Static observation only, no new execution evidence."
+      ],
+      "sourceReferences": [
+        {
+          "line": 30,
+          "source": "export ledger owner_pk: JubjubPoint;"
+        },
+        {
+          "line": 55,
+          "source": "const pk: JubjubPoint = ecMulGenerator(sk);"
+        },
+        {
+          "line": 84,
+          "source": "sig_r:     JubjubPoint,  // Schnorr nonce point R = r\u00b7G"
+        },
+        {
+          "line": 96,
+          "source": "const h: Bytes<32> = persistentHash<[JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 105,
+          "source": "ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(owner_pk, c)),"
+        },
+        {
+          "line": 131,
+          "source": "export pure circuit compute_nonce_point(r: Field): JubjubPoint {"
+        },
+        {
+          "line": 132,
+          "source": "return ecMulGenerator(r);"
+        },
+        {
+          "line": 140,
+          "source": "sig_r:              JubjubPoint,"
+        },
+        {
+          "line": 141,
+          "source": "pk:                 JubjubPoint,"
+        },
+        {
+          "line": 148,
+          "source": "return persistentHash<[JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        }
+      ]
+    },
+    {
+      "path": "experiments/redjubjub-wallet/contracts/schnorr-wallet.compact",
+      "sha256": "0ee6db1ebae3485aec6b5a4981faa57db710bb258fe0a69fb178e30070b2ba07",
+      "lineCount": 151,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "JubjubPoint"
+      ],
+      "cryptoPrimitives": [
+        "ecAdd",
+        "ecMul",
+        "ecMulGenerator",
+        "persistentHash"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "Stored owner key derives from generator multiplication (subgroup origin); no explicit subgroup or nonidentity guard on signature R.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "register_owner derives owner_pk = sk*G but has no sk != 0 or owner_pk != identity guard. Withdraw asserts the Schnorr equation; deriving a generator multiple ensures subgroup origin, not nonzero-secret validation. Static observation only, no new execution evidence."
+      ],
+      "sourceReferences": [
+        {
+          "line": 30,
+          "source": "export ledger owner_pk: JubjubPoint;"
+        },
+        {
+          "line": 55,
+          "source": "const pk: JubjubPoint = ecMulGenerator(sk);"
+        },
+        {
+          "line": 84,
+          "source": "sig_r:     JubjubPoint,  // Schnorr nonce point R = r\u00b7G"
+        },
+        {
+          "line": 96,
+          "source": "const h: Bytes<32> = persistentHash<[JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        },
+        {
+          "line": 105,
+          "source": "ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(owner_pk, c)),"
+        },
+        {
+          "line": 131,
+          "source": "export pure circuit compute_nonce_point(r: Field): JubjubPoint {"
+        },
+        {
+          "line": 132,
+          "source": "return ecMulGenerator(r);"
+        },
+        {
+          "line": 140,
+          "source": "sig_r:              JubjubPoint,"
+        },
+        {
+          "line": 141,
+          "source": "pk:                 JubjubPoint,"
+        },
+        {
+          "line": 148,
+          "source": "return persistentHash<[JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>("
+        }
+      ]
+    },
+    {
+      "path": "experiments/stateless-shielded-custody/contracts/faucet.compact",
+      "sha256": "49a9a62e511bd55f24f3ee46faa8061963d8ce90456055990ac708fa23ee3581",
+      "lineCount": 27,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "mintShieldedToken"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 19,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 25,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/stateless-shielded-custody/contracts/probes/p1-receive-undisclosed.compact",
+      "sha256": "190bd310fa53fa0159b81355b93aaa9a49f13a98779f148de3ff4378285eb3be",
+      "lineCount": 21,
+      "scope": "testscaffold",
+      "cryptoRelevant": false,
+      "keyAndCurveTypes": [],
+      "cryptoPrimitives": [
+        "receiveShielded"
+      ],
+      "explicitGuards": {
+        "identity": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "subgroup": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source.",
+        "pointFormat": "Not applicable: no curve/public-key input, stored encryption key or curve arithmetic found in executable source."
+      },
+      "validationNotes": [
+        "No ECC/public-key validation surface identified. Hashes, contract addresses and commitment fields alone are not treated as elliptic-curve public keys."
+      ],
+      "sourceReferences": [
+        {
+          "line": 12,
+          "source": "export ledger round: Uint<64>;"
+        },
+        {
+          "line": 14,
+          "source": "constructor() {"
+        },
+        {
+          "line": 18,
+          "source": "export circuit deposit_undisclosed(coin: ShieldedCoinInfo): [] {"
+        }
+      ]
+    },
+    {
+      "path": "experiments/stateless-shielded-custody/contracts/probes/p2-send-undisclosed.compact",
+      "sha256": "656a800f29b809e18b7518cc09a5c886a3b03b611d8be7b822bbed74b5fcba1a",
+      "lineCount": 32,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 21,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 28,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/stateless-shielded-custody/contracts/probes/p3-change-undisclosed.compact",
+      "sha256": "3c9d8c5ed99340b0af19911ca4a59d3111e093049286286f7b26d7e6fd8ff7b5",
+      "lineCount": 44,
+      "scope": "testscaffold",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary."
+      ],
+      "sourceReferences": [
+        {
+          "line": 29,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 36,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        }
+      ]
+    },
+    {
+      "path": "experiments/stateless-shielded-custody/contracts/stateless.compact",
+      "sha256": "16fa59970348feb31384d32432bac56e4275cf1ff0719b49d34e98a2364421da",
+      "lineCount": 189,
+      "scope": "prototype",
+      "cryptoRelevant": true,
+      "keyAndCurveTypes": [
+        "ZswapCoinPublicKey"
+      ],
+      "cryptoPrimitives": [
+        "receiveShielded",
+        "sendShielded"
+      ],
+      "explicitGuards": {
+        "identity": "No explicit identity guard in this source.",
+        "subgroup": "No explicit subgroup-membership guard in this source.",
+        "pointFormat": "No explicit coordinate/encoding validity guard in this source; native-type or primitive validation, where used, is a separate boundary."
+      },
+      "validationNotes": [
+        "ZswapCoinPublicKey is a coin-ownership recipient value, not the separate Ledger encryption public key. Source does not receive or validate that encryption point; output encryption is a client/Ledger boundary.",
+        "Encryption key stored as opaque Bytes<32>; fixed byte width is not a low-order or curve-validity check."
+      ],
+      "sourceReferences": [
+        {
+          "line": 53,
+          "source": "export ledger enc_key: Bytes<32>;"
+        },
+        {
+          "line": 69,
+          "source": "constructor(encryption_key: Bytes<32>) {"
+        },
+        {
+          "line": 72,
+          "source": "enc_key     = disclose(encryption_key);"
+        },
+        {
+          "line": 114,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 121,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 149,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 155,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        },
+        {
+          "line": 162,
+          "source": "recipient: ZswapCoinPublicKey,"
+        },
+        {
+          "line": 169,
+          "source": "left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),"
+        },
+        {
+          "line": 183,
+          "source": "right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),"
+        }
+      ]
+    }
+  ]
+}

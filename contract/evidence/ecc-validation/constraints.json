@@ -1,0 +1,848 @@
+{
+  "fullProofsRequested": true,
+  "rows": [
+    {
+      "accepted": true,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "Failed direct assertion",
+      "input": "identity (0,1)",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000)] as JubjubPoint",
+      "input": "order two (0,-1)",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "Failed to decode [Fq(0x0e254e7ea104d3802bccbee3b4dc92a06d23c09a0f29d8e46239cfcd94b2c782), Fq(0x3a06f639d4bab6865b1f72baff9cdd547d96c632ed1833b0038842c237e2d68b)] as JubjubPoint",
+      "input": "mixed torsion P+(0,-1)",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000000000000000000000000001), Fq(0x0000000000000000000000000000000000000000000000000000000000000001)] as JubjubPoint",
+      "input": "off curve (1,1)",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "Failed to decode [Fq(0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296), Fq(0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5)] as JubjubPoint",
+      "input": "P-256 generator as Jubjub",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "k": 14,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": false,
+      "boundary": "bootstrap/jubjub",
+      "circuit": "activate_initial_device_with_jubjub",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Cannot extract coordinates of the Secp256k1 identity",
+      "input": "flagged identity",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Failed to decode [Fq(0x0000000000000000fffffffffffffffffffffffffffffffffffffffefffffc2e), Fq(0x000000000000000000000000000000000000000000000000ffffffffffffffff), Fq(0x0000000000000000fffffffffffffffffffffffffffffffffffffffefffffc2e), Fq(0x000000000000000000000000000000000000000000000000ffffffffffffffff), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point",
+      "input": "unflagged zero coordinates",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "The encoded value of type Secp256k1Point is not in canonical form: [Fq(0x000000000000000055a06295ce870b07029bfcdb2dce28d959f2815b16f81797), Fq(0x00000000000000000000000000000000000000000000000079be667ef9dcbbac), Fq(0x00000000000000005da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b7), Fq(0x000000000000000000000000000000000000000000000000483ada7726a3c465), Fq(0x0000000000000000000000000000000000000000000000000000000000000001)]",
+      "input": "identity flag with generator coordinates",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point",
+      "input": "off curve (1,1)",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Failed to decode [Fq(0x0000000000000000f8bce6e563a440f277037d812deb33a0f4a13945d898c295), Fq(0x0000000000000000000000000000000000000000000000006b17d1f2e12c4247), Fq(0x00000000000000008ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f4), Fq(0x0000000000000000000000000000000000000000000000004fe342e2fe1a7f9b), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point",
+      "input": "other curve generator",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000000000000000000000000002), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000b7565e8a4c456b5a5e7d6d2b9542846dfd7e571e400d8b39), Fq(0x000000000000000000000000000000000000000000000000d4f81aab1a2b90cf), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point",
+      "input": "invalid-curve twin y\u00b2=x\u00b3+2",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Failed to decode [Fq(0x0000000000000000fffffffffffffffffffffffffffffffffffffffefffffc2f), Fq(0x000000000000000000000000000000000000000000000000ffffffffffffffff), Fq(0x00000000000000005da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b7), Fq(0x000000000000000000000000000000000000000000000000483ada7726a3c465), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point",
+      "input": "noncanonical shifted x=p",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "The encoded value of type Secp256k1Point is not in canonical form: [Fq(0x000000000000000055a06295ce870b07029bfcdb2dce28d959f2815b16f81797), Fq(0x00000000000000000000000000000000000000000000000079be667ef9dcbbac), Fq(0x00000000000000005da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b7), Fq(0x000000000000000000000000000000000000000000000000483ada7726a3c465), Fq(0x0000000000000000000000000000000000000000000000000000000000000002)]",
+      "input": "identity flag=2",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": "Failed to decode [Fq(0x0000000000000001000000000000000000000000000000000000000000000000), Fq(0x00000000000000000000000000000000000000000000000079be667ef9dcbbac), Fq(0x00000000000000005da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b7), Fq(0x000000000000000000000000000000000000000000000000483ada7726a3c465), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point",
+      "input": "oversized low coordinate limb",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "bootstrap/k256",
+      "circuit": "activate_initial_device_with_k256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "Cannot extract coordinates of the Secp256r1 identity",
+      "input": "flagged identity",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000fffffffffffffffffffffffe), Fq(0x000000000000000000000000000000000000000000000000ffffffff00000001), Fq(0x0000000000000000000000000000000000000000fffffffffffffffffffffffe), Fq(0x000000000000000000000000000000000000000000000000ffffffff00000001), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256r1Point",
+      "input": "unflagged zero coordinates",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "The encoded value of type Secp256r1Point is not in canonical form: [Fq(0x0000000000000000f8bce6e563a440f277037d812deb33a0f4a13945d898c295), Fq(0x0000000000000000000000000000000000000000000000006b17d1f2e12c4247), Fq(0x00000000000000008ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f4), Fq(0x0000000000000000000000000000000000000000000000004fe342e2fe1a7f9b), Fq(0x0000000000000000000000000000000000000000000000000000000000000001)]",
+      "input": "identity flag with generator coordinates",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256r1Point",
+      "input": "off curve (1,1)",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "Failed to decode [Fq(0x000000000000000055a06295ce870b07029bfcdb2dce28d959f2815b16f81797), Fq(0x00000000000000000000000000000000000000000000000079be667ef9dcbbac), Fq(0x00000000000000005da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b7), Fq(0x000000000000000000000000000000000000000000000000483ada7726a3c465), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256r1Point",
+      "input": "other curve generator",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "Failed to decode [Fq(0x0000000000000000000000000000000000000000ffffffffffffffffffffffff), Fq(0x000000000000000000000000000000000000000000000000ffffffff00000001), Fq(0x00000000000000008ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f4), Fq(0x0000000000000000000000000000000000000000000000004fe342e2fe1a7f9b), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256r1Point",
+      "input": "noncanonical shifted x=p",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "The encoded value of type Secp256r1Point is not in canonical form: [Fq(0x0000000000000000f8bce6e563a440f277037d812deb33a0f4a13945d898c295), Fq(0x0000000000000000000000000000000000000000000000006b17d1f2e12c4247), Fq(0x00000000000000008ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f4), Fq(0x0000000000000000000000000000000000000000000000004fe342e2fe1a7f9b), Fq(0x0000000000000000000000000000000000000000000000000000000000000002)]",
+      "input": "identity flag=2",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "raw-bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": "Failed to decode [Fq(0x0000000000000001000000000000000000000000000000000000000000000000), Fq(0x0000000000000000000000000000000000000000000000006b17d1f2e12c4247), Fq(0x00000000000000008ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f4), Fq(0x0000000000000000000000000000000000000000000000004fe342e2fe1a7f9b), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256r1Point",
+      "input": "oversized low coordinate limb",
+      "stage": "raw-input-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "bootstrap/p256",
+      "circuit": "activate_initial_device_with_p256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/authorise jubjub",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "identity (0,1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "order two (0,-1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "mixed torsion P+(0,-1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "off curve (1,1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "P-256 generator as Jubjub",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/enrol commitment",
+      "circuit": "add_device_with_jubjub",
+      "error": null,
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "device/authorise jubjub",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/authorise k256",
+      "circuit": "rotate_enc_key_with_k256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "device/authorise p256",
+      "circuit": "rotate_enc_key_with_p256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/spend jubjub",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "identity (0,1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "order two (0,-1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "mixed torsion P+(0,-1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "off curve (1,1)",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "P-256 generator as Jubjub",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/issue committed jubjub key",
+      "circuit": "issue_grant_with_jubjub",
+      "error": null,
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "grant/spend jubjub",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "recovery/submit stored key",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "recovery/submit stored key",
+      "circuit": "recover_submit",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "valid announcement",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "valid announcement",
+      "k": 15,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "input": "valid announcement",
+      "stage": "local-test-proof-verification"
+    },
+    {
+      "accepted": false,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "input": "damaged proof: valid announcement",
+      "stage": "local-test-proof-verification"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "identity R, valid owner key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "identity R, valid owner key",
+      "k": 15,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "input": "identity R, valid owner key",
+      "stage": "local-test-proof-verification"
+    },
+    {
+      "accepted": false,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "input": "damaged proof: identity R, valid owner key",
+      "stage": "local-test-proof-verification"
+    },
+    {
+      "accepted": false,
+      "boundary": "signature/announcement",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x69b0fb638c01a066859db5c1386766c844970573f55fe1e5869b17d51fb1b6da), Fq(0x18100ccf927de921d18e203c14ab2100d7cc8773809db28aa337e192c49cc626)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "recovery/successor device",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "recovery/successor device",
+      "circuit": "recover_submit",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "recovery/successor recovery",
+      "circuit": "recover_submit",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "zero",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "one",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "valid X25519",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/grant announcement",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "error": null,
+      "input": "valid announcement",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/grant announcement",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "error": null,
+      "input": "valid announcement",
+      "k": 16,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/grant announcement",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "error": null,
+      "input": "identity R",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/grant announcement",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "error": null,
+      "input": "identity R",
+      "k": 16,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=7, successor nonce=7",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=7, successor nonce=7",
+      "k": 15,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=0, successor nonce=7",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=0, successor nonce=7",
+      "k": 15,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=7, successor nonce=0",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=7, successor nonce=0",
+      "k": 15,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=0, successor nonce=0",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/recovery announcement",
+      "circuit": "recover_submit",
+      "error": null,
+      "input": "recovery nonce=0, successor nonce=0",
+      "k": 15,
+      "stage": "mock-prover-constraints"
+    },
+    {
+      "accepted": true,
+      "boundary": "recovery/publish key",
+      "circuit": "publish_recovery_session_with_jubjub",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": false,
+      "boundary": "recovery/publish key",
+      "circuit": "publish_recovery_session_with_jubjub",
+      "error": "The encoded value of type JubjubPoint is not in canonical form: [Fq(0x65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d3881), Fq(0x39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976)]",
+      "input": "altered x+2, same y",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/spend k256",
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "grant/spend p256",
+      "circuit": "withdraw_unshielded_with_grant_p256",
+      "error": null,
+      "input": "valid subgroup key",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/ECDSA k256",
+      "circuit": "rotate_enc_key_with_k256",
+      "error": null,
+      "input": "low s",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/ECDSA k256",
+      "circuit": "rotate_enc_key_with_k256",
+      "error": null,
+      "input": "high s",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/ECDSA p256",
+      "circuit": "rotate_enc_key_with_p256",
+      "error": null,
+      "input": "low s",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "signature/ECDSA p256",
+      "circuit": "rotate_enc_key_with_p256",
+      "error": null,
+      "input": "high s",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "0000000000000000000000000000000000000000000000000000000000000000",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "0000000000000000000000000000000000000000000000000000000000000080",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "0100000000000000000000000000000000000000000000000000000000000000",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "0100000000000000000000000000000000000000000000000000000000000080",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+      "stage": "zkir-preprocessing"
+    },
+    {
+      "accepted": true,
+      "boundary": "encryption/rotate low-order key",
+      "circuit": "rotate_enc_key_with_jubjub",
+      "error": null,
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+      "stage": "zkir-preprocessing"
+    }
+  ],
+  "runtimeGeneratedSha256": "055ff3357d7c89b84967f2babca7f3657b802dc3072f54daf3d18cb148c90f5c",
+  "runtimeRows": 197,
+  "scope": "Native ZKIR preprocessing, marked MockProver checks, and optionally local proofs using test-only KZG parameters. No production proof or node submission.",
+  "zkir_revision": "e82d81d25aabcc5f5092e2bd559083487f577914",
+  "testSourceSha256": "5ec3d1983a028bf6588f638d87377cba5f44d1f787c727bb388120a243dfbee7",
+  "runnerSha256": "6c68634cb8e05e1d4ffa0ae41c39204774f91a3318e9fafce2060c4309265ca1",
+  "runtimeEvidenceSha256": "b0b52a23265cb4c91f00a68e6a7cf89844131d7d122f27f3fe2da8aa3ed87573",
+  "zkirSha256": {
+    "activate_initial_device_with_jubjub": "aa57039b114151e1889e8ae86afcc3aa2ca0e5929275bcc75061b28088eb868b",
+    "activate_initial_device_with_k256": "b197e27eaa0b96c3e320a65c238ff662ce3e6cb0be7d56a5e1dabba0e7db8662",
+    "activate_initial_device_with_p256": "a6c4420309515190f2f93ff5ceb3caf8faf32c1a277c249456a7db6520cf8510",
+    "add_device_with_jubjub": "d6086a4bcd2f3d6c0c891657121df7ad753f4b5c52f9843c68e9c927471e6c5f",
+    "issue_grant_with_jubjub": "5a375421790a8e1e2c7ee2a6a04bc45b59af6d3e5fd39ceac047605178bed0e8",
+    "publish_recovery_session_with_jubjub": "b3c9ba85558a6114552f1ccf3a0a8f5a3ad2931be27ec588ba8a80768500a23b",
+    "recover_submit": "383f701d09f5c763f17b5821c41944f3f5681a5b9cf9e39e525dded79e13e6d3",
+    "rotate_enc_key_with_jubjub": "c9e1e5f58c19179f290face9c90935a20c28938c4c8db2bbf0bf1fc0d10999ab",
+    "rotate_enc_key_with_k256": "7f22b917111f9de789a5da7d7b2c1182c8c5578b9d06bb7c11b5339ac829052f",
+    "rotate_enc_key_with_p256": "2b056dde43dc3e75a651b3f19f48abf8d0fe48c6a167a561b58c5a8ee714ea5f",
+    "withdraw_unshielded_with_grant_jubjub": "c3694f8f2c42693d9b3ab45605194d4a3dc31ba6664985902c1e64fa3b5c5f40",
+    "withdraw_unshielded_with_grant_k256": "b0ec72d2b80131da5caa38715865048ca6d27938b85263f2afff0670c9ef6328",
+    "withdraw_unshielded_with_grant_p256": "0a02e65b7f4a34e93f62c92604394a2352a42090b34fd965078ab8d49602c683"
+  }
+}

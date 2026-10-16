@@ -508,6 +508,24 @@ mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
 
+    #[test]
+    fn jubjub_secret_import_currently_accepts_zero_and_empty_strings() {
+        // Characterize the current policy; these are not usable signing keys.
+        for encoded in ["", "0x", "0", "0x00"] {
+            let secret = jubjub_scalar_from_hex(encoded).unwrap();
+            assert_eq!(secret, JubjubScalar::from(0u64));
+            assert_eq!(JubjubSubgroup::generator() * secret, JubjubSubgroup::identity());
+        }
+    }
+
+    #[test]
+    fn jubjub_secret_import_rejects_the_subgroup_order() {
+        let mut order = JUBJUB_R_LE;
+        order.reverse();
+        assert!(jubjub_scalar_from_hex(&hex::encode(order)).is_err());
+        assert_eq!(jubjub_scalar_from_hex("1").unwrap(), JubjubScalar::from(1u64));
+    }
+
     const GX_BE: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
     const GY_BE: &str = "483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
 
@@ -718,5 +736,12 @@ mod tests {
         let challenge = out.get("challenge").unwrap().as_str().unwrap();
         let challenge_bytes: [u8; 32] = hex::decode(challenge).unwrap().try_into().unwrap();
         assert!(hash_below_r(&challenge_bytes));
+        // Sampling check, not an RNG-quality proof. Exercise the real signer
+        // repeatedly with identical inputs to detect accidental nonce reuse.
+        let mut announcements = std::collections::HashSet::new();
+        for _ in 0..64 {
+            let signed = sign_jubjub(&req).unwrap();
+            assert!(announcements.insert(signed["sig_r"].to_string()), "repeated nonce announcement");
+        }
     }
 }

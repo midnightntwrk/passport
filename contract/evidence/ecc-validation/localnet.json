@@ -1,0 +1,37 @@
+{
+  "runAt": "2026-10-15T11:01:09.759634+00:00",
+  "probeSha256": "1879100ae7799b78269ac4a59d57852831d817d8216e893b9dbf28ca869f94f8",
+  "composeSha256": "9216038eedf9d5c2bd783e4bd3a8f3875835aea538641e9397f0b666e27199a3",
+  "scope": "Local TCP availability only; reachability does not establish service health or transaction acceptance",
+  "services": [
+    {
+      "service": "node",
+      "port": 9944,
+      "reachable": false,
+      "error": "[Errno 111] Connection refused"
+    },
+    {
+      "service": "indexer",
+      "port": 8088,
+      "reachable": false,
+      "error": "[Errno 111] Connection refused"
+    },
+    {
+      "service": "proof-server",
+      "port": 6300,
+      "reachable": false,
+      "error": "[Errno 111] Connection refused"
+    }
+  ],
+  "containerCommands": {
+    "docker": null,
+    "podman": null
+  },
+  "containerSockets": {
+    "/var/run/docker.sock": false,
+    "/run/user/1000/docker.sock": false,
+    "/run/podman/podman.sock": false
+  },
+  "nodeSubmission": "not attempted",
+  "status": "blocked: local integration services unavailable"
+}

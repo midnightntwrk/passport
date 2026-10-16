@@ -1,0 +1,229 @@
+{
+  "completed": true,
+  "runAt": "2026-10-15T11:31:34.049Z",
+  "node": "v22.23.3",
+  "scope": "Installed SDK address codec, default v9 transfer capability and local ledger validation/application with proofs and fee balancing disabled; synthetic funding; no browser UI or node submission",
+  "lockfileSha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51",
+  "testSha256": "1dd262bfd1b421776d3b32861c644f8d61ced79b5721a4ebea9231ce8598acef",
+  "versions": {
+    "ledger": "1.0.0-rc.5",
+    "shieldedWallet": "4.0.0-rc.0",
+    "addressFormat": "4.0.0-rc.0"
+  },
+  "recipientVectors": [
+    {
+      "input": "normal",
+      "encryptionPublicKey": "4502d686bf0783d927c307713cd112103cb3ccca4e677b0e84562eb1ee4266d9",
+      "transferAccepted": true
+    },
+    {
+      "input": "identity",
+      "encryptionPublicKey": "0100000000000000000000000000000000000000000000000000000000000000",
+      "transferAccepted": true
+    },
+    {
+      "input": "order-two",
+      "encryptionPublicKey": "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+      "transferAccepted": false
+    },
+    {
+      "input": "mixed-torsion",
+      "encryptionPublicKey": "bcfd29793ff87c26d798f68ec6d2aa43c924d53eb970be24c4266f786464871a",
+      "transferAccepted": false
+    },
+    {
+      "input": "invalid-group-zero",
+      "encryptionPublicKey": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transferAccepted": false
+    },
+    {
+      "input": "noncanonical-field",
+      "encryptionPublicKey": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "transferAccepted": false
+    },
+    {
+      "input": "empty",
+      "encryptionPublicKey": "",
+      "transferAccepted": false
+    },
+    {
+      "input": "31-bytes",
+      "encryptionPublicKey": "01010101010101010101010101010101010101010101010101010101010101",
+      "transferAccepted": false
+    },
+    {
+      "input": "33-bytes",
+      "encryptionPublicKey": "010101010101010101010101010101010101010101010101010101010101010101",
+      "transferAccepted": false
+    }
+  ],
+  "rows": [
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "normal",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "identity",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "order-two",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "mixed-torsion",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "invalid-group-zero",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "noncanonical-field",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "empty",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "31-bytes",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address encode/parse/decode",
+      "input": "33-bytes",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "address network control",
+      "input": "wrong-network",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Error: Expected preview address, got undeployed one"
+    },
+    {
+      "boundary": "address checksum control",
+      "input": "damaged-checksum",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Error: Invalid checksum in mn_shield-addr_undeployed1s7nlpkzpvhljkw4dx29p6p7jyynu974apnfen2jtv76jg203fvqszqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqf6t6wq: expected \"f6t6w8\""
+    },
+    {
+      "boundary": "wallet secret-key codec",
+      "input": "zero-secret import",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "normal",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "identity",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "order-two",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: invalid group element encoding"
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "mixed-torsion",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: invalid group element encoding"
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "invalid-group-zero",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: invalid group element encoding"
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "noncanonical-field",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: invalid group element encoding"
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "empty",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: failed to fill whole buffer"
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "31-bytes",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: failed to fill whole buffer"
+    },
+    {
+      "boundary": "wallet makeTransfer",
+      "input": "33-bytes",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Wallet.Other: Failed to process desired outputs: Error: invalid group element encoding"
+    },
+    {
+      "boundary": "wallet identity transaction serialization",
+      "input": "unproven round-trip retains zero-secret detection",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "local ledger (proofs/fees disabled)",
+      "input": "normal",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "local ledger native-proof control",
+      "input": "normal: mock proof",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Error: Invalid proof -- while verifying Zswap proof"
+    },
+    {
+      "boundary": "local ledger (proofs/fees disabled)",
+      "input": "identity",
+      "expectedAccepted": true,
+      "accepted": true
+    },
+    {
+      "boundary": "local ledger native-proof control",
+      "input": "identity: mock proof",
+      "expectedAccepted": false,
+      "accepted": false,
+      "error": "Error: Invalid proof -- while verifying Zswap proof"
+    }
+  ]
+}

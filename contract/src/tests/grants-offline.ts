@@ -238,7 +238,7 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
     259_200n,            // veto window, seconds
   );
 
-  let state: any = init.currentContractState;
+  let state: any = init.currentContractState.data;
   let useCounter = 0n;
   let time = 1_800_000_000; // simulated block time, whole seconds
 

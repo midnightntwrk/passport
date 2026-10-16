@@ -9,3 +9,4 @@ signer-rs/target/
 buss-rs/target/
 evidence/p256-webauthn/run-*.jsonl
 evidence/p256-webauthn/run-browser-*.json
+evidence/ecc-validation/preimages/

@@ -1,0 +1,15 @@
+[package]
+name = "ecc-validation-checks"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+midnight-circuits = "=7.2.4"
+midnight-curves = "=0.3.1"
+midnight-proofs = "=0.8.3"
+midnight-zk-stdlib = "=2.3.5"
+ff = "0.13"
+group = "0.13"
+rand = "0.8"
+blake2b_simd = "1"

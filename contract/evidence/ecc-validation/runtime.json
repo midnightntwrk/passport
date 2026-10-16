@@ -1,0 +1,1509 @@
+{
+  "scope": "Generated Compact JavaScript execution only; no proof generation, verification or node submission",
+  "completed": true,
+  "node": "v22.23.3",
+  "compiler": "0.35.0",
+  "compilerCommit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
+  "runtime": "0.20.0",
+  "sourceSha256": {
+    "account.compact": "a5a05eef67399856dc9d25ae9989a3972b4695f1f2fe6a25bfd68ee51669d3d5",
+    "account-p256.compact": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4",
+    "webauthn.compact": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb"
+  },
+  "generatedSha256": "055ff3357d7c89b84967f2babca7f3657b802dc3072f54daf3d18cb148c90f5c",
+  "zkirSha256": {
+    "activate_initial_device_with_jubjub": "aa57039b114151e1889e8ae86afcc3aa2ca0e5929275bcc75061b28088eb868b",
+    "activate_initial_device_with_k256": "b197e27eaa0b96c3e320a65c238ff662ce3e6cb0be7d56a5e1dabba0e7db8662",
+    "activate_initial_device_with_p256": "a6c4420309515190f2f93ff5ceb3caf8faf32c1a277c249456a7db6520cf8510",
+    "add_device_with_jubjub": "d6086a4bcd2f3d6c0c891657121df7ad753f4b5c52f9843c68e9c927471e6c5f",
+    "issue_grant_with_jubjub": "5a375421790a8e1e2c7ee2a6a04bc45b59af6d3e5fd39ceac047605178bed0e8",
+    "publish_recovery_session_with_jubjub": "b3c9ba85558a6114552f1ccf3a0a8f5a3ad2931be27ec588ba8a80768500a23b",
+    "recover_submit": "383f701d09f5c763f17b5821c41944f3f5681a5b9cf9e39e525dded79e13e6d3",
+    "rotate_enc_key_with_jubjub": "c9e1e5f58c19179f290face9c90935a20c28938c4c8db2bbf0bf1fc0d10999ab",
+    "rotate_enc_key_with_k256": "7f22b917111f9de789a5da7d7b2c1182c8c5578b9d06bb7c11b5339ac829052f",
+    "rotate_enc_key_with_p256": "2b056dde43dc3e75a651b3f19f48abf8d0fe48c6a167a561b58c5a8ee714ea5f",
+    "withdraw_unshielded_with_grant_jubjub": "c3694f8f2c42693d9b3ab45605194d4a3dc31ba6664985902c1e64fa3b5c5f40",
+    "withdraw_unshielded_with_grant_k256": "b0ec72d2b80131da5caa38715865048ca6d27938b85263f2afff0670c9ef6328",
+    "withdraw_unshielded_with_grant_p256": "0a02e65b7f4a34e93f62c92604394a2352a42090b34fd965078ab8d49602c683"
+  },
+  "clientSourceSha256": {
+    "wallet/signer.ts": "4c3d593c0947641a116bfca059de399c1fcff24d37c430a38bbbf493c8e3cc8b",
+    "wallet/signer-p256.ts": "5a2b9e646283425fefcdf2f70dd058976aa772b1c11a10522df0eaa059787c76",
+    "wallet/recovery-gate.ts": "4367c68b64d12ab7216e4c9aabe4686a65835ca873b4f1d4842ff62398180389",
+    "wallet/recovery.ts": "8a92114a7d9c3e1b4f5188b8d660d1459c58b70b715992c4b5d144a1bf7baf2c",
+    "wallet/inbox.ts": "3c4bce6dd5e92eda4b8e2dda15fc4aef91003300c4296cb3794a1d8d695a5922",
+    "wallet/contract.ts": "1f7afef8d4fa921d5f2431e61d8cec7570c242c130435a4bfd894b88183eea66",
+    "wallet/witnesses.ts": "7eadb415ac132fa06670633539573d83904e3d6b126cda020b7244cb2d2f89c0",
+    "tests/p256-fixtures.ts": "2e381e5cece4814b2e71de9920649851191e73b6ac997c72addcb94c8c2995ee"
+  },
+  "rawBootstrapVectors": {
+    "jubjub": [
+      {
+        "input": "valid subgroup key",
+        "encoded": [
+          "46037580203438066765405229507649644425780970512522822336637661968249826130047",
+          "26189429486186784039799689203850934078756791903368248146476421754146336352630"
+        ]
+      },
+      {
+        "input": "identity (0,1)",
+        "encoded": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "input": "order two (0,-1)",
+        "encoded": [
+          "0",
+          "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+        ]
+      },
+      {
+        "input": "mixed torsion P+(0,-1)",
+        "encoded": [
+          "6398294971688123714042511000536321411909581988004815485965996731688755054466",
+          "26246445688939406439648051304335031758933760597159389676127236945792244831883"
+        ]
+      },
+      {
+        "input": "off curve (1,1)",
+        "encoded": [
+          "1",
+          "1"
+        ]
+      },
+      {
+        "input": "P-256 generator as Jubjub",
+        "encoded": [
+          "48439561293906451759052585252797914202762949526041747995844080717082404635286",
+          "36134250956749795798585127919587881956611106672985015071877198253568414405109"
+        ]
+      },
+      {
+        "input": "altered x+2, same y",
+        "encoded": [
+          "46037580203438066765405229507649644425780970512522822336637661968249826130049",
+          "26189429486186784039799689203850934078756791903368248146476421754146336352630"
+        ]
+      }
+    ],
+    "k256": [
+      {
+        "input": "valid subgroup key",
+        "encoded": [
+          "2099555776082152715959984918052470658229899869495865382807",
+          "8772561819708210092",
+          "2296155722730244661782892549812466823803139066887912084663",
+          "5204712524664259685",
+          "0"
+        ]
+      },
+      {
+        "input": "flagged identity",
+        "encoded": [
+          "6277101735386680763835789423207666416102355444459739544622",
+          "18446744073709551615",
+          "6277101735386680763835789423207666416102355444459739544622",
+          "18446744073709551615",
+          "1"
+        ]
+      },
+      {
+        "input": "unflagged zero coordinates",
+        "encoded": [
+          "6277101735386680763835789423207666416102355444459739544622",
+          "18446744073709551615",
+          "6277101735386680763835789423207666416102355444459739544622",
+          "18446744073709551615",
+          "0"
+        ]
+      },
+      {
+        "input": "identity flag with generator coordinates",
+        "encoded": [
+          "2099555776082152715959984918052470658229899869495865382807",
+          "8772561819708210092",
+          "2296155722730244661782892549812466823803139066887912084663",
+          "5204712524664259685",
+          "1"
+        ]
+      },
+      {
+        "input": "off curve (1,1)",
+        "encoded": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      {
+        "input": "other curve generator",
+        "encoded": [
+          "6099035517230155242609171499450231825021331682018394161813",
+          "7716867327612699207",
+          "3504043306016436884234838970674372189138811540596173263348",
+          "5756518291402817435",
+          "0"
+        ]
+      },
+      {
+        "input": "invalid-curve twin y²=x³+2",
+        "encoded": [
+          "2",
+          "0",
+          "4495419478885534814166259397363447813314460142672397830969",
+          "15346045052445757647",
+          "0"
+        ]
+      },
+      {
+        "input": "noncanonical shifted x=p",
+        "encoded": [
+          "6277101735386680763835789423207666416102355444459739544623",
+          "18446744073709551615",
+          "2296155722730244661782892549812466823803139066887912084663",
+          "5204712524664259685",
+          "0"
+        ]
+      },
+      {
+        "input": "identity flag=2",
+        "encoded": [
+          "2099555776082152715959984918052470658229899869495865382807",
+          "8772561819708210092",
+          "2296155722730244661782892549812466823803139066887912084663",
+          "5204712524664259685",
+          "2"
+        ]
+      },
+      {
+        "input": "oversized low coordinate limb",
+        "encoded": [
+          "6277101735386680763835789423207666416102355444464034512896",
+          "8772561819708210092",
+          "2296155722730244661782892549812466823803139066887912084663",
+          "5204712524664259685",
+          "0"
+        ]
+      }
+    ],
+    "p256": [
+      {
+        "input": "valid subgroup key",
+        "encoded": [
+          "6099035517230155242609171499450231825021331682018394161813",
+          "7716867327612699207",
+          "3504043306016436884234838970674372189138811540596173263348",
+          "5756518291402817435",
+          "0"
+        ]
+      },
+      {
+        "input": "flagged identity",
+        "encoded": [
+          "79228162514264337593543950334",
+          "18446744069414584321",
+          "79228162514264337593543950334",
+          "18446744069414584321",
+          "1"
+        ]
+      },
+      {
+        "input": "unflagged zero coordinates",
+        "encoded": [
+          "79228162514264337593543950334",
+          "18446744069414584321",
+          "79228162514264337593543950334",
+          "18446744069414584321",
+          "0"
+        ]
+      },
+      {
+        "input": "identity flag with generator coordinates",
+        "encoded": [
+          "6099035517230155242609171499450231825021331682018394161813",
+          "7716867327612699207",
+          "3504043306016436884234838970674372189138811540596173263348",
+          "5756518291402817435",
+          "1"
+        ]
+      },
+      {
+        "input": "off curve (1,1)",
+        "encoded": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      {
+        "input": "other curve generator",
+        "encoded": [
+          "2099555776082152715959984918052470658229899869495865382807",
+          "8772561819708210092",
+          "2296155722730244661782892549812466823803139066887912084663",
+          "5204712524664259685",
+          "0"
+        ]
+      },
+      {
+        "input": "noncanonical shifted x=p",
+        "encoded": [
+          "79228162514264337593543950335",
+          "18446744069414584321",
+          "3504043306016436884234838970674372189138811540596173263348",
+          "5756518291402817435",
+          "0"
+        ]
+      },
+      {
+        "input": "identity flag=2",
+        "encoded": [
+          "6099035517230155242609171499450231825021331682018394161813",
+          "7716867327612699207",
+          "3504043306016436884234838970674372189138811540596173263348",
+          "5756518291402817435",
+          "2"
+        ]
+      },
+      {
+        "input": "oversized low coordinate limb",
+        "encoded": [
+          "6277101735386680763835789423207666416102355444464034512896",
+          "7716867327612699207",
+          "3504043306016436884234838970674372189138811540596173263348",
+          "5756518291402817435",
+          "0"
+        ]
+      }
+    ]
+  },
+  "testSourceSha256": "2d09f238e58c41668c227be56ec0afaa41c72612dc91782a2c226b8c696efcf5",
+  "lockfileSha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51",
+  "rows": [
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "activate_initial_device_with_jubjub",
+      "preimage": "preimages/0.bin"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: device key has small order"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "activate_initial_device_with_jubjub",
+      "preimage": "preimages/6.bin"
+    },
+    {
+      "boundary": "bootstrap/jubjub",
+      "input": "noncanonical x=FQ",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_jubjub argument 1 (argument 2 as invoked from Typescript) at account.compact line 405 char 1; expected value of type JubjubPoint but received { x: 52435875175126190479447740508185965837690552500527637822603658699938581184513n, y: 1n }"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "activate_initial_device_with_k256",
+      "preimage": "preimages/8.bin"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "flagged identity",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "unflagged zero coordinates",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 415 char 1; expected value of type Secp256k1Point but received { x: 0n, y: 0n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "identity flag with generator coordinates",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 415 char 1; expected value of type Secp256k1Point but received { x: 1n, y: 1n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "other curve generator",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 415 char 1; expected value of type Secp256k1Point but received { x: 48439561293906451759052585252797914202762949526041747995844080717082404635286n, y: 36134250956749795798585127919587881956611106672985015071877198253568414405109n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "invalid-curve twin y²=x³+2",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 415 char 1; expected value of type Secp256k1Point but received { x: 3n, y: 96328686030029451746606799749843082175136920865428714315981278333859709946682n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/k256",
+      "input": "noncanonical x=p",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 415 char 1; expected value of type Secp256k1Point but received { x: 115792089237316195423570985008687907853269984665640564039457584007908834671663n, y: 32670510020758816978083085130507043184471273380659243275938904335757337482424n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "activate_initial_device_with_p256",
+      "preimage": "preimages/16.bin"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "flagged identity",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256r1 identity point"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "unflagged zero coordinates",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 47 char 1; expected value of type Secp256r1Point but received { x: 0n, y: 0n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "identity flag with generator coordinates",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256r1 identity point"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 47 char 1; expected value of type Secp256r1Point but received { x: 1n, y: 1n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "other curve generator",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 47 char 1; expected value of type Secp256r1Point but received { x: 55066263022277343669578718895168534326250603453777594175500187360389116729240n, y: 32670510020758816978083085130507043184471273380659243275938904335757337482424n, identity: false }"
+    },
+    {
+      "boundary": "bootstrap/p256",
+      "input": "noncanonical x=p",
+      "accepted": false,
+      "error": "CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 47 char 1; expected value of type Secp256r1Point but received { x: 115792089210356248762697446949407573530086143415290314195533631308867097853951n, y: 36134250956749795798585127919587881956611106672985015071877198253568414405109n, identity: false }"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/23.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/24.bin"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "identity (0,1)",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/25.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: device key has small order"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "order two (0,-1)",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/27.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/29.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "off curve (1,1)",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/31.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "P-256 generator as Jubjub",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/33.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "device/enrol commitment",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "add_device_with_jubjub",
+      "preimage": "preimages/35.bin"
+    },
+    {
+      "boundary": "device/authorise jubjub",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/36.bin"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_k256",
+      "preimage": "preimages/37.bin"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "flagged identity",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "unflagged zero coordinates",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type Secp256k1Point but received { x: 0n, y: 0n, identity: false }"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "identity flag with generator coordinates",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type Secp256k1Point but received { x: 1n, y: 1n, identity: false }"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "other curve generator",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type Secp256k1Point but received { x: 48439561293906451759052585252797914202762949526041747995844080717082404635286n, y: 36134250956749795798585127919587881956611106672985015071877198253568414405109n, identity: false }"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "invalid-curve twin y²=x³+2",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type Secp256k1Point but received { x: 3n, y: 96328686030029451746606799749843082175136920865428714315981278333859709946682n, identity: false }"
+    },
+    {
+      "boundary": "device/authorise k256",
+      "input": "noncanonical x=p",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type Secp256k1Point but received { x: 115792089237316195423570985008687907853269984665640564039457584007908834671663n, y: 32670510020758816978083085130507043184471273380659243275938904335757337482424n, identity: false }"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_p256",
+      "preimage": "preimages/45.bin"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "flagged identity",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256r1 identity point"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "unflagged zero coordinates",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 208 char 1; expected value of type struct P256Auth<pk: Secp256r1Point, use_counter: Uint<0..18446744073709551616>, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 0n, y: 0n, identity: false }, use_counter: 0n, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0, 25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 1n, s: 1n } }"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "identity flag with generator coordinates",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256r1 identity point"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 208 char 1; expected value of type struct P256Auth<pk: Secp256r1Point, use_counter: Uint<0..18446744073709551616>, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 1n, y: 1n, identity: false }, use_counter: 0n, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0, 25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 1n, s: 1n } }"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "other curve generator",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 208 char 1; expected value of type struct P256Auth<pk: Secp256r1Point, use_counter: Uint<0..18446744073709551616>, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 55066263022277343669578718895168534326250603453777594175500187360389116729240n, y: 32670510020758816978083085130507043184471273380659243275938904335757337482424n, identity: false }, use_counter: 0n, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0, 25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 1n, s: 1n } }"
+    },
+    {
+      "boundary": "device/authorise p256",
+      "input": "noncanonical x=p",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 208 char 1; expected value of type struct P256Auth<pk: Secp256r1Point, use_counter: Uint<0..18446744073709551616>, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 115792089210356248762697446949407573530086143415290314195533631308867097853951n, y: 36134250956749795798585127919587881956611106672985015071877198253568414405109n, identity: false }, use_counter: 0n, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0, 25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 1n, s: 1n } }"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/52.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "preimage": "preimages/53.bin"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "identity (0,1)",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/54.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: grantee key has small order"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "order two (0,-1)",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/56.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/58.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "off curve (1,1)",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/60.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "P-256 generator as Jubjub",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/62.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "grant/issue committed jubjub key",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "issue_grant_with_jubjub",
+      "preimage": "preimages/64.bin"
+    },
+    {
+      "boundary": "grant/spend jubjub",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "preimage": "preimages/65.bin"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "valid subgroup key",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/67.bin"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "identity (0,1)",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: recovery key is the identity"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "order two (0,-1)",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "off curve (1,1)",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "P-256 generator as Jubjub",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/birth storage",
+      "input": "altered x+2, same y",
+      "accepted": true
+    },
+    {
+      "boundary": "recovery/submit stored key",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/79.bin"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "valid announcement",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/80.bin"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "identity R, valid owner key",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/81.bin"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/82.bin"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "signature/announcement",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/87.bin"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: recovery key is the identity"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/successor device",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/93.bin"
+    },
+    {
+      "boundary": "recovery/successor recovery",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: recovery key is the identity"
+    },
+    {
+      "boundary": "recovery/successor recovery",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/successor recovery",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/successor recovery",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/successor recovery",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/successor recovery",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/99.bin"
+    },
+    {
+      "boundary": "encryption/rotate key",
+      "input": "zero",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/100.bin"
+    },
+    {
+      "boundary": "encryption/seal inbox",
+      "input": "zero",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/rotate key",
+      "input": "one",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/102.bin"
+    },
+    {
+      "boundary": "encryption/seal inbox",
+      "input": "one",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/rotate key",
+      "input": "valid X25519",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/104.bin"
+    },
+    {
+      "boundary": "encryption/seal inbox",
+      "input": "valid X25519",
+      "accepted": true
+    },
+    {
+      "boundary": "signature/grant announcement",
+      "input": "valid announcement",
+      "accepted": true,
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "preimage": "preimages/106.bin"
+    },
+    {
+      "boundary": "signature/grant announcement",
+      "input": "identity R",
+      "accepted": true,
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "preimage": "preimages/107.bin"
+    },
+    {
+      "boundary": "signature/zero-nonce disclosure",
+      "input": "grant key recoverable from response/challenge",
+      "accepted": true
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=7, successor nonce=7",
+      "accepted": false,
+      "error": "CompactError: failed assert: invalid recovery signature"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=7, successor nonce=7",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/110.bin"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=0, successor nonce=7",
+      "accepted": false,
+      "error": "CompactError: failed assert: invalid recovery signature"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=0, successor nonce=7",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/112.bin"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=7, successor nonce=0",
+      "accepted": false,
+      "error": "CompactError: failed assert: invalid recovery signature"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=7, successor nonce=0",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/114.bin"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=0, successor nonce=0",
+      "accepted": false,
+      "error": "CompactError: failed assert: invalid recovery signature"
+    },
+    {
+      "boundary": "signature/recovery announcement",
+      "input": "recovery nonce=0, successor nonce=0",
+      "accepted": true,
+      "circuit": "recover_submit",
+      "preimage": "preimages/116.bin"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "publish_recovery_session_with_jubjub",
+      "preimage": "preimages/117.bin"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "identity (0,1)",
+      "accepted": false,
+      "error": "CompactError: failed assert: recovery key is the identity"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "order two (0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "mixed torsion P+(0,-1)",
+      "accepted": false,
+      "error": "RuntimeError: unreachable"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "P-256 generator as Jubjub",
+      "accepted": false,
+      "error": "Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck"
+    },
+    {
+      "boundary": "recovery/publish key",
+      "input": "altered x+2, same y",
+      "accepted": true,
+      "circuit": "publish_recovery_session_with_jubjub",
+      "preimage": "preimages/123.bin"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "preimage": "preimages/124.bin"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "flagged identity",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "unflagged zero coordinates",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2044 char 1; expected value of type Secp256k1Point but received { x: 0n, y: 0n, identity: false }"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "identity flag with generator coordinates",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256k1 identity point"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2044 char 1; expected value of type Secp256k1Point but received { x: 1n, y: 1n, identity: false }"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "other curve generator",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2044 char 1; expected value of type Secp256k1Point but received { x: 48439561293906451759052585252797914202762949526041747995844080717082404635286n, y: 36134250956749795798585127919587881956611106672985015071877198253568414405109n, identity: false }"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "invalid-curve twin y²=x³+2",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2044 char 1; expected value of type Secp256k1Point but received { x: 3n, y: 96328686030029451746606799749843082175136920865428714315981278333859709946682n, identity: false }"
+    },
+    {
+      "boundary": "grant/spend k256",
+      "input": "noncanonical x=p",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2044 char 1; expected value of type Secp256k1Point but received { x: 115792089237316195423570985008687907853269984665640564039457584007908834671663n, y: 32670510020758816978083085130507043184471273380659243275938904335757337482424n, identity: false }"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "valid subgroup key",
+      "accepted": true,
+      "circuit": "withdraw_unshielded_with_grant_p256",
+      "preimage": "preimages/132.bin"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "flagged identity",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256r1 identity point"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "unflagged zero coordinates",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 345 char 1; expected value of type struct P256GrantAuth<pk: Secp256r1Point, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 0n, y: 0n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 5, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 52699220407195046106248979573804151919791626218454717584647168830156405750791n, s: 52283204718150847314223790982831875883668045538948013149407467161431447845753n } }"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "identity flag with generator coordinates",
+      "accepted": false,
+      "error": "CompactError: cannot extract the x-coordinate of the secp256r1 identity point"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "off curve (1,1)",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 345 char 1; expected value of type struct P256GrantAuth<pk: Secp256r1Point, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 1n, y: 1n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 5, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 65703788168085890170319404205069134036744268945632022307278998297541639793434n, s: 18378549033674954141961194862636526654258365444754929793429487802479684730708n } }"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "other curve generator",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 345 char 1; expected value of type struct P256GrantAuth<pk: Secp256r1Point, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 55066263022277343669578718895168534326250603453777594175500187360389116729240n, y: 32670510020758816978083085130507043184471273380659243275938904335757337482424n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 5, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 105770503171761209344784665153293467720137883888392726272890159898011480022160n, s: 43274613223140803958842501098863811074224250841427490966163951963958815469529n } }"
+    },
+    {
+      "boundary": "grant/spend p256",
+      "input": "noncanonical x=p",
+      "accepted": false,
+      "error": "CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 345 char 1; expected value of type struct P256GrantAuth<pk: Secp256r1Point, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 115792089210356248762697446949407573530086143415290314195533631308867097853951n, y: 36134250956749795798585127919587881956611106672985015071877198253568414405109n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 5, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 100731985898169797597136922824381587464852871360319551387439076665241754882632n, s: 9987263513184507282585980525789575909668006746326813663508340302556234462532n } }"
+    },
+    {
+      "boundary": "signature/ECDSA k256",
+      "input": "low s",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_k256",
+      "preimage": "preimages/139.bin"
+    },
+    {
+      "boundary": "signature/ECDSA k256",
+      "input": "high s",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_k256",
+      "preimage": "preimages/140.bin"
+    },
+    {
+      "boundary": "signature/ECDSA k256",
+      "input": "zero r",
+      "accepted": false,
+      "error": "CompactError: failed assert: invalid signature"
+    },
+    {
+      "boundary": "signature/ECDSA k256",
+      "input": "zero s",
+      "accepted": false,
+      "error": "CompactError: secp256k1 scalar field has no inverse for 0"
+    },
+    {
+      "boundary": "signature/ECDSA k256",
+      "input": "r=n",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type struct Secp256k1EcdsaSignature<r: Secp256k1Scalar, s: Secp256k1Scalar> but received { r: 115792089237316195423570985008687907852837564279074904382605163141518161494337n, s: 29681242076685576598021496479349256302257122654080671741351134351933479956757n }"
+    },
+    {
+      "boundary": "signature/ECDSA k256",
+      "input": "s=n",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 1244 char 1; expected value of type struct Secp256k1EcdsaSignature<r: Secp256k1Scalar, s: Secp256k1Scalar> but received { r: 100483615823404052496940813092020515155709387882370369020092584195132329256667n, s: 115792089237316195423570985008687907852837564279074904382605163141518161494337n }"
+    },
+    {
+      "boundary": "signature/ECDSA p256",
+      "input": "low s",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_p256",
+      "preimage": "preimages/145.bin"
+    },
+    {
+      "boundary": "signature/ECDSA p256",
+      "input": "high s",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_p256",
+      "preimage": "preimages/146.bin"
+    },
+    {
+      "boundary": "signature/ECDSA p256",
+      "input": "zero r",
+      "accepted": false,
+      "error": "CompactError: failed assert: zero ECDSA r"
+    },
+    {
+      "boundary": "signature/ECDSA p256",
+      "input": "zero s",
+      "accepted": false,
+      "error": "CompactError: failed assert: zero ECDSA s"
+    },
+    {
+      "boundary": "signature/ECDSA p256",
+      "input": "r=n",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 208 char 1; expected value of type struct P256Auth<pk: Secp256r1Point, use_counter: Uint<0..18446744073709551616>, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 67908241360625473791745650116162822437446424685548540306991471148861447217164n, y: 109641914370351250004201702035118581929549612884577555402995510875186720907460n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 5, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 115792089210356248762697446949407573529996955224135760342422259061068512044369n, s: 51210771374302443623386662063492337603050901954161855879688459883628543749838n }, use_counter: 0n }"
+    },
+    {
+      "boundary": "signature/ECDSA p256",
+      "input": "s=n",
+      "accepted": false,
+      "error": "CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 208 char 1; expected value of type struct P256Auth<pk: Secp256r1Point, use_counter: Uint<0..18446744073709551616>, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 67908241360625473791745650116162822437446424685548540306991471148861447217164n, y: 109641914370351250004201702035118581929549612884577555402995510875186720907460n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 5, 33: 0, 34: 0, 35: 0, 36: 0 }, sig: { r: 2245644022161397009300188693859705302184451101036897986342595687519722015631n, s: 115792089210356248762697446949407573529996955224135760342422259061068512044369n }, use_counter: 0n }"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "0000000000000000000000000000000000000000000000000000000000000000",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "0000000000000000000000000000000000000000000000000000000000000000",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/152.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "0000000000000000000000000000000000000000000000000000000000000000",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "0000000000000000000000000000000000000000000000000000000000000080",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "0000000000000000000000000000000000000000000000000000000000000080",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/155.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "0000000000000000000000000000000000000000000000000000000000000080",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "0100000000000000000000000000000000000000000000000000000000000000",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "0100000000000000000000000000000000000000000000000000000000000000",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/158.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "0100000000000000000000000000000000000000000000000000000000000000",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "0100000000000000000000000000000000000000000000000000000000000080",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "0100000000000000000000000000000000000000000000000000000000000080",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/161.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "0100000000000000000000000000000000000000000000000000000000000080",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/164.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/167.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/170.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/173.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/176.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/179.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/182.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/185.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/188.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/constructor low-order key",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+      "accepted": true
+    },
+    {
+      "boundary": "encryption/rotate low-order key",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+      "accepted": true,
+      "circuit": "rotate_enc_key_with_jubjub",
+      "preimage": "preimages/191.bin"
+    },
+    {
+      "boundary": "encryption/seal low-order key",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+      "accepted": false,
+      "error": "Error: error:1C8000A4:Provider routines::failed during derivation"
+    },
+    {
+      "boundary": "encryption/keypair mismatch",
+      "input": "unrelated secret cannot read valid entry",
+      "accepted": true
+    },
+    {
+      "boundary": "ledger-WASM/encryption",
+      "input": "zero secret and identity recipient output",
+      "accepted": true
+    },
+    {
+      "boundary": "ledger-WASM/encryption",
+      "input": "normal recipient not detected by zero secret",
+      "accepted": true
+    },
+    {
+      "boundary": "ledger-WASM/encryption",
+      "input": "invalid compressed subgroup point",
+      "accepted": false,
+      "error": "Error: invalid group element encoding"
+    }
+  ]
+}
