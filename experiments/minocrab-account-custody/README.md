@@ -19,9 +19,14 @@ reference artifacts are consumed unchanged. Exact revisions and source hashes
 are in [reference provenance](reference/provenance.json) and
 [run provenance](evidence/provenance.json); all transitive versions are locked.
 
-This remains an offline circuit experiment. Verification-key installation,
-wallet transaction construction, funded transactions, and on-node conformance
-are not implemented by this experiment.
+The paired benchmark measures isolated circuits. A separate
+[local-network harness](localnet/README.md) installs the native verifier keys,
+constructs funded transactions through an SDK adapter, and checks their indexed
+results. The **2026-10-16 run passed: 116 successful transactions covering all
+52 native entrypoints across three accounts**. The independent read-back audit
+verified indexed transaction bytes/hashes, installed native keys and retired
+authorities, recovery state, and the node's forged-caller rejection. See the
+[audited journal](evidence/localnet.json) and [reproduction instructions](localnet/README.md).
 
 ## Current comparison
 
@@ -123,7 +128,10 @@ The reference's behavior is preserved rather than silently corrected.
 
 ## Measurement limits
 
-**Complete transaction sizes are not measured:** `transaction_bytes` is `null`.
+**The paired benchmark does not measure complete transaction sizes:**
+`transaction_bytes` remains `null`. The local-network journal separately records
+serialized native transactions submitted to the node; those samples are not a
+paired Compact/Minocrab transaction-size comparison.
 Proof bytes and ZKIR JSON bytes must not be interpreted as transaction size.
 Funded transactions also carry transcripts, offers/shielded proofs, fees, and
 signatures. Verification samples measure cryptographic proof verification,
@@ -188,6 +196,8 @@ that backend, rather than relying on the simulator alone.
 The ledger VM dependencies remain at Minocrab's pinned `04c9c5d`; comparison with
 the current generated TypeScript checks the exercised VM effects and state.
 This does not claim full compatibility with every current ledger feature.
-The next end-to-end acceptance gate is funded native transaction construction
-and localnet conformance, including receiving-contract composition. Only then
-should full transaction sizes and validation times be populated.
+The local-network acceptance gate requires all 52 native entrypoints in
+successful indexed transactions, including receiving-contract composition.
+It reuses reference client ABI encoding and Zswap bookkeeping, while executing
+the independent Rust circuits and installing their verifier keys. This is not
+a standalone Rust wallet/SDK port or a measurement of node validation latency.

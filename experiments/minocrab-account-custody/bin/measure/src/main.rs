@@ -27,6 +27,7 @@ fn current_ir(ir: &minocrab_zkir::v3::IrSource) -> Result<IrSource> {
     Ok(IrSource::load(to_zkir_string(ir)?.as_bytes())?)
 }
 
+mod localnet;
 #[allow(dead_code)]
 mod simulator;
 struct Circuit {
@@ -619,8 +620,15 @@ async fn measure(ir: &IrSource, name: &str, side: &str, iters: usize) -> Result<
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("localnet-execute") => return localnet::execute_request(),
+        Some("localnet-constructor") => return localnet::constructor(),
+        _ => (),
+    }
     let pairs = artifacts()?;
     match args.first().map(String::as_str) {
+        Some("localnet-package") => localnet::package(&pairs),
+        Some("localnet-keys") => localnet::keys(&pairs).await,
         Some("compare") => compare(&pairs, args.iter().any(|a| a == "--mutations")),
         Some("costs") => {
             let mut rows = Vec::new();
@@ -652,7 +660,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         _ => bail!(
-            "usage: project-custody-measure compare | costs | measure CIRCUIT compactc|minocrab [ITERATIONS]"
+            "usage: project-custody-measure compare | costs | measure CIRCUIT compactc|minocrab [ITERATIONS] | localnet-keys | localnet-package | localnet-execute | localnet-constructor"
         ),
     }
 }
