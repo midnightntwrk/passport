@@ -1,0 +1,915 @@
+{
+  "verdict": "PASS",
+  "startedAt": "2026-10-17T13:25:57.375Z",
+  "profile": "experimental-e1",
+  "payloadBytes": 192,
+  "layout": [
+    [
+      "version",
+      0,
+      1
+    ],
+    [
+      "suite",
+      1,
+      1
+    ],
+    [
+      "recipient tag",
+      2,
+      32
+    ],
+    [
+      "ephemeral X25519 public key",
+      34,
+      32
+    ],
+    [
+      "AES-GCM nonce",
+      66,
+      12
+    ],
+    [
+      "AES-GCM tag",
+      78,
+      16
+    ],
+    [
+      "encrypted viewing secret",
+      94,
+      32
+    ],
+    [
+      "encrypted public ES256 x/y coordinates",
+      126,
+      64
+    ],
+    [
+      "zero padding",
+      190,
+      2
+    ]
+  ],
+  "authenticator": "OpenSSL software ES256 fixture; independent synthetic PRF outputs; no live browser claim",
+  "measurements": [
+    {
+      "name": "envelope A / generation 0",
+      "payloadBytes": 192,
+      "before": {
+        "contractStateBytes": 137702,
+        "inboxFrameBytes": 70,
+        "inboxCount": "0",
+        "authNonce": "0"
+      },
+      "after": {
+        "contractStateBytes": 138255,
+        "inboxFrameBytes": 592,
+        "inboxCount": "1",
+        "authNonce": "1"
+      },
+      "serializedStateDelta": 553,
+      "serializedInboxFrameDelta": 522,
+      "wallMilliseconds": 48170.01849999998
+    },
+    {
+      "name": "envelope B / generation 0",
+      "payloadBytes": 192,
+      "before": {
+        "contractStateBytes": 138568,
+        "inboxFrameBytes": 592,
+        "inboxCount": "1",
+        "authNonce": "2"
+      },
+      "after": {
+        "contractStateBytes": 137830,
+        "inboxFrameBytes": 1200,
+        "inboxCount": "2",
+        "authNonce": "3"
+      },
+      "serializedStateDelta": -738,
+      "serializedInboxFrameDelta": 608,
+      "wallMilliseconds": 42819.65549999999
+    },
+    {
+      "name": "envelope A / staged generation 1",
+      "payloadBytes": 192,
+      "before": {
+        "contractStateBytes": 138602,
+        "inboxFrameBytes": 2044,
+        "inboxCount": "4",
+        "authNonce": "4"
+      },
+      "after": {
+        "contractStateBytes": 139325,
+        "inboxFrameBytes": 1335,
+        "inboxCount": "5",
+        "authNonce": "5"
+      },
+      "serializedStateDelta": 723,
+      "serializedInboxFrameDelta": -709,
+      "wallMilliseconds": 41454.01324999996
+    },
+    {
+      "name": "envelope B / staged generation 1",
+      "payloadBytes": 192,
+      "before": {
+        "contractStateBytes": 139325,
+        "inboxFrameBytes": 1335,
+        "inboxCount": "5",
+        "authNonce": "5"
+      },
+      "after": {
+        "contractStateBytes": 139585,
+        "inboxFrameBytes": 1588,
+        "inboxCount": "6",
+        "authNonce": "6"
+      },
+      "serializedStateDelta": 260,
+      "serializedInboxFrameDelta": 253,
+      "wallMilliseconds": 41403.19620899996
+    },
+    {
+      "name": "envelope A only / generation 2",
+      "payloadBytes": 192,
+      "before": {
+        "contractStateBytes": 139843,
+        "inboxFrameBytes": 1811,
+        "inboxCount": "7",
+        "authNonce": "9"
+      },
+      "after": {
+        "contractStateBytes": 140110,
+        "inboxFrameBytes": 2082,
+        "inboxCount": "8",
+        "authNonce": "10"
+      },
+      "serializedStateDelta": 267,
+      "serializedInboxFrameDelta": 271,
+      "wallMilliseconds": 46850.77470800001
+    }
+  ],
+  "proofs": [
+    {
+      "label": "account deployment",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/activate_initial_device_with_p256?vk=042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd",
+      "startedAt": "2026-10-17T13:29:27.540Z",
+      "milliseconds": 1896.9492500000051,
+      "proofBytes": 6364
+    },
+    {
+      "label": "envelope A / generation 0",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-17T13:29:53.230Z",
+      "milliseconds": 26871.673458000005,
+      "proofBytes": 6364
+    },
+    {
+      "label": "enrol B",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/add_device_with_p256?vk=7414477f52366b4098bb5347879fcad174595148b19d853ffa65d4d84d48913f",
+      "startedAt": "2026-10-17T13:30:41.461Z",
+      "milliseconds": 26121.88049999997,
+      "proofBytes": 6364
+    },
+    {
+      "label": "envelope B / generation 0",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-17T13:31:29.590Z",
+      "milliseconds": 22011.620666000003,
+      "proofBytes": 6364
+    },
+    {
+      "label": "deposit first coin",
+      "keyLocation": "midnight/zswap/output",
+      "startedAt": "2026-10-17T13:32:58.987Z",
+      "milliseconds": 804.7920830000076,
+      "proofBytes": 4860
+    },
+    {
+      "label": "deposit first coin",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/deposit_shielded?vk=18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+      "startedAt": "2026-10-17T13:32:59.067Z",
+      "milliseconds": 971.0061250000144,
+      "proofBytes": 5420
+    },
+    {
+      "label": "B fresh restore / first shielded spend",
+      "keyLocation": "midnight/zswap/output",
+      "startedAt": "2026-10-17T13:33:20.866Z",
+      "milliseconds": 1680.436166999978,
+      "proofBytes": 4860
+    },
+    {
+      "label": "B fresh restore / first shielded spend",
+      "keyLocation": "midnight/zswap/spend",
+      "startedAt": "2026-10-17T13:33:20.866Z",
+      "milliseconds": 1680.864292000013,
+      "proofBytes": 4860
+    },
+    {
+      "label": "B fresh restore / first shielded spend",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/withdraw_shielded_with_p256?vk=d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26",
+      "startedAt": "2026-10-17T13:33:24.168Z",
+      "milliseconds": 26649.55804199999,
+      "proofBytes": 6364
+    },
+    {
+      "label": "deposit second coin",
+      "keyLocation": "midnight/zswap/output",
+      "startedAt": "2026-10-17T13:34:42.073Z",
+      "milliseconds": 885.2269170000218,
+      "proofBytes": 4860
+    },
+    {
+      "label": "deposit second coin",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/deposit_shielded?vk=18caf9ffc1ea3271c340f97ee5433598b796a64fadcc1fb7bb5c65868574d328",
+      "startedAt": "2026-10-17T13:34:42.155Z",
+      "milliseconds": 884.5964170000516,
+      "proofBytes": 5420
+    },
+    {
+      "label": "envelope A / staged generation 1",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-17T13:35:06.494Z",
+      "milliseconds": 21873.83366699994,
+      "proofBytes": 6364
+    },
+    {
+      "label": "envelope B / staged generation 1",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-17T13:35:48.056Z",
+      "milliseconds": 21816.692041000002,
+      "proofBytes": 6364
+    },
+    {
+      "label": "activate generation 1",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+      "startedAt": "2026-10-17T13:36:29.512Z",
+      "milliseconds": 27928.70983399998,
+      "proofBytes": 6364
+    },
+    {
+      "label": "backfill live coin under generation 1",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-17T13:37:17.650Z",
+      "milliseconds": 22123.405416999944,
+      "proofBytes": 6364
+    },
+    {
+      "label": "B fresh restore / post-rotation shielded spend",
+      "keyLocation": "midnight/zswap/output",
+      "startedAt": "2026-10-17T13:37:57.745Z",
+      "milliseconds": 1706.9274580000201,
+      "proofBytes": 4860
+    },
+    {
+      "label": "B fresh restore / post-rotation shielded spend",
+      "keyLocation": "midnight/zswap/spend",
+      "startedAt": "2026-10-17T13:37:57.745Z",
+      "milliseconds": 1707.3669999999693,
+      "proofBytes": 4860
+    },
+    {
+      "label": "B fresh restore / post-rotation shielded spend",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/withdraw_shielded_with_p256?vk=d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26",
+      "startedAt": "2026-10-17T13:38:01.137Z",
+      "milliseconds": 22410.64554200007,
+      "proofBytes": 6364
+    },
+    {
+      "label": "envelope A only / generation 2",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/append_inbox_with_p256?vk=52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9",
+      "startedAt": "2026-10-17T13:38:48.572Z",
+      "milliseconds": 22294.19104200008,
+      "proofBytes": 6364
+    },
+    {
+      "label": "activate generation 2",
+      "keyLocation": "contract:3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1/rotate_enc_key_with_p256?vk=4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f",
+      "startedAt": "2026-10-17T13:39:35.376Z",
+      "milliseconds": 22067.08383300004,
+      "proofBytes": 6364
+    }
+  ],
+  "submissions": [
+    {
+      "label": "account deployment",
+      "bytes": 19450,
+      "sha256": "59bde0b639528ac34333109fead64e744a8fcd7debe0cbdcade875d5ca00f06e",
+      "modelledFeeSpecks": "9615866057142858",
+      "txId": "00f9524ac703e18a51737e35b311cc6ad0238e61fc09ba7487d8544fc2c94d8084"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 17398,
+      "sha256": "b19eb94f4b18a6d2189d1b17036d3ea8c2b8e45d8166b0544e3099b60b1ea14a",
+      "modelledFeeSpecks": "6612582857142858",
+      "txId": "004b520e7aa8a1bf916c8bc7525d58591462c62a0771d7a2a3657bb8ce6af9d2b0"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 17399,
+      "sha256": "dd24fba82d6ce18f3871b44672f80265fbdc7100f0c91f18a8984666ba23b4c4",
+      "modelledFeeSpecks": "6613502857142858",
+      "txId": "00aac58ad9a6c4a91f5e4f5e58653295277cb72c7ae749a0ddefad807a2ed83c36"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 18423,
+      "sha256": "2a0f3d376ff5c65a0ff8ea1ed61ff40e1b8d69c6a81ff4634524ee9ba90df029",
+      "modelledFeeSpecks": "7098242514285715",
+      "txId": "002d6b154c0c6b9f88025242cd6afa72113424332673fd53db78c0d45c6bf140ca"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 18443,
+      "sha256": "f520587d79f4ff60ea95bf308313dd00f76e5fd3f16099c35ff0e8a8779535b1",
+      "modelledFeeSpecks": "7107499657142858",
+      "txId": "001887adcaf8f71c63825f078613a7465f665821e2ecbd4370c6a5441e3012682a"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 17409,
+      "sha256": "a9039301e06014aa29b472cfafc79e00d619519142cc6b12eff160ee9eb7398f",
+      "modelledFeeSpecks": "6617674285714286",
+      "txId": "005b6fd961b5214cf391182697eb6bb80e48c06febdb1afa5f78ecfab38d6bba03"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 17407,
+      "sha256": "6e63811e951178059cd73168e823ad3c97a6c9ad584a03666e66564732ef6499",
+      "modelledFeeSpecks": "6616748571428572",
+      "txId": "006058ecfa110f7e8a574f36ce955f88eca274156eb69ca2196860f6c9e08b6131"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 17592,
+      "sha256": "83b2de65a726be758f42a65177a7e53e2160800da862c25dd2861d8590f71b41",
+      "modelledFeeSpecks": "6713608228571429",
+      "txId": "000d582f2b031db0cd9113461d72d568df8d615e8ec81495ec62cc448bdc4c48c8"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 16229,
+      "sha256": "c6d5e72b1b32ead2da3f089b59ae4d0ef6f331ffba2f90e2f5cc63640496017c",
+      "modelledFeeSpecks": "6071502857142858",
+      "txId": "009c029b3fed1831815b20e4229eb52466c3ccdc92117ba611e8a3f98392ea8b71"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 11176,
+      "sha256": "69fadbd2bd1c0854646dc5394b6a48c507e93bd59ee43ee1a201fbe3fc652e81",
+      "modelledFeeSpecks": "3706815085714286",
+      "txId": "00521ee669e0138c7a30e16cec3bbd905da36daf0a95f99eed405af23dc046aec5"
+    },
+    {
+      "label": "account deployment",
+      "bytes": 10567,
+      "sha256": "a589205895ab0f40970695ab2ceb9f9441cbbcc9a27af1ec1798d81c664b2854",
+      "modelledFeeSpecks": "272737600000001",
+      "txId": "00f1fbb859930aeae8dbe518d42ac28bd0ecead0ca0f3c42b4757eaf942a5e2aba"
+    },
+    {
+      "label": "envelope A / generation 0",
+      "bytes": 10919,
+      "sha256": "a133bfa3755c54d6bbd26925ccf246691ff019b6ddc2d05386ebbda9b9d82232",
+      "modelledFeeSpecks": "490578971428572",
+      "txId": "0085f2eb08fac197af237d2dc46b422fd2fdcd840fdf963c54b5126a618048b786"
+    },
+    {
+      "label": "enrol B",
+      "bytes": 10774,
+      "sha256": "2002c89f85c5dc390160af0ae9d98e9a884871c75b2a3654f88c71a52f3e3ed9",
+      "modelledFeeSpecks": "381224685714286",
+      "txId": "00766a705abeeac85a59232f7519b028ba50b374f2c2ed4a2a8faa698ad8ad14dd"
+    },
+    {
+      "label": "envelope B / generation 0",
+      "bytes": 10950,
+      "sha256": "270a209dc652b90dc7b531a71c93e0dae1ed8e2f3cb864110359fabbbfc4648d",
+      "modelledFeeSpecks": "69745828571429",
+      "txId": "00b07bb276fd9f776519ce585a7a637f226926442e7e66941cb02a183074d37c49"
+    },
+    {
+      "label": "deposit first coin",
+      "bytes": 19626,
+      "sha256": "941e88e03c2847e3eb4213d6110a9f5d38f068163cb12ad6d0abc6d71c5c99b2",
+      "modelledFeeSpecks": "951330285714286",
+      "txId": "00b59e5e5dad9b2c00670fa808e2b6aeed728a59b0e3045cc0bcbac8b55ef0d1f2"
+    },
+    {
+      "label": "B fresh restore / first shielded spend",
+      "bytes": 21079,
+      "sha256": "90eb3591d02a9a861ed011a77381b4dfe581c54f665d25dfb2828dea3bd76bc2",
+      "modelledFeeSpecks": "338083885714286",
+      "txId": "003df3e3157c6b13f7107cd1bac88db3fc73531ddef8865a1755c5c87157f254f3"
+    },
+    {
+      "label": "deposit second coin",
+      "bytes": 19625,
+      "sha256": "4ffaffdd7d4c68c5f15f213d9cbc96af0240a72038da02fe14c045f90c2e7431",
+      "modelledFeeSpecks": "329775314285715",
+      "txId": "00912807030281eb3b7031a1cc8735ff12522609f73ae9194cf4db6f67f9f97510"
+    },
+    {
+      "label": "envelope A / staged generation 1",
+      "bytes": 10920,
+      "sha256": "4a52181773f3dc22fcb83ed4a8b2298349c0c2c5e58a324cedc5c2d7b8e38816",
+      "modelledFeeSpecks": "680336000000001",
+      "txId": "00b6e538d57c43390ac62500ee002e09c4f2d6d6333798fc6462e3dd4e35f18659"
+    },
+    {
+      "label": "envelope B / staged generation 1",
+      "bytes": 10920,
+      "sha256": "8b7eb861dfa6d7032fda392758f48d17a1ac6ac9b5aafce6026a8400e6179cc7",
+      "modelledFeeSpecks": "216800000000001",
+      "txId": "00880a7ab6d1ebbb3673a1c99ca1ab85e90d5d546c63509f4e5cc1d82da35ee511"
+    },
+    {
+      "label": "activate generation 1",
+      "bytes": 10659,
+      "sha256": "dfde989837fd7d73ce94bd4f951e363f821e1ef8a3c113c2470857de21d55ec7",
+      "modelledFeeSpecks": "215005028571429",
+      "txId": "008501933e946ab95ff84a432b76239c21b14119b96e82e6b4165a3457b44bb2bf"
+    },
+    {
+      "label": "backfill live coin under generation 1",
+      "bytes": 10903,
+      "sha256": "03ed69b46fd175a2575bfbd2c898d8b026622f3a85383767b2b3040daac5ce7b",
+      "modelledFeeSpecks": "216702857142858",
+      "txId": "00410afd1cccf1045a7f26bd36b8d13495b27029ad3f20022289ab5f7a70a831ee"
+    },
+    {
+      "label": "B fresh restore / post-rotation shielded spend",
+      "bytes": 21079,
+      "sha256": "b6a9c99f81ac43a73ad2a131fe1b646bfac25fe1ba236b16a76362851b9a5403",
+      "modelledFeeSpecks": "344644342857143",
+      "txId": "00e218c9dc46da77e23fa1277c42fcc8492e2896a2e7c57f108ff4ed7dec0c8bc9"
+    },
+    {
+      "label": "envelope A only / generation 2",
+      "bytes": 10950,
+      "sha256": "77020f6d2e29a2bdae9feae2c9f4773384633a9cf3d8ab14c938555c7e183012",
+      "modelledFeeSpecks": "210121142857143",
+      "txId": "00535d9a86bb469cf935c9502fb5dc5dfe655d907af6c5dfd02f86565aafd97197"
+    },
+    {
+      "label": "activate generation 2",
+      "bytes": 10697,
+      "sha256": "e77390e8336f160726de7ce1e7dd7ce97bb328e589f075c8fb6fbb0334bc0f69",
+      "modelledFeeSpecks": "215222171428572",
+      "txId": "00e45976785b9f687beb416994ce36744994150944fc50369de994c81ab6005d9d"
+    }
+  ],
+  "restores": [
+    {
+      "name": "B fresh restore / first shielded spend",
+      "initiallyEmpty": true,
+      "aUnavailable": true,
+      "account": "3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1",
+      "signingKeyRecoveredFromEnvelope": true,
+      "sameEnrolledP256Key": true,
+      "decryptedCoins": 1,
+      "historyActions": 15,
+      "candidateCount": 1,
+      "attempts": [
+        {
+          "index": "98",
+          "result": "accepted"
+        }
+      ],
+      "attemptsBeyondFirst": 0,
+      "acceptedTx": "003df3e3157c6b13f7107cd1bac88db3fc73531ddef8865a1755c5c87157f254f3"
+    },
+    {
+      "name": "B fresh restore / post-rotation shielded spend",
+      "initiallyEmpty": true,
+      "aUnavailable": true,
+      "account": "3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1",
+      "signingKeyRecoveredFromEnvelope": true,
+      "sameEnrolledP256Key": true,
+      "decryptedCoins": 1,
+      "historyActions": 21,
+      "candidateCount": 2,
+      "attempts": [
+        {
+          "index": "101",
+          "result": "accepted"
+        }
+      ],
+      "attemptsBeyondFirst": 0,
+      "acceptedTx": "00e218c9dc46da77e23fa1277c42fcc8492e2896a2e7c57f108ff4ed7dec0c8bc9"
+    }
+  ],
+  "transactions": [
+    {
+      "name": "envelope A / generation 0",
+      "txId": "0085f2eb08fac197af237d2dc46b422fd2fdcd840fdf963c54b5126a618048b786",
+      "startIndex": 97,
+      "endIndex": 97,
+      "blockHeight": 25739,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 335,
+        "hash": "a133bfa3755c54d6bbd26925ccf246691ff019b6ddc2d05386ebbda9b9d82232",
+        "startIndex": 97,
+        "endIndex": 97,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25739,
+          "hash": "226a3cd2d6f4d96f2e759326f65b431b8d3635acd29c6678622ed805a5e313ca"
+        }
+      },
+      "nodeBlockHash": "0x226a3cd2d6f4d96f2e759326f65b431b8d3635acd29c6678622ed805a5e313ca"
+    },
+    {
+      "name": "enrol B",
+      "txId": "00766a705abeeac85a59232f7519b028ba50b374f2c2ed4a2a8faa698ad8ad14dd",
+      "startIndex": 97,
+      "endIndex": 97,
+      "blockHeight": 25747,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 336,
+        "hash": "2002c89f85c5dc390160af0ae9d98e9a884871c75b2a3654f88c71a52f3e3ed9",
+        "startIndex": 97,
+        "endIndex": 97,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25747,
+          "hash": "266a10c7ae937b6fc0d5bbd55bb30dee96e6483365d246c4950bf217600052fa"
+        }
+      },
+      "nodeBlockHash": "0x266a10c7ae937b6fc0d5bbd55bb30dee96e6483365d246c4950bf217600052fa"
+    },
+    {
+      "name": "envelope B / generation 0",
+      "txId": "00b07bb276fd9f776519ce585a7a637f226926442e7e66941cb02a183074d37c49",
+      "startIndex": 97,
+      "endIndex": 97,
+      "blockHeight": 25754,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 337,
+        "hash": "270a209dc652b90dc7b531a71c93e0dae1ed8e2f3cb864110359fabbbfc4648d",
+        "startIndex": 97,
+        "endIndex": 97,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25754,
+          "hash": "c2425c86724b1b85dff5f1e002437769eab711112859dacff39ec5180e5de6c0"
+        }
+      },
+      "nodeBlockHash": "0xc2425c86724b1b85dff5f1e002437769eab711112859dacff39ec5180e5de6c0"
+    },
+    {
+      "name": "deposit first coin",
+      "txId": "00b59e5e5dad9b2c00670fa808e2b6aeed728a59b0e3045cc0bcbac8b55ef0d1f2",
+      "startIndex": 98,
+      "endIndex": 99,
+      "blockHeight": 25766,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 340,
+        "hash": "941e88e03c2847e3eb4213d6110a9f5d38f068163cb12ad6d0abc6d71c5c99b2",
+        "startIndex": 98,
+        "endIndex": 99,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25766,
+          "hash": "038babf4a7c0af442f657010dc5a093cf2d7abc99c9f03b944c0cf403a7458cd"
+        }
+      },
+      "nodeBlockHash": "0x038babf4a7c0af442f657010dc5a093cf2d7abc99c9f03b944c0cf403a7458cd"
+    },
+    {
+      "name": "B fresh restore / first shielded spend",
+      "txId": "003df3e3157c6b13f7107cd1bac88db3fc73531ddef8865a1755c5c87157f254f3",
+      "startIndex": 99,
+      "endIndex": 100,
+      "blockHeight": 25774,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 341,
+        "hash": "90eb3591d02a9a861ed011a77381b4dfe581c54f665d25dfb2828dea3bd76bc2",
+        "startIndex": 99,
+        "endIndex": 100,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25774,
+          "hash": "29511e24500372d04f97e0b5773a0731a7e4b1435bf9c591d98432b62e8b14a0"
+        }
+      },
+      "nodeBlockHash": "0x29511e24500372d04f97e0b5773a0731a7e4b1435bf9c591d98432b62e8b14a0"
+    },
+    {
+      "name": "deposit second coin",
+      "txId": "00912807030281eb3b7031a1cc8735ff12522609f73ae9194cf4db6f67f9f97510",
+      "startIndex": 101,
+      "endIndex": 102,
+      "blockHeight": 25783,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 343,
+        "hash": "4ffaffdd7d4c68c5f15f213d9cbc96af0240a72038da02fe14c045f90c2e7431",
+        "startIndex": 101,
+        "endIndex": 102,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25783,
+          "hash": "a5711cf69d00d5ce80d34a2862242c5e8a85686ca7f8d65657e38e4fe3d75cb9"
+        }
+      },
+      "nodeBlockHash": "0xa5711cf69d00d5ce80d34a2862242c5e8a85686ca7f8d65657e38e4fe3d75cb9"
+    },
+    {
+      "name": "envelope A / staged generation 1",
+      "txId": "00b6e538d57c43390ac62500ee002e09c4f2d6d6333798fc6462e3dd4e35f18659",
+      "startIndex": 102,
+      "endIndex": 102,
+      "blockHeight": 25790,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 344,
+        "hash": "4a52181773f3dc22fcb83ed4a8b2298349c0c2c5e58a324cedc5c2d7b8e38816",
+        "startIndex": 102,
+        "endIndex": 102,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25790,
+          "hash": "36183d6dd11422788f9fa0edd2c64d700e6ca94512f04f4ed416ef13e980d7ba"
+        }
+      },
+      "nodeBlockHash": "0x36183d6dd11422788f9fa0edd2c64d700e6ca94512f04f4ed416ef13e980d7ba"
+    },
+    {
+      "name": "envelope B / staged generation 1",
+      "txId": "00880a7ab6d1ebbb3673a1c99ca1ab85e90d5d546c63509f4e5cc1d82da35ee511",
+      "startIndex": 102,
+      "endIndex": 102,
+      "blockHeight": 25797,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 345,
+        "hash": "8b7eb861dfa6d7032fda392758f48d17a1ac6ac9b5aafce6026a8400e6179cc7",
+        "startIndex": 102,
+        "endIndex": 102,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25797,
+          "hash": "2497d2b5dd7c4248cd4ae1bdbf3c2bdd061a3f7cdcd3545593d26ae7231e7143"
+        }
+      },
+      "nodeBlockHash": "0x2497d2b5dd7c4248cd4ae1bdbf3c2bdd061a3f7cdcd3545593d26ae7231e7143"
+    },
+    {
+      "name": "activate generation 1",
+      "txId": "008501933e946ab95ff84a432b76239c21b14119b96e82e6b4165a3457b44bb2bf",
+      "startIndex": 102,
+      "endIndex": 102,
+      "blockHeight": 25805,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 346,
+        "hash": "dfde989837fd7d73ce94bd4f951e363f821e1ef8a3c113c2470857de21d55ec7",
+        "startIndex": 102,
+        "endIndex": 102,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25805,
+          "hash": "96c47e817328fc968c335cfc972c2e40a8d1e40d2bef6a8bb39596ce172ca9bc"
+        }
+      },
+      "nodeBlockHash": "0x96c47e817328fc968c335cfc972c2e40a8d1e40d2bef6a8bb39596ce172ca9bc"
+    },
+    {
+      "name": "backfill live coin under generation 1",
+      "txId": "00410afd1cccf1045a7f26bd36b8d13495b27029ad3f20022289ab5f7a70a831ee",
+      "startIndex": 102,
+      "endIndex": 102,
+      "blockHeight": 25812,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 347,
+        "hash": "03ed69b46fd175a2575bfbd2c898d8b026622f3a85383767b2b3040daac5ce7b",
+        "startIndex": 102,
+        "endIndex": 102,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25812,
+          "hash": "83f44743d6df7a095fee86ff3ea2e3b5b72be9af21e0aaaf3b6c5b3c7102f365"
+        }
+      },
+      "nodeBlockHash": "0x83f44743d6df7a095fee86ff3ea2e3b5b72be9af21e0aaaf3b6c5b3c7102f365"
+    },
+    {
+      "name": "B fresh restore / post-rotation shielded spend",
+      "txId": "00e218c9dc46da77e23fa1277c42fcc8492e2896a2e7c57f108ff4ed7dec0c8bc9",
+      "startIndex": 102,
+      "endIndex": 103,
+      "blockHeight": 25820,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 348,
+        "hash": "b6a9c99f81ac43a73ad2a131fe1b646bfac25fe1ba236b16a76362851b9a5403",
+        "startIndex": 102,
+        "endIndex": 103,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25820,
+          "hash": "e1cf4bbc757016ae1e1b3ec87fe718a56019804fbcae57a47f97b5da664a9c63"
+        }
+      },
+      "nodeBlockHash": "0xe1cf4bbc757016ae1e1b3ec87fe718a56019804fbcae57a47f97b5da664a9c63"
+    },
+    {
+      "name": "envelope A only / generation 2",
+      "txId": "00535d9a86bb469cf935c9502fb5dc5dfe655d907af6c5dfd02f86565aafd97197",
+      "startIndex": 103,
+      "endIndex": 103,
+      "blockHeight": 25828,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 349,
+        "hash": "77020f6d2e29a2bdae9feae2c9f4773384633a9cf3d8ab14c938555c7e183012",
+        "startIndex": 103,
+        "endIndex": 103,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25828,
+          "hash": "1f704e22ad6b460337753413607c47f3080bff3d577aaeda7d5ae43c66c6aa50"
+        }
+      },
+      "nodeBlockHash": "0x1f704e22ad6b460337753413607c47f3080bff3d577aaeda7d5ae43c66c6aa50"
+    },
+    {
+      "name": "activate generation 2",
+      "txId": "00e45976785b9f687beb416994ce36744994150944fc50369de994c81ab6005d9d",
+      "startIndex": 103,
+      "endIndex": 103,
+      "blockHeight": 25835,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 350,
+        "hash": "e77390e8336f160726de7ce1e7dd7ce97bb328e589f075c8fb6fbb0334bc0f69",
+        "startIndex": 103,
+        "endIndex": 103,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 25835,
+          "hash": "2bca98b9849a60967ee2b61cf5b6bea47a1967a90559663ed949f81da7d70d31"
+        }
+      },
+      "nodeBlockHash": "0x2bca98b9849a60967ee2b61cf5b6bea47a1967a90559663ed949f81da7d70d31"
+    }
+  ],
+  "methodology": {
+    "state": "Serialised ledger ContractState including authentication-state changes, not physical database allocation.",
+    "transaction": "Full balanced submitted transaction including proof and funding-wallet DUST overhead.",
+    "proving": "Single observations including key lookup/load and local HTTP; no cold-cache or repeat-mean claim.",
+    "fee": "Ledger model fees in SPECKs against indexed parameters, not a separately observed amount burnt."
+  },
+  "provenance": {
+    "capturedAt": "2026-10-17T13:25:57.376Z",
+    "note": "Captured before the localnet scenario; checked again at completion and report generation.",
+    "files": {
+      "src/tests/inbox-view-envelope/codec.ts": {
+        "bytes": 9180,
+        "sha256": "087463a8cbcfe252a36ddd5365eb0522c95cb3b5233c1b20ae2a064b35df844d"
+      },
+      "src/tests/inbox-view-envelope/offline.ts": {
+        "bytes": 10702,
+        "sha256": "b0924471921e2cc6a3e924357e39454156f38396f44a766f975b085a7e2abc10"
+      },
+      "src/tests/inbox-view-envelope/localnet.ts": {
+        "bytes": 16772,
+        "sha256": "55b9112f4001752be2e5a6aef1c4aac60661ec7db29038cc535105add225a6a7"
+      },
+      "src/tests/inbox-view-envelope/private-state.ts": {
+        "bytes": 1632,
+        "sha256": "39bf85b8ca2d03748455d87c058898796bd2fea358126d50170b67dc430d4295"
+      },
+      "src/tests/inbox-view-envelope/provenance.ts": {
+        "bytes": 1770,
+        "sha256": "2fc4fd99093cc9b81bfa17dd15896a8169b1ba661d35663177961905d7730603"
+      },
+      "src/tests/inbox-view-envelope/report.ts": {
+        "bytes": 9933,
+        "sha256": "1990b0cad02c2dc69ec50f495ff933585c90fc99e7e3737150c4181ac3a4a9e0"
+      },
+      "src/tests/instrumentation.ts": {
+        "bytes": 4027,
+        "sha256": "05e36dbb3abf83856ae4519f877c485025585ff808b472a33df64bd9b58e098b"
+      },
+      "src/wallet/webauthn.ts": {
+        "bytes": 8610,
+        "sha256": "b49c26fcb9a405885e18c44e40e94b20ca7c2c18c638344557b7a5b18602c108"
+      },
+      "package-lock.json": {
+        "bytes": 112661,
+        "sha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51"
+      },
+      "contracts/account.compact": {
+        "bytes": 130095,
+        "sha256": "ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae"
+      },
+      "contracts/account-p256.compact": {
+        "bytes": 19918,
+        "sha256": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4"
+      },
+      "contracts/managed/account/contract/index.js": {
+        "bytes": 1701081,
+        "sha256": "1824d7fef8b864b2bc97d697f4a70aab1ac00750ba8c8cc68a5381651ce86e15"
+      },
+      "contracts/managed/account/keys/append_inbox_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9"
+      },
+      "contracts/managed/account/zkir/append_inbox_with_p256.bzkir": {
+        "bytes": 87904,
+        "sha256": "5216deac0c2d865f57cceec0527a8ead88ff8805565d07d35ec4cb544f76d92c"
+      },
+      "contracts/managed/account/keys/withdraw_shielded_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26"
+      },
+      "contracts/managed/account/zkir/withdraw_shielded_with_p256.bzkir": {
+        "bytes": 89532,
+        "sha256": "4f261b83715f9314de02ba5d47e24a55df4086709ff9dafff765321d590790bd"
+      },
+      "contracts/managed/account/keys/rotate_enc_key_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f"
+      },
+      "contracts/managed/account/zkir/rotate_enc_key_with_p256.bzkir": {
+        "bytes": 87134,
+        "sha256": "2f4bf0b5bce44c87d23de6e33276bc0dd6db19c6547e37bb4b53d81b574d1a83"
+      }
+    }
+  },
+  "chain": {
+    "height": 25692,
+    "hash": "1a004ca26240256b59d2c7b50e814ab7dfd15497b3a7cb962bcfc8427018de44"
+  },
+  "environment": {
+    "gitHead": "2d5e7f0b7f6229806df1848dc1d91904ca26da78",
+    "gitDirty": false,
+    "gitBase": "0d7bb0bc834f2d45d9fe2d84c4d022a30d648423",
+    "docker": "aarch64 8 CPUs 25159827456 memoryBytes"
+  },
+  "ledgerParametersSha256": "27eb882109310560df1a1bed6109a85999ae27cf7453c234163a178abad850d5",
+  "deployment": {
+    "circuitCount": 52,
+    "verifierByteBudget": 15000
+  },
+  "account": "3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1",
+  "controls": {
+    "excludedReaderCannotOpenNewGeneration": true,
+    "legacyCoinReaderSkipsEnvelopes": true,
+    "stagedKeyNotLive": true,
+    "oldKeyNotCurrent": true,
+    "independentP256Credentials": true
+  },
+  "recovery": "Default test deployment has no usable recovery wrap. Rotation/recovery continuity is NOT tested or claimed.",
+  "final": {
+    "account": "3473332587e305c0eeadcd42c7b60a8893cfb2a1c0a5493786ea1438622078f1",
+    "inboxCount": "8",
+    "encKey": "fbfe2dbfe17dcef784c67cd7a1407b1995a4fb5744b79b97b791d6fdb9e79864",
+    "inboxRecords": 8,
+    "envelopeCount": 5,
+    "envelopeBytes": 960,
+    "inboxRecordBytes": 1536
+  },
+  "artifacts": {
+    "account.compact": "ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae",
+    "account-p256.compact": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4",
+    "managed/account/contract/index.js": "1824d7fef8b864b2bc97d697f4a70aab1ac00750ba8c8cc68a5381651ce86e15"
+  },
+  "completedAt": "2026-10-17T13:40:14.746Z",
+  "capturedAt": "2026-10-17T13:40:31.876Z"
+}

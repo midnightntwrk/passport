@@ -1,0 +1,78 @@
+{
+  "capturedAt": "2026-10-17T13:25:57.376Z",
+  "note": "Captured before the localnet scenario; checked again at completion and report generation.",
+  "files": {
+    "src/tests/inbox-view-envelope/codec.ts": {
+      "bytes": 9180,
+      "sha256": "087463a8cbcfe252a36ddd5365eb0522c95cb3b5233c1b20ae2a064b35df844d"
+    },
+    "src/tests/inbox-view-envelope/offline.ts": {
+      "bytes": 10702,
+      "sha256": "b0924471921e2cc6a3e924357e39454156f38396f44a766f975b085a7e2abc10"
+    },
+    "src/tests/inbox-view-envelope/localnet.ts": {
+      "bytes": 16772,
+      "sha256": "55b9112f4001752be2e5a6aef1c4aac60661ec7db29038cc535105add225a6a7"
+    },
+    "src/tests/inbox-view-envelope/private-state.ts": {
+      "bytes": 1632,
+      "sha256": "39bf85b8ca2d03748455d87c058898796bd2fea358126d50170b67dc430d4295"
+    },
+    "src/tests/inbox-view-envelope/provenance.ts": {
+      "bytes": 1770,
+      "sha256": "2fc4fd99093cc9b81bfa17dd15896a8169b1ba661d35663177961905d7730603"
+    },
+    "src/tests/inbox-view-envelope/report.ts": {
+      "bytes": 9933,
+      "sha256": "1990b0cad02c2dc69ec50f495ff933585c90fc99e7e3737150c4181ac3a4a9e0"
+    },
+    "src/tests/instrumentation.ts": {
+      "bytes": 4027,
+      "sha256": "05e36dbb3abf83856ae4519f877c485025585ff808b472a33df64bd9b58e098b"
+    },
+    "src/wallet/webauthn.ts": {
+      "bytes": 8610,
+      "sha256": "b49c26fcb9a405885e18c44e40e94b20ca7c2c18c638344557b7a5b18602c108"
+    },
+    "package-lock.json": {
+      "bytes": 112661,
+      "sha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51"
+    },
+    "contracts/account.compact": {
+      "bytes": 130095,
+      "sha256": "ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae"
+    },
+    "contracts/account-p256.compact": {
+      "bytes": 19918,
+      "sha256": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4"
+    },
+    "contracts/managed/account/contract/index.js": {
+      "bytes": 1701081,
+      "sha256": "1824d7fef8b864b2bc97d697f4a70aab1ac00750ba8c8cc68a5381651ce86e15"
+    },
+    "contracts/managed/account/keys/append_inbox_with_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "52779a258276ea8c217de9e307d5611c8589fc1c715cdde466f14472736303f9"
+    },
+    "contracts/managed/account/zkir/append_inbox_with_p256.bzkir": {
+      "bytes": 87904,
+      "sha256": "5216deac0c2d865f57cceec0527a8ead88ff8805565d07d35ec4cb544f76d92c"
+    },
+    "contracts/managed/account/keys/withdraw_shielded_with_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "d6adc1feaabc78edb925b901ed7ff2d22a1da102b7686f8ab4a4bc552d8e4c26"
+    },
+    "contracts/managed/account/zkir/withdraw_shielded_with_p256.bzkir": {
+      "bytes": 89532,
+      "sha256": "4f261b83715f9314de02ba5d47e24a55df4086709ff9dafff765321d590790bd"
+    },
+    "contracts/managed/account/keys/rotate_enc_key_with_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f"
+    },
+    "contracts/managed/account/zkir/rotate_enc_key_with_p256.bzkir": {
+      "bytes": 87134,
+      "sha256": "2f4bf0b5bce44c87d23de6e33276bc0dd6db19c6547e37bb4b53d81b574d1a83"
+    }
+  }
+}

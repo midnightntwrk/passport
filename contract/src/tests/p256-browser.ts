@@ -9,18 +9,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspect } from 'node:util';
 import { build } from 'esbuild';
-import { CostModel } from '@midnightntwrk/ledger-v9';
-import { nodeZkConfigRegistry } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import { httpClientProvingProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
-import { createProofProviderFromHandlers } from '@midnight-ntwrk/midnight-js-types';
 import { CustodyAccount } from '../wallet/account.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
 import { P256Device, p256Challenges } from '../wallet/signer-p256.js';
 import { type WebAuthnAssertion, type P256PublicKey, validateP256Key } from '../wallet/webauthn.js';
-import { queryTxPosition } from '../wallet/capture.js';
 import { setupWallet, compiledAccountContract } from '../node/setup.js';
-import { CONFIG, managedPath } from '../node/wallet.js';
 import { serialiseError } from './evidence.js';
+import { assertNodeIndexerConsistent, bytes, confirmTransaction, installTimedProver } from './instrumentation.js';
 
 const origin = 'http://localhost:8973', rpId = 'localhost';
 const runId = randomUUID();
@@ -30,13 +25,6 @@ mkdirSync(evidenceDir, { recursive: true });
 const evidenceFile = path.join(evidenceDir, `run-browser-${runId}.json`);
 const json = (value: unknown) => JSON.stringify(value, (_key, v) => typeof v === 'bigint' ? v.toString() : v, 2);
 const hex = (value: Uint8Array) => Buffer.from(value).toString('hex');
-function bytes(value: unknown, length?: number): Uint8Array {
-  assert.equal(typeof value, 'string', 'hex string required');
-  assert.match(value as string, /^(?:[0-9a-f]{2})+$/i, 'invalid hex');
-  const result = new Uint8Array(Buffer.from(value as string, 'hex'));
-  if (length !== undefined) assert.equal(result.length, length);
-  return result;
-}
 
 type Credential = { credentialId: string; pk: P256PublicKey; userAgent: string };
 type Request = { id: string; challenge: string; credentialId: string; purpose: 'approve' | 'cancel'; requestedAt: string };
@@ -158,32 +146,12 @@ save();
 
 async function scenario() {
   credential = await registration;
-  // A dev node may have been recreated while its indexer kept the old chain.
-  // Wallet isSynced then means synced to stale indexed data, not to this node.
-  const indexed: any = await (await fetch(CONFIG.indexer, { method: 'POST',
-    headers: { 'Content-Type': 'application/json' }, body: json({ query: '{ block { height hash timestamp } }' }),
-  })).json();
-  assert.equal(indexed.errors, undefined);
-  const block = indexed.data?.block;
-  assert.ok(block, 'indexer has no block yet');
-  const nodeBlock: any = await (await fetch(CONFIG.node, { method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: json({ jsonrpc: '2.0', id: 1, method: 'chain_getBlockHash', params: [block.height] }),
-  })).json();
-  assert.equal(nodeBlock.result?.replace(/^0x/, ''), block.hash.replace(/^0x/, ''),
-    'Node/indexer chain mismatch; the indexer must be rebuilt for this dev chain before spending DUST');
-  evidence.chain = { indexedBlock: block, nodeBlockHash: nodeBlock.result }; save();
+  const { block, nodeBlockHash } = await assertNodeIndexerConsistent();
+  evidence.chain = { indexedBlock: block, nodeBlockHash }; save();
   const ctx = await setupWallet();
-  const base = httpClientProvingProvider(CONFIG.proofServer, await nodeZkConfigRegistry(managedPath));
   let label = 'activation', proofCalls = 0, submissions = 0;
-  const timed = { ...base, async prove(...args: Parameters<typeof base.prove>) {
-    proofCalls++;
-    const startedAt = new Date().toISOString(), start = performance.now();
-    const proof = await base.prove(...args);
-    evidence.samples.push({ label, keyLocation: args[1], startedAt, milliseconds: performance.now() - start, proofBytes: proof.length });
-    save(); return proof;
-  } };
-  ctx.providers.proofProvider = createProofProviderFromHandlers({ currentEra: tx => tx.prove(timed, CostModel.initialCostModel()) });
+  await installTimedProver(ctx.providers, sample => { evidence.samples.push({ label, ...sample }); save(); },
+    () => { proofCalls++; });
   const submit = ctx.providers.midnightProvider.submitTx.bind(ctx.providers.midnightProvider);
   ctx.providers.midnightProvider.submitTx = (...args: unknown[]) => {
     submissions++;
@@ -196,9 +164,7 @@ async function scenario() {
   const activation: any = await dormant.activate(device, dormant.salt);
   const account = dormant.finish();
   const record = async (name: string, txId: string) => {
-    const position = await queryTxPosition(txId);
-    assert.equal(position.error, undefined); assert.equal(position.status, 'SUCCESS');
-    evidence.transactions.push({ name, txId, ...position }); save();
+    evidence.transactions.push({ name, ...(await confirmTransaction(txId)) }); save();
   };
   await record('activate_initial_device_with_p256', activation.public.txId);
   const snapshot = async () => {
