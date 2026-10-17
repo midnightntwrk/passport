@@ -37,7 +37,8 @@ the in-circuit variant:
   `ecAdd`: native Compact built-ins, no foreign-field arithmetic.
 - **Keys** — per-device JubJub keypairs, mutually independent, no HD
   tree (the MIP's seedlessness invariant). Rotation is an add/remove
-  ceremony; revocation totality comes from the epoch mechanism.
+  ceremony; recovery revocation requires atomic entry retirement with the epoch change
+  (MIP-0013 §8/AUTH-6), not an unchecked epoch bump alone.
 - **Threshold profile** — a t-of-n FROST committee registers as a
   single device entry presenting the joint public key; signature
   shares aggregate per RFC 9591 and the key is never reconstructed.
@@ -57,48 +58,31 @@ MIP-0013 conformance test 7: an independent Rust signer built on the
 published ledger crates produces bit-exact challenges and accepted
 signatures against the deployed standard contract.
 
-**Status 2026/09 — the trunk has arms.** The signature-schemes MIP is
-drafted (`docs/mps-mip/mips/mip-xxxx-signature-schemes.md`), the
-successor document MIP-0013's Versioning section anticipates. It
-defines the scheme registry (schemes named by arm marker `v1`, `k1`,
-`r1`, identified by their domain-separation tag families), per-scheme
-dedicated circuits over one challenge core with the ECDSA deltas made
-structural (no `sig_r` element, no grinding tail, keys bound as
-coordinate bytes), the **r1 arm** (WebAuthn ECDSA over secp256r1, the
-circuit verifying the assertion together with the signing envelope
-that produced it), the **k1 arm** (ECDSA over secp256k1) registered as
-Interim with a named sunset, the SIG-1 to SIG-5 invariant family, and
-**BIP-340 over secp256k1** as a named candidate. Evidence behind it:
+**Status 2026/10/17:** [MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md) is published as **Draft**,
+merged through upstream #374. It specifies the ECDSA signing boundary for
+k1/secp256k1 and r1/WebAuthn P-256, preserving current signing bytes and
+requiring policy enforcement across every verifier accepting a credential.
+It supersedes the former general registry draft and adopts no k1 sunset.
 
-- The reference contract carries JubJub Schnorr and k256 as
-  **co-resident arms** over shared chips, both suites green on node.
-  The k256 arm's per-device signing envelope (id 0 none, id 1 the
-  dApp-connector `midnight_signed_message:32:` prefix), bound into the
-  entry and boot derivations (`…:k1:v2`), admits connector, MPC, and
-  HSM ECDSA signers; `persistentHash` is byte-exact SHA-256, so the
-  envelope digest is recomputable in-circuit today.
-- **P-256 in-circuit**: k=15, sub-second proving, a real platform
-  passkey assertion verified, including the WebAuthn envelope hashed
-  in-circuit; direct verification beats a recursion wrapper on every
-  axis.
-- **Wallet gate**: every Midnight wallet signing surface (ledger WASM,
-  SDK keystore, dApp connector) signs BIP-340 with an untagged SHA-256
-  pre-hash, characterised bit-exactly and cross-verified by two
-  implementations; verification on real wallet vectors is measured at
-  k=15 (SDK path) and k=16 (connector envelope). The arm is blocked in
-  Compact only on secp256k1 point operations.
+Compact 0.35 exposes native P-256. Merged [Passport #175](https://github.com/midnightntwrk/passport/pull/175)
+implements `wa-json134` (134-byte client JSON, 21-byte origin, 37-byte
+extension-free authenticator data, bound RP/origin and UP+UV). One real Safari
+account-key rotation was accepted on localnet. Automated account measurements
+use software credentials; the k=18 account circuits are distinct from the
+older k=15 midnight-zk experiment. General browser, PRF and caller-bound P-256
+coverage are separate obligations.
 
-**Update 2026/10/01:** Compact 0.35 supplies native P-256 verification.
-Open [#175](https://github.com/midnightntwrk/passport/pull/175) implements
-`wa-json134` (134-byte JSON, 21-byte origin, 37-byte extension-free
-authenticator data, enrolled RP/origin and UP+UV). A real Safari passkey
-approved an account-key rotation accepted on localnet; automated account
-benchmarks use software credentials. The new Compact account circuits are
-k=18; the older k=15 experiment above is a different implementation.
+The k1 signing envelopes remain 0: SHA-256(challenge), and 1:
+SHA-256(`midnight_signed_message:32:` || challenge); the enrolled selector
+is bound into v2 boot/device commitments. BIP-340 remains experimental work
+outside MIP-0030's scope.
 
-Submission still needs cryptographer/profile review, the accept-both-s
-policy and Interim-status ruling. A supported-toolchain key admissibility
-map and normative amendment remain open (C1). See [status](../STATUS.md).
+Remaining under #51: per-operation typed encodings and independent vectors,
+common UV policy and downgrade protection across all accepting verifiers,
+key/scalar admissibility mapping, cryptographic review, and explicit
+compatibility with MIP-0021. Existing bytes must not change silently.
+See [status](../STATUS.md) for evidence limits.
+
 
 ## Dependencies
 
@@ -223,16 +207,15 @@ non-interactive threshold analogue, and interactive nonce protocols
 are the failure class behind the published MPC-wallet key-extraction
 attacks.
 
-**F — ECDSA over secp256r1 (WebAuthn passkey assertion).** **Registered
-as the r1 arm** in the schemes draft. Measured in-circuit at k=15 with
-sub-second proving against a real platform passkey; the credential
-never exists outside the authenticator. Gated on the secp256r1 Compact
-language surface.
+**F — ECDSA over secp256r1 (WebAuthn assertion).** MIP-0030's r1
+construction; native Compact 0.35 verification and bounded `wa-json134`
+reference evidence. ES256 alone proves neither hardware custody nor a
+particular biometric. Broader browser/profile conformance remains.
 
-**G — ECDSA over secp256k1 (interim k1 arm).** **Co-resident with A**
-in the reference contract; Interim status with a named sunset; the
-per-device signing envelope admits dApp-connector, MPC, and HSM
-signers today.
+**G — ECDSA over secp256k1 (k1 arm).** Co-resident with JubJub;
+MIP-0030 preserves its enrolled signing envelopes and adopts no retirement
+policy. Continued coexistence and any migration require consumer evidence.
+
 
 **H — BIP-340 Schnorr over secp256k1 (Midnight wallet key).** Named
 candidate. Every wallet key already signs an account challenge on

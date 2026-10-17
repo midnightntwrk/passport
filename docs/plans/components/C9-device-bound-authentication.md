@@ -2,13 +2,19 @@
 
 **Serves:** P1 · P3 · P6.
 
+**Status 2026/10/17:** [MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md) is published as Draft.
+Compact 0.35 native P-256 and #175's bounded WebAuthn reference are merged.
+Profile/UV policy, all-verifier downgrade protection and cryptographic review
+remain under #51. Browser/authenticator and real PRF coverage remain under
+#15/#48; ES256 alone does not establish device binding or hardware custody.
+
 ## Outcome
 
 How a device proves it is the user's authorised device. Passkey
 (WebAuthn) bound to the device's secure boundary. Provides P1
 (seedless), P3 (peer-device), P6 (key-bound).
 
-**Status 2026/10/01:** open [#175](https://github.com/midnightntwrk/passport/pull/175)
+**Implementation evidence:** merged [#175](https://github.com/midnightntwrk/passport/pull/175)
 adds direct P-256 signing under a bounded WebAuthn profile, with real Safari
 account-key rotation accepted on localnet. Draft
 [#177](https://github.com/midnightntwrk/passport/pull/177) separately

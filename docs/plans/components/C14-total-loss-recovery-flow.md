@@ -8,12 +8,22 @@ The flow by which a user recovers their account when all authorised
 devices are lost. Implements P5 (recover-from-zero). Mirrors I-5.1
 through I-5.4.
 
-**Status 2026/10/01:** draft and reference tranche
-[#165](https://github.com/midnightntwrk/passport/pull/165) are merged;
-Hector submitted [upstream #339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339),
-still open. The reference uses recovery/successor signatures in a two-phase
-gate with a veto window and a separate viewing-key wrap. Transport,
-interoperability and multi-session crypto review remain. See [status](../STATUS.md).
+**Status 2026/10/17:** [MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is **Proposed**, published
+through #339. [Upstream #385](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/385) amends it and MIP-0013: finalisation
+must atomically retire all prior entries, including pending-phase enrolments,
+and leave only the authorised successor active. Opaque entries with unchecked
+epochs must be cleared or protected by equivalent contract-assigned registration
+epochs; future epoch changes must not reactivate retained entries.
+
+The signature-based two-phase reference (#165) and reset (#183) are merged.
+The reset has Compact 0.35 compilation (keygen skipped) and simulator evidence;
+regenerated keys, proof/node validation, deployment sizing and the expanded
+retirement matrix remain. Older on-node receipts predate the correction.
+Existing deployments need verifier maintenance or migration, with separate
+handling of any already-finalised state. Multi-session review, transport,
+interoperability and viewing-wrap lifecycle remain. See [status](../STATUS.md).
+
+
 
 **Prototype baseline (2026/07).** The
 mechanism is **BUSS (ANARKey, EPRINT 2025/551): stateless guardians
@@ -41,7 +51,7 @@ plaintext-Shamir placeholder:
   and vice versa. The BUSS mathematics runs client-side through
   `buss-wasm` (wasm-bindgen over the Pleiades library).
 
-The recovery-paths draft now specifies the construction; the prototype
+MIP-0022 now specifies the construction; the prototype
 description above is historical. The merged reference adds session,
 pending-recovery and viewing-wrap state and a delegation-safe signature
 gate. DeRec and encrypted-blob remain substitutable profiles.
@@ -84,10 +94,8 @@ is published; our integration (φ handling, session nonces, the
 custody and authorisation MIPs — an acceptance criterion for the
 recovery MIP.
 
-**MPS-0018 cross-listing.** The recovery-paths MIP is the second
-recommended MIP of MPS-0018; the upstream recommendation names DeRec
-and encrypted-blob, so the draft should position BUSS as the realised
-mechanism and those as substitutable profiles.
+**Standards linkage.** MIP-0022 names MPS-0018 in its header. BUSS is
+the realised mechanism; alternative profiles remain behind the same seam.
 
 ## Failure modes
 
@@ -131,5 +139,4 @@ account). Rejected: weaker security, introduces an identity operator.
 
 **E — BUSS / ANARKey stateless guardians + paper keys.** **Chosen
 2026/07** — assessed (PR #90), implemented in the account-custody
-prototype behind the MIP-0013 recovery seam, and next to be specified as
-the recovery-paths MIP.
+prototype behind the MIP-0013 recovery seam, and specified by MIP-0022 (Proposed).
