@@ -116,7 +116,18 @@ Midnight Passport sits between users (and the wallets / dApps they operate) and 
 
 ## 4. Solution Strategy
 
-The high-level shape is set: `alice.passport.night` names (upstream name service adopted) + passkey-bound devices (WebAuthn PRF → per-device JubJub keys) + stateless contract custody (assets in the account contract, no coin material in public ledger state) + in-circuit Schnorr authorisation (MIP-0012 / MIP-0013, reference implementation at `contract/`) + browser proving + BUSS / ANARKey recovery + chain-only operation + scoped grants + selective disclosure. Remaining mechanism choices land per component as the open workstreams resolve.
+The account model combines adopted name service, independent signing credentials,
+stateless contract custody (MIP-0012), in-circuit authorisation (MIP-0013),
+BUSS/ANARKey recovery (MIP-0022), scoped grants and selective disclosure.
+MIP-0030 is now published as Draft for k1/ECDSA and bounded r1/WebAuthn signing;
+Compact 0.35 native P-256 is implemented alongside JubJub and k256. PRF-based
+key derivation remains a separate option with its own support-matrix work.
+
+The merged MIP-0013/0022 amendment requires recovery finalisation to atomically
+retire every prior device entry and install only the authorised successor.
+Reference #183 implements the reset, with compilation/simulation evidence;
+regenerated keys, proof/node validation and deployment adoption remain. See
+[development status](plans/STATUS.md) for the 17 October evidence boundaries.
 
 See [`docs/plans/components/README.md`](plans/components/README.md) for the CAKE-vocabulary anchor (Applications · Permission · Solver · Settlement) the component inventory maps onto.
 

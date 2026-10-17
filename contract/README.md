@@ -155,8 +155,8 @@ Clients MUST still derive enrolment entries at the current `device_epoch`
 and use counter 0. A wrong-address or **past**-epoch entry is dead weight; one
 at the current epoch but a non-zero counter is live at that counter; and one
 at a **future** epoch is dormant rather than dead, going live when the epoch
-advances. That last case constrains the recovery seam that will own the only
-epoch bump: it MUST clear the device set as part of the bump, because
+advances. The recovery seam owns the epoch bump and now clears the device
+set atomically before successor insertion (#183, upstream #385), because
 otherwise a device can pre-plant an entry that survives its own revocation
 (erratum 7). All of them count toward `device_count` until removed, and none
 can strand the account.
@@ -621,17 +621,22 @@ To be folded back into the MIP texts:
    case forces), nothing binds the epoch at enrolment, so any authorised
    device can enrol an entry derived at `device_epoch + 1`. It matches nothing
    until the bump and authorises immediately after it, which means a
-   compromised device survives the very revocation intended to evict it. **§8
-   should require that an epoch bump clear the device set**, or that entries
-   be stored stamped with the epoch the contract observed at enrolment rather
-   than one carried in a preimage it cannot inspect. The reference now calls
+   compromised device survives the very revocation intended to evict it. **Resolved normatively by [upstream #385](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/385), merged 15 October
+   2026:** MIP-0013 §8/AUTH-6 and MIP-0022 finalisation/REC-8 require atomic
+   retirement, by clearing unchecked opaque entries or enforcing equivalent
+   contract-assigned registration epochs. This includes pending-phase entries
+   and prohibits reactivation after later epoch changes. The reference now calls
    `devices.resetToDefault()` during finalisation, before inserting the
    authorised successor. This also removes entries added while recovery was
    pending. The recovery simulator checks that the actual set contains only
    that successor, independently of `device_count`. Older deployments retain
    their installed verifier: adopting this correction requires a verifier
    update where maintenance remains available, or migration to a corrected
-   deployment where it has been retired. Individual device removal remains
+   deployment where it has been retired. [Passport #183](https://github.com/midnightntwrk/passport/pull/183)
+   passed Compact 0.35 compilation with keygen skipped and simulation.
+   Regenerated keys, proof/node validation, deployment sizing and the expanded
+   retirement cases remain; earlier on-node receipts predate this correction.
+   Individual device removal remains
    a separate issue (erratum 8).
 8. **MIP-0013 §6 removal removes an entry, not a device, so revocation does
    not revoke.** The device set holds single-use entries and carries no

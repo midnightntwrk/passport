@@ -2,6 +2,13 @@
 
 **Serves:** P6 · P9.
 
+**Status 2026/10/17:** [MIP-0021](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0021-domain-separation.md) is **Proposed**, published
+via #331. It rejects a central registry, so ADR-0001 below is an earlier local
+choice requiring reconciliation. MIP-0030 explicitly records conflicts with
+existing zero padding, colon-version tags and underscore operation names.
+Preserve existing cryptographic bytes until compatibility/versioning is agreed.
+#14/#44 track the convention/catalogue decision; publication does not close it.
+
 ## Outcome
 
 Cross-cutting hash-prefix discipline: every `persistentHash` use site
@@ -37,9 +44,9 @@ distinction.
 
 ## Open questions
 
-### Resolved
+### Earlier local decision
 
-**Centralised registry vs per-protocol prefixes.** Resolved by
+**Centralised registry vs per-protocol prefixes.** Previously recorded by
 [ADR-0001](../../adrs/0001-domain-separation-registry.md): a central
 registry (alternative A), with compile-time enforcement (C) deferred. The
 inventory at `experiments/domain-separation-inventory/` is its first draft.
@@ -100,7 +107,7 @@ declares).
 
 ## Readings
 
-**v1.0 direction** — alternative **A** (central registry, markdown + audit)
+**Earlier local direction (pending MIP-0021 reconciliation)** — alternative **A** (central registry, markdown + audit)
 selected; compile-time enforcement (**C**) deferred as a later convergence.
 Recorded in [ADR-0001](../../adrs/0001-domain-separation-registry.md), and
 standardised via a solution-agnostic MPS

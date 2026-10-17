@@ -4,7 +4,7 @@ The plan for **feature-complete v1.0** of Midnight Passport — what v1.0
 promises, the components that deliver it, and how the October MVP
 consumes those deliverables early.
 
-**Current development status:** [1 October 2026 reconciliation](STATUS.md)
+**Current development status:** [17 October 2026 standards reconciliation](STATUS.md)
 of merged implementation, open feature PRs, upstream proposals, demo releases,
 SDK work and formal-spec tickets.
 

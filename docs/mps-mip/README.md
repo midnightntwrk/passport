@@ -8,7 +8,7 @@ Editor numbers are assigned upstream at merge; files here use `xxxx`
 until then. Once a document is merged upstream, the upstream copy is
 canonical and the copy here is retired to a pointer.
 
-Last reconciled: **1 October 2026**. See [development status](../plans/STATUS.md).
+Last reconciled: **17 October 2026**. See [development status](../plans/STATUS.md).
 
 ## Published upstream (upstream copy is canonical)
 
@@ -30,41 +30,34 @@ Last reconciled: **1 October 2026**. See [development status](../plans/STATUS.md
   Schnorr verification over JubJub (FROST-compatible, separating
   approval from proving). The DST-derivation and bootstrap errata are
   merged upstream. The local [ECDSA signing-boundary extension](mips/mip-xxxx-signature-schemes.md)
-  is prepared for Hector's review in Passport before an upstream PR.
+  is published as MIP-0030 (Draft). Recovery retirement is amended by upstream #385.
   Scoped grants are a separate successor extension.
 - `mps/mps-call-provenance.md` → upstream **MPS-0040**, Cross-Contract
   Call Provenance in Compact Circuits (Proposed). Compact 0.35 now exposes
-  immediate caller identity; open Passport #176 validates a consumer.
+  immediate caller identity; merged Passport #176 validates a consumer.
 - **MPS-0039**, Calling a Contract Requires Its Full Compiled Artifacts, is published
   upstream (Proposed); the regeneration proposal below addresses it.
 
-The two MIP files here are retained as working mirrors while the
-reference implementation (`contract/`) and the upstream texts evolve
-together; the upstream copies are canonical.
+- `mips/mip-xxxx-signature-schemes.md` → [**MIP-0030**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md),
+  ECDSA Authorisation for Custody Accounts (**Draft**), merged via #374.
+  Complete recipes, policy/enforcement mapping, cryptographic review and
+  MIP-0021 compatibility remain; no k1 sunset policy is adopted.
+- `mips/mip-xxxx-account-recovery.md` → [**MIP-0022**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md),
+  Recovery Paths for Custody Accounts (**Proposed**), merged via #339.
+  Authors: Nicolas Di Prima and Raphael Toledo. Upstream #385 now requires
+  atomic retirement of all prior entries at finalisation, including pending
+  enrolments. Passport #183 implements the reset; compilation/simulation
+  evidence does not complete proof/node or deployment validation.
+- `mips/mip-xxxx-prover-key-regeneration.md` → [**MIP-0020**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md),
+  On-Demand Prover Keys from Bundled ZKIR (**Proposed**), merged via #338.
+  Authors: Nicolas Di Prima and Vincent Hanquez. Supported APIs, conformance
+  and integration remain.
 
-## Submitted upstream, still open
-
-- [#338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338):
-  `mips/mip-xxxx-prover-key-regeneration.md`, submitted by Hector after
-  Passport #173 merged. Authors: **Nicolas Di Prima and Vincent Hanquez**.
-- [#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339):
-  `mips/mip-xxxx-account-recovery.md`, submitted by Hector after Passport
-  #165 merged.
-
-Both contain Draft-status documents. Neither is accepted/merged upstream;
-retain the local working drafts while review continues.
+The authorisation, ECDSA, recovery and regeneration paths above are retired
+to canonical pointers. The older custody mirror is non-canonical.
 
 ## Working draft and evidence notes
 
-- `mips/mip-xxxx-signature-schemes.md` — **ECDSA Authorisation for Custody
-  Accounts (C5 signing primitive)**: a narrow MIP-0013 successor-extension
-  working draft aligning wallet signing bytes with k1/r1 verification.
-  Records current envelope and commitment recipes, permits named bounded
-  WebAuthn profiles, and requires policy enforcement across every reachable
-  verifier accepting a credential. `wa-json134` and one live Safari account
-  operation provide bounded evidence. Remaining specification work covers
-  exact recipe references, the common UV requirement and evidence mapping. Tracking:
-  https://github.com/midnightntwrk/passport/issues/51.
 - `mips/mip-xxxx-scoped-grants.md` — **Scoped Grants and dApp Connection
   for Custody Accounts (C10, C11, C12, C23)**: the successor extension
   MIP-0013 reserves behind `require_authorised()`. A grant is a
@@ -84,43 +77,11 @@ retain the local working drafts while review continues.
   contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
   `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
   is exercised on node.
-- Caller-bound grants are implemented in open #176 using `kernel.caller()`
+- Caller-bound grants are implemented in merged #176 using `kernel.caller()`
   on Compact 0.35, with a fabricated-caller proof refused at node admission.
-  The extension uses schema v3 and needs reconciliation with P-256 #175;
+  The extension uses schema v3 and retains a separate combined-build/client-ABI/P-256 caller validation obligation;
   earlier grant evidence and the unshielded follow-up #163 are merged.
   Calling-circuit identity remains distinct from immediate caller identity.
-- `mips/mip-xxxx-account-recovery.md` — **Recovery Paths for Custody
-  Accounts (building block three)**: total-loss recovery behind the
-  MIP-0013 seam, anchored on bottom-up secret sharing (ANARKey/BUSS).
-  Guardians are authenticator credentials, cold signers, or paper
-  keys that persist no per-account state; the account publishes one
-  artefact set per session (public shares, a recovery public key, and
-  a wrap of the viewing key), so recovery restores both control and
-  visibility. Covers the guardian model and its three profiles, share
-  derivation, the single session operation, the two-phase recovery
-  gate with its pending record and veto window, the off-ledger
-  transport and roster record, and the REC invariant family. The
-  gate is a signature gate: the recovering party presents a Schnorr
-  signature under the stored recovery key and the successor co-signs
-  the same challenge, so neither secret enters the proof and the proof
-  may be delegated (REC-11). Remaining tag: [CRYPTO-MEMO] the
-  commissioned multi-session review (sent, response pending; the
-  published scheme's model is single-session, so the freshness rules
-  are our own normative addition). The contract tranche, in the
-  signature-gate form, is implemented on the reference implementation
-  (`contract/`) on both authorisation arms and evidenced in the
-  runtime simulator (the full behaviour matrix) and on a local
-  network (the lifecycle end to end).
-- `mips/mip-xxxx-prover-key-regeneration.md` — **On-Demand Prover Keys
-  from Bundled ZKIR**: a solution MIP under MPS-0039. Applications package
-  small ZKIR assets and regenerate/cache prover keys using verifier keys
-  read from the deployed contract, without requiring a registry. Defines
-  a versioned recipe, compatible keygen profile, independent ZKIR/VK
-  validation and upgrade handling. Native feasibility evidence is merged
-  in `experiments/proving-key-regeneration/`; supported SDK/WASM APIs,
-  conformance vectors and integration evidence remain to be delivered.
-  This is the chosen direction instead of the additional MPS in PR #172.
-
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on

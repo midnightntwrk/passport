@@ -2,12 +2,13 @@
 
 **Serves:** P5 · P8.
 
-**Status 2026/10/01:** draft and reference gate merged in
-[#165](https://github.com/midnightntwrk/passport/pull/165); upstream
-[#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339)
-is open. Transport, roster handling, interoperability vectors and
-multi-session crypto review remain. Prototype wire formats below are
-historical evidence, not a completed interoperable standard.
+**Status 2026/10/17:** [MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is published as **Proposed**;
+#165's signature gate is merged. The MIP-0013/0022 retirement amendment #385
+and reference reset #183 are merged, with proof/node validation still pending.
+Transport/liveness, roster handling, interoperability vectors and multi-session
+cryptographic review remain. The prototype formats below are historical evidence;
+use the canonical MIP for current protocol requirements.
+
 
 ## Outcome
 
@@ -22,8 +23,8 @@ derives its share on demand from keys it already holds, so there is
 nothing to back up, verify, or keep alive between recoveries. The wire
 formats are copy/paste strings (`buss-req.v0` / `buss-sig.v0` /
 `buss-paper.v0`) shared between the CLI and the app, so any conforming
-client can guard any account. Formalisation belongs to the
-recovery-paths MIP; DeRec remains a substitutable profile behind the
+client can guard any account. The canonical protocol is now
+MIP-0022; DeRec remains a substitutable profile behind the
 same seam.
 
 ## Dependencies
@@ -81,7 +82,7 @@ substitutable profile behind the same recovery seam.
 
 **B — BUSS stateless-guardian protocol (Passport-specific wire
 format).** **Chosen via C14** — realised in the prototype, shared
-across CLI and app; to be formalised in the recovery-paths MIP.
+across CLI and app; specified by MIP-0022; transport and interoperability remain.
 
 **C — Cheqd or similar credential-secured helper protocol.** Reuses
 credential infrastructure; unexplored.

@@ -1,5 +1,11 @@
 # ADR 0001 — Domain-separation registry
 
+**Compatibility follow-up, 17 October 2026:** [MIP-0021](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0021-domain-separation.md) is
+Proposed and rejects a central registry. This ADR records the earlier local
+decision; #14/#44 track reconciliation with the upstream convention and
+MIP-0030's existing bytes. No cryptographic preimage migration is authorised
+by this status update.
+
 **Status:** Accepted (2026/06/02)
 
 ## Context

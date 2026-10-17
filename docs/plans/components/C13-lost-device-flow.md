@@ -11,8 +11,8 @@ Mirrors I-4.1 through I-4.4.
 **Status 2026/07 — decided.** Alternative A: any surviving device
 revokes, via the `remove_device` ceremony the account-authorisation
 MIP specifies (1-of-n, guarded so the last active device cannot be
-removed), with the epoch mechanism as the stronger fallback — one bump
-invalidates every credential and grant registered under prior epochs,
+removed), with recovery retirement as the stronger fallback — finalisation retires
+all prior device entries atomically and advances the revocation epoch,
 which is also exactly the machinery the ANARKey recovery flow (C14)
 executes on total loss. The prototype implements the flow end to end;
 the contract surface is published upstream (MIP-0013) and exercised by
@@ -25,12 +25,13 @@ own key holds two live entries and survives its own revocation.
 Demonstrated on node against both enrolment shapes and on both
 authorisation arms; deriving the entry in-circuit does not prevent it
 (MIP-0013 erratum 8, `npm run probe:revocation` in the reference
-implementation). Today only the epoch bump is a complete revocation.
+implementation). Total recovery revocation now requires atomic entry retirement as well as
+the epoch bump (MIP-0013 §8/AUTH-6, upstream #385).
 The remedy is a contract-maintained device identity in MIP-0013 §3, a
 state-schema change and so a redeploy, proposed to ride the
 scoped-grants `spec_version = 2` redeploy. The decision of substance
 here is therefore upstream's, not this canvas's: until it lands, the
-lost-device flow must fall back to the epoch bump when the lost
+lost-device flow must use the corrected recovery retirement path when the lost
 device's entry count is unknown.
 
 ## Dependencies
@@ -67,7 +68,7 @@ lag or cache. *Detection:* timed test of post-revocation operations.
 
 **Revocation does not revoke.** A device that enrolled a second entry
 for its own key survives `remove_device` (erratum 8, measured on both
-arms). Mitigated today by the epoch bump; fixed only by a
+arms). Recovery retirement is a separate fallback; individual removal still needs a
 contract-maintained device identity. *Detection:* the revocation probe
 in the reference implementation.
 

@@ -42,7 +42,7 @@ MPS: MPS-0018
      | O6 | one MIP or two | one MIP under MPS-0018; the split offered in the PR body |
      | O7 | editor deviation from brief T3: rp_id_hash is committed under scope_salt (rp_commit) rather than stored clear, so the "observer does not learn the origin" claim of brief 5.5 holds for r1 grants | commitment; one extra opening on the p256 seam |
      | O8 | editor deviation from brief section 7: the Expired to Active edge is dropped; renewal is revoke then issue, composable in one transaction | issue_grant does not evaluate expiry |
-     | O9 | the schemes draft is cited, not listed in Requires, per brief 10.1; the r1 checks and witness set are reproduced inline; r1 registration is gated on that draft receiving a number | as sections 3.1 and 14 |
+     | O9 | the schemes draft is cited, not listed in Requires, per brief 10.1; the r1 checks and witness set are reproduced inline; MIP-0030 now has a number; profile and policy alignment remain | as sections 3.1 and 14 |
      | O10 | enc_pk argument on the shielded grant twins, asserted equal to enc_key, so a rotation aborts a pending grant call rather than orphaning change | adopted |
      | O11 | re-seal obligation toward other live read grants on every rotation | adopted as an authoriser MUST with a roster fallback |
      | O12 | Replaces: none per the brief and the published family | adopted |
@@ -50,12 +50,18 @@ MPS: MPS-0018
      | O14 | approved deviation from brief T5: canonical JSON (RFC 8785, JCS) replaced by signing the `request` parameter bytes as received, with the proof carried as a detached `proof` fragment parameter and no canonicalisation step anywhere | adopted (sections 9.1 to 9.4, 9.6, R10, R21) |
      | O15 | E1 folded, both stages, and the on-node conformance run (E2) with it: the grant seam is compiled and measured on the reference contract at spec_version 2 over the whole thirty-circuit roster, both grantee arms, 34 recipe vectors agreed three ways, and the seam is exercised on node. Every [CIRCUIT] item of the brief's section 13 is now settled, including the two that were open: proving times are measured for every circuit the on-node run exercised, which is three of the six grant twins (6.7), and the change-description precomputation is evidenced on node (6.5); the node's unit of block time is settled by E3 (O4) | both correction lists applied in the text; what remains is the residue named in Path to Active E2 and E6 and in Implementation |
 
-     Upstream dependencies: secp256r1 in the Compact language surface (r1
-     arm); secp256k1 point operations (schnorr_bip340); a connector
+     Upstream dependencies: secp256r1 is available in Compact 0.35; r1
+     profile/policy review remains under MIP-0030. secp256k1 point operations (schnorr_bip340); a connector
      structured-display surface (envelope-1 spend); WebAuthn PRF in target
      browsers; the Open Wallet Standard handshake flag and mapping-table
      acceptance; CAIP-10 for Midnight. Circuit and cryptographer evidence
      items are the checkboxes of Path to Active. -->
+
+> **Reconciliation, 17 October 2026:** the schemes companion is now
+> [MIP-0030 (Draft)](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md), with no adopted k1 sunset. Recovery retirement
+> is normative in MIP-0013/MIP-0022 after upstream #385; reference #183 still
+> needs proof/node validation. This does not settle this draft's separate
+> AUTH-1/2/9 companion amendment, device-identity remedy, or acceptance gates.
 
 ## Table of contents
 
@@ -264,7 +270,7 @@ needs are stated in full in sections 3.3 and 6.2.
 | Arm | Scheme | Envelope | Registry status | Today |
 |---|---|---|---|---|
 | `v1` | Schnorr over JubJub | intrinsic (none) | Active | yes |
-| `k1` | ECDSA over secp256k1 | `0` none, `1` connector prefix | Interim, with the schemes MIP's sunset | yes |
+| `k1` | ECDSA over secp256k1 | `0` none, `1` connector prefix | MIP-0030 k1; no adopted sunset | yes |
 | `r1` | ECDSA over secp256r1 through the WebAuthn envelope | intrinsic (WebAuthn message) | Active upon the secp256r1 surface | no |
 
 `envelope` is the k1 digest selector and nothing else: the k1 arm
@@ -2664,7 +2670,7 @@ the following. Each item names the invariants it exercises.
   seam, AUTH-1 to AUTH-10, errata 6 to 8); its
   [discussion](https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/244)
   (the VRF objection, R12).
-- Signature Schemes for Custody-Account Authorisation (the schemes MIP;
+- ECDSA Authorisation for Custody Accounts (MIP-0030;
   draft, number pending): registry, r1 WebAuthn envelope, k1 interim
   arm, SIG-1 to SIG-5.
 - [MIP-0003](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0003-ecdsa-support.md):

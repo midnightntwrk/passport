@@ -2,12 +2,16 @@
 
 **Serves:** P1 · P3 · P4 · P5 · P8.
 
-**Status 2026/10/01:** recovery #165 and Compact 0.35 maintenance #174 are
-merged. P-256 #175 and caller-bound grants #176 are open, separate builds;
-the latter uses schema v3. Preserve the 15,000-verifier-byte limit on every
-deployment wave. Public-key admissibility and device-wide revocation
-corrections remain; the earlier observations below are toolchain-specific.
-See [current evidence and integration sequence](../STATUS.md).
+**Status 2026/10/17:** recovery #165, Compact 0.35 #174, P-256 #175,
+caller-bound grants #176 and recovery entry reset #183 are merged. MIP-0030
+is Draft; [upstream #385](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/385) amends MIP-0013 and MIP-0022 to
+require atomic retirement of all prior device entries at finalisation.
+The reset has compilation/simulation evidence; regenerated keys, proof/node
+validation, expanded retirement cases and deployment sizing remain. Preserve
+the 15,000-verifier-byte budget per wave. Fresh combined-build/client-ABI/P-256
+caller validation, key-admissibility mapping and individual-device revocation
+remain separate. See [current evidence](../STATUS.md).
+
 
 ## Outcome
 
@@ -33,7 +37,7 @@ an independent bit-exact Rust signer):
 - **MIP-0013 — Multi-key Account Authorisation for Custody
   Contracts**: rolling single-use device entries (each gated call
   consumes an entry and inserts its successor, AUTH-9), revocation
-  epochs (one bump invalidates every stale credential), device
+  epochs plus atomic recovery retirement (AUTH-6), device
   lifecycle ceremonies with a last-device guard, a dedicated
   `auth_nonce` freshness counter, per-circuit challenge binding with
   witness-value pinning (AUTH-10), a post-deploy bootstrap (the
@@ -41,7 +45,7 @@ an independent bit-exact Rust signer):
   installs the real entry, since no deploy-time code can know the
   contract's own address), and the seam instantiated with in-circuit
   JubJub Schnorr (see C5). A recovery seam is fixed but its mechanism
-  is deferred to the recovery-paths MIP (C14).
+  is specified by MIP-0022 (C14), including the merged retirement amendment.
 
 Implementing the standards surfaced three errata (the direct-transfer
 return signature, the DST derivation, and the bootstrap), all folded
@@ -60,7 +64,7 @@ and two gaps in the published standard are measured.
   dApp-connector prefix) bound at enrolment, which admits connector,
   MPC, and HSM ECDSA signers with no upstream change. The full deploy
   exceeds ledger-9 per-block limits, so the client deploys in waves.
-  The signature-schemes MIP (C5) standardises this shape.
+  MIP-0030 (Draft, C5) documents the ECDSA signing boundary.
 - **Callee composition.** The account participates as a cross-contract
   callee: a counterparty contract drove a seam-gated circuit and the
   seam verified inside the callee; value crosses the boundary as send
@@ -75,8 +79,7 @@ and two gaps in the published standard are measured.
   the seam and the bootstrap; MIP-0013 §4 does not yet require it.
 - **Gap: removal retires an entry, not a device (erratum 8).** A device
   that enrols a second entry for its own key survives `remove_device`;
-  deriving the entry in-circuit does not prevent it. Only the epoch
-  bump is a complete revocation. The remedy is a contract-maintained
+  deriving the entry in-circuit does not prevent it. Recovery must atomically retire all prior entries with the epoch change. The remedy is a contract-maintained
   device identity in §3, a schema change proposed to ride the
   `spec_version = 2` redeploy; ruling pending upstream.
 
@@ -139,7 +142,7 @@ the identity-key rejection rows in the conformance suite.
 
 **Incomplete revocation.** A device that enrolled a second entry for
 its own key survives `remove_device` (erratum 8, measured on both
-arms). Mitigated today by the epoch bump; fixed only by a
+arms). Recovery retirement is a separate fallback; individual removal still needs a
 contract-maintained device identity. *Detection:*
 `npm run probe:revocation` in the reference implementation.
 
@@ -178,7 +181,7 @@ FROST (a threshold committee registers as one device); separates
 approval from proving. See C5 for the full shape.
 
 **C — P-256 ECDSA (passkey assertion).** Viable, evidenced, and now
-**registered as the r1 arm** of the signature-schemes MIP draft (C5).
+**specified as the r1 construction** in MIP-0030 (Draft, C5).
 In-circuit ECDSA-P256 verification is measured at practical cost
 (k=15, sub-second proving) against a real platform passkey assertion,
 and upstream carries P-256 as a first-class proof-system chip with
@@ -188,11 +191,12 @@ trunk on its own grounds: FROST-compatibility, native-curve
 verification cost, and approval / proving separation. C is the arm for
 flows where the signing operation must occur inside the
 authenticator's secure element, and the natural shape for a PRF-free
-fallback (C9). Gated on the secp256r1 Compact language surface.
+fallback (C9). Compact 0.35 exposes the primitive; #175 implements the
+bounded reference profile. Profile/policy and admissibility review remain.
 
 **D — ECDSA-secp256k1 (interim k1 arm).** Co-resident with B in the
-reference contract, registered with Interim status and a named sunset
-in the schemes draft. Its per-device signing envelope is what admits
+reference contract. MIP-0030 preserves its signing bytes and sets no
+sunset policy. Its per-device signing envelope is what admits
 dApp-connector ECDSA signers today.
 
 **E — BIP-340 Schnorr over secp256k1 (Midnight wallet key).** Named
