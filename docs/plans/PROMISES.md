@@ -266,153 +266,193 @@ and selective disclosure — not the cross-chain machinery itself.
 
 ## Security properties
 
-The ten promises above state what the user is offered. This section
-records the adversarial and integrity properties those promises leave
-implicit — what the system must *not* permit, however it is
-built. They are numbered from P11 and carry their own invariants in
-the same form. One of them, P5′, is a strengthening of an existing
-promise rather than a new one.
-
-They come from the Agda formal specification, where each is stated as a
-machine-level property over the architecture; the formal statements, and the
-setting they are stated in, live in
-[`arc-passport-formal-spec/docs/security-properties.md`](https://github.com/input-output-hk/arc-passport-formal-spec/blob/main/docs/security-properties.md).
+The ten promises above describe what you can do with Passport. These security
+promises describe what must stay safe: who can move your funds, whether your
+balance is accurate, and what recovery, proof services, and upgrades may reveal
+or change. P5′ adds safety rules to recovery; P11–P16 cover the other protections.
 
 | ID | Name | One-line statement |
 |----|------|--------------------|
-| **P5′** | Recovery-authorised | No key rotation happens that the user did not authorise. |
-| **P11** | Transaction safety | Only a holder of the account's keys can move its funds. |
-| **P12** | Value integrity | The balance changes only through incoming and outgoing transactions. |
-| **P13** | Funds availability | With key access and funds above the fee threshold, the user can move all their funds. |
-| **P14** | Private proving | The proof service learns only what proving requires, and total leakage is bounded by the prover view plus the chain. |
-| **P15** | Guardian privacy | No one but a guardian itself can learn it is your guardian, and a guardian learns nothing beyond its own request. |
-| **P16** | Upgrade safety | Upgrades are account-gated and preserve devices, balances, and identity observations. |
+| **P5′** | Recovery-authorised | Recovery follows the rules you set. |
+| **P11** | Transaction safety | Your funds move only with permission. |
+| **P12** | Value integrity | Your balance is accurate, and catches up when you reconnect. |
+| **P13** | Funds availability | Your funds remain available, even if you lose your devices. |
+| **P14** | Private proving | Getting help to make a proof does not mean sharing everything. |
+| **P15** | Guardian privacy | Your recovery contacts stay private. |
+| **P16** | Upgrade safety | Upgrades do not take away access, funds, or identity. |
+
+**Status.** These are v1.0 design requirements, not a claim that the current
+prototype meets or formally proves them all. The
+[source specification](https://github.com/input-output-hk/arc-passport-formal-spec/blob/main/docs/security-properties.md)
+records their precise meaning, formal status, supporting evidence, known gaps,
+and acceptance checks still to be completed.
 
 ### P5′ · Recovery authorisation (recovery-authorised)
 
-P5 promises that recovery *works* (liveness), this is its safety:
-every rotation of the account's keys is authorised by the user through
-the recovery mechanism.
+**Recovery follows the rules you set.** Recovery replaces account authority
+only through the configured recovery authority and waiting period; a live
+device can cancel it. This does not certify the human owner's consent: a
+colluding group of recovery contacts can reconstruct that authority (see Limits).
+Ordinary live-device-authorised encryption-key rotation remains available
+without a recovery exchange.
 
 **Invariants.**
 
-- **I-5′.1** Every key rotation the chain adopts is accompanied by a
-  recovery exchange authenticated under the account's out-of-band recovery
-  secret.
-- **I-5′.2** A rotation without such an authenticated exchange is rejected by
-  chain-side verification.
+- **I-5′.1** Submission verifies the current recovery authority and successor
+  key possession. Their authorisation binds the account, successor device key,
+  successor recovery authority, current epoch/authorisation nonce, and signed
+  time bound. Invalid signatures, stale state, or invalid time bounds are rejected
+  chain-side.
+- **I-5′.2** Finalisation enacts only an authorised pending record after the
+  veto window, if uncancelled. A live device can cancel the pending record.
+  Finalisation is permissionless: it does not require fresh recovery or successor
+  signatures.
+
+**Limits.** Recovery trusts the configured group of contacts: enough of them
+acting together can recover the account without consent. If all devices are lost,
+none remains to cancel recovery during the waiting period.
 
 ### P11 · Transaction safety
 
-Only a holder of the account's keys can move its funds.
+**Your funds move only with permission.** Permission can come from an enrolled
+live device or a live grant within the limits you set under P7. A grantee need
+not hold an account device key; the chain enforces those limits.
 
 **Invariants.**
 
-- **I-11.1** Every spend from the account that the chain adopts carries a
-  valid signature under a key registered to that account at the time of
-  adoption.
-- **I-11.2** The signature requirement is enforced chain-side, at
-  verification.
-- **I-11.3** A signature under a revoked key does not authorise a spend, even
-  if the key material is intact.
-- **I-11.4** No party other than the key holder can produce a signature that
-  verifies.
+- **I-11.1** Every adopted spend carries valid device or grant authorisation
+  bound to the account, operation, and applicable state.
+- **I-11.2** Chain-side verification enforces signatures, authority liveness,
+  grant scope, expiry, quantitative caps, state binding, and replay prevention.
+- **I-11.3** Revoked devices or grants, expired grants, and stale epochs,
+  generations, or nonces do not authorise new spends, even if keys are retained.
+- **I-11.4** Under the signature scheme and cryptographic assumptions, producing
+  authorisation for a **fresh unauthorised operation** is computationally
+  infeasible. This does not require exclusive creation of every verifying
+  signature byte string.
 
 ### P12 · Value integrity
 
-The account balance changes only through incoming and outgoing transactions.
-The statement is more than a single equality, because the balance the user
-sees is an *answer the system gives*, and a client can be offline or behind
-the chain: what must hold is that the reported balance is never an
-overstatement, and that it converges eventually.
+**Your balance is accurate, and catches up when you reconnect.** A report tells
+you which account, asset, and finalised ledger snapshot it describes, and
+whether it is complete. An older balance may no longer be spendable; a
+reconnecting client must catch up rather than keep presenting an old snapshot
+as current.
 
 **Invariants.**
 
-- **I-12.1** A reported balance never exceeds the account's real balance.
-- **I-12.2** After a period in which nothing enters or leaves the account,
-  the reported balance equals the real balance.
-- **I-12.3** No operation other than an incoming or outgoing transaction
-  changes the real balance. Things like adding or revoking a device, recovering,
-  renaming, etc. are all value-neutral.
-- **I-12.4** Any divergence between reported and real balance is
-  explained by staleness alone. It can never be a transaction that was
-  lost, double-counted, or attributed to the wrong account.
+- **I-12.1** A complete report equals the ledger balance at its identified
+  snapshot. A partial report declared as a lower bound does not exceed the
+  balance at **that same snapshot**. Incomplete views must account for relevant
+  debits before claiming a lower bound. Stale reports may exceed the latest balance.
+- **I-12.2** With accessible ledger/viewing data, continued synchronisation,
+  sufficient computation, and fair progress, every relevant finalised movement
+  is eventually included in the client's accounting. After movements cease,
+  the client eventually reports a complete snapshot including all of them.
+- **I-12.3** Holdings change only through ledger movements. Device changes,
+  recovery, naming, and upgrades do not themselves create or destroy holdings.
+- **I-12.4** Accounting loses, duplicates, or misattributes no movement.
 
 ### P13 · Funds availability
 
-With access to the account's keys and a balance above the fee threshold, the
-user can move all of their funds. This is the liveness dual of P11: safety
-alone is satisfied by a wallet that never releases anything.
+**Your funds remain available, even if you lose your devices.** Funds acquired
+honestly and recoverable before a supported operation must remain recoverable
+after spending, key changes, crashes, and total device loss. Moving them still
+requires valid device/grant authority (or recovery authority to regain access),
+computation/proving resources, fee resources, accessible chain data, and fair
+transaction inclusion. A signing key alone does not supply these resources.
+
+**Recoverable holdings** have valid coin descriptions and commitment openings,
+viewing/decryption material, and ledger membership/witness data reconstructible
+using the owner's valid private credential/recovery authority and chain data.
 
 **Invariants.**
 
-- **I-13.1** From any authorised device, the user can construct, authorise,
-  and settle transactions that move the account's entire spendable balance,
-  less fees.
-- **I-13.2** No party can withhold this: no operator, helper, indexer, or
-  proof service is on the critical path of a spend (the spending case of
-  I-8.3).
-- **I-13.3** The only precondition is that the balance covers transaction
-  fees, and that threshold is discoverable by the client rather than
-  implicit.
-- **I-13.4** No account state renders funds permanently unspendable.
+- **I-13.1** Given the stated prerequisites, any authorised device can construct,
+  authorise, and settle transactions moving all such holdings.
+- **I-13.2** No particular ancillary operator is indispensable.
+- **I-13.3** The client can discover fee requirements and identify missing
+  data/viewing/witness or proving prerequisites.
+- **I-13.4** The remaining value of previously recoverable, honestly acquired
+  holdings, including change, remains recoverable through supported spends and
+  account transitions, including encryption-key changes, crashes, and total
+  device loss.
 
 ### P14 · Private proving
 
-The proof service learns only what producing the proof requires, and the
-total leakage of the architecture is bounded by two feeds: what the prover
-sees and what the chain publishes.
+**Getting help to make a proof does not mean sharing everything.** A proof
+service receives only the information allowed for that proof's supported
+profile. Ordinary delegated proving can expose private witness data, including
+coin descriptions; it is not anonymous or statement-only proving.
 
 **Invariants.**
 
-- **I-14.1** Everything the proof service observes is derivable from the
-  statement being proved — a compromised or curious prover gains nothing a
-  party holding only the statement could not have worked out itself.
-- **I-14.2** Nothing the proof service is handed links two proving requests
-  to the same account or user: no persistent identifier, no reused
-  commitment, no key or handle that survives a request.
-- **I-14.3** The combined view of every component outside the user's own
-  devices is accounted for by the prover view and the chain view together.
-  No component carries user state out through a third channel.
-
-*Not covered.* Availability of the proof service — a malicious prover may
-simply refuse to prove, which P13 covers only where proving is not on the
-spend path — and contact metadata (timing, network origin) beyond what the
-statement itself pins.
+- **I-14.1** Each supported circuit/proving profile has a fixed, normative,
+  exhaustive leakage budget, anchored to its documented protocol: public inputs,
+  necessary private witness fields disclosed to the prover, and minimum
+  request/transport metadata. Observations must be simulatable from that budget.
+- **I-14.2** Requests and logs introduce no unrelated persistent identifiers,
+  telemetry, or linkage beyond the fixed profile budget and inherent public
+  linkage, including the
+  [custody contract address carried by deposits/spends](https://github.com/midnightntwrk/passport/blob/5d12798321d3daba37b1da90162ee1468daf38a6/docs/mps-mip/mips/mip-xxxx-native-asset-custody.md#L608-L618).
+- **I-14.3** An architecture leakage claim inventories all relevant off-device
+  component views and their combined observations: prover, chain, guardians,
+  network endpoints/timing, transport, and logging as applicable. Required views
+  cannot be silently omitted to obtain a prover-plus-chain bound; each must fit
+  a fixed budget or have a justified, explicit assumption limiting the claim.
 
 ### P15 · Guardian privacy
 
-No one but a guardian itself can learn that it is your guardian, and a
-guardian learns nothing beyond what answering its own request requires.
+**Your recovery contacts stay private.** The chain must not reveal who they
+are, and each contact receives only the information allowed for its role.
+This is not a promise of network anonymity: ordinary transport exposes
+endpoints/timing, and privacy against contacts depends on prior knowledge and
+collusion.
 
 **Invariants.**
 
-- **I-15.1** Chain state and network traffic do not reveal who an account's
-  guardians are. Two accounts whose guardian sets have the same shape (size
-  and threshold) are indistinguishable to a third party.
-- **I-15.2** A guardian's view does not reveal the identity or the
-  participation of any other guardian.
-- **I-15.3** A guardian learns exactly the account address, the
-  session nonce, its own share index, and its own reply and nothing
-  else.
+- **I-15.1** Passive chain observers learn no guardian identities or roster,
+  requests, responses, or guardian graph. Permitted chain leakage is limited to
+  recovery configuration existence, public-share count, session timing/frequency,
+  and routine-versus-churn activity, with account/public context fixed for
+  comparisons. Confidential authenticated transport protects message contents
+  and authenticates parties, but does not hide endpoints or timing; stronger
+  network anonymity requires its own mechanism and assumptions.
+- **I-15.2** Each supported protocol/transport profile fixes an exhaustive,
+  normative budget for individual and sub-quorum guardian views, anchored to
+  documented messages and an explicit corruption model. It must not disclose
+  other guardians' identities/roster. Prior knowledge, coordination, and traffic
+  observations are explicit assumptions, not silently omitted views; removing
+  another guardian is not unconditionally indistinguishable.
+- **I-15.3** A profile may permit only purpose-required account/session
+  identifiers, the guardian's evaluation index and own share/reply/liveness
+  information, minimum authentication fields justified by their specified
+  purpose, and unavoidable ordinary-transport endpoint/timing metadata.
+  Unrelated persistent identifiers, telemetry, and unnecessary fields are
+  prohibited. Missing exhaustive budgets remain unresolved obligations, and
+  providers cannot widen them. A colluding **t+1** quorum can reconstruct
+  recovery authority and viewing capability; historical quorums may retain
+  viewing capability for historical artefacts/pre-rotation history, and
+  potentially current holdings if viewing material remains stable.
 
 ### P16 · Upgrade safety
 
-Upgrades are gated by the account, and an upgrade preserves devices,
-balances, and identity observations. MIP-0013 permits in-place circuit
-replacement and records the device-orphaning risk that comes with it; these
-invariants are what bounds that risk.
+**Upgrades do not take away access, funds, or identity.** An upgrade needs
+account authorisation and must leave authorised devices actually able to
+operate, preserve holdings, and preserve identity answers in the same context.
 
 **Invariants.**
 
 - **I-16.1** No upgrade takes effect without authorisation from the account
   itself. No operator, deployer, or circuit author can upgrade an account
   unilaterally.
-- **I-16.2** An upgrade preserves the set of authorised devices.
-- **I-16.3** An upgrade preserves balances.
+- **I-16.2** An upgrade preserves both the set of authorised devices and their
+  actual authorisation capability.
+- **I-16.3** An upgrade preserves holdings except actual ledger movements,
+  with fees separately attributed to their payer and fee asset.
 - **I-16.4** An upgrade preserves identity observations: every attribute
-  question answerable before the upgrade is answerable after, with the same
-  answer.
+  question answerable before remains answerable with the same answer when
+  compared in the same ledger/credential context.
 
 ---
 
@@ -452,7 +492,7 @@ And the security properties:
 
 | ID | Name | Invariants |
 |----|------|------------|
-| **P5′** | Recovery-authorised | I-5′.1 … I-5′.3 |
+| **P5′** | Recovery-authorised | I-5′.1 … I-5′.2 |
 | **P11** | Transaction safety | I-11.1 … I-11.4 |
 | **P12** | Value integrity | I-12.1 … I-12.4 |
 | **P13** | Funds availability | I-13.1 … I-13.4 |
@@ -525,23 +565,27 @@ The security properties attach to the same map. Each is the safety or
 liveness counterpart of a promise that states only the other half:
 
 - **P5′ ↔ P5.** P5 is recovery liveness (the user *can* recover); P5′ is
-  recovery safety (nobody else can). A recovery mechanism satisfying P5
-  alone is compatible with an unauthorised rotation.
-- **P11 ↔ P4, P6.** I-4.2 (a revoked device cannot operate) and the I-6.x
-  family (keys do not leave their holder) are only meaningful because P11
-  requires a key for a spend in the first place.
+  recovery-authority safety (only an authorised pending record can replace
+  authority). It does not rule out recovery by a colluding quorum or certify
+  human consent. P5 alone is compatible with unauthorised replacement.
+- **P11 ↔ P4, P6, P7.** Revocation and key protection matter because P11
+  requires live device or live in-scope grant authorisation. P7 supplies the
+  chain-enforced scope/bounds for grantee spends; no account device key is needed.
 - **P13 ↔ P11.** The liveness dual: P11 alone is satisfied by a wallet that
   never releases anything, P13 alone by one that releases to anybody.
-- **P13 ↔ P8.** I-13.2 (nobody can withhold a spend) is the spending case of
-  I-8.3 (no operator on the critical path).
-- **P12 ↔ P16.** I-16.3 (upgrades preserve balances) is the upgrade case of
-  I-12.3 (only transactions move value).
+- **P13 ↔ P8.** I-13.2 (no particular ancillary operator is indispensable)
+  is the spending case of I-8.3. P13's preservation duty complements I-8.1:
+  client-only loss of change descriptions is an obligation to fix, not grounds
+  to weaken chain-only operation.
+- **P12 ↔ P16.** I-16.3 (upgrades preserve holdings except actual ledger
+  movements) is the upgrade case of I-12.3; fees are attributed by payer/asset,
+  and asset compensation needs separate spend authorisation.
 - **P14 ↔ P9.** P9 bounds what a *proof* reveals to its verifier; P14 bounds
-  what producing the proof reveals to the prover, and what the architecture
-  as a whole reveals to everything off the user's devices.
-- **P15 ↔ P5, P6.** P5 admits recovery helpers and I-6.4 governs the share
-  material they hold; P15 governs what their participation reveals — about
-  the account, and about each other.
+  what producing it reveals to the prover under fixed profile budgets.
+  Architecture-wide claims must cover all relevant off-device observer views.
+- **P15 ↔ P5, P6.** Recovery helpers hold shares under I-6.4; P15 separates
+  chain, network, sub-quorum, and quorum views. A colluding quorum's recovery/
+  viewing capability is a trust limit, not a denial of the intended share scheme.
 - **P16 ↔ P8.** I-16.1 (upgrades are account-gated) is the upgrade case of
   I-8.3: an operator-gated upgrade would put a named party back on the
   critical path.
