@@ -1,0 +1,29 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+include "bip340";
+import Bip340;
+
+// Cost and conformance probe only. This does not enrol or authorise ACC keys.
+export ledger accepted: Bytes<32>;
+
+circuit verify<#N>(publicKey: Bytes<32>, message: Bytes<N>, signature: Bytes<64>): [] {
+  assert(verifyBip340<N>(publicKey, message, signature), "invalid BIP-340 signature");
+  accepted = disclose(persistentHash<[Bytes<32>, Bytes<N>, Bytes<64>]>([publicKey, message, signature]));
+}
+
+// All message lengths in the official BIP-340 vectors, including empty input.
+export circuit verify_0(publicKey: Bytes<32>, message: Bytes<0>, signature: Bytes<64>): [] {
+  verify<0>(publicKey, message, signature);
+}
+export circuit verify_1(publicKey: Bytes<32>, message: Bytes<1>, signature: Bytes<64>): [] {
+  verify<1>(publicKey, message, signature);
+}
+export circuit verify_17(publicKey: Bytes<32>, message: Bytes<17>, signature: Bytes<64>): [] {
+  verify<17>(publicKey, message, signature);
+}
+export circuit verify_32(publicKey: Bytes<32>, message: Bytes<32>, signature: Bytes<64>): [] {
+  verify<32>(publicKey, message, signature);
+}
+export circuit verify_100(publicKey: Bytes<32>, message: Bytes<100>, signature: Bytes<64>): [] {
+  verify<100>(publicKey, message, signature);
+}

@@ -1,0 +1,16 @@
+[package]
+name = "bip340-proof-verify"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Native verification of the standalone Compact BIP-340 probe proofs"
+
+[dependencies]
+# Reuse the pinned native verifier and v7 key format already used by the
+# repository's proving-key-regeneration experiment. No ledger feature flags.
+midnight-transient-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "e5da67016d143db7822bbcd79eb1dd4ca198cb07" }
+midnight-serialize = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "e5da67016d143db7822bbcd79eb1dd4ca198cb07" }
+midnight-zk-stdlib = "=2.3.5"
+midnight-proofs = "=0.8.2"
+serde_json = "1"
+sha2 = "0.10"

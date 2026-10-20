@@ -1,0 +1,356 @@
+{
+  "measuredAt": "2026-10-20T16:21:23.317Z",
+  "baseCommit": "cd346383c89b9ac3b328122b0053d66a2ce6215e",
+  "compilerInfo": {
+    "compiler-version": "0.35.0",
+    "compiler-commit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
+    "language-version": "0.27.0",
+    "runtime-version": "0.20.0",
+    "circuits": [
+      {
+        "name": "verify_0",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 0
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_1",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 1
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_17",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 17
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_32",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_100",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 100
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      }
+    ],
+    "witnesses": [
+      {
+        "name": "bip340LiftX",
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          }
+        ],
+        "result type": {
+          "type-name": "Secp256k1Point"
+        }
+      }
+    ],
+    "contracts": [],
+    "ledger": [
+      {
+        "name": "accepted",
+        "index": 0,
+        "exported": true,
+        "storage": "Cell",
+        "type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      }
+    ]
+  },
+  "zkirVersion": "midnight-zkir 3.1.0-rc.1",
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4 Max",
+    "memoryBytes": 68719476736
+  },
+  "fixture": {
+    "repository": "https://github.com/bitcoin/bips",
+    "revision": "130b8e0fa7f30fa45532f080b87b8db27a79e46e",
+    "path": "bip-0340/test-vectors.csv",
+    "sha256": "34c9d1d9c3a88d524bc80778540dc43f8306ec249a7485293063c376db851c2d"
+  },
+  "note": "Rows describe the full probe, including its SHA-256 input commitment and ledger write. Key sizes come from full compilation. No ACC integration or node deployment is measured.",
+  "sources": {
+    "contracts/bip340.compact": {
+      "bytes": 2959,
+      "sha256": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab"
+    },
+    "contracts/probe-bip340.compact": {
+      "bytes": 1285,
+      "sha256": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096"
+    },
+    "src/tests/bip340/measure.ts": {
+      "bytes": 3100,
+      "sha256": "9ec8e6ca44c1d592a8536278f9ea2ef99871ea8159e4c01cef7e9fae4ce813d8"
+    },
+    "src/tests/bip340/fixtures.ts": {
+      "bytes": 2133,
+      "sha256": "5c2ec021a44b89e4df857084096663e131c8d79efef465542b8568bf87d8ab51"
+    }
+  },
+  "circuits": [
+    {
+      "name": "verify_0",
+      "messageBytes": 0,
+      "k": 17,
+      "rows": 106487,
+      "assets": {
+        "zkir": {
+          "bytes": 101266,
+          "sha256": "1e763bd15131f41a6fa355101a1aaecb3985c0c596718851afde6fda6ee746ae"
+        },
+        "bzkir": {
+          "bytes": 30851,
+          "sha256": "f13ea1d2f9126f6e3e605a8c0322dffa3e2aa72d5a01373d2e70cfe924ace56d"
+        },
+        "prover": {
+          "bytes": 234917545,
+          "sha256": "adec750f3a6b4bceb0a18c4808f3d2c2c1ac5096389df236d81b1d5efe4e6480"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "ad7f97545138e0edc0aad43653c1894490d4f35d7074faf7094050536694a6d0"
+        }
+      }
+    },
+    {
+      "name": "verify_1",
+      "messageBytes": 1,
+      "k": 17,
+      "rows": 106513,
+      "assets": {
+        "zkir": {
+          "bytes": 101454,
+          "sha256": "753b378e09bf8fe14b58c1ec56f9ded72d7081578ba95a7dc8937f5245c352cb"
+        },
+        "bzkir": {
+          "bytes": 30938,
+          "sha256": "7f70e00bc39304a6c89812e4b0448c70cd490f98f27862de647f05306916f52c"
+        },
+        "prover": {
+          "bytes": 234917632,
+          "sha256": "ec8d123ba8c08253681b46e22a70144fe002621d6ed354f03649a182f3681f68"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "f84feeb0e50a979a2d3c61aa0a0288e5c10686356552cabd99ffb9cd258e683a"
+        }
+      }
+    },
+    {
+      "name": "verify_17",
+      "messageBytes": 17,
+      "k": 17,
+      "rows": 106561,
+      "assets": {
+        "zkir": {
+          "bytes": 101458,
+          "sha256": "658c5964a176ba8eb440eb05e050d555de6874f1b593fb276a2239c3298c158c"
+        },
+        "bzkir": {
+          "bytes": 30939,
+          "sha256": "4cbb9a994eac0203b86a4b879c84e4280cc517d2e4dbbef0b95662df27ffdcdd"
+        },
+        "prover": {
+          "bytes": 234917633,
+          "sha256": "716ef32f57ab3a87477d958a8d85ecf89264e011bdc4a2f1771b9ee55b6fd10a"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "7978d22fdf62a6c70b1cdc59556a8f629c427cc16064b00c8918bc0b9ca72741"
+        }
+      }
+    },
+    {
+      "name": "verify_32",
+      "messageBytes": 32,
+      "k": 17,
+      "rows": 108457,
+      "assets": {
+        "zkir": {
+          "bytes": 101614,
+          "sha256": "b4d49423bf747012e1f3af0260e778e8e38ee9093e78612c61b7e05380e43862"
+        },
+        "bzkir": {
+          "bytes": 30996,
+          "sha256": "2765887b3c741d2f9cc8d1f1621cdb3ead752657757e73843a965ef6ba1c749d"
+        },
+        "prover": {
+          "bytes": 234917690,
+          "sha256": "1d2959c45b32e09f05ce95350d06069b1e9e07ed9bbb93963416317685d1ef76"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "b3134e41ed2a6cb2aba9fa0fca22bba2894e8915874c18ee8afc60baa49bd737"
+        }
+      }
+    },
+    {
+      "name": "verify_100",
+      "messageBytes": 100,
+      "k": 17,
+      "rows": 112381,
+      "assets": {
+        "zkir": {
+          "bytes": 101934,
+          "sha256": "3ea67fef5bd0ab40a4bfe36a4b4dabc7323d10b79182029984a43e4da6862e18"
+        },
+        "bzkir": {
+          "bytes": 31109,
+          "sha256": "d308a9a8621d01f0d575dc8d812798c5346f31f2b8a8ba20e2f8b9ede11524ab"
+        },
+        "prover": {
+          "bytes": 234917803,
+          "sha256": "7da12490892164b21acbc0ba2620e69d672accfee71f632d70b81d8d6eed2fbc"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "08da9c17e629e657669ff40540153de2170e67b776c41d0348ae0f095d665c3b"
+        }
+      }
+    }
+  ]
+}

@@ -14,6 +14,10 @@ in one deployment, with the conformance suites both Testing sections
 require. This directory is the standard to build against going forward;
 the `experiments/` directories remain the historical evidence base.
 
+The standalone [BIP-340 verification helper](../experiments/bip340-verification/README.md)
+has its own conformance probe and opt-in test commands. It is not wired into
+the account contract or its authorisation arms.
+
 ## Co-resident authorisation arms
 
 The MIP-0012 §4 seam is credential-scheme-agnostic, and this contract

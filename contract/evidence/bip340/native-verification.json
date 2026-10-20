@@ -1,0 +1,162 @@
+{
+  "checks": [
+    {
+      "artefacts": {
+        "binaryZkir": {
+          "bytes": 30996,
+          "sha256": "2765887b3c741d2f9cc8d1f1621cdb3ead752657757e73843a965ef6ba1c749d"
+        },
+        "captureMetadata": {
+          "bytes": 534,
+          "sha256": "1b441e525a0ceb6fdf5513297278736cee66c553a41876c81cec2db4379463c1"
+        },
+        "jsonZkir": {
+          "bytes": 101614,
+          "sha256": "b4d49423bf747012e1f3af0260e778e8e38ee9093e78612c61b7e05380e43862"
+        },
+        "preimage": {
+          "bytes": 323,
+          "sha256": "934fe7005eb62edca20f2cd1fc8fb1f9bd0eff28df06ccff636fd2365fd2573b"
+        },
+        "proof": {
+          "bytes": 6364,
+          "sha256": "f6b579ddfdde2eed1fe2121d60f31aada0cf8497d2ad2110d11831e5b2e0a620"
+        },
+        "verifierKey": {
+          "bytes": 2745,
+          "sha256": "b3134e41ed2a6cb2aba9fa0fca22bba2894e8915874c18ee8afc60baa49bd737"
+        }
+      },
+      "circuit": "verify_32",
+      "negativeControls": [
+        {
+          "name": "changed accepted hash",
+          "publicInputIndex": 12,
+          "reason": "Invalid proof",
+          "result": "REJECTED"
+        },
+        {
+          "name": "changed binding",
+          "publicInputIndex": 0,
+          "reason": "Invalid proof",
+          "result": "REJECTED"
+        }
+      ],
+      "publicInputs": 14,
+      "result": "PASS",
+      "verificationMilliseconds": 42.770875
+    },
+    {
+      "artefacts": {
+        "binaryZkir": {
+          "bytes": 30851,
+          "sha256": "f13ea1d2f9126f6e3e605a8c0322dffa3e2aa72d5a01373d2e70cfe924ace56d"
+        },
+        "captureMetadata": {
+          "bytes": 531,
+          "sha256": "6c049742cc44c0a5f40099b51dc63e8c6d6814f94eb449ccdf632e9b0fd459d3"
+        },
+        "jsonZkir": {
+          "bytes": 101266,
+          "sha256": "1e763bd15131f41a6fa355101a1aaecb3985c0c596718851afde6fda6ee746ae"
+        },
+        "preimage": {
+          "bytes": 319,
+          "sha256": "f18236fe66d748caf5022a23734762291c2057c3e0e2cd790ac4586b4dd85d71"
+        },
+        "proof": {
+          "bytes": 6364,
+          "sha256": "14e090e9c360bcbc5115da4535298864558a25e171f6c5b0eddf31fee80694b3"
+        },
+        "verifierKey": {
+          "bytes": 2745,
+          "sha256": "ad7f97545138e0edc0aad43653c1894490d4f35d7074faf7094050536694a6d0"
+        }
+      },
+      "circuit": "verify_0",
+      "negativeControls": [
+        {
+          "name": "changed accepted hash",
+          "publicInputIndex": 12,
+          "reason": "Invalid proof",
+          "result": "REJECTED"
+        },
+        {
+          "name": "changed binding",
+          "publicInputIndex": 0,
+          "reason": "Invalid proof",
+          "result": "REJECTED"
+        }
+      ],
+      "publicInputs": 14,
+      "result": "PASS",
+      "verificationMilliseconds": 25.480041
+    },
+    {
+      "artefacts": {
+        "binaryZkir": {
+          "bytes": 31109,
+          "sha256": "d308a9a8621d01f0d575dc8d812798c5346f31f2b8a8ba20e2f8b9ede11524ab"
+        },
+        "captureMetadata": {
+          "bytes": 537,
+          "sha256": "d2afaaf9623e9c00db6129d18355d23738161fbe11c01a651e6aa3b736944592"
+        },
+        "jsonZkir": {
+          "bytes": 101934,
+          "sha256": "3ea67fef5bd0ab40a4bfe36a4b4dabc7323d10b79182029984a43e4da6862e18"
+        },
+        "preimage": {
+          "bytes": 426,
+          "sha256": "a458947619aaa3ee9086eb7dcd0ca734dee526107e97eb00e0f447a00dc369e5"
+        },
+        "proof": {
+          "bytes": 6364,
+          "sha256": "c6681088d314cc5c62a4b2020254f3da889e18be3f975c06656f748b263fecc4"
+        },
+        "verifierKey": {
+          "bytes": 2745,
+          "sha256": "08da9c17e629e657669ff40540153de2170e67b776c41d0348ae0f095d665c3b"
+        }
+      },
+      "circuit": "verify_100",
+      "negativeControls": [
+        {
+          "name": "changed accepted hash",
+          "publicInputIndex": 12,
+          "reason": "Invalid proof",
+          "result": "REJECTED"
+        },
+        {
+          "name": "changed binding",
+          "publicInputIndex": 0,
+          "reason": "Invalid proof",
+          "result": "REJECTED"
+        }
+      ],
+      "publicInputs": 14,
+      "result": "PASS",
+      "verificationMilliseconds": 24.746625
+    }
+  ],
+  "dependency": {
+    "repository": "https://github.com/midnightntwrk/midnight-ledger",
+    "revision": "e5da67016d143db7822bbcd79eb1dd4ca198cb07"
+  },
+  "evidenceLayer": "Native VerifierKey::verify with embedded verifier parameters; each original proof accepted, altered accepted hash and binding rejected",
+  "result": "PASS",
+  "sources": {
+    "Cargo.lock": {
+      "bytes": 84592,
+      "sha256": "dcf4ed692007b08042ec0d79174db17c844ad08840e131cb72232ef9cfc4dd6c"
+    },
+    "Cargo.toml": {
+      "bytes": 698,
+      "sha256": "f4dc68210b7de73681c38650ca38c24cad760a04dc6a72b0bbcc02fd567c98f0"
+    },
+    "src/main.rs": {
+      "bytes": 8119,
+      "sha256": "efada485d950f649136523fa5b29f8a3d170e20c1285c703e6d2ef99bb3c659c"
+    }
+  }
+}
