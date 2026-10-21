@@ -6,7 +6,7 @@ and can that signature be verified at the account seam? Verdict and
 detail in `FINDINGS.md`; probe plan and status in
 `EXPERIMENT_GUIDELINE.md`.
 
-**Compact 0.35 follow-up:** the [standalone BIP-340 verification helper](../bip340-verification/README.md)
+**Compact 0.35 follow-up:** the [standalone BIP-340 verification experiment](../bip340-verification/README.md)
 uses the newly exposed native group operations. It verifies raw BIP-340
 messages only; it does not integrate the wallet envelopes or ACC authorisation
 arm discussed in this earlier experiment.

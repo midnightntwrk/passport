@@ -17,16 +17,16 @@ import {
 } from '@midnightntwrk/ledger-v9';
 import {
   Contract, type ImpureCircuits, type Witnesses,
-} from '../../../contracts/managed/probe-bip340/contract/index.js';
-import { checkStreamingEncoding, proveStream } from '../webauthn-variable/proof-provider.js';
+} from '../contracts/managed/probe-bip340/contract/index.js';
+import { checkStreamingEncoding, proveStream } from './proof-provider.js';
 import { vectors, vectorSource, type Vector } from './fixtures.js';
 import {
   fieldOrder, fixedPointWitness, identity, liftX, witnesses, type PrivateState,
 } from './witnesses.js';
 
-const root = new URL('../../../', import.meta.url);
+const root = new URL('../', import.meta.url);
 const managed = new URL('contracts/managed/probe-bip340/', root);
-const output = new URL('evidence/bip340/', root);
+const output = new URL('evidence/', root);
 const captures = new URL('proof-artifacts/', managed);
 mkdirSync(output, { recursive: true });
 mkdirSync(captures, { recursive: true });
@@ -239,8 +239,8 @@ try {
 
 const sources = [
   'contracts/bip340.compact', 'contracts/probe-bip340.compact',
-  'src/tests/bip340/prove.ts', 'src/tests/bip340/witnesses.ts', 'src/tests/bip340/fixtures.ts',
-  'src/tests/webauthn-variable/proof-provider.ts',
+  'src/prove.ts', 'src/witnesses.ts', 'src/fixtures.ts',
+  'src/proof-provider.ts',
 ];
 writeFileSync(new URL('proofs.json', output), JSON.stringify({
   result: failure ? 'FAIL' : 'PASS', startedAt, completedAt: new Date().toISOString(),

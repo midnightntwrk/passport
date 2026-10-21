@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { vectorSource } from './fixtures.js';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const managed = path.join(root, 'contracts/managed/probe-bip340');
 const toolchainPlatform = `${arch() === 'arm64' ? 'aarch64' : arch() === 'x64' ? 'x86_64' : arch()}-${platform()}`;
 const zkir = process.env.ZKIR_BIN
@@ -35,7 +35,7 @@ for (const messageBytes of [0, 1, 17, 32, 100]) {
   console.log(JSON.stringify(measurement));
 }
 const sources = ['contracts/bip340.compact', 'contracts/probe-bip340.compact',
-  'src/tests/bip340/measure.ts', 'src/tests/bip340/fixtures.ts'];
+  'src/measure.ts', 'src/fixtures.ts'];
 const result = {
   measuredAt: new Date().toISOString(),
   baseCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -48,6 +48,6 @@ const result = {
     [file, await hashFile(path.join(root, file))]))),
   circuits,
 };
-const output = path.join(root, 'evidence/bip340');
+const output = path.join(root, 'evidence');
 mkdirSync(output, { recursive: true });
 writeFileSync(path.join(output, 'circuit-sizes.json'), JSON.stringify(result, null, 2) + '\n');

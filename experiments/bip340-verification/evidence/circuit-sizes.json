@@ -1,6 +1,6 @@
 {
-  "measuredAt": "2026-10-20T16:21:23.317Z",
-  "baseCommit": "cd346383c89b9ac3b328122b0053d66a2ce6215e",
+  "measuredAt": "2026-10-21T18:15:31.223Z",
+  "baseCommit": "957f6db838183759ebd017f9f0bb8ff56d102da7",
   "compilerInfo": {
     "compiler-version": "0.35.0",
     "compiler-commit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
@@ -222,11 +222,11 @@
       "bytes": 1285,
       "sha256": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096"
     },
-    "src/tests/bip340/measure.ts": {
-      "bytes": 3100,
-      "sha256": "9ec8e6ca44c1d592a8536278f9ea2ef99871ea8159e4c01cef7e9fae4ce813d8"
+    "src/measure.ts": {
+      "bytes": 3061,
+      "sha256": "e94adef3d59a95c667461edf621598f9ee3227e799557c5742ac7d66ab539be6"
     },
-    "src/tests/bip340/fixtures.ts": {
+    "src/fixtures.ts": {
       "bytes": 2133,
       "sha256": "5c2ec021a44b89e4df857084096663e131c8d79efef465542b8568bf87d8ab51"
     }

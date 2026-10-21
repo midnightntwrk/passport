@@ -1,6 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": true, "strict": true },
-  "include": ["src/tests/bip340/**/*.ts"],
-  "exclude": ["dist", "node_modules", "app"]
-}

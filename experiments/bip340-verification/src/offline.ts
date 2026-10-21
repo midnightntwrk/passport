@@ -9,7 +9,7 @@ import {
 import {
   Contract, ledger,
   type ImpureCircuits, type Witnesses,
-} from '../../../contracts/managed/probe-bip340/contract/index.js';
+} from '../contracts/managed/probe-bip340/contract/index.js';
 import { vectors, vectorSource, type Vector } from './fixtures.js';
 import {
   bytes32, fieldOrder, fixedPointWitness, identity, liftX, scalarOrder, witnesses,

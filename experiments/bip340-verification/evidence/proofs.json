@@ -1,8 +1,8 @@
 {
   "result": "PASS",
-  "startedAt": "2026-10-20T16:30:10.229Z",
-  "completedAt": "2026-10-20T16:30:40.269Z",
-  "baseCommit": "cd346383c89b9ac3b328122b0053d66a2ce6215e",
+  "startedAt": "2026-10-21T18:14:19.468Z",
+  "completedAt": "2026-10-21T18:14:58.173Z",
+  "baseCommit": "957f6db838183759ebd017f9f0bb8ff56d102da7",
   "evidenceLayer": "Original ZKIR /check for positive and forged negative assignments; local proof-server generation; ledger-v9 structural wellFormed and in-memory apply; fee balancing disabled; no node submission",
   "limitation": "ledger-v9 WASM omits the proof-verifying build feature. Its verification flags do not establish cryptographic proof verification; use the separate native verifier and its evidence.",
   "compilerInfo": {
@@ -217,10 +217,10 @@
   "sources": {
     "contracts/bip340.compact": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab",
     "contracts/probe-bip340.compact": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096",
-    "src/tests/bip340/prove.ts": "497512fcc2192bc94d7b09e55b6553945bee58406a8c8deb5b3b3c3123c54321",
-    "src/tests/bip340/witnesses.ts": "9faab4b9a00611a45da5d6570b3c5e2e60d616f2045aed85c775754bd505210c",
-    "src/tests/bip340/fixtures.ts": "5c2ec021a44b89e4df857084096663e131c8d79efef465542b8568bf87d8ab51",
-    "src/tests/webauthn-variable/proof-provider.ts": "f37142697ea954ae841bd1b37f6294ff11dce586ff45087edd6fc9b3d65f8746"
+    "src/prove.ts": "88260f74f9e3ede46af07be74d9d07d07a084340a53f3d5d83ac129bb299f8ad",
+    "src/witnesses.ts": "73682bcdb944c63314602d784edbffc2131a648d33d7178911137b038ebc4652",
+    "src/fixtures.ts": "5c2ec021a44b89e4df857084096663e131c8d79efef465542b8568bf87d8ab51",
+    "src/proof-provider.ts": "f37142697ea954ae841bd1b37f6294ff11dce586ff45087edd6fc9b3d65f8746"
   },
   "circuits": {
     "verify_0": {
@@ -417,50 +417,50 @@
       "result": "PASS",
       "messageBytes": 32,
       "transactionBytes": 6837,
-      "endToEndMilliseconds": 9751.276541000001,
-      "structuralCheckMilliseconds": 9.65991699999904,
-      "transactionSha256": "4fc9aee8ac775882a8b062563c1aa348479e6fc088ce859a9216c726aadfea79"
+      "endToEndMilliseconds": 12868.315416000001,
+      "structuralCheckMilliseconds": 10.323707999999897,
+      "transactionSha256": "d6310e382813033abbaeb0abaaa03c20acb2ad5ed7e994896e3d4cdc79bf8ba5"
     },
     {
       "name": "official vector 15 real proof",
       "result": "PASS",
       "messageBytes": 0,
       "transactionBytes": 6836,
-      "endToEndMilliseconds": 9933.902375,
-      "structuralCheckMilliseconds": 3.9711669999996957,
-      "transactionSha256": "17fbd3e527e6cb93374315f01e602b6f25f2ebf566e1e4e70ea9fb3a3c2d7a45"
+      "endToEndMilliseconds": 12674.760374999998,
+      "structuralCheckMilliseconds": 10.268292000000656,
+      "transactionSha256": "bdae8899eef6a1819d135fc5f4ae8d381bdf523153dd680bec76a5016a4b8c9c"
     },
     {
       "name": "official vector 18 real proof",
       "result": "PASS",
       "messageBytes": 100,
       "transactionBytes": 6838,
-      "endToEndMilliseconds": 9951.316458999998,
-      "structuralCheckMilliseconds": 7.549542000000656,
-      "transactionSha256": "84192ae8c3b8dc49f31d0a9a5d861f434ce1057e772928f9f15cb31f65992da0"
+      "endToEndMilliseconds": 12750.305832999999,
+      "structuralCheckMilliseconds": 8.349958999999217,
+      "transactionSha256": "ec47bcb1040b2b7af5bd516608a6ec6349ac2932baf12a17df480c51097f8e2a"
     }
   ],
   "proofs": [
     {
       "circuit": "verify_32",
       "proofBytes": 6364,
-      "proveRequestMilliseconds": 9718.928333,
+      "proveRequestMilliseconds": 12832.087834,
       "requestBytes": 234951847,
-      "proofSha256": "f6b579ddfdde2eed1fe2121d60f31aada0cf8497d2ad2110d11831e5b2e0a620"
+      "proofSha256": "40de198d0ab659d1d0ee31f044ff422f31de65ceb5618054e465e52b80da7d7d"
     },
     {
       "circuit": "verify_0",
       "proofBytes": 6364,
-      "proveRequestMilliseconds": 9908.634792,
+      "proveRequestMilliseconds": 12638.404999999999,
       "requestBytes": 234951553,
-      "proofSha256": "14e090e9c360bcbc5115da4535298864558a25e171f6c5b0eddf31fee80694b3"
+      "proofSha256": "dd3d84bfd661742f67ceb6f59fc59511dec323bac1deadad52aa0530c80244d2"
     },
     {
       "circuit": "verify_100",
       "proofBytes": 6364,
-      "proveRequestMilliseconds": 9923.096417,
+      "proveRequestMilliseconds": 12714.824166999999,
       "requestBytes": 234952176,
-      "proofSha256": "c6681088d314cc5c62a4b2020254f3da889e18be3f975c06656f748b263fecc4"
+      "proofSha256": "062b28dba1d5b35406f2d049d2768fcfd570e67129b7329be68adcd9bf66404b"
     }
   ]
 }

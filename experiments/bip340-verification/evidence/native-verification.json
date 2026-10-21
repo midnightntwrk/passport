@@ -7,8 +7,8 @@
           "sha256": "2765887b3c741d2f9cc8d1f1621cdb3ead752657757e73843a965ef6ba1c749d"
         },
         "captureMetadata": {
-          "bytes": 534,
-          "sha256": "1b441e525a0ceb6fdf5513297278736cee66c553a41876c81cec2db4379463c1"
+          "bytes": 580,
+          "sha256": "9de4e050ec1dbd9d97435a29c3013a5cfd6b69b35c968444700b10a9c98dffd3"
         },
         "jsonZkir": {
           "bytes": 101614,
@@ -16,11 +16,11 @@
         },
         "preimage": {
           "bytes": 323,
-          "sha256": "934fe7005eb62edca20f2cd1fc8fb1f9bd0eff28df06ccff636fd2365fd2573b"
+          "sha256": "d1e4506c068dc610cea7fc29385c61c64440c2fd9d94471304c719bb81021b58"
         },
         "proof": {
           "bytes": 6364,
-          "sha256": "f6b579ddfdde2eed1fe2121d60f31aada0cf8497d2ad2110d11831e5b2e0a620"
+          "sha256": "40de198d0ab659d1d0ee31f044ff422f31de65ceb5618054e465e52b80da7d7d"
         },
         "verifierKey": {
           "bytes": 2745,
@@ -44,7 +44,7 @@
       ],
       "publicInputs": 14,
       "result": "PASS",
-      "verificationMilliseconds": 42.770875
+      "verificationMilliseconds": 34.658417
     },
     {
       "artefacts": {
@@ -53,8 +53,8 @@
           "sha256": "f13ea1d2f9126f6e3e605a8c0322dffa3e2aa72d5a01373d2e70cfe924ace56d"
         },
         "captureMetadata": {
-          "bytes": 531,
-          "sha256": "6c049742cc44c0a5f40099b51dc63e8c6d6814f94eb449ccdf632e9b0fd459d3"
+          "bytes": 577,
+          "sha256": "86ce4011da33c21c62a3752f09a1552f776a2345e9c87c0dd2c4ad06cc9ffb3b"
         },
         "jsonZkir": {
           "bytes": 101266,
@@ -62,11 +62,11 @@
         },
         "preimage": {
           "bytes": 319,
-          "sha256": "f18236fe66d748caf5022a23734762291c2057c3e0e2cd790ac4586b4dd85d71"
+          "sha256": "09739c8ba39daf12c422f2f5b17bcbf069adbd4602c68759ac484d2a0c44a1f4"
         },
         "proof": {
           "bytes": 6364,
-          "sha256": "14e090e9c360bcbc5115da4535298864558a25e171f6c5b0eddf31fee80694b3"
+          "sha256": "dd3d84bfd661742f67ceb6f59fc59511dec323bac1deadad52aa0530c80244d2"
         },
         "verifierKey": {
           "bytes": 2745,
@@ -90,7 +90,7 @@
       ],
       "publicInputs": 14,
       "result": "PASS",
-      "verificationMilliseconds": 25.480041
+      "verificationMilliseconds": 25.020375
     },
     {
       "artefacts": {
@@ -99,8 +99,8 @@
           "sha256": "d308a9a8621d01f0d575dc8d812798c5346f31f2b8a8ba20e2f8b9ede11524ab"
         },
         "captureMetadata": {
-          "bytes": 537,
-          "sha256": "d2afaaf9623e9c00db6129d18355d23738161fbe11c01a651e6aa3b736944592"
+          "bytes": 583,
+          "sha256": "a9b6751edd1d8d7d8643d3f5fe9b8590c98785a2348917ed0d176c516ff16e6f"
         },
         "jsonZkir": {
           "bytes": 101934,
@@ -108,11 +108,11 @@
         },
         "preimage": {
           "bytes": 426,
-          "sha256": "a458947619aaa3ee9086eb7dcd0ca734dee526107e97eb00e0f447a00dc369e5"
+          "sha256": "97837ca6b96dca3d96030493295713c2c174185212ff46fa6427c25c3c770253"
         },
         "proof": {
           "bytes": 6364,
-          "sha256": "c6681088d314cc5c62a4b2020254f3da889e18be3f975c06656f748b263fecc4"
+          "sha256": "062b28dba1d5b35406f2d049d2768fcfd570e67129b7329be68adcd9bf66404b"
         },
         "verifierKey": {
           "bytes": 2745,
@@ -136,7 +136,7 @@
       ],
       "publicInputs": 14,
       "result": "PASS",
-      "verificationMilliseconds": 24.746625
+      "verificationMilliseconds": 24.882
     }
   ],
   "dependency": {

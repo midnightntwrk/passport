@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import type { Secp256k1Point } from '@midnight-ntwrk/compact-runtime';
-import type { Witnesses } from '../../../contracts/managed/probe-bip340/contract/index.js';
+import type { Witnesses } from '../contracts/managed/probe-bip340/contract/index.js';
 
 export type PrivateState = Record<string, never>;
 export const fieldOrder = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;

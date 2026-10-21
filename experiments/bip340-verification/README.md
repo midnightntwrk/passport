@@ -1,17 +1,18 @@
-# BIP-340 signature verification in Compact
+# BIP-340 signature verification experiment
 
-[`bip340.compact`](../../contract/contracts/bip340.compact) provides a reusable
-signature verification helper using Compact 0.35.0's native secp256k1 operations.
+[`bip340.compact`](contracts/bip340.compact) is a prototype
+signature verifier using Compact 0.35.0's native secp256k1 operations.
 It verifies the **exact message bytes** according to
 [BIP-340](https://github.com/bitcoin/bips/blob/130b8e0fa7f30fa45532f080b87b8db27a79e46e/bip-0340.mediawiki).
 It adds no prehash, wallet envelope, enrolment, recovery, or ACC authorisation
-arm. The existing account contract is unchanged.
+arm. All code, dependencies, tests, and evidence are isolated in this experiment;
+`contract/` is unchanged.
 
 This supersedes the Compact 0.34 group-operation limitation recorded in the
 earlier [wallet gate experiment](../bip340-wallet-gate/FINDINGS.md). The earlier
 Rust relation and its measurements remain separate evidence.
 
-## Use
+## Experimental API
 
 ```compact
 include "bip340";
@@ -29,7 +30,7 @@ encoding. Inputs are not padded or truncated.
 Callers must supply the `bip340LiftX` witness, which returns the full even-Y
 secp256k1 point for the x-only public key, or the identity for an unliftable
 key. A reference implementation is in the
-[test witnesses](../../contract/src/tests/bip340/witnesses.ts); it throws for an
+[test witnesses](src/witnesses.ts); it throws for an
 unliftable key instead of returning the identity.
 This witness performs no trusted signature verification. The circuit checks
 the point's canonical x bytes, even Y, and nonidentity status, and native curve
@@ -58,32 +59,33 @@ arbitrary signatures are invalid.
 
 ## Reproduce
 
-From `contract/`, with Compact 0.35.0 and Node.js installed:
+From `experiments/bip340-verification/`, with Compact 0.35.0 and Node.js 22
+or later installed:
 
 ```sh
 npm ci
-npm run compile:bip340-js
-npm run check:bip340
-npm run test:bip340
+npm run compile:js
+npm run check
+npm run test
 ```
 
 The JavaScript run tests generated circuit execution. To generate keys, check
 the actual proof constraints, produce proofs, and measure the circuit:
 
 ```sh
-npm run compile:bip340
-docker compose -f ../experiments/bip340-verification/docker-compose.yml up -d
-npm run prove:bip340
-npm run measure:bip340
+npm run compile
+docker compose up -d
+npm run prove
+npm run measure
 cargo run --release --locked \
-  --manifest-path ../experiments/bip340-verification/native/Cargo.toml \
+  --manifest-path native/Cargo.toml \
   -- contracts/managed/probe-bip340/proof-artifacts \
-  > evidence/bip340/native-verification.json
-docker compose -f ../experiments/bip340-verification/docker-compose.yml down
+  > evidence/native-verification.json
+docker compose down
 ```
 
 The native verification step needs Rust. It consumes the exact captured proof,
-preimage, verifier key, and transaction binding from `prove:bip340`. Dependencies
+preimage, verifier key, and transaction binding from `prove`. Dependencies
 are pinned in `native/Cargo.lock`; verification uses embedded public parameters
 and does not need the proving key or a wallet.
 
@@ -114,14 +116,14 @@ Its `wellFormed` verification flags therefore do not establish cryptographic
 proof verification. The in-memory application results are structural checks;
 cryptographic verification must use the native verifier described below.
 
-See [proof evidence](../../contract/evidence/bip340/proofs.json) and
-[circuit measurements](../../contract/evidence/bip340/circuit-sizes.json) for
+See [proof evidence](evidence/proofs.json) and
+[circuit measurements](evidence/circuit-sizes.json) for
 source hashes, tool versions, individual results, and timings.
 
 The [native verifier](native/src/main.rs) calls `VerifierKey::verify` directly.
 It checks all three captured proofs and requires rejection when either the
 accepted-hash public input or the transaction binding changes. Its
-[evidence](../../contract/evidence/bip340/native-verification.json) fingerprints
+[evidence](evidence/native-verification.json) fingerprints
 the exact proofs, keys, captures, and native sources. The harness deliberately
 supports only this probe's unconditional public-transcript shape and rejects
 other shapes; it is not a general Compact proof-verification tool.
@@ -129,7 +131,7 @@ other shapes; it is not a general Compact proof-verification tool.
 The 32-byte probe has **108,457 rows at k=17**, a **234,917,690-byte proving
 key** (about 224 MiB), and a **2,745-byte verifier key**. The three measured
 proofs are each **6,364 bytes**. The final local proof requests took
-9.7–9.9 seconds on an Apple M4 Max host with a Docker proof server and four Rayon
+12.6–12.8 seconds on an Apple M4 Max host with a Docker proof server and four Rayon
 threads. This includes streaming the approximately 224 MiB key to the local
 server, so it is not an isolated cryptographic proving-time measurement.
 These are single samples per message length, not a latency distribution or
@@ -141,4 +143,18 @@ verification. It is a conformance and cost probe, not an account authorisation
 endpoint. Applications remain responsible for constructing and binding the
 message, selecting trusted keys, and applying their own replay policy.
 
-This is a prototype verifier pending independent cryptographic review.
+## Adoption criteria
+
+This experiment establishes feasibility, conformance against the test vectors,
+and local proof cost. It is not part of the ACC reference implementation.
+Before proposing promotion into `contract/`, a separate change should:
+
+- Obtain independent cryptographic review of the circuit, witness constraints,
+  and negative tests.
+- Decide whether the measured proving and key costs are acceptable for the
+  intended signature-verification use.
+- Define the supported verifier API, failure behaviour, and regression checks.
+
+Any later ACC authorisation integration needs its own design and review. This
+experiment makes no decision about account keys, message binding, or replay
+policy.
