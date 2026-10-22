@@ -1,0 +1,679 @@
+{
+  "compiler": "0.35.0",
+  "measurement": "zkir-v3 mock-compile circuit model; no proof timing, DUST fee, or transaction benchmark",
+  "note": "k is per circuit, logarithmic, and not additive. External required-policy paths add a separate Policy.check proof. Branches do not produce cheaper specialized root circuits.",
+  "rows": [
+    {
+      "variant": "Policy",
+      "circuit": "check",
+      "k": 8,
+      "rows": 147,
+      "tableRows": 10,
+      "zkirSha256": "4eb6c63eeaa6504bae3894c49f6d17b714de0cdb71d49b111471e63795b17067"
+    },
+    {
+      "variant": "Policy",
+      "circuit": "set_frozen",
+      "k": 13,
+      "rows": 2138,
+      "tableRows": 7933,
+      "zkirSha256": "3757f7592c2878ec1bdb529c13cb37268dcfb8f570dcc2da6426339af1f212db"
+    },
+    {
+      "variant": "PolicyAlternate",
+      "circuit": "check",
+      "k": 8,
+      "rows": 140,
+      "tableRows": 7,
+      "zkirSha256": "1bb6606ceb4cd0aaf6ab6af20b66e09ffb36b2445ed0e6872aa9760ffc9e8c5b"
+    },
+    {
+      "variant": "Registry",
+      "circuit": "resolve",
+      "k": 8,
+      "rows": 168,
+      "tableRows": 10,
+      "zkirSha256": "c584d33e2891dd89f120893a6e87244d7be848ade46863af595d015492c2d012"
+    },
+    {
+      "variant": "Registry",
+      "circuit": "rebind",
+      "k": 13,
+      "rows": 2224,
+      "tableRows": 7933,
+      "zkirSha256": "59eb541612d3a31e34984a4f880a1b4c8185754331596a2b558cbe4b26601ad4"
+    },
+    {
+      "variant": "Dispatch",
+      "circuit": "check",
+      "k": 9,
+      "rows": 475,
+      "tableRows": 16,
+      "zkirSha256": "4ad73d0cf5b5e255d865f94b67d9fe5860d622fbdbe0636d4a55c84ddc9cf381"
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_with_jubjub",
+      "k": 16,
+      "rows": 50055,
+      "tableRows": 61831,
+      "zkirSha256": "baba55cbb4ad3d6ff039a1ab4f815fa1384038844d593079a6790a9e18802b77",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_with_k256",
+      "k": 17,
+      "rows": 83202,
+      "tableRows": 123155,
+      "zkirSha256": "8065a88ce3415272cf157fd02419ccd8010772ec5f1bcf4afde188915ea4852b",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "k": 17,
+      "rows": 66014,
+      "tableRows": 123271,
+      "zkirSha256": "22db8509bc4f7ae152f7bfa8ed0a1131786f8cae5566d7484715bc17bc531fef",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "k": 17,
+      "rows": 100480,
+      "tableRows": 123155,
+      "zkirSha256": "a1fe055f2d7c2ded27fde9829a9819d4f28a70e62f354334d479a033c4ab8620",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "k": 16,
+      "rows": 55758,
+      "tableRows": 61831,
+      "zkirSha256": "ba1a54e48ca6e4fca9c9c9cf7ab294d8dc280fd45d231f0e7b5c916d094b7b66",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "k": 17,
+      "rows": 88905,
+      "tableRows": 123155,
+      "zkirSha256": "65731100a7cd07f3cc8d19a1fb416902b9ce3f6f8079689f166a3aa6470e616f",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "k": 17,
+      "rows": 71717,
+      "tableRows": 123271,
+      "zkirSha256": "f041af097e351303741365846b70633ec2119b6aeadbbac323bb0f91c520cabe",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "k": 17,
+      "rows": 106183,
+      "tableRows": 123155,
+      "zkirSha256": "28692ab1a22103a04b42321dc74215db4cedf6eb2354a629b192257a8fc64268",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "k": 15,
+      "rows": 28877,
+      "tableRows": 32167,
+      "zkirSha256": "05c90e13464b0c0ca0028e400ed37c48b9e5e33440d7ae9e8a495eaa025fccc3",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_unshielded_with_k256",
+      "k": 17,
+      "rows": 63864,
+      "tableRows": 123155,
+      "zkirSha256": "e45dfa06a6d3e2a3b28ccf30394bf7b1d9eed8a8f2a5ce7f6fa7fb44ff02afed",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "k": 16,
+      "rows": 38514,
+      "tableRows": 61831,
+      "zkirSha256": "5a44dd61d967f5cf5c3f2c0b33fae942a78ec9ffe612b0efe0e2eb5dab1c0ea5",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Baseline",
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "k": 17,
+      "rows": 72970,
+      "tableRows": 123155,
+      "zkirSha256": "a83cd4e5ab8e2ca2091ae6bba8567164088533058eae65a11925193bbf3e255e",
+      "deltaRows": 0,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_with_jubjub",
+      "k": 16,
+      "rows": 50165,
+      "tableRows": 61831,
+      "zkirSha256": "3a8fd7eb69ea1d4f4daae6b5f8a0889aaeb867292013bd535b9c3e14aa39c8ed",
+      "deltaRows": 110,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_with_k256",
+      "k": 17,
+      "rows": 83312,
+      "tableRows": 123155,
+      "zkirSha256": "90444ac6d4cad01f03737a195023fdb59ad6faad78fdd31523a02ccd6326a09c",
+      "deltaRows": 110,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "k": 17,
+      "rows": 66130,
+      "tableRows": 123271,
+      "zkirSha256": "e116c4fddda09868ad8b1fb76335b9ced9d855e80dc924e0c6349b41d4ecbfbd",
+      "deltaRows": 116,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "k": 17,
+      "rows": 100596,
+      "tableRows": 123155,
+      "zkirSha256": "a2bc90dcbc10207c3ae2bb2eaad6a0d0d6eace6fce0be41caac8ed38e0c495b8",
+      "deltaRows": 116,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "k": 16,
+      "rows": 55868,
+      "tableRows": 61831,
+      "zkirSha256": "f412af19cc67d0c2e22571586da0ffdd01e717b9716450f0a52966e9061d6bcc",
+      "deltaRows": 110,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "k": 17,
+      "rows": 89015,
+      "tableRows": 123155,
+      "zkirSha256": "19390ced00aba1126479db33d8306321b1f5f6d83c4b41e8db312a6aed17d238",
+      "deltaRows": 110,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "k": 17,
+      "rows": 71833,
+      "tableRows": 123271,
+      "zkirSha256": "2b4c584355daa3591c80845a7a5fd34557253029d34e3a69c75f37a18a33078f",
+      "deltaRows": 116,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "k": 17,
+      "rows": 106299,
+      "tableRows": 123155,
+      "zkirSha256": "8140d8a839172bc42e51a9a2e577703976cef9672c756150a7e4aedbbeb52468",
+      "deltaRows": 116,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "k": 15,
+      "rows": 28996,
+      "tableRows": 32167,
+      "zkirSha256": "54a7b9ad0211921849b0fa93e6e7a2f72ee9bbb5dea1ab6abf17ef34fd7b2a55",
+      "deltaRows": 119,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_unshielded_with_k256",
+      "k": 17,
+      "rows": 63983,
+      "tableRows": 123155,
+      "zkirSha256": "16412a8536359a0400135b7d22cdd15d7db590f97e730d5afa4d5f9ff15d54da",
+      "deltaRows": 119,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "k": 16,
+      "rows": 38622,
+      "tableRows": 61831,
+      "zkirSha256": "516dd1481733056a2f69dfa8263e30c9f54674ab81eb34578d8c36968caaec3a",
+      "deltaRows": 108,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "Inline",
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "k": 17,
+      "rows": 73078,
+      "tableRows": 123155,
+      "zkirSha256": "462e795e69a079604d31f5bb35658cb5524433f7d4b3889d3c202ca18eda4a25",
+      "deltaRows": 108,
+      "deltaK": 0,
+      "externalCheck": null
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_with_jubjub",
+      "k": 16,
+      "rows": 50295,
+      "tableRows": 61831,
+      "zkirSha256": "7e446cc466b8cd4698a650924d474b8249e2b48430fbce9bcc74b0bc2c64aac2",
+      "deltaRows": 240,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_with_k256",
+      "k": 17,
+      "rows": 83442,
+      "tableRows": 123155,
+      "zkirSha256": "76435eb5f2745a8dddefb4a205c92c4ae28214ed334c7bc11c16e6ff54624d95",
+      "deltaRows": 240,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "k": 17,
+      "rows": 66260,
+      "tableRows": 123271,
+      "zkirSha256": "28d8aca844b0fb6b9900e9dcc667674ee46dc45212a9c385e22319dbe7dfe543",
+      "deltaRows": 246,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "k": 17,
+      "rows": 100726,
+      "tableRows": 123155,
+      "zkirSha256": "a4fb68d858f3737338aa73be30848c91683d642628e49f9cf18b74038decd2ea",
+      "deltaRows": 246,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "k": 16,
+      "rows": 55998,
+      "tableRows": 61831,
+      "zkirSha256": "1476d553da8c7996117ceba915a9d6dede4b6a6951db1550a93585e1bf35b290",
+      "deltaRows": 240,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "k": 17,
+      "rows": 89145,
+      "tableRows": 123155,
+      "zkirSha256": "641dc0a8e1f2b7b6388e0e6de95ede2eccff8243c83cf3b38eb0b063fe00976f",
+      "deltaRows": 240,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "k": 17,
+      "rows": 71963,
+      "tableRows": 123271,
+      "zkirSha256": "49a1385e79646161ec3d188e7d2bf046884543d8c7e39d17b9ab450d79d516e7",
+      "deltaRows": 246,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "k": 17,
+      "rows": 106429,
+      "tableRows": 123155,
+      "zkirSha256": "bb92b7c415d95d30a1d1672aedcae4eb771886f53589037cb04b19d0a8afecd0",
+      "deltaRows": 246,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "k": 15,
+      "rows": 29126,
+      "tableRows": 32167,
+      "zkirSha256": "c58033a4c571f5d4f7593c9d2d5adf6d798fae632a528b84bb342b0e54d63152",
+      "deltaRows": 249,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_unshielded_with_k256",
+      "k": 17,
+      "rows": 64113,
+      "tableRows": 123155,
+      "zkirSha256": "03f49ed7a07fc68bf42da35f6fca169536d378eda3df011288cafcdfeaaee691",
+      "deltaRows": 249,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "k": 16,
+      "rows": 38752,
+      "tableRows": 61831,
+      "zkirSha256": "a1b157b29c7b1c82a350c96fc1a121323343c90f31c2c955bd279903c81f1ec9",
+      "deltaRows": 238,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalRaw",
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "k": 17,
+      "rows": 73208,
+      "tableRows": 123155,
+      "zkirSha256": "2b6d278f94eeae88a8f4bf2a837e9e613f398be8d48932f11aab9412cdab1171",
+      "deltaRows": 238,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_with_jubjub",
+      "k": 16,
+      "rows": 56032,
+      "tableRows": 61831,
+      "zkirSha256": "865a626f7a38e21b66c7038ee19c4e5a4d3b797db2ada10ac10fcc1574d664b8",
+      "deltaRows": 5977,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_with_k256",
+      "k": 17,
+      "rows": 89179,
+      "tableRows": 123155,
+      "zkirSha256": "7de2a1bc95d245611495ac6a53a9d462f2feb8853320bb1fa8cb28097480e1ef",
+      "deltaRows": 5977,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_with_grant_jubjub",
+      "k": 17,
+      "rows": 71997,
+      "tableRows": 123271,
+      "zkirSha256": "6a27b5205223ea00fa0455c2bc771880902d5a5697e6594b6f1d48ec4abd4ca8",
+      "deltaRows": 5983,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_with_grant_k256",
+      "k": 17,
+      "rows": 106463,
+      "tableRows": 123155,
+      "zkirSha256": "f78c7eb57be1c3168d6424060236c6593e061f56e7bce41d66bc71b5a49f36a1",
+      "deltaRows": 5983,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_to_contract_with_jubjub",
+      "k": 16,
+      "rows": 61735,
+      "tableRows": 61831,
+      "zkirSha256": "2b688392083ee1b0e9326151fe1c91b956f07edd2edbb153d7ee824ad0a130c5",
+      "deltaRows": 5977,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_to_contract_with_k256",
+      "k": 17,
+      "rows": 94882,
+      "tableRows": 123155,
+      "zkirSha256": "170ba2341f85a5696bb50249e4a8edaf5826b03446a10b2fc816b1b578ca0166",
+      "deltaRows": 5977,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_to_contract_with_grant_jubjub",
+      "k": 17,
+      "rows": 77700,
+      "tableRows": 123271,
+      "zkirSha256": "6c99899a3395d726aae620291b0aa7401db53cbfb73549f8137fe6a1eae98718",
+      "deltaRows": 5983,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_shielded_to_contract_with_grant_k256",
+      "k": 17,
+      "rows": 112166,
+      "tableRows": 123155,
+      "zkirSha256": "854aa90e696d856f05d051ebc0a7ad3453929ae0e32f224a47ff479b61cf20ec",
+      "deltaRows": 5983,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_unshielded_with_jubjub",
+      "k": 16,
+      "rows": 34855,
+      "tableRows": 61831,
+      "zkirSha256": "faa7ea76714cd29aa18e92c984316aa7ee3f5723692c58ba40712ef0cfb90b56",
+      "deltaRows": 5978,
+      "deltaK": 1,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_unshielded_with_k256",
+      "k": 17,
+      "rows": 69850,
+      "tableRows": 123155,
+      "zkirSha256": "867084e3bb3855bae1979f9a0141868aee90a9c0e149e5756aad51dd067a19ca",
+      "deltaRows": 5986,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_unshielded_with_grant_jubjub",
+      "k": 16,
+      "rows": 44489,
+      "tableRows": 61831,
+      "zkirSha256": "18ccf5c88fa3e1fa3c589e6ce4c5e6922d1eac963dbdd476e833fc874c2455a4",
+      "deltaRows": 5975,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    },
+    {
+      "variant": "ExternalTagged",
+      "circuit": "withdraw_unshielded_with_grant_k256",
+      "k": 17,
+      "rows": 78945,
+      "tableRows": 123155,
+      "zkirSha256": "99af8f43e64ab589c6fc13213924f3969611b98439715b9ae6b0e5bafb6355db",
+      "deltaRows": 5975,
+      "deltaK": 0,
+      "externalCheck": {
+        "k": 8,
+        "rows": 147,
+        "conditional": true
+      }
+    }
+  ]
+}
