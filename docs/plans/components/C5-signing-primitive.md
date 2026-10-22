@@ -217,7 +217,10 @@ MIP-0030 preserves its enrolled signing envelopes and adopts no retirement
 policy. Continued coexistence and any migration require consumer evidence.
 
 
-**H — BIP-340 Schnorr over secp256k1 (Midnight wallet key).** Named
-candidate. Every wallet key already signs an account challenge on
-every shipped surface; verification is measured in-circuit at k=15 to
-k=16. Blocked in Compact only on secp256k1 point operations.
+**H: BIP-340 Schnorr over secp256k1.** **Deferred 2026/10/22.** Compact
+0.35 provides the native point operations used by the standalone verifier
+experiment. Passport does not adopt BIP-340, including for scoped grants:
+the expected proving benefit over k256 or P-256 does not justify another
+supported signature scheme. The experiment and evidence are retained;
+[ACC integration #191](https://github.com/midnightntwrk/passport/pull/191) is
+withdrawn. See the [decision and reconsideration criteria](../../../experiments/bip340-verification/README.md#decision-retain-the-experiment-defer-passport-integration).

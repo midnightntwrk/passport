@@ -12,6 +12,32 @@ This supersedes the Compact 0.34 group-operation limitation recorded in the
 earlier [wallet gate experiment](../bip340-wallet-gate/FINDINGS.md). The earlier
 Rust relation and its measurements remain separate evidence.
 
+## Decision: retain the experiment, defer Passport integration
+
+**Accepted 2026/10/22.** Passport does not adopt BIP-340 authorisation at this
+stage, including for scoped grants. We do not expect a proving-speed benefit
+over the existing k256 (secp256k1 ECDSA) and P-256 paths large enough to justify
+another signature scheme and its integration, review, deployment, and
+maintenance costs.
+
+We retain this experiment, its tests, and its evidence in
+[PR #190](https://github.com/midnightntwrk/passport/pull/190) for future reference.
+The proposed ACC integration in
+[PR #191](https://github.com/midnightntwrk/passport/pull/191) is withdrawn;
+its [implementation and measurements](https://github.com/midnightntwrk/passport/blob/2b0f594c346c69058e9b8293d3b77a85bf7510fe/contract/BIP340-GRANTS.md)
+remain historical evidence, not supported Passport functionality.
+
+The experiment establishes feasibility and records local costs. These results
+are not a controlled, like-for-like latency comparison with k256 or P-256 and
+do not establish a worthwhile speed advantage. The current reason for
+deferral is insufficient additional value, rather than missing Compact curve
+operations.
+
+Revisit this decision if a concrete BIP-340 interoperability requirement
+emerges or repeatable benchmarks of equivalent complete ACC operations show a
+worthwhile improvement on the same toolchain and hardware. Any adoption still
+requires the separate design, review, and validation described below.
+
 ## Experimental API
 
 ```compact
@@ -149,12 +175,15 @@ This experiment establishes feasibility, conformance against the test vectors,
 and local proof cost. It is not part of the ACC reference implementation.
 Before proposing promotion into `contract/`, a separate change should:
 
+- Revisit the deferral decision above with a concrete use case or evidence of
+  a worthwhile comparative proving benefit.
 - Obtain independent cryptographic review of the circuit, witness constraints,
   and negative tests.
 - Decide whether the measured proving and key costs are acceptable for the
   intended signature-verification use.
 - Define the supported verifier API, failure behaviour, and regression checks.
 
-Any later ACC authorisation integration needs its own design and review. This
-experiment makes no decision about account keys, message binding, or replay
+Any later ACC authorisation integration needs its own design, review, and
+complete on-node validation, including successful custody operations. This
+experiment defines no production account-key, message-binding, or replay
 policy.
