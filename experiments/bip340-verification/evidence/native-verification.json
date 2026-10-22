@@ -8,7 +8,7 @@
         },
         "captureMetadata": {
           "bytes": 580,
-          "sha256": "9de4e050ec1dbd9d97435a29c3013a5cfd6b69b35c968444700b10a9c98dffd3"
+          "sha256": "15bc18dea586aa26dc05d1d7045e37a4f39fd36c966824571770cd14e7a1c3db"
         },
         "jsonZkir": {
           "bytes": 101614,
@@ -16,11 +16,11 @@
         },
         "preimage": {
           "bytes": 323,
-          "sha256": "d1e4506c068dc610cea7fc29385c61c64440c2fd9d94471304c719bb81021b58"
+          "sha256": "e187cf92c7363872967ca53a585c7ed985acab92b7eb2bf5260c69fe63bc8909"
         },
         "proof": {
           "bytes": 6364,
-          "sha256": "40de198d0ab659d1d0ee31f044ff422f31de65ceb5618054e465e52b80da7d7d"
+          "sha256": "d1e708535da2dcb08ecd66b96e764295ad33478f5651a7012061f967540fdfa6"
         },
         "verifierKey": {
           "bytes": 2745,
@@ -28,6 +28,7 @@
         }
       },
       "circuit": "verify_32",
+      "expectedAcceptedSha256": "9e80a537204775ce5415f9cafce42a4fc506404477da9f0a1a9c3b10b7e9381c",
       "negativeControls": [
         {
           "name": "changed accepted hash",
@@ -42,9 +43,10 @@
           "result": "REJECTED"
         }
       ],
+      "officialFixtureIndex": 0,
       "publicInputs": 14,
       "result": "PASS",
-      "verificationMilliseconds": 34.658417
+      "verificationMilliseconds": 60.28637500000001
     },
     {
       "artefacts": {
@@ -54,7 +56,7 @@
         },
         "captureMetadata": {
           "bytes": 577,
-          "sha256": "86ce4011da33c21c62a3752f09a1552f776a2345e9c87c0dd2c4ad06cc9ffb3b"
+          "sha256": "2a809df948f5b014d767c29d76f685bce275cc40c9d0ae1a18670b1af1513590"
         },
         "jsonZkir": {
           "bytes": 101266,
@@ -62,11 +64,11 @@
         },
         "preimage": {
           "bytes": 319,
-          "sha256": "09739c8ba39daf12c422f2f5b17bcbf069adbd4602c68759ac484d2a0c44a1f4"
+          "sha256": "704b4883952ddb1ac536740b7f37b0911a89bf4d56d09adb6c92712548a8faa1"
         },
         "proof": {
           "bytes": 6364,
-          "sha256": "dd3d84bfd661742f67ceb6f59fc59511dec323bac1deadad52aa0530c80244d2"
+          "sha256": "93ffc2f1232b52fe74c808821edc9009df84797060b06f11a32f8f4dc45034db"
         },
         "verifierKey": {
           "bytes": 2745,
@@ -74,6 +76,7 @@
         }
       },
       "circuit": "verify_0",
+      "expectedAcceptedSha256": "5e36dcd99d6d2e01612a6b9cfbf03aa399b48d44e4f3ad12f64558cb83bfa631",
       "negativeControls": [
         {
           "name": "changed accepted hash",
@@ -88,9 +91,10 @@
           "result": "REJECTED"
         }
       ],
+      "officialFixtureIndex": 15,
       "publicInputs": 14,
       "result": "PASS",
-      "verificationMilliseconds": 25.020375
+      "verificationMilliseconds": 24.133042
     },
     {
       "artefacts": {
@@ -100,7 +104,7 @@
         },
         "captureMetadata": {
           "bytes": 583,
-          "sha256": "a9b6751edd1d8d7d8643d3f5fe9b8590c98785a2348917ed0d176c516ff16e6f"
+          "sha256": "b88b9c9a2945daafe724153a24d3478d7ec8194cacab870adea807a591c932be"
         },
         "jsonZkir": {
           "bytes": 101934,
@@ -108,11 +112,11 @@
         },
         "preimage": {
           "bytes": 426,
-          "sha256": "97837ca6b96dca3d96030493295713c2c174185212ff46fa6427c25c3c770253"
+          "sha256": "31ea36e8b2ea435d73c8979e4417772d9eff8bdda4938c6d8dd8e6a67cfcbb93"
         },
         "proof": {
           "bytes": 6364,
-          "sha256": "062b28dba1d5b35406f2d049d2768fcfd570e67129b7329be68adcd9bf66404b"
+          "sha256": "f8fc9bf1887fea5161a301169538ce9ba7611d468ec5029c77f4e1b340403765"
         },
         "verifierKey": {
           "bytes": 2745,
@@ -120,6 +124,7 @@
         }
       },
       "circuit": "verify_100",
+      "expectedAcceptedSha256": "20fb63d257fb1d9edb73bcbd0979c65b830245f72c3dcc7a8f2dbc0e965c794d",
       "negativeControls": [
         {
           "name": "changed accepted hash",
@@ -134,16 +139,18 @@
           "result": "REJECTED"
         }
       ],
+      "officialFixtureIndex": 18,
       "publicInputs": 14,
       "result": "PASS",
-      "verificationMilliseconds": 24.882
+      "verificationMilliseconds": 24.142833
     }
   ],
   "dependency": {
     "repository": "https://github.com/midnightntwrk/midnight-ledger",
     "revision": "e5da67016d143db7822bbcd79eb1dd4ca198cb07"
   },
-  "evidenceLayer": "Native VerifierKey::verify with embedded verifier parameters; each original proof accepted, altered accepted hash and binding rejected",
+  "evidenceLayer": "Native VerifierKey::verify with embedded verifier parameters and reviewed build manifest; complete public transcript independently reconstructed from pinned official fixtures; each proof accepted, altered accepted hash and binding rejected",
+  "limitation": "Build pins establish reviewed artefact identity, not compiler correctness or independent reproducibility. Binding and communications commitment come from the capture and are authenticated by the proof; no independent transaction or node admission is checked.",
   "result": "PASS",
   "sources": {
     "Cargo.lock": {
@@ -155,8 +162,32 @@
       "sha256": "f4dc68210b7de73681c38650ca38c24cad760a04dc6a72b0bbcc02fd567c98f0"
     },
     "src/main.rs": {
-      "bytes": 8119,
-      "sha256": "efada485d950f649136523fa5b29f8a3d170e20c1285c703e6d2ef99bb3c659c"
+      "bytes": 21318,
+      "sha256": "0fe7aa3a44ba9b7b8b829b0f1137a621fdfadd1df236d5f3205b718cd5f8004c"
     }
-  }
+  },
+  "trustedBuildManifest": {
+    "bytes": 3206,
+    "sha256": "d8b8a2f21c3cefb9c19eda37109f3bb9dcd6073664b1cb4cbe2f9fd77e61b240"
+  },
+  "trustedFixture": {
+    "bytes": 6892,
+    "path": "src/fixtures/test-vectors.csv",
+    "repository": "https://github.com/bitcoin/bips",
+    "revision": "130b8e0fa7f30fa45532f080b87b8db27a79e46e",
+    "sha256": "34c9d1d9c3a88d524bc80778540dc43f8306ec249a7485293063c376db851c2d",
+    "upstreamPath": "bip-0340/test-vectors.csv"
+  },
+  "trustedSources": [
+    {
+      "bytes": 2959,
+      "path": "contracts/bip340.compact",
+      "sha256": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab"
+    },
+    {
+      "bytes": 1285,
+      "path": "contracts/probe-bip340.compact",
+      "sha256": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096"
+    }
+  ]
 }

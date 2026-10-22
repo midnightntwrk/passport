@@ -64,7 +64,7 @@ operations constrain curve membership.
 
 The helper checks:
 
-1. The public key is its canonical, nonidentity even-Y lift.
+1. The public key is its canonical, non-identity even-Y lift.
 2. Signature `s` is canonical and below the group order. A modular cast alone
    would be insufficient, so its byte encoding must round-trip.
 3. The challenge is
@@ -93,6 +93,8 @@ npm ci
 npm run compile:js
 npm run check
 npm run test
+npm run test:harness
+npm run test:native
 ```
 
 The JavaScript run tests generated circuit execution. To generate keys, check
@@ -103,21 +105,38 @@ npm run compile
 docker compose up -d
 npm run prove
 npm run measure
-cargo run --release --locked \
-  --manifest-path native/Cargo.toml \
-  -- contracts/managed/probe-bip340/proof-artifacts \
-  > evidence/native-verification.json
+npm run --silent verify:native > evidence/native-verification.json
 docker compose down
 ```
 
-The native verification step needs Rust. It consumes the exact captured proof,
-preimage, verifier key, and transaction binding from `prove`. Dependencies
+The native tests and verification need Rust (validated with 1.98.1). Dependencies
 are pinned in `native/Cargo.lock`; verification uses embedded public parameters
-and does not need the proving key or a wallet.
+and does not need the proving key or a wallet. The native verifier checks the
+captures against the reviewed build pins described below. Do not regenerate
+those pins automatically to make a differing build pass.
 
 The server listens only on localhost port 6391. The proof harness uses public
 test fixtures and an in-memory ledger. It needs no wallet, funds, node, or
 indexer. Generated contract artefacts and proving keys are ignored by Git.
+
+Compose pins the proof-server image by its immutable repository digest.
+Before proving, the harness checks the running container's image identity and
+loopback port through the local Docker daemon, and records these observations
+separately from the requested image pin. It finds the Compose service by
+default; set `PROOF_SERVER_CONTAINER` to use an existing matching container.
+This is local provenance evidence, not remote attestation.
+
+Both `/prove` and `/check` responses are capped at 1 MiB. The complete proof
+request has a 25-minute deadline; constraint checks retain their two-minute
+deadline. Limits also apply to chunked responses, and failures cancel the
+response and upload where applicable.
+
+The [BIP-340 regression workflow](../../.github/workflows/bip340-experiment.yml)
+rebuilds with the pinned Compact 0.35.0 release, runs the circuit and harness
+tests, generates fresh proofs, and requires native verification against the
+committed build pins. Native tests cover source, fixture, artefact, metadata,
+and public-statement substitution. CI uploads fresh evidence separately from
+the historical reports committed here.
 
 ## Evidence and limits
 
@@ -154,10 +173,24 @@ the exact proofs, keys, captures, and native sources. The harness deliberately
 supports only this probe's unconditional public-transcript shape and rejects
 other shapes; it is not a general Compact proof-verification tool.
 
+The verifier embeds [trusted-build.json](native/trusted-build.json), which pins
+the reviewed Compact sources, official fixture file, and each proof case's
+verification key and JSON/binary ZKIR. Captures cannot select a different
+manifest or artefact path. It independently computes
+`SHA256(publicKey || message || signature)` from official vectors 0, 15, and
+18, then checks the complete expected ledger transcript before verifying the
+proof. It does not accept a capture's claimed output as the expected result.
+
+These pins record the reviewed build identity. They do not prove compiler
+correctness or establish trust independently of the reviewed repository and
+verifier binary. The transaction binding and communications commitment still
+come from the capture and are authenticated by the proof; the harness does
+not independently validate a transaction, its witnesses, or node admission.
+
 The 32-byte probe has **108,457 rows at k=17**, a **234,917,690-byte proving
 key** (about 224 MiB), and a **2,745-byte verifier key**. The three measured
 proofs are each **6,364 bytes**. The final local proof requests took
-12.6–12.8 seconds on an Apple M4 Max host with a Docker proof server and four Rayon
+12.5–12.6 seconds on an Apple M4 Max host with a Docker proof server and four Rayon
 threads. This includes streaming the approximately 224 MiB key to the local
 server, so it is not an isolated cryptographic proving-time measurement.
 These are single samples per message length, not a latency distribution or
@@ -173,6 +206,11 @@ message, selecting trusted keys, and applying their own replay policy.
 
 This experiment establishes feasibility, conformance against the test vectors,
 and local proof cost. It is not part of the ACC reference implementation.
+It does not approve the wider custody implementation: complete device
+revocation remains unresolved in [#192](https://github.com/midnightntwrk/passport/issues/192),
+corrected recovery validation is tracked in [#73](https://github.com/midnightntwrk/passport/issues/73),
+and deployment trust checks are tracked in [#193](https://github.com/midnightntwrk/passport/issues/193)
+alongside artefact provenance in [#116](https://github.com/midnightntwrk/passport/issues/116).
 Before proposing promotion into `contract/`, a separate change should:
 
 - Revisit the deferral decision above with a concrete use case or evidence of

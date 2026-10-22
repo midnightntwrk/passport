@@ -12,6 +12,9 @@
     "compile:js": "compact compile +0.35.0 --feature-zkir-v3 --skip-zk contracts/probe-bip340.compact contracts/managed/probe-bip340",
     "check": "tsc -p tsconfig.json",
     "test": "node --import tsx src/offline.ts",
+    "test:harness": "node --import tsx --test src/proof-provider.test.ts src/proof-server-identity.test.ts",
+    "test:native": "cargo test --locked --manifest-path native/Cargo.toml -p bip340-proof-verify",
+    "verify:native": "cargo run --release --locked --manifest-path native/Cargo.toml -- contracts/managed/probe-bip340/proof-artifacts",
     "prove": "node --import tsx src/prove.ts",
     "measure": "node --import tsx src/measure.ts"
   },

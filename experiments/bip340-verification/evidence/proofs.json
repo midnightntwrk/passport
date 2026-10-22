@@ -1,8 +1,8 @@
 {
   "result": "PASS",
-  "startedAt": "2026-10-21T18:14:19.468Z",
-  "completedAt": "2026-10-21T18:14:58.173Z",
-  "baseCommit": "957f6db838183759ebd017f9f0bb8ff56d102da7",
+  "startedAt": "2026-10-22T12:46:07.198Z",
+  "completedAt": "2026-10-22T12:46:45.313Z",
+  "baseCommit": "35fac07431150d9f415a9214be371dea776d35e1",
   "evidenceLayer": "Original ZKIR /check for positive and forged negative assignments; local proof-server generation; ledger-v9 structural wellFormed and in-memory apply; fee balancing disabled; no node submission",
   "limitation": "ledger-v9 WASM omits the proof-verifying build feature. Its verification flags do not establish cryptographic proof verification; use the separate native verifier and its evidence.",
   "compilerInfo": {
@@ -203,7 +203,20 @@
       }
     ]
   },
-  "proofServerImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+  "proofServerImage": "midnightntwrk/proof-server:9.0.0-rc.8@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+  "proofServerIdentity": {
+    "requestedImage": "midnightntwrk/proof-server:9.0.0-rc.8@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+    "repositoryDigest": "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+    "observedAt": "2026-10-22T12:46:07.237Z",
+    "containerId": "1ffd775d2c5df609a0ffb5167f86c93cf7751767722ff9ada320450f41187394",
+    "configuredImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+    "observedImageId": "sha256:2c9b9917d3dd81b6f47ccdab333064eb6bad0fa0f7b5a0c9087fc7cd1d26cade",
+    "observedRepositoryDigests": [
+      "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf"
+    ],
+    "endpoint": "http://127.0.0.1:6391",
+    "verification": "Local Docker inspection: running container image ID matches the pinned repository digest and publishes the loopback endpoint. This is local daemon evidence, not remote attestation."
+  },
   "runtimeVersions": {
     "@midnight-ntwrk/compact-runtime": "0.20.0",
     "@midnightntwrk/ledger-v9": "1.0.0-rc.5"
@@ -217,10 +230,12 @@
   "sources": {
     "contracts/bip340.compact": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab",
     "contracts/probe-bip340.compact": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096",
-    "src/prove.ts": "88260f74f9e3ede46af07be74d9d07d07a084340a53f3d5d83ac129bb299f8ad",
+    "src/prove.ts": "1ad2e15b776f1efcaed844ac28969ec5d185e887186ca31a19175752a859baeb",
     "src/witnesses.ts": "73682bcdb944c63314602d784edbffc2131a648d33d7178911137b038ebc4652",
     "src/fixtures.ts": "5c2ec021a44b89e4df857084096663e131c8d79efef465542b8568bf87d8ab51",
-    "src/proof-provider.ts": "f37142697ea954ae841bd1b37f6294ff11dce586ff45087edd6fc9b3d65f8746"
+    "src/proof-provider.ts": "a8c1a63922714e79b79f7691d57d40b342063dd0f70069900049cd60083cd107",
+    "src/proof-server-identity.ts": "8e4dd45907a05eb851da68e9641674c5dc3d2c5529074a6398e4f7467346de55",
+    "docker-compose.yml": "4e5e4514a0ba5268902603affbbf327752ed47dddfdccf5c7f840d1486aceaf3"
   },
   "circuits": {
     "verify_0": {
@@ -417,50 +432,50 @@
       "result": "PASS",
       "messageBytes": 32,
       "transactionBytes": 6837,
-      "endToEndMilliseconds": 12868.315416000001,
-      "structuralCheckMilliseconds": 10.323707999999897,
-      "transactionSha256": "d6310e382813033abbaeb0abaaa03c20acb2ad5ed7e994896e3d4cdc79bf8ba5"
+      "endToEndMilliseconds": 12604.576792,
+      "structuralCheckMilliseconds": 11.072292000000743,
+      "transactionSha256": "606017f7bcf6d059a36cd9643d5721d928cd7c05dcc621928028af344a2551a4"
     },
     {
       "name": "official vector 15 real proof",
       "result": "PASS",
       "messageBytes": 0,
       "transactionBytes": 6836,
-      "endToEndMilliseconds": 12674.760374999998,
-      "structuralCheckMilliseconds": 10.268292000000656,
-      "transactionSha256": "bdae8899eef6a1819d135fc5f4ae8d381bdf523153dd680bec76a5016a4b8c9c"
+      "endToEndMilliseconds": 12507.961667,
+      "structuralCheckMilliseconds": 9.042499999999563,
+      "transactionSha256": "9c0d199412023da9526b444d51f317567d068cb93363bbde5051e60a8f04550f"
     },
     {
       "name": "official vector 18 real proof",
       "result": "PASS",
       "messageBytes": 100,
-      "transactionBytes": 6838,
-      "endToEndMilliseconds": 12750.305832999999,
-      "structuralCheckMilliseconds": 8.349958999999217,
-      "transactionSha256": "ec47bcb1040b2b7af5bd516608a6ec6349ac2932baf12a17df480c51097f8e2a"
+      "transactionBytes": 6837,
+      "endToEndMilliseconds": 12556.892917000001,
+      "structuralCheckMilliseconds": 8.673084000001836,
+      "transactionSha256": "c802e74f0db444df586a52591cc54a013f7abefe2d2ac52950c08dbb9ff98f10"
     }
   ],
   "proofs": [
     {
       "circuit": "verify_32",
       "proofBytes": 6364,
-      "proveRequestMilliseconds": 12832.087834,
+      "proveRequestMilliseconds": 12565.9055,
       "requestBytes": 234951847,
-      "proofSha256": "40de198d0ab659d1d0ee31f044ff422f31de65ceb5618054e465e52b80da7d7d"
+      "proofSha256": "d1e708535da2dcb08ecd66b96e764295ad33478f5651a7012061f967540fdfa6"
     },
     {
       "circuit": "verify_0",
       "proofBytes": 6364,
-      "proveRequestMilliseconds": 12638.404999999999,
+      "proveRequestMilliseconds": 12468.527250000001,
       "requestBytes": 234951553,
-      "proofSha256": "dd3d84bfd661742f67ceb6f59fc59511dec323bac1deadad52aa0530c80244d2"
+      "proofSha256": "93ffc2f1232b52fe74c808821edc9009df84797060b06f11a32f8f4dc45034db"
     },
     {
       "circuit": "verify_100",
       "proofBytes": 6364,
-      "proveRequestMilliseconds": 12714.824166999999,
+      "proveRequestMilliseconds": 12518.999124999998,
       "requestBytes": 234952176,
-      "proofSha256": "062b28dba1d5b35406f2d049d2768fcfd570e67129b7329be68adcd9bf66404b"
+      "proofSha256": "f8fc9bf1887fea5161a301169538ce9ba7611d468ec5029c77f4e1b340403765"
     }
   ]
 }

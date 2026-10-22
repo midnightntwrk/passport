@@ -1,0 +1,91 @@
+name: BIP-340 experiment
+
+on:
+  pull_request:
+    paths:
+      - 'experiments/bip340-verification/**'
+      - '.github/workflows/bip340-experiment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'experiments/bip340-verification/**'
+      - '.github/workflows/bip340-experiment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bip340-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: experiments/bip340-verification
+    env:
+      CARGO_BUILD_JOBS: '2'
+      RAYON_NUM_THREADS: '4'
+      RUSTUP_TOOLCHAIN: '1.98.1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: experiments/bip340-verification/package-lock.json
+      - name: Install pinned toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain_dir="$RUNNER_TEMP/bip340-compact-0.35.0"
+          mkdir -p "$toolchain_dir"
+          curl --fail --location --retry 3 \
+            https://github.com/LFDT-Minokawa/compact/releases/download/compactc-v0.35.0/compactc_v0.35.0_x86_64-unknown-linux-musl.zip \
+            -o "$toolchain_dir/compiler.zip"
+          printf '%s  %s\n' '70f22fb8209cc5a8504b2b3d91796cfdab2d71d88807ceef12fab87fed03bae2' "$toolchain_dir/compiler.zip" | sha256sum -c -
+          unzip -q "$toolchain_dir/compiler.zip" -d "$toolchain_dir"
+          echo "$toolchain_dir" >> "$GITHUB_PATH"
+          echo "ZKIR_BIN=$toolchain_dir/zkir-v3" >> "$GITHUB_ENV"
+          rustup toolchain install 1.98.1 --profile minimal --component clippy --component rustfmt
+      - name: Build and test the experiment
+        run: |
+          rm -f evidence/proofs.json evidence/native-verification.json evidence/circuit-sizes.json
+          npm ci --ignore-scripts --no-audit --no-fund
+          compactc --feature-zkir-v3 contracts/probe-bip340.compact contracts/managed/probe-bip340
+          npm run check
+          npm test
+          npm run test:harness
+          cargo fmt --manifest-path native/Cargo.toml --check
+          npm run test:native
+          cargo clippy --locked --manifest-path native/Cargo.toml -p bip340-proof-verify --all-targets -- -D warnings
+      - name: Start the pinned local proof server
+        run: docker compose up -d
+      - name: Generate proofs and verify the trusted build and fixture statements
+        run: |
+          node --input-type=module -e '
+            const deadline = Date.now() + 120000;
+            while (true) {
+              try {
+                const result = await fetch("http://127.0.0.1:6391/health", {signal: AbortSignal.timeout(2000)});
+                if (result.ok) break;
+              } catch {}
+              if (Date.now() >= deadline) throw new Error("proof server did not become ready");
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          '
+          npm run prove
+          npm run measure
+          npm run --silent verify:native > evidence/native-verification.json
+      - name: Preserve regression evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: bip340-proof-evidence
+          path: experiments/bip340-verification/evidence/*.json
+      - name: Stop the proof server
+        if: always()
+        run: docker compose down

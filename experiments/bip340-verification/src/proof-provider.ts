@@ -3,7 +3,7 @@
 // streamed. Small payloads are checked byte-for-byte against the ledger encoder.
 import { strict as assert } from 'node:assert';
 import { createReadStream, statSync } from 'node:fs';
-import { request } from 'node:http';
+import { request, type IncomingMessage } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createProvingPayload } from '@midnightntwrk/ledger-v9';
@@ -38,11 +38,124 @@ export function checkStreamingEncoding(preimage: Uint8Array) {
   }
 }
 
+export const proofRequestLimits = { maxResponseBytes: 1024 * 1024, deadlineMilliseconds: 25 * 60_000 };
+
+// Fetch keeps its AbortSignal active while the response body is being consumed.
+// Bound the /check response without cloning or buffering an unchecked body.
+export async function readBoundedResponse(
+  response: Response, maxResponseBytes = proofRequestLimits.maxResponseBytes,
+): Promise<Uint8Array> {
+  assert.ok(Number.isSafeInteger(maxResponseBytes) && maxResponseBytes > 0);
+  const reader = response.body?.getReader();
+  try {
+    const declaredLength = response.headers.get('content-length');
+    if (declaredLength !== null &&
+      (!/^\d+$/.test(declaredLength) || !Number.isSafeInteger(Number(declaredLength)) || Number(declaredLength) > maxResponseBytes)) {
+      throw new Error(`proof server response exceeds ${maxResponseBytes} bytes (Content-Length)`);
+    }
+    if (!reader) return new Uint8Array();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.length;
+      if (bytes > maxResponseBytes) throw new Error(`proof server response exceeds ${maxResponseBytes} bytes`);
+      chunks.push(chunk.value);
+    }
+    return Buffer.concat(chunks, bytes);
+  } catch (error) {
+    // Cancel the fetch body on size rejection as well as stream failures. An
+    // already-aborted body may reject cancellation; preserve the original error.
+    await reader?.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    reader?.releaseLock();
+  }
+}
+
+// Exposed separately so the HTTP failure paths can be exercised with small,
+// public fixtures, without compiling circuits or running a real proof server.
+export async function requestLocalProof(
+  url: URL, input: Readable, contentLength: number,
+  limits: Partial<typeof proofRequestLimits> = {},
+): Promise<Buffer> {
+  assert.equal(url.protocol, 'http:', 'isolated local proof server only');
+  assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname), 'proof inputs must stay local');
+  const { maxResponseBytes, deadlineMilliseconds } = { ...proofRequestLimits, ...limits };
+  assert.ok(Number.isSafeInteger(maxResponseBytes) && maxResponseBytes > 0);
+  assert.ok(Number.isSafeInteger(deadlineMilliseconds) && deadlineMilliseconds > 0);
+  assert.ok(Number.isSafeInteger(contentLength) && contentLength >= 0);
+  return await new Promise<Buffer>((resolve, reject) => {
+    let settled = false, uploaded = false;
+    let response: IncomingMessage | undefined, completedBody: Buffer | undefined;
+    const req = request(url, { method: 'POST', agent: false, headers: {
+      'content-type': 'application/octet-stream', 'content-length': contentLength,
+    } });
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      // Stop the upload and close the response/socket on every failure, including
+      // a server that rejects a request before consuming the large proving key.
+      input.destroy(error);
+      response?.destroy(error);
+      req.destroy(error);
+      reject(error);
+    };
+    const succeed = () => {
+      if (settled || !uploaded || completedBody === undefined) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve(completedBody);
+    };
+    // This is a wall-clock deadline from request creation through the complete
+    // response. A peer sending occasional bytes cannot extend it indefinitely.
+    const deadline = setTimeout(() => fail(new Error('proof server overall deadline exceeded')), deadlineMilliseconds);
+    req.on('error', fail);
+    req.on('response', res => {
+      response = res;
+      const received: Buffer[] = [];
+      let bytes = 0;
+      res.on('error', fail);
+      res.on('aborted', () => fail(new Error('proof server response aborted')));
+      res.on('close', () => {
+        if (!res.complete) fail(new Error('proof server response closed prematurely'));
+      });
+      const declaredLength = res.headers['content-length'];
+      if (declaredLength !== undefined &&
+        (!/^\d+$/.test(declaredLength) || !Number.isSafeInteger(Number(declaredLength)) || Number(declaredLength) > maxResponseBytes)) {
+        fail(new Error(`proof server response exceeds ${maxResponseBytes} bytes (Content-Length)`));
+        return;
+      }
+      res.on('data', (chunk: Buffer) => {
+        if (settled) return;
+        bytes += chunk.length;
+        if (bytes > maxResponseBytes) {
+          fail(new Error(`proof server response exceeds ${maxResponseBytes} bytes`));
+          return;
+        }
+        received.push(chunk);
+      });
+      res.on('end', () => {
+        if (settled) return;
+        if (!res.complete) { fail(new Error('proof server response ended prematurely')); return; }
+        const body = Buffer.concat(received, bytes);
+        if (res.statusCode !== 200) {
+          fail(new Error(`proof server ${res.statusCode}: ${body.toString().slice(0, 3000)}`));
+          return;
+        }
+        completedBody = body;
+        succeed();
+      });
+    });
+    pipeline(input, req).then(() => { uploaded = true; succeed(); }, fail);
+  });
+}
+
 export async function proveStream(baseUrl: string, preimage: Uint8Array, binding: bigint | undefined, files: string[]) {
   assert.equal(files.length, 3);
   const url = new URL('/prove', baseUrl);
-  assert.equal(url.protocol, 'http:', 'isolated local proof server only');
-  assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname), 'proof inputs must stay local');
   const { prefix, suffix } = envelope(preimage, binding);
   const sizes = files.map(file => statSync(file).size);
   const contentLength = prefix.length + suffix.length + sizes.reduce((sum, n) => sum + vectorLength(n).length + n, 0);
@@ -55,22 +168,6 @@ export async function proveStream(baseUrl: string, preimage: Uint8Array, binding
     yield suffix;
   }
   const start = performance.now();
-  const response = await new Promise<Buffer>((resolve, reject) => {
-    const req = request(url, { method: 'POST', headers: {
-      'content-type': 'application/octet-stream', 'content-length': contentLength,
-    } }, res => {
-      const received: Buffer[] = [];
-      res.on('data', chunk => received.push(chunk));
-      res.on('error', reject);
-      res.on('end', () => {
-        const body = Buffer.concat(received);
-        if (res.statusCode !== 200) reject(new Error(`proof server ${res.statusCode}: ${body.toString().slice(0, 3000)}`));
-        else resolve(body);
-      });
-    });
-    req.setTimeout(25 * 60_000, () => req.destroy(new Error('proof server timeout')));
-    req.on('error', reject);
-    pipeline(Readable.from(chunks()), req).catch(reject);
-  });
+  const response = await requestLocalProof(url, Readable.from(chunks()), contentLength);
   return { proof: new Uint8Array(response), milliseconds: performance.now() - start, requestBytes: contentLength };
 }

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Reviewed build identity for the standalone BIP-340 experiment, embedded into the native verifier. These pins match the previously recorded circuit-sizes.json; they do not establish compiler correctness or an independent reproducible build.",
+  "compiler": {
+    "version": "0.35.0",
+    "commit": "debb05f9414b9d1e176741c2be289bb32233f0fc"
+  },
+  "sources": [
+    {
+      "path": "contracts/bip340.compact",
+      "bytes": 2959,
+      "sha256": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab"
+    },
+    {
+      "path": "contracts/probe-bip340.compact",
+      "bytes": 1285,
+      "sha256": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096"
+    }
+  ],
+  "fixture": {
+    "path": "src/fixtures/test-vectors.csv",
+    "bytes": 6892,
+    "sha256": "34c9d1d9c3a88d524bc80778540dc43f8306ec249a7485293063c376db851c2d",
+    "repository": "https://github.com/bitcoin/bips",
+    "revision": "130b8e0fa7f30fa45532f080b87b8db27a79e46e",
+    "upstreamPath": "bip-0340/test-vectors.csv"
+  },
+  "circuits": {
+    "verify_32": {
+      "fixtureIndex": 0,
+      "messageBytes": 32,
+      "verifierKey": {
+        "path": "contracts/managed/probe-bip340/keys/verify_32.verifier",
+        "bytes": 2745,
+        "sha256": "b3134e41ed2a6cb2aba9fa0fca22bba2894e8915874c18ee8afc60baa49bd737"
+      },
+      "binaryZkir": {
+        "path": "contracts/managed/probe-bip340/zkir/verify_32.bzkir",
+        "bytes": 30996,
+        "sha256": "2765887b3c741d2f9cc8d1f1621cdb3ead752657757e73843a965ef6ba1c749d"
+      },
+      "jsonZkir": {
+        "path": "contracts/managed/probe-bip340/zkir/verify_32.zkir",
+        "bytes": 101614,
+        "sha256": "b4d49423bf747012e1f3af0260e778e8e38ee9093e78612c61b7e05380e43862"
+      }
+    },
+    "verify_0": {
+      "fixtureIndex": 15,
+      "messageBytes": 0,
+      "verifierKey": {
+        "path": "contracts/managed/probe-bip340/keys/verify_0.verifier",
+        "bytes": 2745,
+        "sha256": "ad7f97545138e0edc0aad43653c1894490d4f35d7074faf7094050536694a6d0"
+      },
+      "binaryZkir": {
+        "path": "contracts/managed/probe-bip340/zkir/verify_0.bzkir",
+        "bytes": 30851,
+        "sha256": "f13ea1d2f9126f6e3e605a8c0322dffa3e2aa72d5a01373d2e70cfe924ace56d"
+      },
+      "jsonZkir": {
+        "path": "contracts/managed/probe-bip340/zkir/verify_0.zkir",
+        "bytes": 101266,
+        "sha256": "1e763bd15131f41a6fa355101a1aaecb3985c0c596718851afde6fda6ee746ae"
+      }
+    },
+    "verify_100": {
+      "fixtureIndex": 18,
+      "messageBytes": 100,
+      "verifierKey": {
+        "path": "contracts/managed/probe-bip340/keys/verify_100.verifier",
+        "bytes": 2745,
+        "sha256": "08da9c17e629e657669ff40540153de2170e67b776c41d0348ae0f095d665c3b"
+      },
+      "binaryZkir": {
+        "path": "contracts/managed/probe-bip340/zkir/verify_100.bzkir",
+        "bytes": 31109,
+        "sha256": "d308a9a8621d01f0d575dc8d812798c5346f31f2b8a8ba20e2f8b9ede11524ab"
+      },
+      "jsonZkir": {
+        "path": "contracts/managed/probe-bip340/zkir/verify_100.zkir",
+        "bytes": 101934,
+        "sha256": "3ea67fef5bd0ab40a4bfe36a4b4dabc7323d10b79182029984a43e4da6862e18"
+      }
+    }
+  }
+}

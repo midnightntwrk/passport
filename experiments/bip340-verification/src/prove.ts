@@ -18,7 +18,8 @@ import {
 import {
   Contract, type ImpureCircuits, type Witnesses,
 } from '../contracts/managed/probe-bip340/contract/index.js';
-import { checkStreamingEncoding, proveStream } from './proof-provider.js';
+import { checkStreamingEncoding, proveStream, readBoundedResponse } from './proof-provider.js';
+import { inspectProofServerIdentity, proofServerImage } from './proof-server-identity.js';
 import { vectors, vectorSource, type Vector } from './fixtures.js';
 import {
   fieldOrder, fixedPointWitness, identity, liftX, witnesses, type PrivateState,
@@ -52,6 +53,7 @@ const material = Object.fromEntries(circuitNames.map(name => {
 const checks: unknown[] = [];
 const proofs: unknown[] = [];
 let failure: string | undefined;
+let proofServerIdentity: ReturnType<typeof inspectProofServerIdentity> | undefined;
 
 async function checkRaw(
   preimage: Uint8Array, circuit: Circuit,
@@ -61,8 +63,9 @@ async function checkRaw(
     method: 'POST', body: createCheckPayload(preimage, material[circuit].ir) as BodyInit,
     headers: { 'content-type': 'application/octet-stream' }, signal: AbortSignal.timeout(120_000),
   });
+  const body = await readBoundedResponse(response);
   if (rejection) {
-    const reason = await response.text();
+    const reason = new TextDecoder().decode(body);
     assert.equal(response.status, 400, `invalid assignment accepted or infrastructure failed: ${reason}`);
     const expected = rejection === 'native-point-decoding'
       ? /Failed to decode \[Fq\(.*\] as Secp256k1Point/
@@ -71,8 +74,8 @@ async function checkRaw(
       `negative must fail the circuit, not HTTP, serialisation or generated JavaScript: ${reason}`);
     return reason;
   }
-  assert.equal(response.status, 200, await response.clone().text());
-  return parseCheckResult(new Uint8Array(await response.arrayBuffer()));
+  assert.equal(response.status, 200, new TextDecoder().decode(body));
+  return parseCheckResult(body);
 }
 
 async function traceFor(vector: Vector, bypassFinalAssertion = false) {
@@ -231,6 +234,7 @@ async function proveVector(vector: Vector) {
 }
 
 try {
+  proofServerIdentity = inspectProofServerIdentity(endpoint);
   await checkConstraints();
   // Three representative lengths exercise empty input, the common digest-sized
   // input and a longer message. /check covers every official positive above.
@@ -240,7 +244,7 @@ try {
 const sources = [
   'contracts/bip340.compact', 'contracts/probe-bip340.compact',
   'src/prove.ts', 'src/witnesses.ts', 'src/fixtures.ts',
-  'src/proof-provider.ts',
+  'src/proof-provider.ts', 'src/proof-server-identity.ts', 'docker-compose.yml',
 ];
 writeFileSync(new URL('proofs.json', output), JSON.stringify({
   result: failure ? 'FAIL' : 'PASS', startedAt, completedAt: new Date().toISOString(),
@@ -248,7 +252,7 @@ writeFileSync(new URL('proofs.json', output), JSON.stringify({
   evidenceLayer: 'Original ZKIR /check for positive and forged negative assignments; local proof-server generation; ledger-v9 structural wellFormed and in-memory apply; fee balancing disabled; no node submission',
   limitation: 'ledger-v9 WASM omits the proof-verifying build feature. Its verification flags do not establish cryptographic proof verification; use the separate native verifier and its evidence.',
   compilerInfo: JSON.parse(readFileSync(new URL('compiler/contract-info.json', managed), 'utf8')),
-  proofServerImage: 'midnightntwrk/proof-server:9.0.0-rc.8',
+  proofServerImage, proofServerIdentity,
   runtimeVersions: Object.fromEntries(['@midnight-ntwrk/compact-runtime', '@midnightntwrk/ledger-v9']
     .map(name => [name, JSON.parse(readFileSync(new URL(`node_modules/${name}/package.json`, root), 'utf8')).version])),
   fixture: vectorSource,
