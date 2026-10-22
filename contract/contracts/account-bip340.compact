@@ -1,0 +1,135 @@
+// BIP-340 scoped grant authorisation, included by account.compact.
+// This arm has no owner, grant-lifecycle, or recovery authorisation circuits.
+// Existing owner arms issue and revoke its grants through the shared ledger.
+// The x-only key is the canonical 32-byte big-endian BIP-340 encoding. A
+// signature covers the raw 32-byte ACC challenge, with no signing envelope.
+// origin_hash namespaces the grant; it does not attest a browser origin.
+
+export pure circuit derive_grant_id_with_bip340(
+  self_addr: ContractAddress, pk: Bytes<32>, origin_hash: Bytes<32>, slot: Uint<8>
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<8>]>([
+    pad(32, "midnight:account:grant:id:b1:v1"), self_addr, pk, origin_hash, slot
+  ]);
+}
+
+// Tuple fields flatten in declaration order. The challenge binds the
+// account, key, grant incarnation, operation, arguments, and record nonce.
+// Shielded operations also bind the actual held_coin witness and the
+// encrypted change entry, as the other grant arms do.
+circuit bip340_grant_challenge<T>(
+  tag: Bytes<64>, self_addr: ContractAddress, pk: Bytes<32>, grant_id: Bytes<32>,
+  issued_at: Uint<64>, args: T, nonce_value: Uint<64>
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<64>, T, Uint<64>]>([
+    persistentHash<[Bytes<64>]>([tag]), self_addr, pk, grant_id, issued_at, args, nonce_value
+  ]);
+}
+
+export pure circuit challenge_withdraw_unshielded_with_grant_bip340(
+  self_addr: ContractAddress, pk: Bytes<32>, grant_id: Bytes<32>, issued_at: Uint<64>,
+  color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, nonce_value: Uint<64>
+): Bytes<32> {
+  return bip340_grant_challenge<[Bytes<32>, Uint<128>, UserAddress]>(
+    pad(64, "midnight:account:grant:auth:b1:v1:withdraw_unshielded"), self_addr, pk,
+    grant_id, issued_at, [color, amount, recipient], nonce_value);
+}
+
+export pure circuit challenge_withdraw_shielded_with_grant_bip340(
+  self_addr: ContractAddress, pk: Bytes<32>, grant_id: Bytes<32>, issued_at: Uint<64>,
+  recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>,
+  change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, nonce_value: Uint<64>
+): Bytes<32> {
+  return bip340_grant_challenge<[ZswapCoinPublicKey, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo]>(
+    pad(64, "midnight:account:grant:auth:b1:v1:withdraw_shielded"), self_addr, pk,
+    grant_id, issued_at, [recipient, color, amount, change_entry, enc_pk, coin], nonce_value);
+}
+
+export pure circuit challenge_withdraw_shielded_to_contract_with_grant_bip340(
+  self_addr: ContractAddress, pk: Bytes<32>, grant_id: Bytes<32>, issued_at: Uint<64>,
+  recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>,
+  change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, nonce_value: Uint<64>
+): Bytes<32> {
+  return bip340_grant_challenge<[ContractAddress, Bytes<32>, Uint<128>, Bytes<192>, Bytes<32>, QualifiedShieldedCoinInfo]>(
+    pad(64, "midnight:account:grant:auth:b1:v1:withdraw_shielded_to_contract"), self_addr, pk,
+    grant_id, issued_at, [recipient, color, amount, change_entry, enc_pk, coin], nonce_value);
+}
+
+circuit authenticate_grant_with_bip340(
+  pk: Bytes<32>, origin_hash: Bytes<32>, slot: Uint<8>
+): [Bytes<32>, GrantRecord] {
+  const id = disclose(derive_grant_id_with_bip340(kernel.self(), pk, origin_hash, slot));
+  assert(grants.member(id), "unknown grant");
+  const g = grants.lookup(id);
+  assert(g.active, "grant revoked");
+  assert(g.epoch == device_epoch, "grant epoch stale");
+  assert(g.gen == grant_generation, "grant generation stale");
+  assert(g.scope.expires_at == 0 || kernel.blockTimeLessThan(g.scope.expires_at), "grant expired");
+  return [id, g];
+}
+
+// The verifier constrains the untrusted lift_x witness to this x-only key,
+// a nonidentity point, and even y. Ledger writes follow verification.
+// Settlement advances only this grant's nonce/spend commitment and round.
+circuit settle_grant_with_bip340(
+  id: Bytes<32>, g: GrantRecord, pk: Bytes<32>, challenge: Bytes<32>, sig: Bytes<64>,
+  scope_salt: Bytes<32>, new_spent: Uint<128>
+): [] {
+  assert(verifyBip340<32>(pk, challenge, sig), "invalid grant signature");
+  grants.insert(id, GrantRecord {
+    epoch: g.epoch, gen: g.gen, issued_at: g.issued_at, nonce: (g.nonce + 1) as Uint<64>,
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),
+    window_start: g.window_start, window_spent: g.window_spent, active: g.active, scope: g.scope
+  });
+  bump_round();
+}
+
+export circuit withdraw_unshielded_with_grant_bip340(
+  color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, pk: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>, recipient_kind: Uint<8>,
+  pinned_recipient: Bytes<32>, max_coin_value: Uint<128>, spent_prev: Uint<128>, sig: Bytes<64>
+): [] {
+  const [id, g] = authenticate_grant_with_bip340(pk, origin_hash, slot);
+  const new_spent = check_spend_scope(g, g.scope.op_withdraw_unshielded, scope_salt, color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev, 1, recipient.bytes);
+  const challenge = challenge_withdraw_unshielded_with_grant_bip340(
+    kernel.self(), pk, id, g.issued_at, color, amount, recipient, g.nonce);
+  settle_grant_with_bip340(id, g, pk, challenge, sig, scope_salt, new_spent);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+export circuit withdraw_shielded_with_grant_bip340(
+  recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+  pk: Bytes<32>, origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>, recipient_kind: Uint<8>,
+  pinned_recipient: Bytes<32>, max_coin_value: Uint<128>, spent_prev: Uint<128>, sig: Bytes<64>
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_bip340(pk, origin_hash, slot);
+  const new_spent = check_spend_scope(g, g.scope.op_withdraw_shielded, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev, 2, recipient.bytes);
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_with_grant_bip340(
+    kernel.self(), pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin, g.nonce);
+  settle_grant_with_bip340(id, g, pk, challenge, sig, scope_salt, new_spent);
+  const result = do_withdraw_shielded(recipient, amount, coin);
+  if (disclose(result.is_some)) { do_append_inbox(change_entry); }
+  return result;
+}
+
+export circuit withdraw_shielded_to_contract_with_grant_bip340(
+  recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+  pk: Bytes<32>, origin_hash: Bytes<32>, slot: Uint<8>, scope_salt: Bytes<32>, recipient_kind: Uint<8>,
+  pinned_recipient: Bytes<32>, max_coin_value: Uint<128>, spent_prev: Uint<128>, sig: Bytes<64>
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  const [id, g] = authenticate_grant_with_bip340(pk, origin_hash, slot);
+  const new_spent = check_spend_scope(g, g.scope.op_withdraw_shielded_to_contract, scope_salt, coin.color,
+    recipient_kind, pinned_recipient, max_coin_value, amount, spent_prev, 3, recipient.bytes);
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  const challenge = challenge_withdraw_shielded_to_contract_with_grant_bip340(
+    kernel.self(), pk, id, g.issued_at, recipient, color, amount, change_entry, enc_pk, coin, g.nonce);
+  settle_grant_with_bip340(id, g, pk, challenge, sig, scope_salt, new_spent);
+  const [sent, change] = do_withdraw_shielded_to_contract(recipient, amount, coin);
+  if (disclose(change.is_some)) { do_append_inbox(change_entry); }
+  return [sent, change];
+}

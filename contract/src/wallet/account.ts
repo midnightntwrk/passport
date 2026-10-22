@@ -51,6 +51,7 @@ import {
   jubjubGrantChallenges,
   k256GrantChallenges,
   p256GrantChallenges,
+  bip340GrantChallenges,
   grantAuthArgs,
   scopeArgs,
   scopeDigest,
@@ -801,6 +802,8 @@ export class CustodyAccount {
     const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient))
+      : grantee.arm === 'bip340'
+        ? grantee.sign(bip340GrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient))
       : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawUnshielded(g, grantee.pk, color, amount, recipient));
     return this.withdrawUnshieldedWithGrantAuth(color, amount, recipient, opening, auth);
   }
@@ -819,6 +822,8 @@ export class CustodyAccount {
     const coin = await this.heldCoin(color);
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
+      : grantee.arm === 'bip340'
+        ? grantee.sign(bip340GrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
       : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
     return this.withdrawShieldedWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
   }
@@ -837,6 +842,8 @@ export class CustodyAccount {
     const coin = await this.heldCoin(color);
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
+      : grantee.arm === 'bip340'
+        ? grantee.sign(bip340GrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
       : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
     return this.withdrawShieldedToContractWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
   }

@@ -94,7 +94,7 @@ A second authoriser class sits beside the device set at
 `spec_version = 3`: a **grantee**, a key the owner enrols into the `grants`
 register under a scope rather than into the device set, and which can spend
 within that scope without holding a device. Grantees are co-resident the same
-way. Each grantee arm (`jubjub`, `k256`, `p256`) exports three grant twins over the shared custody chips,
+way. Each grantee arm (`jubjub`, `k256`, `p256`, `bip340`) exports three grant twins over the shared custody chips,
 `withdraw_unshielded_with_grant_<arm>`, `withdraw_shielded_with_grant_<arm>`,
 and `withdraw_shielded_to_contract_with_grant_<arm>`; each device arm exports
 the three lifecycle circuits `issue_grant_with_<arm>`,
@@ -109,8 +109,14 @@ so an owner signature pending across a grant call still verifies. Lifecycle is
 device-gated, and the register is killable in one call, since
 `revoke_all_grants` bumps `grant_generation` and clears the map. The grant
 twins include the scope-opening and signature constraints. Historical
-per-circuit costs are in "Scoped grants" below; the current 52-circuit
+per-circuit costs are in "Scoped grants" below; the earlier 52-circuit
 inventory is in `evidence/p256-webauthn/circuit-sizes.json`.
+
+The **BIP-340 arm is grant-only**. It adds three scoped withdrawal circuits
+to the deployment inventory, for 55 circuits in total, with no BIP-340 owner,
+bootstrap, lifecycle or recovery authorisation path. Existing owners issue
+and revoke its grants. See [BIP340-GRANTS.md](BIP340-GRANTS.md) for its raw
+signature profile, permission boundary, validation and adoption requirements.
 
 Grants may additionally pin an **immediate calling contract**, enforced
 inside the account with `kernel.caller()`. See [GRANTS-CALLER.md](GRANTS-CALLER.md)

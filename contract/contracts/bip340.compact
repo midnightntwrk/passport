@@ -1,0 +1,71 @@
+// BIP-340 verification of the exact message bytes. No application prehash,
+// wallet envelope, or authorisation policy is added here.
+module Bip340 {
+  import CompactStandardLibrary;
+
+  // Supply lift_x(publicKey), or the identity for an unliftable key. The
+  // witness is untrusted: its canonical x, even y, and nonidentity status
+  // are constrained below. Native point operations constrain curve membership.
+  witness bip340LiftX(publicKey: Bytes<32>): Secp256k1Point;
+
+  circuit reverse32(bytes: Bytes<32>): Bytes<32> {
+    return Bytes[
+      bytes[31], bytes[30], bytes[29], bytes[28], bytes[27], bytes[26], bytes[25], bytes[24],
+      bytes[23], bytes[22], bytes[21], bytes[20], bytes[19], bytes[18], bytes[17], bytes[16],
+      bytes[15], bytes[14], bytes[13], bytes[12], bytes[11], bytes[10], bytes[9], bytes[8],
+      bytes[7], bytes[6], bytes[5], bytes[4], bytes[3], bytes[2], bytes[1], bytes[0]
+    ];
+  }
+
+  circuit evenByte(byte: Uint<8>): Boolean {
+    const b6 = byte >= 128 ? byte - 128 : byte;
+    const b5 = b6 >= 64 ? b6 - 64 : b6;
+    const b4 = b5 >= 32 ? b5 - 32 : b5;
+    const b3 = b4 >= 16 ? b4 - 16 : b4;
+    const b2 = b3 >= 8 ? b3 - 8 : b3;
+    const b1 = b2 >= 4 ? b2 - 4 : b2;
+    const b0 = b1 >= 2 ? b1 - 2 : b1;
+    return b0 == 0;
+  }
+
+  // Callers must assert the returned Boolean to enforce verification.
+  // N is a compile-time byte length, including zero; no padding is signed.
+  export circuit verifyBip340<#N>(
+    publicKey: Bytes<32>, message: Bytes<N>, signature: Bytes<64>
+  ): Boolean {
+    const p = bip340LiftX(publicKey);
+    if (p == default<Secp256k1Point>) {
+      return false;
+    }
+    const px = secp256k1PointX(p) as Bytes<32>;
+    const py = secp256k1PointY(p) as Bytes<32>;
+    if (reverse32(px) != publicKey || !evenByte(py[0])) {
+      return false;
+    }
+
+    const rBytes = slice<32>(signature, 0);
+    const sBytes = reverse32(slice<32>(signature, 32));
+    // Compact's bytes-to-scalar cast reduces modulo n. Round-trip equality
+    // rejects noncanonical s >= n rather than silently reducing the signature.
+    const s = sBytes as Secp256k1Scalar;
+    if ((s as Bytes<32>) != sBytes) {
+      return false;
+    }
+
+    const tag = persistentHash<Bytes<17>>(pad(17, "BIP0340/challenge"));
+    const hash = persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<N>]>(
+      [tag, tag, rBytes, publicKey, message]
+    );
+    // BIP-340 integers are big-endian; Compact foreign-field casts are
+    // little-endian. Unlike signature s, the challenge must reduce modulo n.
+    const e = reverse32(hash) as Secp256k1Scalar;
+    const r = ecAdd(ecMulGenerator(s), ecMul(p, neg(e)));
+    if (r == default<Secp256k1Point>) {
+      return false;
+    }
+    const rx = secp256k1PointX(r) as Bytes<32>;
+    const ry = secp256k1PointY(r) as Bytes<32>;
+    // Equality to the canonical x bytes also enforces the BIP-340 r < p bound.
+    return evenByte(ry[0]) && reverse32(rx) == rBytes;
+  }
+}

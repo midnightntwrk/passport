@@ -7,6 +7,9 @@ include "webauthn";
 import WebAuthn<21>;
 export { WebAuthnPolicy, webauthn_challenge_base64, webauthn_client_data_hash };
 include "account-p256";
+include "bip340";
+import Bip340;
+include "account-bip340";
 
 // ---------------------------------------------------------------------------
 // Midnight account custody contract — reference implementation.
@@ -118,6 +121,13 @@ include "account-p256";
 //     scope; webauthn.compact reconstructs the complete signed envelope,
 //     including the challenge, and requires UP+UV. See WEBAUTHN.md for the
 //     supported fixed lengths and asynchronous browser assertion adapter.
+//
+//   grant-only arm `bip340` verifies BIP-340 Schnorr signatures over the raw
+//     32-byte ACC challenge. account-bip340.compact supplies only the three
+//     scoped withdrawal twins. Existing owner arms authorise grant issuance
+//     and revocation; there is no BIP-340 owner or recovery authorisation.
+//     The key is its 32-byte big-endian x-only encoding, with grant identity
+//     and challenge tags under the separate `b1` domain-separation family.
 //
 // Per-arm circuits instead of one circuit with an in-circuit scheme choice:
 // Compact compiles every exported circuit to its own proof, so a proof
@@ -1408,23 +1418,27 @@ export circuit remove_device_with_k256(
 // nonce and never auth_nonce (GR-5), so a grantee cannot invalidate a
 // pending owner authorisation.
 //
-// Roster at spec_version = 2 (MIP section 6.1): 30 non-pure circuits, the
-// 18 existing ones (four permissionless circuits, the two deposits and the
+// Historical roster at spec_version = 2 (MIP section 6.1): 30 non-pure
+// circuits, the 18 existing ones (four permissionless circuits, the two deposits and the
 // two initial-device activations, and seven device-gated operations on
 // each of the two device arms), 6 grant twins (three per grantee arm,
 // jubjub and k256), and 6 lifecycle circuits (three per device arm). Both
-// grantee arms and both device arms are populated below.
+// grantee arms and both device arms are populated below. The included P-256
+// arm adds owner and grant circuits; BIP-340 adds only three grant twins.
 //
 // Every preimage is a byte concatenation of fixed-width elements hashed
 // with SHA-256 (persistentHash over byte atoms is SHA-256 of the raw
 // concatenation); the exported pure circuits are one implementation of the
-// recipe, not its definition. Tag families (MIP section 14):
-//   midnight:account:grant:id:{v1,k1:v1}          raw 32-byte pad, element
+// recipe, not its definition. Tag families (MIP section 14, extended by the
+// included P-256 and BIP-340 arms):
+//   midnight:account:grant:id:{v1,k1:v1,r1:v1,b1:v1} raw 32-byte pad, element
 //   midnight:account:grant:{obj,spent,rp,scope}:v1 raw 32-byte pad, element
 //   midnight:account:grant:auth:v1:<op>            hashed from a 64-byte pad,
 //                                                  the jubjub grantee arm
 //   midnight:account:grant:auth:k1:v1:<op>         hashed from a 64-byte pad,
 //                                                  the k256 grantee arm
+//   midnight:account:grant:auth:{r1,b1}:v1:<op>    hashed from a 64-byte pad,
+//                                                  the p256/bip340 grantee arms
 //   midnight:account:auth:{v1,k1:v1}:{issue_grant,revoke_grant,
 //     revoke_all_grants}                            the existing device family
 // ═══════════════════════════════════════════════════════════════════════════

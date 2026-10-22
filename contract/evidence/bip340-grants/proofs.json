@@ -1,0 +1,85 @@
+{
+  "result": "PASS",
+  "startedAt": "2026-10-22T07:24:13.129Z",
+  "completedAt": "2026-10-22T07:24:38.469Z",
+  "baseCommit": "cd346383c89b9ac3b328122b0053d66a2ce6215e",
+  "circuit": "withdraw_unshielded_with_grant_bip340",
+  "evidenceLayer": "Original full-ACC ZKIR constraint checks and local proof-server generation with server self-verification",
+  "limitations": [
+    "Constructor, activation, owner grant issuance and deposit are simulated setup; they are not independently proved here.",
+    "The unshielded balance mirror comes from simulated receiveUnshielded; no funded assets or node admission are established.",
+    "No wallet, deployment-wave execution, independent native verifier, or shielded-withdrawal proof is tested here.",
+    "ledger-v9 WASM is not used as proof-verification evidence: its proof-verifying build feature is disabled."
+  ],
+  "proofServerImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+  "compilerInfo": {
+    "compiler-version": "0.35.0",
+    "language-version": "0.27.0",
+    "runtime-version": "0.20.0"
+  },
+  "runtimeVersions": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5"
+  },
+  "sources": {
+    "contracts/account.compact": "baa904f6af5599d3d93862288cefb751fc20a81d83ae91ba920f0f230d722b74",
+    "contracts/account-bip340.compact": "ad9948644ba120eb28c0a7e44f3e91c0026dcdfe03df26e2aa1ce74751c52123",
+    "contracts/bip340.compact": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab",
+    "contracts/account-p256.compact": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4",
+    "contracts/webauthn.compact": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb",
+    "src/tests/bip340-grants-prove.ts": "1b4d34b14407620bc3afeed18bd551d71c56c0b10f4c18459b2fb8be0282de5e",
+    "src/tests/sim.ts": "8f6552f4731ec9d7ee8dca3562c9a389bdf0feca3acfe049b9be084103f77df9",
+    "src/tests/webauthn-variable/proof-provider.ts": "f37142697ea954ae841bd1b37f6294ff11dce586ff45087edd6fc9b3d65f8746",
+    "src/wallet/signer.ts": "c15f5db46aa338871deeb5aefddad5bf1b072cf171ae6c9ff5a520a953b0c26f",
+    "src/wallet/signer-bip340.ts": "39301b2f98ef95b910e152372022dc1ab5b675bb107bb5d95611e1c819101a11",
+    "src/wallet/witnesses.ts": "31f9071d97cd43f345afb0fa35fed05f8e240a6810481c5e5a36a6b5f00f19c4",
+    "src/wallet/bip340-witness.ts": "5999a5cbace6721058f4d601a7acfbd70160fe436583d9223ee4a86b616297a3"
+  },
+  "artefacts": {
+    "proverKey": {
+      "bytes": 469805926,
+      "sha256": "b0e789cf216d878a86a8627cdf39d602cd2cc1bd22daa4749c2045dfac39e51e"
+    },
+    "verifierKey": {
+      "bytes": 2745,
+      "sha256": "d60b12d9559c1881e757ded4597c21e8a4722e5c2f564049d1675e669458c56c"
+    },
+    "binaryZkir": {
+      "bytes": 38208,
+      "sha256": "bb963238e76e7c8800708fe974b00574974da111e29ce743d25725b6761d2f5b"
+    }
+  },
+  "checks": [
+    {
+      "name": "owner-issued BIP-340 unshielded grant",
+      "result": "ACCEPTED",
+      "grantNonceBefore": "0",
+      "grantNonceAfter": "1",
+      "mirrorBalanceBefore": "100",
+      "mirrorBalanceAfter": "80"
+    },
+    {
+      "name": "changed signature",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`",
+      "evidenceLayer": "original ACC ZKIR; fresh invalid-input trace bypasses only generated JS verification result"
+    },
+    {
+      "name": "changed withdrawal amount with original signature",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`",
+      "evidenceLayer": "original ACC ZKIR; fresh invalid-input trace bypasses only generated JS verification result"
+    }
+  ],
+  "samples": [
+    {
+      "circuit": "withdraw_unshielded_with_grant_bip340",
+      "proofBytes": 6364,
+      "requestBytes": 469848574,
+      "proveRequestMilliseconds": 25107.124958,
+      "proofSha256": "342b76024c76ba23a037a411375e1b72f9be5bb795f0907048addc1cafe29f78",
+      "preimageSha256": "c35d323fa1f8f9313279857a9c2b28f8f758de8ae75583dd50218593d1b4f388",
+      "binding": "0"
+    }
+  ]
+}

@@ -9,7 +9,7 @@
 // the ledger fee computation refuses it up front ("exceeded block limit in
 // transaction fee computation"). The 30-circuit roster prices at 74,286
 // verifier bytes and is refused by a wider margin. The account therefore
-// deploys in budgeted waves (52 circuits with recovery and P-256):
+// deploys in budgeted waves (55 circuits, including three BIP-340 grant twins):
 //
 //   wave 1  a prefix of the deposits + initial device's arm, the
 //           constructor's ledger state, and the maintenance authority;
@@ -53,7 +53,7 @@ import {
 } from '@midnight-ntwrk/midnight-js-contracts';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
-import type { Arm } from './signer.js';
+import type { Arm, GrantArm } from './signer.js';
 
 const GATED_BASES = [
   'withdraw_unshielded',
@@ -84,7 +84,7 @@ export const armCircuits = (arm: Arm): string[] =>
   ['activate_initial_device', ...GATED_BASES].map((base) => `${base}_with_${arm}`);
 
 /** The grantee twins of one arm: `<op>_with_grant_<arm>`. */
-export const grantTwins = (arm: Arm): string[] =>
+export const grantTwins = (arm: GrantArm): string[] =>
   GRANT_TWIN_BASES.map((base) => `${base}_with_grant_${arm}`);
 
 /** The grant-lifecycle circuits of one arm: `<op>_with_<arm>`. */
@@ -110,11 +110,15 @@ export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
 
 export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256'];
 
-/** All 52 impure circuits: four shared and sixteen per credential arm. */
+/** Grant-only signers have no activation, owner, lifecycle or recovery circuits. */
+export const GRANT_ONLY_ARMS: readonly Exclude<GrantArm, Arm>[] = ['bip340'];
+
+/** All 55 impure circuits: four shared, sixteen per owner arm, three grant-only. */
 export const allCircuits = (): string[] => [
   ...SHARED_CIRCUITS,
   ...ARMS.flatMap(armCircuits),
   ...ARMS.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
+  ...GRANT_ONLY_ARMS.flatMap(grantTwins),
   ...RECOVERY_SHARED_CIRCUITS,
   ...ARMS.flatMap(recoveryCircuits),
 ];
@@ -233,6 +237,8 @@ export function planWaves(
     ...grantTwins(firstArm),
     ...lifecycleCircuits(firstArm),
     ...others.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
+    // Grant-only verifiers are installed alongside grants, never as owner arms.
+    ...GRANT_ONLY_ARMS.flatMap(grantTwins),
     // Recovery last: the gate and the first arm's session and cancel, then
     // the other arm's. An account is functional without them; they are the
     // last thing the authority installs before retiring.

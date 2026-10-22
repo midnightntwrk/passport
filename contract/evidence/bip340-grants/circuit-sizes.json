@@ -1,0 +1,114 @@
+{
+  "measuredAt": "2026-10-22T07:22:56.561Z",
+  "baseCommit": "cd346383c89b9ac3b328122b0053d66a2ce6215e",
+  "compilerInfo": {
+    "compiler-version": "0.35.0",
+    "language-version": "0.27.0",
+    "runtime-version": "0.20.0"
+  },
+  "zkirVersion": "midnight-zkir 3.1.0-rc.1",
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4 Max",
+    "memoryBytes": 68719476736
+  },
+  "note": "Rows describe the complete ACC grant withdrawal circuits, including signature verification, scope checks and custody operations. Key sizes come from full key generation. This report does not measure proof latency or node admission.",
+  "sources": {
+    "contracts/account.compact": {
+      "bytes": 130939,
+      "sha256": "baa904f6af5599d3d93862288cefb751fc20a81d83ae91ba920f0f230d722b74"
+    },
+    "contracts/account-bip340.compact": {
+      "bytes": 7846,
+      "sha256": "ad9948644ba120eb28c0a7e44f3e91c0026dcdfe03df26e2aa1ce74751c52123"
+    },
+    "contracts/bip340.compact": {
+      "bytes": 2959,
+      "sha256": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab"
+    },
+    "contracts/account-p256.compact": {
+      "bytes": 19918,
+      "sha256": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4"
+    },
+    "contracts/webauthn.compact": {
+      "bytes": 4778,
+      "sha256": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb"
+    },
+    "src/tests/bip340-grants-measure.ts": {
+      "bytes": 3352,
+      "sha256": "4e16b9fa5a3260c323f1dcbb670dd39bc78251b711075070e84a2224452e35f4"
+    }
+  },
+  "circuits": [
+    {
+      "name": "withdraw_unshielded_with_grant_bip340",
+      "k": 18,
+      "rows": 135326,
+      "assets": {
+        "zkir": {
+          "bytes": 124579,
+          "sha256": "5c84b91d3250327b3ebb400e12c659463f21d58661e8b9d366179fb9a4186f3e"
+        },
+        "bzkir": {
+          "bytes": 38208,
+          "sha256": "bb963238e76e7c8800708fe974b00574974da111e29ce743d25725b6761d2f5b"
+        },
+        "prover": {
+          "bytes": 469805926,
+          "sha256": "b0e789cf216d878a86a8627cdf39d602cd2cc1bd22daa4749c2045dfac39e51e"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "d60b12d9559c1881e757ded4597c21e8a4722e5c2f564049d1675e669458c56c"
+        }
+      }
+    },
+    {
+      "name": "withdraw_shielded_with_grant_bip340",
+      "k": 18,
+      "rows": 162823,
+      "assets": {
+        "zkir": {
+          "bytes": 132914,
+          "sha256": "d470d52032c36648ea4dc094e253fca71451e662041595668a0ab5f951cb9967"
+        },
+        "bzkir": {
+          "bytes": 40765,
+          "sha256": "850324c60a14424339ca6178ab951511f751dc355907c5e0a89e8af78ad709dd"
+        },
+        "prover": {
+          "bytes": 469808483,
+          "sha256": "3793da79b46ea6e058d3496217a644652fbf92c8b9246a00b63a940aa41209db"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "4ca00d2b46359a1bf591b31f100a1b301f724feaa3d11db4645f3881aabdd81e"
+        }
+      }
+    },
+    {
+      "name": "withdraw_shielded_to_contract_with_grant_bip340",
+      "k": 18,
+      "rows": 168546,
+      "assets": {
+        "zkir": {
+          "bytes": 134565,
+          "sha256": "be8fc1ce77848671afd54a705f769929f10e2b27b1ed45565f56a1570a360b35"
+        },
+        "bzkir": {
+          "bytes": 41307,
+          "sha256": "31a57a33e6919858f51fcb3100caabff9efc1eeb8a2171def16dc87b19ef95eb"
+        },
+        "prover": {
+          "bytes": 469809025,
+          "sha256": "37cb200bc25c96f563e7f1cb1c66a11660d7287b84c0d2eb06d86fb191edc233"
+        },
+        "verifier": {
+          "bytes": 2745,
+          "sha256": "1399c87934e049ebcd903d06d886532199b47cda03aef1696fceba03c5d071fd"
+        }
+      }
+    }
+  ]
+}

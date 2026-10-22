@@ -84,6 +84,7 @@ import {
   type PlainScope,
 } from '../wallet/signer.js';
 import { k256GrantIdFixture } from './k256-fixtures.js';
+import { bip340LiftX } from '../wallet/bip340-witness.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reporting
@@ -186,6 +187,7 @@ type PrivateState = Record<string, never>;
  *  at all: see the module-shape section. */
 function stubWitnesses() {
   return {
+    bip340LiftX,
     held_coin: (ctx: { privateState: PrivateState }, _color: Uint8Array): [PrivateState, QualifiedCoin] => [
       ctx.privateState,
       { nonce: ZERO32, color: ZERO32, value: 0n, mt_index: 0n },
@@ -333,7 +335,7 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
 
 interface SpendOptions {
   /** The signing grantee. Omitted only when `auth` is supplied by hand. */
-  grantee?: Exclude<AnyGrantee, { arm: 'p256' }>;
+  grantee?: Exclude<AnyGrantee, { arm: 'p256' | 'bip340' }>;
   /** The record the challenge names. */
   grantId: Uint8Array;
   color: Uint8Array;

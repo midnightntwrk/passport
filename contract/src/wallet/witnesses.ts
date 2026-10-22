@@ -9,6 +9,7 @@
 import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import type { Ledger, QualifiedCoin } from './contract.js';
 import { hexToBytes, bytesToHex } from './hex.js';
+import { bip340LiftX } from './bip340-witness.js';
 
 export interface StoredCoin {
   nonceHex: string;
@@ -61,6 +62,7 @@ type Ctx = WitnessContext<Ledger, CoinStorePrivateState>;
 // never enters a proof, so nothing here ever holds it.
 export function makeWitnesses() {
   return {
+    bip340LiftX,
     held_coin(ctx: Ctx, color: Uint8Array): [CoinStorePrivateState, QualifiedCoin] {
       const key = bytesToHex(color);
       const stored = ctx.privateState.coins[key];

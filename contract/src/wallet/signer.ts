@@ -34,6 +34,9 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
 export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
+import type { Bip340Grantee, Bip340GrantAuthorisation } from './signer-bip340.js';
+export { Bip340Grantee, bip340GrantChallenges } from './signer-bip340.js';
+export type { Bip340GrantAuthorisation } from './signer-bip340.js';
 
 import {
   pureCircuits,
@@ -42,8 +45,9 @@ import {
   type QualifiedCoin,
 } from './contract.js';
 
-/** The authorisation arms the contract exports circuits for. */
+/** Owner/device authorisation arms. Grant-only schemes must not be added here. */
 export type Arm = 'jubjub' | 'k256' | 'p256';
+export type GrantArm = Arm | 'bip340';
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */
@@ -711,7 +715,7 @@ export interface JubjubGrantAuthorisation {
   grind_nonce: bigint;
 }
 
-export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation;
+export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation | Bip340GrantAuthorisation;
 
 /**
  * A grantee key on the k256 arm. Unlike a device it has no use counter
@@ -814,7 +818,7 @@ export class JubjubGrantee {
   }
 }
 
-export type AnyGrantee = K256Grantee | JubjubGrantee | P256Grantee;
+export type AnyGrantee = K256Grantee | JubjubGrantee | P256Grantee | Bip340Grantee;
 
 // Grant-twin challenges (section 6.3). Preimage, k256:
 // [DST_TWIN, self, pk_x, pk_y, grant_id, issued_at, ...args, [coin], nonce];
@@ -886,10 +890,13 @@ export const jubjubGrantChallenges = {
  *   jubjub: pk, origin_hash, slot, scope_salt, recipient_kind,
  *           pinned_recipient, max_coin_value, spent_prev, sig_r, sig_s,
  *           grind_nonce
+ *   bip340: pk, origin_hash, slot, scope_salt, recipient_kind,
+ *           pinned_recipient, max_coin_value, spent_prev, sig
  * The identity members come from the opening (see GrantOpening).
  */
 export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[] {
   const openings = [o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev];
+  if (a.arm === 'bip340') return [a.pk, o.originHash, o.slot, ...openings, a.sig];
   if (a.arm === 'p256') {
     const { arm, ...auth } = a;
     return [o.originHash, o.slot, ...openings, auth];
