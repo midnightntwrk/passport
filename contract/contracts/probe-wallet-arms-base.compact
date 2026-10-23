@@ -1,0 +1,351 @@
+pragma language_version >= 0.17.0;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// PROBE (not part of the standard, never deployed by the account): compiles
+// and exports the shared modules of the readable authorisation arms, so that
+// the modules are built and tested on their own, before any arm includes
+// them (upstream's probe-*.compact pattern).
+//
+//   modules/WalletArmDescriptors  readable-descriptor derivations (device
+//                                 entries, boot commitments, grant ids,
+//                                 origin_hash, the blind and the grant scope
+//                                 salt), one per payload class, with the
+//                                 registered tags, and the shared RFC 8032
+//                                 encoding of an Ed25519 key
+//   modules/WalletArmRendering    decimal, hex, label, base58, date, and
+//                                 word text for readable signed bytes
+//
+// Every module circuit is re-exported as a pure circuit, which the offline
+// suites compare against upstream's own derivation circuits and against an
+// independent SHA-256 and renderer. The impure `probe_*` circuits wrap one
+// derivation or rendering each and write its result to a ledger cell: the
+// public output stops the compiler from treating them as pure helpers, so
+// they have proving keys. They exist to measure rows and to show, with the
+// generated JavaScript checks bypassed, that the modules' asserts are
+// enforced by the proof itself (constraint-level negatives).
+// ---------------------------------------------------------------------------
+
+import "modules/WalletArmDescriptors";
+import "modules/WalletArmRendering";
+
+export {
+  device_tag_jubjub, device_tag_k256, device_tag_p256,
+  device_tag_evm_eip712, device_tag_sol_ed25519,
+  boot_tag_evm_eip712, boot_tag_sol_ed25519,
+  grant_id_tag_jubjub, grant_id_tag_k256, grant_id_tag_p256,
+  grant_id_tag_evm_eip712, grant_id_tag_sol_ed25519,
+  blind_tag_evm_eip712, blind_tag_sol_ed25519, grant_origin_tag,
+  salt_tag_evm_eip712, salt_tag_sol_ed25519,
+  derive_descriptor_entry_w52, derive_descriptor_entry_w64,
+  derive_descriptor_entry_w65, derive_descriptor_entry_w117,
+  derive_descriptor_boot_w52,
+  derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
+  derive_descriptor_grant_id_w65,
+  encode_public_key_with_sol_ed25519,
+  derive_descriptor_entry_ed25519, derive_descriptor_boot_ed25519,
+  derive_descriptor_grant_id_ed25519,
+  derive_signer_entries_ed25519,
+  derive_grant_origin_hash_label, derive_grant_origin_hash_origin,
+  derive_blind, derive_grant_scope_salt,
+  uint8_text, uint32_text, uint64_text, uint128_text,
+  hex_text_20, hex_text_32, hex_text_64, hex_text_192, reverse_32,
+  label_text_32, visible_text_21, recipient_kind_text, k256_envelope_text,
+  expiry_text, rp_hash_text, rp_hash_text_from_hex,
+  window_text, window_cap_text, utc_datetime_text, expiry_datetime_text,
+  base58_text_32, site_amount_label_text,
+};
+
+export ledger derived: Bytes<32>;
+export ledger text_21: Bytes<21>;
+export ledger text_32: Bytes<32>;
+export ledger text_39: Bytes<39>;
+export ledger text_384: Bytes<384>;
+export ledger text_24: Bytes<24>;
+
+// ── Derivations ─────────────────────────────────────────────────────────────
+
+export circuit probe_entry_w52(
+  tag: Bytes<32>, self_addr: ContractAddress, address: Bytes<20>, blind: Bytes<32>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w52(tag, self_addr, address, blind, epoch, counter));
+}
+
+export circuit probe_entry_w64(
+  tag: Bytes<32>, self_addr: ContractAddress, first: Bytes<32>, second: Bytes<32>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w64(tag, self_addr, first, second, epoch, counter));
+}
+
+export circuit probe_entry_w65(
+  tag: Bytes<32>, self_addr: ContractAddress, x: Bytes<32>, y: Bytes<32>, envelope: Uint<8>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w65(tag, self_addr, x, y, envelope, epoch, counter));
+}
+
+export circuit probe_entry_w117(
+  tag: Bytes<32>, self_addr: ContractAddress, x: Bytes<32>, y: Bytes<32>,
+  rp_id_hash: Bytes<32>, origin: Bytes<21>, epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w117(tag, self_addr, x, y, rp_id_hash, origin, epoch, counter));
+}
+
+export circuit probe_boot_w52(tag: Bytes<32>, salt: Bytes<32>, address: Bytes<20>, blind: Bytes<32>): [] {
+  derived = disclose(derive_descriptor_boot_w52(tag, salt, address, blind));
+}
+
+export circuit probe_grant_id_w52(
+  tag: Bytes<32>, self_addr: ContractAddress, address: Bytes<20>, blind: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_w52(tag, self_addr, address, blind, origin_hash, slot));
+}
+
+export circuit probe_grant_id_w64(
+  tag: Bytes<32>, self_addr: ContractAddress, first: Bytes<32>, second: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_w64(tag, self_addr, first, second, origin_hash, slot));
+}
+
+export circuit probe_grant_id_w65(
+  tag: Bytes<32>, self_addr: ContractAddress, x: Bytes<32>, y: Bytes<32>, envelope: Uint<8>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_w65(tag, self_addr, x, y, envelope, origin_hash, slot));
+}
+
+// The ed25519 class: a Solana key by its point, with its encoding and
+// x-coordinate as checked inputs. probe_encode_ed25519 measures the encoding
+// alone; the derivations add the A != O assert and return [key, value] (the
+// probes write the value).
+export circuit probe_encode_ed25519(pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>): [] {
+  derived = disclose(encode_public_key_with_sol_ed25519(pk, pk_bytes, pk_x));
+}
+
+export circuit probe_entry_ed25519(
+  tag: Bytes<32>, self_addr: ContractAddress, pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>,
+  pk_x: Vector<32, Uint<8>>, blind: Bytes<32>, epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_ed25519(tag, self_addr, pk, pk_bytes, pk_x, blind, epoch, counter)[1]);
+}
+
+export circuit probe_boot_ed25519(
+  tag: Bytes<32>, salt: Bytes<32>, pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>,
+  pk_x: Vector<32, Uint<8>>, blind: Bytes<32>
+): [] {
+  derived = disclose(derive_descriptor_boot_ed25519(tag, salt, pk, pk_bytes, pk_x, blind)[1]);
+}
+
+export circuit probe_grant_id_ed25519(
+  tag: Bytes<32>, self_addr: ContractAddress, pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>,
+  pk_x: Vector<32, Uint<8>>, blind: Bytes<32>, origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_ed25519(tag, self_addr, pk, pk_bytes, pk_x, blind, origin_hash, slot)[1]);
+}
+
+export circuit probe_blind(tag: Bytes<32>, signature: Bytes<64>): [] {
+  derived = disclose(derive_blind(tag, signature));
+}
+
+export circuit probe_grant_scope_salt(tag: Bytes<32>, blind: Bytes<32>, self_addr: ContractAddress, auth_nonce: Uint<64>): [] {
+  derived = disclose(derive_grant_scope_salt(tag, blind, self_addr, auth_nonce));
+}
+
+// ── Rendering ───────────────────────────────────────────────────────────────
+
+export circuit probe_uint128_text(value: Uint<128>, text: Vector<39, Uint<8>>): [] {
+  text_39 = disclose(uint128_text(value, text) as Bytes<39>);
+}
+
+export circuit probe_hex_text_192(b: Bytes<192>): [] {
+  text_384 = disclose(hex_text_192(b) as Bytes<384>);
+}
+
+export circuit probe_label_text_32(label: Bytes<32>): [] {
+  text_32 = disclose(label_text_32(label) as Bytes<32>);
+}
+
+export circuit probe_visible_text_21(b: Bytes<21>): [] {
+  text_21 = disclose(visible_text_21(b) as Bytes<21>);
+}
+
+export circuit probe_recipient_kind_text(kind: Uint<8>): [] {
+  text_24 = disclose(recipient_kind_text(kind) as Bytes<24>);
+}
+
+export circuit probe_k256_envelope_text(envelope: Uint<8>): [] {
+  text_24 = disclose(k256_envelope_text(envelope) as Bytes<24>);
+}
+
+// ── Exact words ─────────────────────────────────────────────────────────────
+//
+// Rows: each helper probe has a control probe with the same inputs and the
+// same ledger writes but without the helper's logic; the difference is what
+// the helper adds to an arm's circuit (the message bytes it adds are the
+// arm's own cost). Checks: an arm binds the shown text through its signed
+// bytes; the probe_check_* circuits model that with an assert, so that a
+// forged word is refused at the prover.
+
+// No circuit writes text_13. It is declared so that the cells after it keep
+// their ledger indices, which the word probes' ZKIR depends on.
+export ledger text_13: Bytes<13>;
+export ledger text_20: Bytes<20>;
+export ledger text_64: Bytes<64>;
+
+export circuit probe_expiry_text(value: Uint<64>, text: Vector<20, Uint<8>>): [] {
+  text_20 = disclose(expiry_text(value, text) as Bytes<20>);
+}
+
+// Control: the decimal digits alone.
+export circuit probe_uint64_text(value: Uint<64>, text: Vector<20, Uint<8>>): [] {
+  text_20 = disclose(uint64_text(value, text) as Bytes<20>);
+}
+
+export circuit probe_rp_hash_text(h: Bytes<32>): [] {
+  text_64 = disclose(rp_hash_text(h) as Bytes<64>);
+}
+
+// Control: the hex alone.
+export circuit probe_hex_text_32(h: Bytes<32>): [] {
+  text_64 = disclose(hex_text_32(h) as Bytes<64>);
+}
+
+// The selection alone, for an arm with its own hex renderer (a free hex here:
+// the probe only measures; an arm passes its checked text).
+export circuit probe_rp_hash_text_from_hex(h: Bytes<32>, hex: Vector<64, Uint<8>>): [] {
+  text_64 = disclose(rp_hash_text_from_hex(h, hex) as Bytes<64>);
+}
+
+// Control: h and a 64-byte input, no selection.
+export circuit probe_text_64_control(h: Bytes<32>, hex: Vector<64, Uint<8>>): [] {
+  derived = disclose(h);
+  text_64 = disclose(hex as Bytes<64>);
+}
+
+export circuit probe_check_expiry(value: Uint<64>, text: Vector<20, Uint<8>>, shown: Bytes<20>): [] {
+  assert(expiry_text(value, text) as Bytes<20> == shown, "display: the shown expiry is not the circuit's");
+  text_20 = disclose(shown);
+}
+
+export circuit probe_check_rp_hash(h: Bytes<32>, shown: Bytes<64>): [] {
+  assert(rp_hash_text(h) as Bytes<64> == shown, "display: the shown RP hash is not the circuit's");
+  text_64 = disclose(shown);
+}
+
+// ── Base58, dates, window words, the site's amount label ────────────────────
+//
+// Each helper probe writes the helper's text; its control writes the same
+// inputs' bytes without the helper's logic, so the difference is what the
+// helper adds to an arm's circuit. The probe_check_* circuits model an arm
+// binding a shown text through its signed bytes, so that a forged word is
+// refused at the prover.
+
+export ledger text_29: Bytes<29>;
+export ledger text_44: Bytes<44>;
+export ledger text_49: Bytes<49>;
+
+export circuit probe_utc_datetime_text(value: Uint<64>, text: Vector<29, Uint<8>>, year_split: Vector<4, Uint<8>>): [] {
+  text_29 = disclose(utc_datetime_text(value, text, year_split) as Bytes<29>);
+}
+
+export circuit probe_expiry_datetime_text(value: Uint<64>, text: Vector<29, Uint<8>>, year_split: Vector<4, Uint<8>>): [] {
+  text_29 = disclose(expiry_datetime_text(value, text, year_split) as Bytes<29>);
+}
+
+// Control: the date's inputs, no checks.
+export circuit probe_datetime_control(value: Uint<64>, text: Vector<29, Uint<8>>, year_split: Vector<4, Uint<8>>): [] {
+  text_29 = disclose(text as Bytes<29>);
+  derived = disclose(Bytes[...year_split, ...pad(28, "")]);
+  text_20 = disclose(value as Bytes<20>);
+}
+
+export circuit probe_check_expiry_datetime(value: Uint<64>, text: Vector<29, Uint<8>>, year_split: Vector<4, Uint<8>>, shown: Bytes<29>): [] {
+  assert(expiry_datetime_text(value, text, year_split) as Bytes<29> == shown, "display: the shown expiry date is not the circuit's");
+  text_29 = disclose(shown);
+}
+
+export circuit probe_window_text(window_len: Uint<64>, text: Vector<20, Uint<8>>): [] {
+  text_20 = disclose(window_text(window_len, text) as Bytes<20>);
+}
+
+export circuit probe_window_cap_text(window_len: Uint<64>, window_cap: Uint<128>, text: Vector<39, Uint<8>>): [] {
+  text_39 = disclose(window_cap_text(window_len, window_cap, text) as Bytes<39>);
+}
+
+export circuit probe_check_window(window_len: Uint<64>, text: Vector<20, Uint<8>>, shown: Bytes<20>): [] {
+  assert(window_text(window_len, text) as Bytes<20> == shown, "display: the shown window is not the circuit's");
+  text_20 = disclose(shown);
+}
+
+export circuit probe_check_window_cap(window_len: Uint<64>, window_cap: Uint<128>, text: Vector<39, Uint<8>>, shown: Bytes<39>): [] {
+  assert(window_cap_text(window_len, window_cap, text) as Bytes<39> == shown, "display: the shown window cap is not the circuit's");
+  text_39 = disclose(shown);
+}
+
+export circuit probe_base58_text_32(b: Vector<32, Uint<8>>, digits: Vector<44, Uint<8>>, carry: Uint<120>, low: Uint<128>, top: Uint<16>): [] {
+  text_44 = disclose(base58_text_32(b, digits, carry, low, top) as Bytes<44>);
+}
+
+// Control: base58's inputs, no checks.
+export circuit probe_base58_control(b: Vector<32, Uint<8>>, digits: Vector<44, Uint<8>>, carry: Uint<120>, low: Uint<128>, top: Uint<16>): [] {
+  text_44 = disclose(digits as Bytes<44>);
+  derived = disclose(Bytes[...b]);
+  text_39 = disclose(((carry as Field) + (low as Field) + (top as Field)) as Bytes<39>);
+}
+
+// A Solana key's base58 text from its checked encoding: the path an arm
+// takes to show a key (the encoding's bytes feed base58 directly).
+export circuit probe_key_base58(
+  pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>,
+  digits: Vector<44, Uint<8>>, carry: Uint<120>, low: Uint<128>, top: Uint<16>
+): [] {
+  derived = disclose(encode_public_key_with_sol_ed25519(pk, pk_bytes, pk_x));
+  text_44 = disclose(base58_text_32(pk_bytes, digits, carry, low, top) as Bytes<44>);
+}
+
+export circuit probe_site_amount_label_text(value: Uint<128>, t: Vector<49, Uint<8>>): [] {
+  text_49 = disclose(site_amount_label_text(value, t) as Bytes<49>);
+}
+
+// Control: the label's inputs, no checks.
+export circuit probe_site_amount_label_control(value: Uint<128>, t: Vector<49, Uint<8>>): [] {
+  text_49 = disclose(t as Bytes<49>);
+  text_39 = disclose(value as Bytes<39>);
+}
+
+// ── The exploded encoding (comparison only) ─────────────────────────────────
+//
+// The RFC 8032 encoding computed from the coordinates' own bytes, as the
+// standard library's ed25519Encode computes it: y's bytes and x's first byte
+// taken out of the coordinates. Never used by the modules; it exists so the
+// checked encoder can be compared with it, output for output.
+
+circuit exploded_base_is_odd(x: Curve25519Base): Boolean {
+  const b = (x as Bytes<32> as Vector<32, Uint<8>>)[0];
+  const b6 = b  >= 128 ? b  - 128 : b;
+  const b5 = b6 >= 64  ? b6 - 64  : b6;
+  const b4 = b5 >= 32  ? b5 - 32  : b5;
+  const b3 = b4 >= 16  ? b4 - 16  : b4;
+  const b2 = b3 >= 8   ? b3 - 8   : b3;
+  const b1 = b2 >= 4   ? b2 - 4   : b2;
+  return (b1 >= 2 ? b1 - 2 : b1) == 1;
+}
+
+export pure circuit exploded_encoding_ed25519(pk: Curve25519Point): Bytes<32> {
+  const y = curve25519PointY(pk) as Bytes<32> as Vector<32, Uint<8>>;
+  const sign = exploded_base_is_odd(curve25519PointX(pk)) ? 128 : 0;
+  return Bytes[y[0],  y[1],  y[2],  y[3],  y[4],  y[5],  y[6],  y[7],
+               y[8],  y[9],  y[10], y[11], y[12], y[13], y[14], y[15],
+               y[16], y[17], y[18], y[19], y[20], y[21], y[22], y[23],
+               y[24], y[25], y[26], y[27], y[28], y[29], y[30],
+               (y[31] + sign) as Uint<8>];
+}
+
+export circuit probe_exploded_encoding_ed25519(pk: Curve25519Point): [] {
+  derived = disclose(exploded_encoding_ed25519(pk));
+}

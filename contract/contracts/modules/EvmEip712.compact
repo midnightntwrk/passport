@@ -1,0 +1,1371 @@
+// ---------------------------------------------------------------------------
+// EvmEip712 — the readable EIP-712 approvals of the `evm_eip712` arm
+// (byte contract: contract/EVM-EIP712.md; client copy:
+// src/wallet/evm-eip712-codec.ts).
+//
+// An Ethereum wallet signs
+//
+//   digest = keccak256(0x19 || 0x01 || domainSeparator || hashStruct(message))
+//
+// and the arm's circuits recompute that digest from exactly the values they
+// execute, then verify the signature against it. Nothing else is signed: no
+// challenge hash, no fingerprint. Every operand and every consumed witness
+// value is a member of the message, shown by the wallet in full.
+//
+// DOMAIN. EIP712Domain(string name,string version,address verifyingContract)
+// with name "Midnight Passport Account", version "1", and verifyingContract
+// the low 20 bytes of keccak256 of the account's 32-byte contract address.
+// There is no chainId and no salt: the contract holds no network value (the
+// cross-network argument is in the arm document).
+//
+// TYPES. One primary type per operation and role (16): the device role's
+// thirteen carry `bytes32 account, address device, uint64 authNonce`; the
+// grantee role's three carry `bytes32 account, address grantee, string
+// siteLabel, uint8 slot, uint64 issuedAt, uint64 grantNonce`. The operation
+// and the role are separated by the type hash. Authority-granting operations
+// carry a circuit-fixed `string effect` line. The other key of
+// add_device, remove_device, issue_grant and revoke_grant is a nested
+// descriptor of one type per target scheme, so a wallet shows only that
+// scheme's fields; the parent's type hash follows the scheme.
+//
+// ENCODING (EIP-712 encodeData). Every member is one 32-byte word:
+//   bytes32            the 32 bytes;
+//   address            12 zero bytes || the 20 bytes;
+//   uint8/32/64/128    big-endian, zero-extended to 32 bytes;
+//   bool               0 or 1 as a uint;
+//   string, bytes      keccak256 of the content;
+//   struct             its hashStruct.
+// Byte order of points and field elements: secp256k1 and P-256
+// coordinates are shown big-endian (SEC1); JubJub coordinates and other Field
+// values are shown as the contract encodes them, little-endian.
+//
+// The four hash-like values that may appear, each
+// under a fixed member name: a k256/jubjub grantee's `siteLabelHash`, a
+// passkey's `passkeyRpHash`, a target device's `privacySalt` (its blind),
+// and RemoveUnknownDevice's `entry` under the fixed line "Removes a device
+// this wallet cannot identify". None grants authority.
+//
+// Every preimage is a keccak256 over a tuple of fixed-width byte atoms (one
+// tuple element per word, or per zero prefix and value), never a flat buffer
+// assembled by slicing, which costs far more rows.
+//
+// Everything here is pure: a function of its arguments. The exported circuits
+// are oracles on the compiled artefact, so a signer obtains the contract's
+// own answer; they have no proving key and no deploy cost.
+// ---------------------------------------------------------------------------
+
+module EvmEip712 {
+  import CompactStandardLibrary;
+  import "./WalletArmDescriptors";
+  import "./WalletArmRendering";
+
+  // ── Descriptor inputs ─────────────────────────────────────────────────────
+  //
+  // The readable descriptor of another key, as the circuits take it. Which
+  // fields a scheme uses (the rest are not hashed and not shown):
+  //   evm_eip712   address, key2 = the target's blind
+  //   sol_ed25519  key = the 32-byte RFC 8032 key, key2 = the target's blind
+  //   jubjub       key = x_le, key2 = y_le
+  //   k256         key = x_le, key2 = y_le, envelope
+  //   p256         key = x_le, key2 = y_le, rp_id_hash, origin (21 bytes)
+  export struct EvmEip712Descriptor {
+    tag:        Bytes<32>;
+    key:        Bytes<32>;
+    key2:       Bytes<32>;
+    address:    Bytes<20>;
+    envelope:   Uint<8>;
+    rp_id_hash: Bytes<32>;
+    origin:     Bytes<21>;
+  }
+
+  // A grantee: the same key fields under the grant-id tag, plus the origin
+  // the grant id binds and the slot:
+  //   evm_eip712, sol_ed25519  label (32-byte zero-padded site label)
+  //   p256                     origin (21 bytes; the RP is a scope field)
+  //   k256, jubjub             origin_hash (shown as siteLabelHash)
+  export struct EvmEip712GranteeDescriptor {
+    tag:         Bytes<32>;
+    key:         Bytes<32>;
+    key2:        Bytes<32>;
+    address:     Bytes<20>;
+    envelope:    Uint<8>;
+    origin:      Bytes<21>;
+    label:       Bytes<32>;
+    origin_hash: Bytes<32>;
+    slot:        Uint<8>;
+  }
+
+  // ── Hint inputs ───────────────────────────────────────────────────────────
+  //
+  // The checked byte hints of the values a message renders from bytes (see
+  // "Checked byte hints"): each field is the exact bytes of one value,
+  // numbers little-endian. A descriptor's hint covers every field the module
+  // reads, whatever the scheme (each is checked, unused or not).
+
+  // The display inputs of a Solana key's base58 text (the shared rendering
+  // module's base58_text_32): each character's digit, 58 for the padding,
+  // and the read-back's three checked hints.
+  export struct EvmEip712Base58Hint {
+    digits: Vector<44, Uint<8>>;
+    carry:  Uint<120>;
+    low:    Uint<128>;
+    top:    Uint<16>;
+  }
+
+  // A descriptor's key, second key and origin, and the base58 inputs of the
+  // key shown under the Solana type.
+  export struct EvmEip712DescriptorHint {
+    key:    Vector<32, Uint<8>>;
+    key2:   Vector<32, Uint<8>>;
+    origin: Vector<21, Uint<8>>;
+    b58:    EvmEip712Base58Hint;
+  }
+
+  // A grantee descriptor's key, second key, origin and site label, and the
+  // base58 inputs of the key shown under the Solana type.
+  export struct EvmEip712GranteeHint {
+    key:    Vector<32, Uint<8>>;
+    key2:   Vector<32, Uint<8>>;
+    origin: Vector<21, Uint<8>>;
+    label:  Vector<32, Uint<8>>;
+    b58:    EvmEip712Base58Hint;
+  }
+
+  // An unshielded amount, and the site's label for it (49 bytes, the display
+  // input of site_amount_label_text).
+  export struct EvmEip712AmountHint {
+    amount: Vector<16, Uint<8>>;
+    label:  Vector<49, Uint<8>>;
+  }
+
+  // A shielded spend: the amount, the spent coin's value and Merkle index, the
+  // change, and the site's label for the amount.
+  export struct EvmEip712CoinHint {
+    amount:   Vector<16, Uint<8>>;
+    value:    Vector<16, Uint<8>>;
+    mt_index: Vector<8, Uint<8>>;
+    change:   Vector<16, Uint<8>>;
+    label:    Vector<49, Uint<8>>;
+  }
+
+  // A removal: the target's descriptor, epoch and use counter.
+  export struct EvmEip712RemoveHint {
+    target:  EvmEip712DescriptorHint;
+    epoch:   Vector<4, Uint<8>>;
+    counter: Vector<8, Uint<8>>;
+  }
+
+  // A grant: the grantee's descriptor, the scope's numbers, and the expiry's
+  // date inputs (the shared rendering module's utc_datetime_text: the 29-byte
+  // text and the year's split).
+  export struct EvmEip712IssueHint {
+    grantee:        EvmEip712GranteeHint;
+    max_coin_value: Vector<16, Uint<8>>;
+    per_call_cap:   Vector<16, Uint<8>>;
+    cap:            Vector<16, Uint<8>>;
+    expires_at:     Vector<8, Uint<8>>;
+    window_len:     Vector<8, Uint<8>>;
+    window_cap:     Vector<16, Uint<8>>;
+    expiry_text:    Vector<29, Uint<8>>;
+    year_split:     Vector<4, Uint<8>>;
+  }
+
+  // ── Frozen constants (keccak256 of the domain fields, the type strings,
+  //    the effect lines and the scheme tags) ─────────────────────────────────
+
+  // keccak256("EIP712Domain(string name,string version,address verifyingContract)")
+  pure circuit evm_eip712_domain_type_hash(): Bytes<32> {
+    return Bytes[0x91, 0xab, 0x3d, 0x17, 0xe3, 0xa5, 0x0a, 0x9d, 0x89, 0xe6, 0x3f, 0xd3, 0x0b, 0x92, 0xbe, 0x7f,
+               0x53, 0x36, 0xb0, 0x3b, 0x28, 0x7b, 0xb9, 0x46, 0x78, 0x7a, 0x83, 0xa9, 0xd6, 0x2a, 0x27, 0x66];
+  }
+
+  // keccak256("Midnight Passport Account")
+  pure circuit evm_eip712_name_hash(): Bytes<32> {
+    return Bytes[0x64, 0xd1, 0xc9, 0x23, 0xe5, 0x9d, 0xa2, 0x0d, 0x02, 0xc9, 0x2d, 0xc0, 0xd6, 0xca, 0xa0, 0x86,
+               0x8c, 0xb5, 0xc8, 0xab, 0x17, 0xee, 0x06, 0x58, 0xaa, 0xfc, 0x5f, 0x0b, 0x72, 0xd5, 0x6c, 0x85];
+  }
+
+  // keccak256("1")
+  pure circuit evm_eip712_version_hash(): Bytes<32> {
+    return Bytes[0xc8, 0x9e, 0xfd, 0xaa, 0x54, 0xc0, 0xf2, 0x0c, 0x7a, 0xdf, 0x61, 0x28, 0x82, 0xdf, 0x09, 0x50,
+               0xf5, 0xa9, 0x51, 0x63, 0x7e, 0x03, 0x07, 0xcd, 0xcb, 0x4c, 0x67, 0x2f, 0x29, 0x8b, 0x8b, 0xc6];
+  }
+
+  // keccak256("WithdrawUnshielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient)")
+  pure circuit evm_eip712_type_withdraw_unshielded(): Bytes<32> {
+    return Bytes[0x47, 0x39, 0x2d, 0xb5, 0x53, 0xcf, 0xdc, 0x77, 0xe5, 0x96, 0xb7, 0x40, 0x88, 0xf4, 0xf9, 0x04,
+               0xd5, 0xb9, 0x99, 0x66, 0x40, 0xa1, 0x88, 0xe1, 0x51, 0xee, 0x65, 0x0d, 0xf8, 0x87, 0x12, 0x98];
+  }
+
+  // keccak256("WithdrawShielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)")
+  pure circuit evm_eip712_type_withdraw_shielded(): Bytes<32> {
+    return Bytes[0xe7, 0xed, 0xf4, 0xa7, 0xeb, 0x19, 0x94, 0x81, 0x1f, 0xb7, 0xce, 0x88, 0x4d, 0x97, 0xad, 0x0b,
+               0x7e, 0x90, 0x89, 0xe2, 0x87, 0xe8, 0x60, 0x27, 0xeb, 0x30, 0x52, 0x02, 0xba, 0x99, 0xc9, 0xb9];
+  }
+
+  // keccak256("WithdrawShieldedToContract(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipientContract,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)")
+  pure circuit evm_eip712_type_withdraw_shielded_to_contract(): Bytes<32> {
+    return Bytes[0xdb, 0x78, 0xca, 0x73, 0x70, 0xa5, 0x61, 0xd7, 0x14, 0xbb, 0x9d, 0x04, 0xa0, 0x9d, 0xa5, 0x71,
+               0x63, 0xbd, 0x63, 0x0c, 0x58, 0xca, 0xb8, 0xbf, 0x66, 0x22, 0xb2, 0x82, 0x80, 0x2c, 0xa9, 0x8b];
+  }
+
+  // keccak256("AppendInbox(bytes32 account,address device,uint64 authNonce,bytes entry)")
+  pure circuit evm_eip712_type_append_inbox(): Bytes<32> {
+    return Bytes[0x16, 0xde, 0x39, 0x23, 0x14, 0x14, 0x37, 0x86, 0xec, 0x7c, 0xc1, 0x91, 0x8a, 0x99, 0x73, 0x80,
+               0xe0, 0x6e, 0x33, 0x29, 0x6e, 0x20, 0xb6, 0x09, 0xff, 0x7c, 0x63, 0x9c, 0x63, 0xb7, 0x0a, 0x69];
+  }
+
+  // keccak256("RotateEncKey(bytes32 account,address device,uint64 authNonce,string effect,bytes32 newKey)")
+  pure circuit evm_eip712_type_rotate_enc_key(): Bytes<32> {
+    return Bytes[0xa6, 0xdf, 0xbe, 0xf4, 0xc4, 0xf7, 0x3a, 0x96, 0x56, 0x11, 0xbc, 0x65, 0xe0, 0x26, 0xbb, 0x37,
+               0xbb, 0x1f, 0x5d, 0xe7, 0x5f, 0x62, 0xc6, 0xb4, 0x77, 0x85, 0x90, 0x5f, 0x52, 0x27, 0x71, 0xe5];
+  }
+
+  // keccak256("AddDevice(bytes32 account,address device,uint64 authNonce,string effect,EvmDevice newDevice)EvmDevice(string scheme,address wallet,bytes32 privacySalt)")
+  pure circuit evm_eip712_type_add_device__evm(): Bytes<32> {
+    return Bytes[0x0d, 0x75, 0xa3, 0x00, 0xd2, 0xc3, 0x2d, 0xd0, 0x0b, 0xc7, 0x61, 0x7a, 0x4a, 0xeb, 0x08, 0x85,
+               0x1b, 0xef, 0xa6, 0x7c, 0x7a, 0xf4, 0x4e, 0xa6, 0xa1, 0x54, 0xef, 0xcb, 0x89, 0xf2, 0x02, 0x29];
+  }
+
+  // keccak256("AddDevice(bytes32 account,address device,uint64 authNonce,string effect,SolanaDevice newDevice)SolanaDevice(string scheme,string publicKey,bytes32 privacySalt)")
+  pure circuit evm_eip712_type_add_device__solana(): Bytes<32> {
+    return Bytes[0x47, 0x7d, 0x68, 0xd6, 0x8a, 0x39, 0x66, 0x1e, 0x21, 0x87, 0x65, 0xf7, 0x92, 0x25, 0x9a, 0x60,
+               0x2d, 0x72, 0xaa, 0x45, 0xf5, 0xb8, 0x6e, 0x3c, 0xde, 0xe6, 0x6a, 0x39, 0x21, 0x28, 0x39, 0xf4];
+  }
+
+  // keccak256("AddDevice(bytes32 account,address device,uint64 authNonce,string effect,JubjubDevice newDevice)JubjubDevice(string scheme,bytes32 x,bytes32 y)")
+  pure circuit evm_eip712_type_add_device__jubjub(): Bytes<32> {
+    return Bytes[0x51, 0x5b, 0x89, 0x0d, 0x3a, 0x81, 0x16, 0xe9, 0xdb, 0xaf, 0x2f, 0x70, 0x78, 0x33, 0xaf, 0xce,
+               0xc6, 0x1f, 0xb3, 0xf0, 0xc6, 0x84, 0x23, 0xc5, 0x76, 0xd1, 0x3d, 0xfd, 0x1b, 0x3d, 0x9f, 0xca];
+  }
+
+  // keccak256("AddDevice(bytes32 account,address device,uint64 authNonce,string effect,K256Device newDevice)K256Device(string scheme,bytes32 x,bytes32 y,string envelope)")
+  pure circuit evm_eip712_type_add_device__k256(): Bytes<32> {
+    return Bytes[0xe3, 0x2d, 0xeb, 0x4f, 0x95, 0x92, 0xa3, 0xe5, 0x87, 0x3f, 0xad, 0xe6, 0x2e, 0xab, 0xbf, 0xd2,
+               0x67, 0x41, 0x15, 0xdc, 0xc0, 0xbc, 0x91, 0x7f, 0xf5, 0xe3, 0x0d, 0xe1, 0x4a, 0xdf, 0x47, 0x9a];
+  }
+
+  // keccak256("AddDevice(bytes32 account,address device,uint64 authNonce,string effect,PasskeyDevice newDevice)PasskeyDevice(string scheme,bytes32 x,bytes32 y,string origin,bytes32 passkeyRpHash)")
+  pure circuit evm_eip712_type_add_device__passkey(): Bytes<32> {
+    return Bytes[0x03, 0xaf, 0xee, 0x13, 0xe8, 0xc7, 0xc1, 0x84, 0x68, 0x09, 0xce, 0x7e, 0x5d, 0xb1, 0xc9, 0x12,
+               0x07, 0xe3, 0xbb, 0x80, 0xb8, 0x9b, 0xaf, 0xda, 0x98, 0x58, 0xf2, 0x1e, 0x7b, 0x9f, 0xd6, 0x26];
+  }
+
+  // keccak256("RemoveDevice(bytes32 account,address device,uint64 authNonce,EvmDevice target,uint32 targetEpoch,uint64 targetCounter)EvmDevice(string scheme,address wallet,bytes32 privacySalt)")
+  pure circuit evm_eip712_type_remove_device__evm(): Bytes<32> {
+    return Bytes[0xfb, 0xda, 0x80, 0x6f, 0xf8, 0x10, 0xad, 0xb3, 0xa9, 0x26, 0xb9, 0xd7, 0xc6, 0x51, 0xab, 0x03,
+               0x3d, 0x62, 0x24, 0xa6, 0x91, 0x95, 0xe9, 0x59, 0x39, 0xe5, 0xec, 0xc8, 0x40, 0x10, 0x4d, 0x7b];
+  }
+
+  // keccak256("RemoveDevice(bytes32 account,address device,uint64 authNonce,SolanaDevice target,uint32 targetEpoch,uint64 targetCounter)SolanaDevice(string scheme,string publicKey,bytes32 privacySalt)")
+  pure circuit evm_eip712_type_remove_device__solana(): Bytes<32> {
+    return Bytes[0x8c, 0x61, 0x24, 0xe8, 0xd7, 0xf8, 0xca, 0x1d, 0x71, 0xd0, 0xd2, 0x6c, 0x69, 0x87, 0x99, 0xe1,
+               0xc3, 0xf9, 0xa6, 0x0b, 0xf8, 0xbd, 0x88, 0xf4, 0x32, 0x1e, 0x44, 0xa4, 0xbd, 0x82, 0xeb, 0x2c];
+  }
+
+  // keccak256("RemoveDevice(bytes32 account,address device,uint64 authNonce,JubjubDevice target,uint32 targetEpoch,uint64 targetCounter)JubjubDevice(string scheme,bytes32 x,bytes32 y)")
+  pure circuit evm_eip712_type_remove_device__jubjub(): Bytes<32> {
+    return Bytes[0x78, 0x3b, 0x7e, 0xae, 0xaa, 0x6c, 0xed, 0xf5, 0xde, 0xa7, 0xa6, 0xb2, 0x11, 0xcb, 0x34, 0xa2,
+               0xdb, 0x75, 0xb8, 0x04, 0x28, 0x20, 0xfd, 0xef, 0xa6, 0x58, 0x01, 0xce, 0x8c, 0x2f, 0x1a, 0xb2];
+  }
+
+  // keccak256("RemoveDevice(bytes32 account,address device,uint64 authNonce,K256Device target,uint32 targetEpoch,uint64 targetCounter)K256Device(string scheme,bytes32 x,bytes32 y,string envelope)")
+  pure circuit evm_eip712_type_remove_device__k256(): Bytes<32> {
+    return Bytes[0xb1, 0x22, 0x2b, 0x26, 0xa9, 0xaa, 0x38, 0x7d, 0xae, 0xad, 0x7a, 0x6a, 0x72, 0xa9, 0x21, 0x89,
+               0x0e, 0x40, 0xa3, 0xc5, 0xc5, 0x81, 0x8d, 0x72, 0x76, 0x01, 0x8e, 0xbf, 0x18, 0x93, 0x8d, 0x17];
+  }
+
+  // keccak256("RemoveDevice(bytes32 account,address device,uint64 authNonce,PasskeyDevice target,uint32 targetEpoch,uint64 targetCounter)PasskeyDevice(string scheme,bytes32 x,bytes32 y,string origin,bytes32 passkeyRpHash)")
+  pure circuit evm_eip712_type_remove_device__passkey(): Bytes<32> {
+    return Bytes[0xaa, 0x9c, 0x93, 0x36, 0x3b, 0x33, 0x93, 0x3a, 0xd4, 0xd4, 0xae, 0x42, 0x84, 0xc9, 0xbe, 0x92,
+               0xfd, 0x9a, 0x16, 0x27, 0x25, 0x1f, 0xa3, 0x91, 0x58, 0xd3, 0x29, 0x72, 0x65, 0xb3, 0x2c, 0x26];
+  }
+
+  // keccak256("RemoveUnknownDevice(bytes32 account,address device,uint64 authNonce,string effect,bytes32 entry)")
+  pure circuit evm_eip712_type_remove_unknown_device(): Bytes<32> {
+    return Bytes[0x4e, 0x76, 0x1a, 0x93, 0x63, 0x3a, 0x0a, 0x7f, 0x40, 0x85, 0x9e, 0xfd, 0x31, 0xf0, 0x75, 0xf6,
+               0x26, 0x9e, 0x1c, 0xc4, 0xa6, 0x4b, 0xfa, 0x34, 0x81, 0x5a, 0x4f, 0x93, 0x54, 0x49, 0x22, 0xa6];
+  }
+
+  // keccak256("IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,EvmGrantee grantee,bool withdrawUnshielded,bool withdrawShielded,bool withdrawShieldedToContract,bool read,bytes32 color,string recipientKind,bytes32 recipient,uint128 maxCoinValue,uint128 perCallCap,uint128 cap,uint64 expiresAt,string expiry,bytes32 passkeyRpHash,string passkeyRp,bytes32 readKey,uint64 windowLength,uint128 windowCap,string window,bool callerPinned,bytes32 caller)EvmGrantee(string scheme,address wallet,bytes32 privacySalt,string siteLabel,uint8 slot)")
+  pure circuit evm_eip712_type_issue_grant__evm(): Bytes<32> {
+    return Bytes[0x49, 0x83, 0xa0, 0xbd, 0xae, 0xe4, 0xa8, 0xfb, 0x28, 0x9a, 0xce, 0xac, 0x17, 0xfe, 0x67, 0xdf,
+               0xdb, 0x64, 0xd9, 0x47, 0x98, 0x52, 0xca, 0x1a, 0x44, 0xed, 0x37, 0xa5, 0xb9, 0x14, 0x43, 0xc5];
+  }
+
+  // keccak256("IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,SolanaGrantee grantee,bool withdrawUnshielded,bool withdrawShielded,bool withdrawShieldedToContract,bool read,bytes32 color,string recipientKind,bytes32 recipient,uint128 maxCoinValue,uint128 perCallCap,uint128 cap,uint64 expiresAt,string expiry,bytes32 passkeyRpHash,string passkeyRp,bytes32 readKey,uint64 windowLength,uint128 windowCap,string window,bool callerPinned,bytes32 caller)SolanaGrantee(string scheme,string publicKey,bytes32 privacySalt,string siteLabel,uint8 slot)")
+  pure circuit evm_eip712_type_issue_grant__solana(): Bytes<32> {
+    return Bytes[0x72, 0x30, 0x7e, 0xe3, 0x50, 0xfe, 0x7e, 0xda, 0x6d, 0x26, 0xdf, 0x12, 0x98, 0x87, 0xff, 0x41,
+               0x99, 0x24, 0x24, 0xd9, 0x4f, 0x00, 0xb8, 0x19, 0x21, 0x6f, 0x6c, 0x87, 0x15, 0x91, 0x1b, 0x44];
+  }
+
+  // keccak256("IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,JubjubGrantee grantee,bool withdrawUnshielded,bool withdrawShielded,bool withdrawShieldedToContract,bool read,bytes32 color,string recipientKind,bytes32 recipient,uint128 maxCoinValue,uint128 perCallCap,uint128 cap,uint64 expiresAt,string expiry,bytes32 passkeyRpHash,string passkeyRp,bytes32 readKey,uint64 windowLength,uint128 windowCap,string window,bool callerPinned,bytes32 caller)JubjubGrantee(string scheme,bytes32 x,bytes32 y,bytes32 siteLabelHash,uint8 slot)")
+  pure circuit evm_eip712_type_issue_grant__jubjub(): Bytes<32> {
+    return Bytes[0x44, 0x03, 0x19, 0xe8, 0x96, 0xb7, 0xba, 0xf5, 0x1f, 0x3d, 0xe6, 0x06, 0x68, 0x06, 0x49, 0x61,
+               0xd6, 0xf1, 0x79, 0x0e, 0x79, 0x1a, 0xf5, 0x6c, 0xdc, 0x80, 0x87, 0x60, 0xc9, 0x1c, 0x45, 0x1e];
+  }
+
+  // keccak256("IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,K256Grantee grantee,bool withdrawUnshielded,bool withdrawShielded,bool withdrawShieldedToContract,bool read,bytes32 color,string recipientKind,bytes32 recipient,uint128 maxCoinValue,uint128 perCallCap,uint128 cap,uint64 expiresAt,string expiry,bytes32 passkeyRpHash,string passkeyRp,bytes32 readKey,uint64 windowLength,uint128 windowCap,string window,bool callerPinned,bytes32 caller)K256Grantee(string scheme,bytes32 x,bytes32 y,string envelope,bytes32 siteLabelHash,uint8 slot)")
+  pure circuit evm_eip712_type_issue_grant__k256(): Bytes<32> {
+    return Bytes[0xd6, 0x6e, 0x61, 0x39, 0x95, 0x64, 0x5e, 0xee, 0x50, 0x7a, 0xd7, 0x72, 0xd0, 0x50, 0xd1, 0xab,
+               0xbb, 0xae, 0x33, 0x3f, 0x09, 0xd6, 0x32, 0xc6, 0xe1, 0x36, 0xcd, 0xf8, 0x75, 0x33, 0x98, 0x72];
+  }
+
+  // keccak256("IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,PasskeyGrantee grantee,bool withdrawUnshielded,bool withdrawShielded,bool withdrawShieldedToContract,bool read,bytes32 color,string recipientKind,bytes32 recipient,uint128 maxCoinValue,uint128 perCallCap,uint128 cap,uint64 expiresAt,string expiry,bytes32 passkeyRpHash,string passkeyRp,bytes32 readKey,uint64 windowLength,uint128 windowCap,string window,bool callerPinned,bytes32 caller)PasskeyGrantee(string scheme,bytes32 x,bytes32 y,string origin,uint8 slot)")
+  pure circuit evm_eip712_type_issue_grant__passkey(): Bytes<32> {
+    return Bytes[0x4f, 0x3e, 0x56, 0xef, 0x30, 0x83, 0xc6, 0x7a, 0xc6, 0xed, 0x32, 0x3a, 0xac, 0x56, 0x67, 0x67,
+               0x33, 0xc4, 0xdc, 0x80, 0x03, 0xc8, 0xc8, 0xcb, 0x89, 0x1f, 0x77, 0xf8, 0x93, 0x72, 0x2c, 0x11];
+  }
+
+  // keccak256("RevokeGrant(bytes32 account,address device,uint64 authNonce,EvmGrantee grantee)EvmGrantee(string scheme,address wallet,bytes32 privacySalt,string siteLabel,uint8 slot)")
+  pure circuit evm_eip712_type_revoke_grant__evm(): Bytes<32> {
+    return Bytes[0xd8, 0x3d, 0xf0, 0xc8, 0x76, 0x3d, 0xa4, 0x77, 0x2a, 0x93, 0x51, 0xac, 0x32, 0x29, 0x2f, 0x5e,
+               0xc5, 0xa4, 0x03, 0x07, 0xd0, 0xfb, 0xc0, 0xf1, 0xa8, 0xbd, 0x80, 0x26, 0xc0, 0xe2, 0xd7, 0x19];
+  }
+
+  // keccak256("RevokeGrant(bytes32 account,address device,uint64 authNonce,SolanaGrantee grantee)SolanaGrantee(string scheme,string publicKey,bytes32 privacySalt,string siteLabel,uint8 slot)")
+  pure circuit evm_eip712_type_revoke_grant__solana(): Bytes<32> {
+    return Bytes[0x6c, 0xf1, 0xc7, 0x69, 0x0d, 0xf3, 0x2d, 0xb5, 0xec, 0xdb, 0x4c, 0x66, 0x57, 0xf6, 0x2a, 0x7c,
+               0xcb, 0xf4, 0xb1, 0x2a, 0x9e, 0x4b, 0x76, 0x51, 0x3d, 0x70, 0x3b, 0x4d, 0x5b, 0xf3, 0x99, 0xed];
+  }
+
+  // keccak256("RevokeGrant(bytes32 account,address device,uint64 authNonce,JubjubGrantee grantee)JubjubGrantee(string scheme,bytes32 x,bytes32 y,bytes32 siteLabelHash,uint8 slot)")
+  pure circuit evm_eip712_type_revoke_grant__jubjub(): Bytes<32> {
+    return Bytes[0x1c, 0xe8, 0xff, 0x8d, 0x56, 0xdd, 0xa1, 0x82, 0x6d, 0xfa, 0x6b, 0x22, 0xbe, 0xb5, 0xa2, 0xfe,
+               0x7d, 0xd2, 0x75, 0x96, 0x09, 0x6f, 0x56, 0x62, 0x69, 0xe4, 0xd1, 0x01, 0xd4, 0xaa, 0x6e, 0xdc];
+  }
+
+  // keccak256("RevokeGrant(bytes32 account,address device,uint64 authNonce,K256Grantee grantee)K256Grantee(string scheme,bytes32 x,bytes32 y,string envelope,bytes32 siteLabelHash,uint8 slot)")
+  pure circuit evm_eip712_type_revoke_grant__k256(): Bytes<32> {
+    return Bytes[0xa5, 0x7f, 0xcb, 0x26, 0x57, 0xb4, 0xe8, 0x00, 0x10, 0xd5, 0xaa, 0x10, 0x5c, 0xab, 0xd3, 0xee,
+               0x9d, 0xa4, 0x29, 0xde, 0xcf, 0x57, 0xd3, 0x9d, 0xa5, 0x03, 0xa1, 0x11, 0xcc, 0xe4, 0xfe, 0xa8];
+  }
+
+  // keccak256("RevokeGrant(bytes32 account,address device,uint64 authNonce,PasskeyGrantee grantee)PasskeyGrantee(string scheme,bytes32 x,bytes32 y,string origin,uint8 slot)")
+  pure circuit evm_eip712_type_revoke_grant__passkey(): Bytes<32> {
+    return Bytes[0x60, 0x45, 0x43, 0x41, 0xfa, 0xaa, 0x60, 0x4a, 0x25, 0x34, 0x17, 0xa0, 0x2c, 0x6f, 0x11, 0xd5,
+               0xd9, 0x7b, 0x96, 0x25, 0x40, 0x3d, 0x80, 0xe0, 0xa6, 0x12, 0xe0, 0xac, 0xcb, 0x3c, 0xfd, 0xdd];
+  }
+
+  // keccak256("RevokeAllGrants(bytes32 account,address device,uint64 authNonce)")
+  pure circuit evm_eip712_type_revoke_all_grants(): Bytes<32> {
+    return Bytes[0xd5, 0x89, 0x97, 0xc2, 0xd0, 0xda, 0xdf, 0x9f, 0x75, 0xa9, 0x2b, 0x4e, 0x57, 0x22, 0x02, 0x1e,
+               0x4a, 0x2c, 0x08, 0x39, 0x2f, 0x71, 0xa0, 0xbf, 0xe3, 0x46, 0x3b, 0x6e, 0xed, 0x9b, 0x2f, 0x83];
+  }
+
+  // keccak256("PublishRecoverySession(bytes32 account,address device,uint64 authNonce,string effect,bytes32 recoveryKeyX,bytes32 recoveryKeyY,bytes32 sessionNonce,bytes32 phi1,bytes32 phi2,bytes32 phi3,bytes32 phi4,uint8 phiLength,bytes wrap)")
+  pure circuit evm_eip712_type_publish_recovery_session(): Bytes<32> {
+    return Bytes[0xc3, 0xce, 0x1d, 0x1e, 0x6a, 0xd6, 0x18, 0x19, 0x91, 0x98, 0xc0, 0x3d, 0xe3, 0x3f, 0x48, 0xc3,
+               0x64, 0x8e, 0xa3, 0xb1, 0x11, 0xa7, 0x09, 0xe2, 0x70, 0x3f, 0x49, 0x37, 0x38, 0x67, 0x04, 0x04];
+  }
+
+  // keccak256("CancelRecovery(bytes32 account,address device,uint64 authNonce)")
+  pure circuit evm_eip712_type_cancel_recovery(): Bytes<32> {
+    return Bytes[0xd5, 0x05, 0xd1, 0x93, 0x2d, 0x73, 0x7d, 0xb8, 0x23, 0xce, 0x1e, 0x2d, 0x28, 0xe6, 0x1f, 0x62,
+               0x8c, 0x6d, 0xe5, 0xc1, 0x4c, 0x47, 0x25, 0xa2, 0x73, 0xb7, 0x01, 0x08, 0x1f, 0xc4, 0x75, 0x8d];
+  }
+
+  // keccak256("WithdrawUnshieldedAsGrantee(bytes32 account,address grantee,string siteLabel,uint8 slot,uint64 issuedAt,uint64 grantNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient)")
+  pure circuit evm_eip712_type_withdraw_unshielded_as_grantee(): Bytes<32> {
+    return Bytes[0x67, 0xe1, 0x7b, 0x86, 0x03, 0xef, 0x01, 0x75, 0xb7, 0x94, 0x3e, 0x72, 0x72, 0xad, 0xd8, 0x48,
+               0x0f, 0xfb, 0x03, 0x28, 0x44, 0xe8, 0x1f, 0x5a, 0x30, 0x88, 0xe5, 0x28, 0x66, 0x3b, 0x01, 0x8f];
+  }
+
+  // keccak256("WithdrawShieldedAsGrantee(bytes32 account,address grantee,string siteLabel,uint8 slot,uint64 issuedAt,uint64 grantNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient,bytes changeEntry,bytes32 encryptionKey,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)")
+  pure circuit evm_eip712_type_withdraw_shielded_as_grantee(): Bytes<32> {
+    return Bytes[0x67, 0x18, 0x48, 0xf4, 0x1d, 0x5f, 0xde, 0x62, 0xae, 0xae, 0xba, 0x4a, 0x9d, 0xec, 0xc4, 0x5f,
+               0xd8, 0x63, 0x97, 0x50, 0x8a, 0xb2, 0x84, 0xc3, 0xff, 0xae, 0xa2, 0x22, 0xdd, 0x56, 0x6f, 0x71];
+  }
+
+  // keccak256("WithdrawShieldedToContractAsGrantee(bytes32 account,address grantee,string siteLabel,uint8 slot,uint64 issuedAt,uint64 grantNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipientContract,bytes changeEntry,bytes32 encryptionKey,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)")
+  pure circuit evm_eip712_type_withdraw_shielded_to_contract_as_grantee(): Bytes<32> {
+    return Bytes[0x57, 0x9e, 0xa8, 0xa0, 0xe6, 0xcd, 0xb6, 0x4b, 0x57, 0x97, 0xf1, 0x46, 0x8e, 0xc4, 0x21, 0x56,
+               0x26, 0xa5, 0x90, 0x71, 0xb4, 0x0d, 0x22, 0x11, 0xf4, 0x40, 0x22, 0xdf, 0x15, 0x0b, 0xbb, 0x0e];
+  }
+
+  // keccak256("EvmDevice(string scheme,address wallet,bytes32 privacySalt)")
+  pure circuit evm_eip712_type_evm_device(): Bytes<32> {
+    return Bytes[0x36, 0xfe, 0xd4, 0xcb, 0x1f, 0x99, 0x65, 0x85, 0xfb, 0x40, 0x3e, 0x01, 0xa6, 0x15, 0xc8, 0x54,
+               0xb5, 0x92, 0x3c, 0xaa, 0x1d, 0x28, 0xe5, 0x20, 0xba, 0x14, 0x8c, 0x81, 0x92, 0x04, 0xa8, 0xf8];
+  }
+
+  // keccak256("SolanaDevice(string scheme,string publicKey,bytes32 privacySalt)")
+  pure circuit evm_eip712_type_solana_device(): Bytes<32> {
+    return Bytes[0xa0, 0xfa, 0xaf, 0x93, 0x61, 0x95, 0xaf, 0x5c, 0x3a, 0x98, 0xac, 0xe1, 0x04, 0x09, 0x77, 0x0e,
+               0x14, 0xc1, 0x7c, 0xe7, 0x45, 0xbb, 0x5f, 0x0c, 0x4a, 0xba, 0xbd, 0x34, 0x47, 0x41, 0xd3, 0x6d];
+  }
+
+  // keccak256("JubjubDevice(string scheme,bytes32 x,bytes32 y)")
+  pure circuit evm_eip712_type_jubjub_device(): Bytes<32> {
+    return Bytes[0x71, 0xec, 0xac, 0xa9, 0x7f, 0xa4, 0x28, 0x46, 0x5b, 0x09, 0xab, 0x62, 0xcd, 0x92, 0x2a, 0x24,
+               0x94, 0x06, 0xe7, 0x02, 0x91, 0x15, 0x27, 0x63, 0x9f, 0xc7, 0x40, 0xfc, 0x1f, 0x9d, 0xa4, 0x1c];
+  }
+
+  // keccak256("K256Device(string scheme,bytes32 x,bytes32 y,string envelope)")
+  pure circuit evm_eip712_type_k256_device(): Bytes<32> {
+    return Bytes[0xea, 0xa4, 0x75, 0x6a, 0x21, 0x34, 0xa5, 0x49, 0x43, 0xc8, 0x85, 0xa6, 0x25, 0x38, 0x8d, 0xe5,
+               0xba, 0x42, 0x42, 0x57, 0x5e, 0xdd, 0x2d, 0x61, 0x82, 0x62, 0x79, 0xbd, 0x42, 0xd4, 0xbd, 0x77];
+  }
+
+  // keccak256("PasskeyDevice(string scheme,bytes32 x,bytes32 y,string origin,bytes32 passkeyRpHash)")
+  pure circuit evm_eip712_type_passkey_device(): Bytes<32> {
+    return Bytes[0x54, 0x93, 0x36, 0xaf, 0xa8, 0x18, 0x07, 0xaa, 0x56, 0x0e, 0x9a, 0x9a, 0xbf, 0xc4, 0x37, 0xbe,
+               0x00, 0x1f, 0xea, 0xf2, 0x4d, 0x32, 0xf6, 0x45, 0x72, 0xe9, 0xca, 0x09, 0x6e, 0xc6, 0x13, 0xca];
+  }
+
+  // keccak256("EvmGrantee(string scheme,address wallet,bytes32 privacySalt,string siteLabel,uint8 slot)")
+  pure circuit evm_eip712_type_evm_grantee(): Bytes<32> {
+    return Bytes[0x52, 0x1f, 0x99, 0x07, 0xb8, 0x97, 0xbe, 0x26, 0x9c, 0xa4, 0x82, 0x56, 0x72, 0xcf, 0x91, 0x0f,
+               0x41, 0x60, 0xcf, 0x9e, 0x12, 0x55, 0xf3, 0x34, 0x48, 0x90, 0x35, 0xb9, 0xab, 0xd1, 0xf8, 0x08];
+  }
+
+  // keccak256("SolanaGrantee(string scheme,string publicKey,bytes32 privacySalt,string siteLabel,uint8 slot)")
+  pure circuit evm_eip712_type_solana_grantee(): Bytes<32> {
+    return Bytes[0x14, 0x4e, 0xe4, 0xaf, 0xb2, 0x00, 0x4c, 0xbf, 0x8c, 0x28, 0xab, 0xeb, 0x7f, 0xda, 0x49, 0x08,
+               0x7f, 0x79, 0xaf, 0xd5, 0x58, 0x56, 0x7f, 0xc7, 0xec, 0x0f, 0x4b, 0x07, 0x01, 0xe2, 0x91, 0x01];
+  }
+
+  // keccak256("JubjubGrantee(string scheme,bytes32 x,bytes32 y,bytes32 siteLabelHash,uint8 slot)")
+  pure circuit evm_eip712_type_jubjub_grantee(): Bytes<32> {
+    return Bytes[0xae, 0xee, 0x63, 0x61, 0xcf, 0xb8, 0xfb, 0x6a, 0x33, 0xa0, 0x1d, 0x80, 0x6c, 0xb9, 0xde, 0xc5,
+               0x1d, 0x67, 0xaf, 0x7d, 0xa6, 0xc1, 0x7a, 0x3c, 0x4a, 0x61, 0x4f, 0x52, 0xd5, 0xc4, 0x5b, 0x97];
+  }
+
+  // keccak256("K256Grantee(string scheme,bytes32 x,bytes32 y,string envelope,bytes32 siteLabelHash,uint8 slot)")
+  pure circuit evm_eip712_type_k256_grantee(): Bytes<32> {
+    return Bytes[0x95, 0x00, 0x57, 0x5f, 0x91, 0xbb, 0xc8, 0xd2, 0x89, 0x9d, 0xb1, 0x34, 0x70, 0x19, 0x4c, 0x5d,
+               0x09, 0xbf, 0xe1, 0x35, 0x1c, 0x70, 0x7a, 0xe4, 0x3e, 0xc2, 0x83, 0xb1, 0xf5, 0xd7, 0xdd, 0xdf];
+  }
+
+  // keccak256("PasskeyGrantee(string scheme,bytes32 x,bytes32 y,string origin,uint8 slot)")
+  pure circuit evm_eip712_type_passkey_grantee(): Bytes<32> {
+    return Bytes[0x79, 0xd2, 0x5a, 0x85, 0x37, 0xb3, 0xe1, 0xc7, 0xf2, 0x11, 0x7f, 0xb7, 0xff, 0x30, 0x12, 0x51,
+               0x64, 0x22, 0xcd, 0x51, 0x04, 0x46, 0x49, 0x0d, 0x44, 0x71, 0x55, 0x4d, 0x9d, 0xd1, 0x7a, 0x59];
+  }
+
+  // keccak256("Sets the key that can read this account's private coin records")
+  pure circuit evm_eip712_effect_rotate_enc_key(): Bytes<32> {
+    return Bytes[0x8a, 0x56, 0xfd, 0xb6, 0x33, 0x07, 0x91, 0x47, 0x6b, 0x90, 0x9f, 0x31, 0x61, 0x4d, 0x38, 0xc0,
+               0x31, 0x6c, 0xdb, 0xde, 0x5d, 0x83, 0x64, 0x7e, 0x2d, 0x65, 0x6a, 0xa7, 0x75, 0xf3, 0xb8, 0x48];
+  }
+
+  // keccak256("Gives this key FULL control of this account")
+  pure circuit evm_eip712_effect_add_device(): Bytes<32> {
+    return Bytes[0xd9, 0x2e, 0xdc, 0x8a, 0xdd, 0x39, 0xcd, 0x99, 0x1b, 0x1e, 0xc9, 0x3c, 0x53, 0x72, 0xc2, 0x09,
+               0x36, 0x9b, 0x3f, 0xe8, 0x15, 0xac, 0x3c, 0xf3, 0xb9, 0x24, 0x2a, 0xa6, 0x41, 0x43, 0x6a, 0xe2];
+  }
+
+  // keccak256("Removes a device this wallet cannot identify")
+  pure circuit evm_eip712_effect_remove_unknown_device(): Bytes<32> {
+    return Bytes[0x4b, 0x17, 0x02, 0x76, 0xff, 0x66, 0x78, 0xdd, 0xbc, 0x49, 0x9e, 0xd2, 0xda, 0x14, 0xf2, 0x69,
+               0xe9, 0x17, 0x18, 0xbf, 0x18, 0x6e, 0x55, 0xd9, 0xda, 0xe1, 0xf1, 0xb3, 0xca, 0xfc, 0x38, 0x84];
+  }
+
+  // keccak256("Lets this key use this account within the limits below")
+  pure circuit evm_eip712_effect_issue_grant(): Bytes<32> {
+    return Bytes[0xe0, 0x13, 0x6f, 0x79, 0xfa, 0x90, 0xd5, 0x7c, 0x25, 0x7c, 0xcd, 0xe3, 0x9d, 0xc1, 0x6b, 0x3d,
+               0x41, 0xc1, 0xc3, 0xb5, 0x90, 0x25, 0x85, 0x05, 0x0c, 0x7c, 0x3c, 0xaf, 0xc7, 0x3e, 0xca, 0xf1];
+  }
+
+  // keccak256("Sets this account's recovery key")
+  pure circuit evm_eip712_effect_publish_recovery_session(): Bytes<32> {
+    return Bytes[0x65, 0x70, 0xa5, 0x14, 0x99, 0x3e, 0xce, 0x2b, 0x6d, 0xf6, 0x85, 0xf0, 0x65, 0xec, 0x75, 0x52,
+               0x82, 0xb2, 0xbd, 0xce, 0xa6, 0x20, 0x06, 0x5f, 0x16, 0xd9, 0xf1, 0x74, 0xe5, 0xf9, 0x66, 0xd2];
+  }
+
+  // keccak256("midnight:account:device:v1")
+  pure circuit evm_eip712_scheme_device_v1(): Bytes<32> {
+    return Bytes[0xe8, 0x8d, 0x90, 0xa9, 0xbf, 0x82, 0x24, 0xa2, 0x1c, 0xc6, 0xde, 0x82, 0x6a, 0xe5, 0x6c, 0x42,
+               0x14, 0xfd, 0xd5, 0x5d, 0xe6, 0xdb, 0xf4, 0xb5, 0x8e, 0x13, 0x82, 0xf2, 0x6d, 0xe7, 0x6c, 0x32];
+  }
+
+  // keccak256("midnight:account:device:k1:v2")
+  pure circuit evm_eip712_scheme_device_k1_v2(): Bytes<32> {
+    return Bytes[0x26, 0x3d, 0xde, 0x4e, 0x9b, 0x0d, 0xad, 0xc8, 0x49, 0x0a, 0x6e, 0x2c, 0xa5, 0xa8, 0x80, 0xed,
+               0x2e, 0xd2, 0xeb, 0x49, 0x00, 0x1c, 0xef, 0xf8, 0x33, 0x9d, 0x8a, 0x17, 0x54, 0x2e, 0xed, 0x3f];
+  }
+
+  // keccak256("midnight:account:device:r1:v2")
+  pure circuit evm_eip712_scheme_device_r1_v2(): Bytes<32> {
+    return Bytes[0xd8, 0x3c, 0xa1, 0xc8, 0x3d, 0x76, 0xc2, 0x43, 0xf1, 0x65, 0x7f, 0x61, 0x5f, 0xce, 0x83, 0xa2,
+               0x2c, 0x5e, 0x25, 0xb4, 0x2c, 0xec, 0x37, 0x14, 0x62, 0xd6, 0x62, 0x73, 0x53, 0xd0, 0x20, 0xc6];
+  }
+
+  // keccak256("midnight:account:device:evm:v1")
+  pure circuit evm_eip712_scheme_device_evm_v1(): Bytes<32> {
+    return Bytes[0x46, 0xd9, 0xa2, 0xad, 0x71, 0xc5, 0x96, 0x17, 0xe9, 0x56, 0x08, 0x56, 0x57, 0x3b, 0x09, 0xd4,
+               0x0b, 0x9b, 0x54, 0x7c, 0x08, 0x14, 0x8b, 0x56, 0xa0, 0x5a, 0xdf, 0x25, 0xfa, 0xde, 0x83, 0xe5];
+  }
+
+  // keccak256("midnight:account:device:sol:v1")
+  pure circuit evm_eip712_scheme_device_sol_v1(): Bytes<32> {
+    return Bytes[0xd2, 0x19, 0x58, 0xf5, 0xdf, 0x88, 0x9f, 0xd0, 0x5a, 0x6c, 0x1e, 0x86, 0x56, 0x43, 0x5a, 0x7d,
+               0x8c, 0xe8, 0xf1, 0xb8, 0x9e, 0xd0, 0x88, 0xc9, 0xd4, 0x3b, 0xdf, 0x0e, 0x15, 0x3a, 0x41, 0x1d];
+  }
+
+  // keccak256("midnight:account:grant:id:v1")
+  pure circuit evm_eip712_scheme_grant_id_v1(): Bytes<32> {
+    return Bytes[0x1b, 0x5e, 0x17, 0xd6, 0x34, 0xbd, 0x4c, 0x3e, 0x19, 0xe6, 0x1c, 0x86, 0x87, 0x99, 0x7f, 0x44,
+               0x07, 0xc6, 0x67, 0x06, 0x1b, 0x4f, 0xfe, 0x97, 0xf0, 0x12, 0x40, 0xe8, 0x17, 0xd0, 0x7a, 0x7a];
+  }
+
+  // keccak256("midnight:account:grant:id:k1:v1")
+  pure circuit evm_eip712_scheme_grant_id_k1_v1(): Bytes<32> {
+    return Bytes[0x14, 0x23, 0xd1, 0x98, 0xd3, 0xc6, 0x8a, 0xc4, 0x05, 0x64, 0x26, 0x19, 0x9c, 0xdc, 0x9e, 0x39,
+               0xf8, 0x5f, 0xb6, 0x8c, 0x8c, 0xa2, 0x29, 0xaf, 0xec, 0xbf, 0x2a, 0x3c, 0x42, 0x76, 0x75, 0x7c];
+  }
+
+  // keccak256("midnight:account:grant:id:r1:v1")
+  pure circuit evm_eip712_scheme_grant_id_r1_v1(): Bytes<32> {
+    return Bytes[0xea, 0xad, 0x9f, 0xac, 0xea, 0x27, 0x8b, 0xeb, 0x12, 0x56, 0xaa, 0xbe, 0x8e, 0xce, 0xfc, 0xb2,
+               0x6d, 0x4f, 0x69, 0xfa, 0x82, 0xa4, 0x57, 0x90, 0xc6, 0x76, 0x4e, 0x27, 0x39, 0xd7, 0xdd, 0x7d];
+  }
+
+  // keccak256("midnight:account:grant:id:evm:v1")
+  pure circuit evm_eip712_scheme_grant_id_evm_v1(): Bytes<32> {
+    return Bytes[0xf6, 0xf4, 0xf2, 0x47, 0x4b, 0x65, 0x0f, 0xee, 0xb7, 0x03, 0x6f, 0xc2, 0xc7, 0x55, 0x63, 0x81,
+               0x12, 0xb3, 0xf4, 0xe2, 0xd9, 0x37, 0x6f, 0x8a, 0xa2, 0xf0, 0x59, 0x6a, 0xa1, 0xbe, 0x31, 0x1c];
+  }
+
+  // keccak256("midnight:account:grant:id:sol:v1")
+  pure circuit evm_eip712_scheme_grant_id_sol_v1(): Bytes<32> {
+    return Bytes[0x6d, 0x45, 0x9c, 0x00, 0x65, 0xcc, 0x66, 0x07, 0xb3, 0xac, 0xbf, 0x2e, 0xe3, 0xf3, 0xfe, 0xca,
+               0xa9, 0x74, 0xa1, 0xd6, 0xae, 0xac, 0xd3, 0x92, 0xb3, 0xfd, 0x4b, 0x72, 0x7d, 0xb7, 0xf9, 0x55];
+  }
+
+  // keccak256("any recipient")
+  pure circuit evm_eip712_label_recipient_kind_0(): Bytes<32> {
+    return Bytes[0x7d, 0x20, 0xdd, 0x5f, 0x0c, 0x4b, 0xbf, 0xe9, 0x62, 0xe7, 0x9a, 0xdb, 0x69, 0x9d, 0x50, 0x8f,
+               0xfa, 0x7c, 0x4e, 0xf6, 0xed, 0x2c, 0xfc, 0x7e, 0xcd, 0xe6, 0xc3, 0xa3, 0x8c, 0x8f, 0xe9, 0x53];
+  }
+
+  // keccak256("unshielded user address")
+  pure circuit evm_eip712_label_recipient_kind_1(): Bytes<32> {
+    return Bytes[0x5a, 0xc1, 0x85, 0xc9, 0xac, 0xd2, 0x2b, 0x12, 0x8e, 0x5b, 0x8d, 0x7e, 0x66, 0x5d, 0xd1, 0xc6,
+               0x87, 0x28, 0x4d, 0x6f, 0x56, 0x56, 0x20, 0x09, 0x5b, 0x55, 0x4d, 0xc4, 0xd1, 0x42, 0x8e, 0x24];
+  }
+
+  // keccak256("shielded coin public key")
+  pure circuit evm_eip712_label_recipient_kind_2(): Bytes<32> {
+    return Bytes[0x23, 0xcc, 0x69, 0x00, 0x22, 0x44, 0x29, 0x59, 0xaa, 0xe0, 0x45, 0xb7, 0xd4, 0x38, 0xd6, 0xe0,
+               0x9a, 0x0d, 0xd1, 0x19, 0xcd, 0x57, 0xa3, 0xcf, 0x23, 0x6b, 0x2a, 0x42, 0x09, 0x5b, 0x9a, 0xe5];
+  }
+
+  // keccak256("contract address")
+  pure circuit evm_eip712_label_recipient_kind_3(): Bytes<32> {
+    return Bytes[0x6d, 0x3a, 0x78, 0xf8, 0x1b, 0x42, 0xc0, 0x7a, 0x2a, 0xed, 0xb7, 0x98, 0xb1, 0xfa, 0x15, 0x1c,
+               0xd1, 0x93, 0xc1, 0xcf, 0xcc, 0x28, 0xf1, 0x1b, 0x19, 0xb5, 0x66, 0xd2, 0xad, 0x2d, 0xd3, 0xcf];
+  }
+
+  // keccak256("SHA-256 of the challenge")
+  pure circuit evm_eip712_label_envelope_0(): Bytes<32> {
+    return Bytes[0x74, 0x20, 0x2d, 0x93, 0x2a, 0x3d, 0x2f, 0xa2, 0x40, 0xb8, 0xc2, 0xb7, 0x1f, 0x59, 0x0f, 0x4c,
+               0x71, 0x8b, 0x09, 0x4b, 0x54, 0x4a, 0x4d, 0x9e, 0x62, 0x8c, 0xab, 0x33, 0xcc, 0x77, 0x71, 0x07];
+  }
+
+  // keccak256("dApp-connector signData")
+  pure circuit evm_eip712_label_envelope_1(): Bytes<32> {
+    return Bytes[0xeb, 0xab, 0xe0, 0x27, 0xfd, 0xaa, 0x20, 0xc9, 0x59, 0x67, 0xf0, 0xf0, 0x0c, 0x5a, 0xbf, 0x1c,
+               0xd5, 0xb9, 0x67, 0x7b, 0x0c, 0xf2, 0x3d, 0x0f, 0xbc, 0x24, 0x94, 0x38, 0xe0, 0x2b, 0x12, 0x81];
+  }
+
+  // keccak256("never")
+  pure circuit evm_eip712_label_expiry_0(): Bytes<32> {
+    return Bytes[0xd8, 0x2a, 0x5e, 0xa9, 0x20, 0x03, 0x3f, 0xd3, 0x50, 0xe1, 0xd2, 0xd1, 0x42, 0x31, 0x77, 0x0d,
+               0x52, 0xe3, 0x11, 0xef, 0x93, 0x4f, 0x8e, 0x79, 0x6b, 0x53, 0xe0, 0xa2, 0x95, 0x10, 0x74, 0x97];
+  }
+
+  // keccak256("after 9999-12-31 23:59:59 UTC")
+  pure circuit evm_eip712_label_expiry_after(): Bytes<32> {
+    return Bytes[0x38, 0x98, 0x83, 0xf2, 0xa5, 0x9a, 0xa8, 0x0a, 0x76, 0x13, 0xf4, 0x19, 0x63, 0x4a, 0x5f, 0x54,
+               0xff, 0x9c, 0x21, 0xe7, 0xf5, 0x3a, 0x7e, 0x84, 0x03, 0x58, 0x83, 0xdf, 0x38, 0x6c, 0x96, 0xf3];
+  }
+
+  // keccak256("no window")
+  pure circuit evm_eip712_label_window_0(): Bytes<32> {
+    return Bytes[0xe7, 0xbb, 0xed, 0xb4, 0x66, 0xa2, 0xcf, 0x68, 0x49, 0x93, 0x8b, 0x1f, 0x1c, 0x73, 0xd0, 0xc3,
+               0xad, 0xb6, 0xa0, 0xd4, 0x35, 0x50, 0xa7, 0xa3, 0x8b, 0x14, 0xf0, 0x08, 0x94, 0xd1, 0x6d, 0xa3];
+  }
+
+  // keccak256("see windowLength and windowCap")
+  pure circuit evm_eip712_label_window_1(): Bytes<32> {
+    return Bytes[0x02, 0x29, 0x46, 0xe5, 0x74, 0xad, 0x88, 0x61, 0x42, 0x18, 0x37, 0x05, 0xa7, 0x3b, 0xb4, 0xc4,
+               0x35, 0x10, 0xc9, 0x50, 0x65, 0xae, 0xe7, 0x11, 0x3f, 0xf7, 0x43, 0x53, 0x91, 0xec, 0xac, 0x31];
+  }
+
+  // keccak256("not applicable")
+  pure circuit evm_eip712_label_passkey_rp_0(): Bytes<32> {
+    return Bytes[0x3d, 0xba, 0x47, 0x33, 0xc8, 0x6d, 0xab, 0xe6, 0xe8, 0xdc, 0x73, 0x87, 0xba, 0x7a, 0x57, 0x7c,
+               0xb4, 0x02, 0x43, 0x4b, 0x52, 0xb0, 0xc1, 0xa6, 0x36, 0x66, 0x7d, 0x3a, 0x13, 0xe6, 0x55, 0x20];
+  }
+
+  // keccak256("see passkeyRpHash")
+  pure circuit evm_eip712_label_passkey_rp_1(): Bytes<32> {
+    return Bytes[0x57, 0x37, 0x4e, 0xcb, 0x5a, 0x18, 0x39, 0xb6, 0xdf, 0x55, 0x3e, 0x8f, 0xa2, 0x82, 0x86, 0x75,
+               0xf2, 0xf4, 0x3a, 0x10, 0x57, 0x9b, 0x00, 0x69, 0x6c, 0x23, 0x5f, 0x0f, 0x5c, 0x6a, 0xe4, 0xc4];
+  }
+
+  // ── Words ─────────────────────────────────────────────────────────────────
+  //
+  // EIP-712 integers are big-endian (the zero prefix is a separate tuple
+  // element). Each word comes from a checked hint of the value's
+  // little-endian bytes (see "Checked byte hints"): the hint is rebuilt as a
+  // number and compared with the value, then emitted in reverse.
+
+  // compact row optimization | hinted big-endian uint32 word | -90% rows
+  export circuit evm_eip712_be4(v: Uint<32>, h: Vector<4, Uint<8>>): Bytes<4> {
+    assert((Bytes[...h] as Field) == (v as Field), "evm_eip712: word hint does not match its value");
+    return Bytes[h[3], h[2], h[1], h[0]];
+  }
+  // compact row optimization | hinted big-endian uint64 word | -89% rows
+  export circuit evm_eip712_be8(v: Uint<64>, h: Vector<8, Uint<8>>): Bytes<8> {
+    assert((Bytes[...h] as Field) == (v as Field), "evm_eip712: word hint does not match its value");
+    return Bytes[h[7], h[6], h[5], h[4], h[3], h[2], h[1], h[0]];
+  }
+  // compact row optimization | hinted big-endian uint128 word | -89% rows
+  export circuit evm_eip712_be16(v: Uint<128>, h: Vector<16, Uint<8>>): Bytes<16> {
+    assert((Bytes[...h] as Field) == (v as Field), "evm_eip712: word hint does not match its value");
+    return Bytes[h[15], h[14], h[13], h[12], h[11], h[10], h[9], h[8], h[7], h[6], h[5], h[4], h[3], h[2], h[1], h[0]];
+  }
+  // A 32-byte value in reverse byte order (secp256k1 and P-256 coordinates are
+  // stored little-endian and shown big-endian), from a checked hint of its bytes.
+  // compact row optimization | reversed 32-byte coordinate from a checked hint | -79% rows
+  circuit rev32(b: Bytes<32>, h: Vector<32, Uint<8>>): Bytes<32> {
+    const v = evm_eip712_reversed(evm_eip712_bytes_of(b, h));
+    return Bytes[...v];
+  }
+  circuit u8b(v: Uint<8>): Bytes<1> { return v as Bytes<1>; }
+  circuit boolb(b: Boolean): Bytes<1> { return (b ? 1 : 0) as Uint<8> as Bytes<1>; }
+
+  // ── Checked byte hints ────────────────────────────────────────────────────
+  //
+  // Taking bytes out of a value costs a full field decomposition per byte, so
+  // the circuits take a value's bytes as a hint instead: a `Uint<8>` vector
+  // that must be exactly the value's bytes in the order Compact stores them
+  // (a `Bytes<n>` in order, a number little-endian). Each check rebuilds the
+  // value from the vector and compares: every element is range-checked to 8
+  // bits as a circuit argument, each limb has at most 31 bytes (below the
+  // field size, so no wrap-around), and base-256 digits are unique, so no
+  // other vector passes. A hint is bound once and the checked vector is the
+  // one used.
+
+  // `h` must be the bytes of `b`; returns them.
+  // compact row optimization | 32 bytes from a checked hint instead of a decomposition | -83% rows
+  export circuit evm_eip712_bytes_of(b: Bytes<32>, h: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
+    assert(Bytes[...h] == b, "evm_eip712: byte hint does not match its value");
+    return h;
+  }
+
+  // The vector in reverse order (no constraint: only element positions move).
+  export circuit evm_eip712_reversed(v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
+    return [v[31], v[30], v[29], v[28], v[27], v[26], v[25], v[24], v[23], v[22], v[21], v[20], v[19], v[18], v[17], v[16],
+            v[15], v[14], v[13], v[12], v[11], v[10], v[9],  v[8],  v[7],  v[6],  v[5],  v[4],  v[3],  v[2],  v[1],  v[0]];
+  }
+
+  // The low 20 bytes of a keccak256 output (an Ethereum address), from a
+  // checked hint `h` of the output's bytes.
+  // compact row optimization | address bytes of a hash from a checked hint | -85% rows
+  export circuit evm_eip712_low20(hash: Bytes<32>, h: Vector<32, Uint<8>>): Bytes<20> {
+    assert(Bytes[...h] == hash, "evm_eip712: hash hint does not match the hash");
+    return Bytes[h[12], h[13], h[14], h[15], h[16], h[17], h[18], h[19], h[20], h[21],
+                 h[22], h[23], h[24], h[25], h[26], h[27], h[28], h[29], h[30], h[31]];
+  }
+
+  // ── Text ──────────────────────────────────────────────────────────────────
+
+  // Exact visible ASCII (0x21..0x7e): a passkey origin, shown byte for byte.
+  // `h` is a checked hint of the origin's bytes.
+  // compact row optimization | passkey origin bytes from a checked hint | -73% rows
+  circuit visible_21(b: Bytes<21>, h: Vector<21, Uint<8>>): Boolean {
+    assert(Bytes[...h] == b, "evm_eip712: byte hint does not match its value");
+    return fold((ok: Boolean, c: Uint<8>): Boolean => ok && c >= 33 && c <= 126, true, h);
+  }
+
+  // A 32-byte site label: one or more words of visible ASCII separated by
+  // single spaces, then zero bytes only (the grammar of the shared rendering
+  // module's label_text_32). Returns the label as the wallet shows it, zero
+  // bytes as spaces, and whether it follows the grammar; the grammar makes the
+  // shown text one-to-one with the stored bytes. `h` is a checked hint of the
+  // label's bytes.
+  // compact row optimization | site label bytes from a checked hint | -66% rows
+  circuit label_text(label: Bytes<32>, h: Vector<32, Uint<8>>): [Bytes<32>, Boolean] {
+    const v = evm_eip712_bytes_of(label, h);
+    // [the previous byte was a space (true before the first byte),
+    //  the padding has begun, every byte fits]
+    const r = fold((s: [Boolean, Boolean, Boolean], c: Uint<8>): [Boolean, Boolean, Boolean] => {
+      const zero = c == 0;
+      const space = c == 32;
+      const shown = c >= 33 && c <= 126;
+      const fits = s[1] ? zero
+                 : zero ? !s[0]
+                 : shown || (space && !s[0]);
+      return [space, s[1] || zero, s[2] && fits];
+    }, [true, false, true], v);
+    const m = map((c: Uint<8>): Uint<8> => (c == 0 ? 32 : c) as Uint<8>, v);
+    return [Bytes[m[0],  m[1],  m[2],  m[3],  m[4],  m[5],  m[6],  m[7],  m[8],  m[9],  m[10], m[11], m[12], m[13], m[14], m[15],
+                  m[16], m[17], m[18], m[19], m[20], m[21], m[22], m[23], m[24], m[25], m[26], m[27], m[28], m[29], m[30], m[31]],
+            r[2] && !r[0]];
+  }
+
+  // keccak256 of a site label as the wallet shows it (the `string siteLabel`);
+  // `h` is a checked hint of the label's bytes.
+  export pure circuit evm_eip712_site_label_hash(label: Bytes<32>, h: Vector<32, Uint<8>>): Bytes<32> {
+    const [text, ok] = label_text(label, h);
+    assert(ok, "evm_eip712: not a site label");
+    return keccak256<Bytes<32>>(text);
+  }
+
+  // ── Labels ──────────────────────────────────────────────────────────
+  //
+  // An enumerated member is shown as a text label: a circuit constant chosen
+  // by the value, so the label and the value can never disagree; a value with
+  // no label is refused.
+
+  circuit evm_eip712_recipient_kind_label(kind: Uint<8>): Bytes<32> {
+    assert(kind <= 3, "evm_eip712: not a recipient kind");
+    return kind == 0 ? evm_eip712_label_recipient_kind_0() : kind == 1 ? evm_eip712_label_recipient_kind_1()
+         : kind == 2 ? evm_eip712_label_recipient_kind_2() : evm_eip712_label_recipient_kind_3();
+  }
+
+  circuit evm_eip712_envelope_label(envelope: Uint<8>): Bytes<32> {
+    return envelope == 0 ? evm_eip712_label_envelope_0() : evm_eip712_label_envelope_1();
+  }
+
+  // The exact words, each one of two fixed texts selected by exact equality
+  // with the executed values. "not applicable" and "no window" are the base's
+  // words (src/wallet/rendering.ts); the other text of each points at the
+  // typed members that carry the values. A zero RP hash only occurs on a
+  // grant whose RP pin is never checked (no passkey grantee, or one that
+  // cannot spend).
+  circuit evm_eip712_passkey_rp_word(rp_id_hash: Bytes<32>): Bytes<32> {
+    return rp_id_hash == pad(32, "") ? evm_eip712_label_passkey_rp_0() : evm_eip712_label_passkey_rp_1();
+  }
+
+  // `string window`: "no window" when the window length and the window cap
+  // are both 0 (no per-window bound applies), else the pointer.
+  circuit evm_eip712_window_word(window_len: Uint<64>, window_cap: Uint<128>): Bytes<32> {
+    return window_len == 0 && window_cap == 0 ? evm_eip712_label_window_0() : evm_eip712_label_window_1();
+  }
+
+  // ── Readable texts (the shared rendering module's checked texts) ────────
+  //
+  // Each text is a display input checked against the executed value by the
+  // base's circuit, so the shown text and the value cannot disagree, and
+  // each value has exactly one valid input.
+
+  // keccak256 of `string expiry`: "never" for 0, the UTC date and time
+  // "yyyy-mm-dd hh:mm:ss UTC" for 1 to 253402300799, and the words "after
+  // 9999-12-31 23:59:59 UTC" above; the exact text, no padding.
+  // `text` and `year_split` are utc_datetime_text's inputs, which it checks
+  // against the value (for 0 the date of 0, which is not shown). The date
+  // fills the text's first 23 bytes; only the date needs a hash here, the
+  // two other texts are constants.
+  circuit evm_eip712_expiry_hash(expires_at: Uint<64>, text: Vector<29, Uint<8>>, year_split: Vector<4, Uint<8>>): Bytes<32> {
+    const t = utc_datetime_text(expires_at, text, year_split);
+    const date = keccak256<Bytes<23>>(Bytes[t[0],  t[1],  t[2],  t[3],  t[4],  t[5],  t[6],  t[7],  t[8],  t[9],  t[10], t[11],
+                                            t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[19], t[20], t[21], t[22]]);
+    return expires_at == 0 ? evm_eip712_label_expiry_0()
+         : expires_at > 253402300799 ? evm_eip712_label_expiry_after() : date;
+  }
+
+  // keccak256 of `string amountLabel`: the fixed words "This site labels it: "
+  // (the label is the site's claim, not a value the contract knows), then
+  // the site's 49-byte space-padded label for the amount, whose digits
+  // site_amount_label_text checks against the amount; the site chooses only
+  // the decimal point and the symbol.
+  circuit evm_eip712_amount_label_hash(amount: Uint<128>, label: Vector<49, Uint<8>>): Bytes<32> {
+    const t = site_amount_label_text(amount, label);
+    return keccak256<[Bytes<21>, Bytes<49>]>([pad(21, "This site labels it: "), Bytes[...t]]);
+  }
+
+  // keccak256 of a Solana key's `string publicKey`: its base58 text, 44 bytes
+  // left-aligned and space-padded, whose digits base58_text_32 checks against
+  // the key's bytes `key`.
+  circuit evm_eip712_solana_key_hash(key: Vector<32, Uint<8>>, h: EvmEip712Base58Hint): Bytes<32> {
+    return keccak256<Bytes<44>>(Bytes[...base58_text_32(key, h.digits, h.carry, h.low, h.top)]);
+  }
+
+  // ── Domain and digest ─────────────────────────────────────────────────────
+
+  // The low 20 bytes of keccak256(account); `account_hash` is a checked hint
+  // of the hash's bytes.
+  export pure circuit evm_eip712_verifying_contract(account: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<20> {
+    return evm_eip712_low20(keccak256<Bytes<32>>(account), account_hash);
+  }
+
+  export pure circuit evm_eip712_domain_separator(account: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>]>([
+      evm_eip712_domain_type_hash(), evm_eip712_name_hash(), evm_eip712_version_hash(),
+      pad(12, ""), evm_eip712_verifying_contract(account, account_hash)]);
+  }
+
+  // The 32 bytes the wallet signs for a message of this account.
+  export pure circuit evm_eip712_digest(account: Bytes<32>, struct_hash: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<32> {
+    return keccak256<[Bytes<2>, Bytes<32>, Bytes<32>]>([
+      Bytes[0x19, 0x01], evm_eip712_domain_separator(account, account_hash), struct_hash]);
+  }
+
+  // ── Descriptors ───────────────────────────────────────────────────────────
+  //
+  // The scheme index (0 evm_eip712, 1 sol_ed25519, 2 jubjub, 3 k256, 4 p256)
+  // selects the parent type hash. An unregistered tag is refused (the
+  // descriptor module accepts only registered tags).
+
+  export pure circuit evm_eip712_device_scheme(tag: Bytes<32>): Uint<8> {
+    const is_evm = tag == device_tag_evm_eip712();
+    const is_sol = tag == device_tag_sol_ed25519();
+    const is_jub = tag == device_tag_jubjub();
+    const is_k1  = tag == device_tag_k256();
+    const is_r1  = tag == device_tag_p256();
+    assert(is_evm || is_sol || is_jub || is_k1 || is_r1, "evm_eip712: not a registered device tag");
+    return (is_evm ? 0 : is_sol ? 1 : is_jub ? 2 : is_k1 ? 3 : 4) as Uint<8>;
+  }
+
+  export pure circuit evm_eip712_grantee_scheme(tag: Bytes<32>): Uint<8> {
+    const is_evm = tag == grant_id_tag_evm_eip712();
+    const is_sol = tag == grant_id_tag_sol_ed25519();
+    const is_jub = tag == grant_id_tag_jubjub();
+    const is_k1  = tag == grant_id_tag_k256();
+    const is_r1  = tag == grant_id_tag_p256();
+    assert(is_evm || is_sol || is_jub || is_k1 || is_r1, "evm_eip712: not a registered grant-id tag");
+    return (is_evm ? 0 : is_sol ? 1 : is_jub ? 2 : is_k1 ? 3 : 4) as Uint<8>;
+  }
+
+  // A Solana target is a Curve25519Point: the descriptor
+  // module's ed25519 class refuses the identity (A != O), checks the byte
+  // inputs `sol_bytes` (the key's 32-byte RFC 8032 encoding) and `sol_x` (x
+  // little-endian) against the point once per call, and returns the key and
+  // the entry or grant id. The approval shows the key as the base58 text of
+  // the same checked `sol_bytes`. Every class is computed in a circuit, so a non-Solana
+  // target feeds the ed25519 class a registered tag and the point the client
+  // passes (any non-identity point, with its own inputs); its results are
+  // discarded. The point is an inline argument, not a struct member (compactc
+  // 0.35.0 cannot emit an exported struct holding a Curve25519Point); `d.key`
+  // is unused for a Solana target.
+  // compact row optimization | Solana descriptor key from checked bytes | -75% rows
+  export pure circuit evm_eip712_sol_device_target(
+    self_addr: ContractAddress, d: EvmEip712Descriptor, sol_pk: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
+    epoch: Uint<32>, counter: Uint<64>
+  ): [Bytes<32>, Bytes<32>] {
+    const s = evm_eip712_device_scheme(d.tag);
+    return derive_descriptor_entry_ed25519(s == 1 ? d.tag : device_tag_sol_ed25519(), self_addr, sol_pk, sol_bytes, sol_x, d.key2, epoch, counter);
+  }
+
+  // `oh` is the grantee's origin hash (evm_eip712_grantee_origin_hash),
+  // computed once by the caller and shared with evm_eip712_grantee_grant_id.
+  // compact row optimization | Solana descriptor key from checked bytes | -75% rows
+  export pure circuit evm_eip712_sol_grantee_target(
+    self_addr: ContractAddress, g: EvmEip712GranteeDescriptor, oh: Bytes<32>, sol_pk: Curve25519Point,
+    sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>
+  ): [Bytes<32>, Bytes<32>] {
+    const s = evm_eip712_grantee_scheme(g.tag);
+    return derive_descriptor_grant_id_ed25519(s == 1 ? g.tag : grant_id_tag_sol_ed25519(), self_addr, sol_pk, sol_bytes, sol_x, g.key2, oh, g.slot);
+  }
+
+  // hashStruct of the nested <Scheme>Device member, and the scheme index.
+  // `sol_key` is the bytes of the key shown for a Solana target: in the
+  // circuits, the encoding the ed25519 class checked against the point
+  // (evm_eip712_sol_device_target's `sol_bytes`).
+  export pure circuit evm_eip712_device_descriptor_hash(
+    d: EvmEip712Descriptor, sol_key: Vector<32, Uint<8>>, h: EvmEip712DescriptorHint
+  ): [Bytes<32>, Uint<8>] {
+    const s = evm_eip712_device_scheme(d.tag);
+    const origin_visible = visible_21(d.origin, h.origin);
+    assert(s != 4 || origin_visible, "evm_eip712: the passkey origin is not visible ASCII");
+    // A passkey's own RP pin is never zero (no honest passkey meets it), so a
+    // zero RP hash can only mean "no passkey".
+    assert(s != 4 || d.rp_id_hash != pad(32, ""), "evm_eip712: a passkey's RP hash is zero");
+    const xb = rev32(d.key, h.key);
+    const yb = rev32(d.key2, h.key2);
+    const h_evm = keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>]>([
+      evm_eip712_type_evm_device(), evm_eip712_scheme_device_evm_v1(), pad(12, ""), d.address, d.key2]);
+    assert(s != 3 || d.envelope <= 1, "evm_eip712: not a k256 envelope");
+    // SolanaDevice(scheme, publicKey, privacySalt) and JubjubDevice(scheme, x, y)
+    // share one shape; a Solana key is shown in base58, JubJub coordinates
+    // little-endian. The base58 text is checked for every target (for any
+    // other target, the filler key's), so every input of the call is checked.
+    const sol_text = evm_eip712_solana_key_hash(sol_key, h.b58);
+    const h_pair = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([
+      s == 1 ? evm_eip712_type_solana_device() : evm_eip712_type_jubjub_device(),
+      s == 1 ? evm_eip712_scheme_device_sol_v1() : evm_eip712_scheme_device_v1(),
+      s == 1 ? sol_text : d.key, d.key2]);
+    const h_k1 = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([
+      evm_eip712_type_k256_device(), evm_eip712_scheme_device_k1_v2(), xb, yb, evm_eip712_envelope_label(d.envelope)]);
+    const h_r1 = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([
+      evm_eip712_type_passkey_device(), evm_eip712_scheme_device_r1_v2(), xb, yb,
+      keccak256<Bytes<21>>(d.origin), d.rp_id_hash]);
+    return [s == 0 ? h_evm : (s == 1 || s == 2) ? h_pair : s == 3 ? h_k1 : h_r1, s];
+  }
+
+  // The target's entry at (epoch, counter), by the target scheme's own recipe.
+  // Every width class is derived (a circuit has no branches); the classes that
+  // do not match are fed a registered tag of their own width, so the module's
+  // width asserts hold, and their results are discarded.
+  // `sol_entry` is the Solana target's entry (evm_eip712_sol_device_target).
+  export pure circuit evm_eip712_descriptor_entry(
+    self_addr: ContractAddress, d: EvmEip712Descriptor, sol_entry: Bytes<32>, epoch: Uint<32>, counter: Uint<64>
+  ): Bytes<32> {
+    const s = evm_eip712_device_scheme(d.tag);
+    const e52 = derive_descriptor_entry_w52(s == 0 ? d.tag : device_tag_evm_eip712(),
+      self_addr, d.address, d.key2, epoch, counter);
+    const e64 = derive_descriptor_entry_w64(s == 2 ? d.tag : device_tag_jubjub(),
+      self_addr, d.key, d.key2, epoch, counter);
+    const e65 = derive_descriptor_entry_w65(s == 3 ? d.tag : device_tag_k256(),
+      self_addr, d.key, d.key2, d.envelope, epoch, counter);
+    const e117 = derive_descriptor_entry_w117(s == 4 ? d.tag : device_tag_p256(),
+      self_addr, d.key, d.key2, d.rp_id_hash, d.origin, epoch, counter);
+    return s == 0 ? e52 : s == 1 ? sol_entry : s == 2 ? e64 : s == 3 ? e65 : e117;
+  }
+
+  // The origin_hash a grantee's grant id binds.
+  export pure circuit evm_eip712_grantee_origin_hash(g: EvmEip712GranteeDescriptor): Bytes<32> {
+    const s = evm_eip712_grantee_scheme(g.tag);
+    const from_label = derive_grant_origin_hash_label(g.label);
+    const from_origin = derive_grant_origin_hash_origin(g.origin);
+    return (s == 0 || s == 1) ? from_label : s == 4 ? from_origin : g.origin_hash;
+  }
+
+  // The grantee's grant id, by the grantee scheme's own grant-id recipe.
+  // `oh` is the grantee's origin hash (evm_eip712_grantee_origin_hash) and
+  // `sol_id` a Solana grantee's grant id (evm_eip712_sol_grantee_target).
+  export pure circuit evm_eip712_grantee_grant_id(
+    self_addr: ContractAddress, g: EvmEip712GranteeDescriptor, oh: Bytes<32>, sol_id: Bytes<32>
+  ): Bytes<32> {
+    const s = evm_eip712_grantee_scheme(g.tag);
+    const i52 = derive_descriptor_grant_id_w52(s == 0 ? g.tag : grant_id_tag_evm_eip712(),
+      self_addr, g.address, g.key2, oh, g.slot);
+    const i64 = derive_descriptor_grant_id_w64((s == 2 || s == 4) ? g.tag : grant_id_tag_jubjub(),
+      self_addr, g.key, g.key2, oh, g.slot);
+    const i65 = derive_descriptor_grant_id_w65(s == 3 ? g.tag : grant_id_tag_k256(),
+      self_addr, g.key, g.key2, g.envelope, oh, g.slot);
+    return s == 0 ? i52 : s == 1 ? sol_id : s == 3 ? i65 : i64;
+  }
+
+  // hashStruct of the nested <Scheme>Grantee member, and the scheme index.
+  // `sol_key` is the bytes of the key shown for a Solana grantee: in the
+  // circuits, the encoding the ed25519 class checked against the point
+  // (evm_eip712_sol_grantee_target's `sol_bytes`).
+  export pure circuit evm_eip712_grantee_descriptor_hash(
+    g: EvmEip712GranteeDescriptor, sol_key: Vector<32, Uint<8>>, h: EvmEip712GranteeHint
+  ): [Bytes<32>, Uint<8>] {
+    const s = evm_eip712_grantee_scheme(g.tag);
+    const [text, label_ok] = label_text(g.label, h.label);
+    assert(!(s == 0 || s == 1) || label_ok, "evm_eip712: not a site label");
+    const origin_visible = visible_21(g.origin, h.origin);
+    assert(s != 4 || origin_visible, "evm_eip712: the passkey origin is not visible ASCII");
+    assert(s != 3 || g.envelope <= 1, "evm_eip712: not a k256 envelope");
+    const label_hash = keccak256<Bytes<32>>(text);
+    // checked for every grantee (for any other grantee, the filler key's)
+    const sol_text = evm_eip712_solana_key_hash(sol_key, h.b58);
+    const xb = rev32(g.key, h.key);
+    const yb = rev32(g.key2, h.key2);
+    const h_evm = keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<32>, Bytes<31>, Bytes<1>]>([
+      evm_eip712_type_evm_grantee(), evm_eip712_scheme_grant_id_evm_v1(), pad(12, ""), g.address, g.key2,
+      label_hash, pad(31, ""), u8b(g.slot)]);
+    // SolanaGrantee(scheme, publicKey, privacySalt, siteLabel, slot),
+    // JubjubGrantee(scheme, x, y, siteLabelHash, slot) and
+    // PasskeyGrantee(scheme, x, y, origin, slot) share one shape.
+    const h_six = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<31>, Bytes<1>]>([
+      s == 1 ? evm_eip712_type_solana_grantee() : s == 2 ? evm_eip712_type_jubjub_grantee() : evm_eip712_type_passkey_grantee(),
+      s == 1 ? evm_eip712_scheme_grant_id_sol_v1() : s == 2 ? evm_eip712_scheme_grant_id_v1() : evm_eip712_scheme_grant_id_r1_v1(),
+      s == 4 ? xb : s == 1 ? sol_text : g.key, s == 4 ? yb : g.key2,
+      s == 1 ? label_hash : s == 2 ? g.origin_hash : keccak256<Bytes<21>>(g.origin),
+      pad(31, ""), u8b(g.slot)]);
+    const h_k1 = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<31>, Bytes<1>]>([
+      evm_eip712_type_k256_grantee(), evm_eip712_scheme_grant_id_k1_v1(), xb, yb, evm_eip712_envelope_label(g.envelope),
+      g.origin_hash, pad(31, ""), u8b(g.slot)]);
+    return [s == 0 ? h_evm : s == 3 ? h_k1 : h_six, s];
+  }
+
+  // ── The frames ────────────────────────────────────────────────────────────
+  //
+  // Every device-role primary type begins with the same frame,
+  //   typeHash, bytes32 account, address device, uint64 authNonce,
+  // and every grantee-role type with
+  //   typeHash, bytes32 account, address grantee, string siteLabel,
+  //   uint8 slot, uint64 issuedAt, uint64 grantNonce,
+  // followed by the operation's own members (its "tail"). The frame builders
+  // below are the only place the frame is encoded: the exported struct-hash
+  // oracles use them, and so does the arm's seam, which supplies the frame's
+  // values itself (the account is kernel.self(), the device the address of
+  // the presented point, the nonce the ledger's) — so no export can ever name
+  // a frame value. Each operation's type hash and tail
+  // come from its `evm_eip712_parts_*` circuit, shared by the oracle and the
+  // export. The tail is a tuple of byte atoms and is hashed in place, flat
+  // (keccak256 of a tuple encodes its elements in declaration order).
+
+  // `nonce_h` is a checked hint of auth_nonce (see "Words").
+  export circuit evm_eip712_device_struct<T>(
+    type_hash: Bytes<32>, account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>, tail: T
+  ): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, T]>([
+      type_hash, account, pad(12, ""), device, pad(24, ""), evm_eip712_be8(auth_nonce, nonce_h), tail]);
+  }
+
+  // The device-role types with no members of their own (RevokeAllGrants,
+  // CancelRecovery): the frame alone.
+  export circuit evm_eip712_device_struct_bare(
+    type_hash: Bytes<32>, account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>
+  ): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>]>([
+      type_hash, account, pad(12, ""), device, pad(24, ""), evm_eip712_be8(auth_nonce, nonce_h)]);
+  }
+
+  // `label_h`, `issued_at_h` and `grant_nonce_h` are checked hints of the
+  // label's bytes and of the two numbers.
+  export circuit evm_eip712_grantee_struct<T>(
+    type_hash: Bytes<32>, account: Bytes<32>, grantee: Bytes<20>, label: Bytes<32>, label_h: Vector<32, Uint<8>>, slot: Uint<8>,
+    issued_at: Uint<64>, issued_at_h: Vector<8, Uint<8>>, grant_nonce: Uint<64>, grant_nonce_h: Vector<8, Uint<8>>, tail: T
+  ): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<31>, Bytes<1>,
+                      Bytes<24>, Bytes<8>, Bytes<24>, Bytes<8>, T]>([
+      type_hash, account, pad(12, ""), grantee, evm_eip712_site_label_hash(label, label_h), pad(31, ""), u8b(slot),
+      pad(24, ""), evm_eip712_be8(issued_at, issued_at_h), pad(24, ""), evm_eip712_be8(grant_nonce, grant_nonce_h), tail]);
+  }
+
+  // ── Parts: each operation's type hash and tail ────────────────────────────
+
+  // color, amount, recipient
+  export circuit evm_eip712_parts_withdraw_unshielded(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, h: EvmEip712AmountHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]] {
+    return [evm_eip712_type_withdraw_unshielded(), [color, pad(16, ""), evm_eip712_be16(amount, h.amount),
+            evm_eip712_amount_label_hash(amount, h.label), recipient]];
+  }
+
+  // The spent coin is shown by its nonce, value and Merkle index; its colour is
+  // `color` (the exports assert coin.color == color); change = value - amount.
+  circuit coin_tail(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>] {
+    const change = (coin_value - amount) as Uint<128>;
+    return [color, pad(16, ""), evm_eip712_be16(amount, h.amount), evm_eip712_amount_label_hash(amount, h.label), recipient,
+            coin_nonce, pad(16, ""), evm_eip712_be16(coin_value, h.value), pad(24, ""), evm_eip712_be8(coin_mt_index, h.mt_index),
+            pad(16, ""), evm_eip712_be16(change, h.change)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded(), coin_tail(color, amount, recipient, coin_nonce, coin_value, coin_mt_index, h)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded_to_contract(
+    color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded_to_contract(),
+            coin_tail(color, amount, recipient_contract, coin_nonce, coin_value, coin_mt_index, h)];
+  }
+
+  // `bytes entry`: the 192-byte InboxEntry v1 ciphertext, shown in full hex.
+  export circuit evm_eip712_parts_append_inbox(entry: Bytes<192>): [Bytes<32>, Bytes<32>] {
+    return [evm_eip712_type_append_inbox(), keccak256<Bytes<192>>(entry)];
+  }
+
+  export circuit evm_eip712_parts_rotate_enc_key(new_key: Bytes<32>): [Bytes<32>, [Bytes<32>, Bytes<32>]] {
+    return [evm_eip712_type_rotate_enc_key(), [evm_eip712_effect_rotate_enc_key(), new_key]];
+  }
+
+  export circuit evm_eip712_parts_add_device(
+    new_device: EvmEip712Descriptor, sol_key: Vector<32, Uint<8>>, h: EvmEip712DescriptorHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<32>]] {
+    const [child, s] = evm_eip712_device_descriptor_hash(new_device, sol_key, h);
+    const t = s == 0 ? evm_eip712_type_add_device__evm() : s == 1 ? evm_eip712_type_add_device__solana()
+            : s == 2 ? evm_eip712_type_add_device__jubjub() : s == 3 ? evm_eip712_type_add_device__k256()
+            : evm_eip712_type_add_device__passkey();
+    return [t, [evm_eip712_effect_add_device(), child]];
+  }
+
+  export circuit evm_eip712_parts_remove_device(
+    target: EvmEip712Descriptor, sol_key: Vector<32, Uint<8>>, target_epoch: Uint<32>, target_counter: Uint<64>, h: EvmEip712RemoveHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>]] {
+    const [child, s] = evm_eip712_device_descriptor_hash(target, sol_key, h.target);
+    const t = s == 0 ? evm_eip712_type_remove_device__evm() : s == 1 ? evm_eip712_type_remove_device__solana()
+            : s == 2 ? evm_eip712_type_remove_device__jubjub() : s == 3 ? evm_eip712_type_remove_device__k256()
+            : evm_eip712_type_remove_device__passkey();
+    return [t, [child, pad(28, ""), evm_eip712_be4(target_epoch, h.epoch), pad(24, ""), evm_eip712_be8(target_counter, h.counter)]];
+  }
+
+  // The revocation-only literal form: the entry under a fixed line.
+  export circuit evm_eip712_parts_remove_unknown_device(entry: Bytes<32>): [Bytes<32>, [Bytes<32>, Bytes<32>]] {
+    return [evm_eip712_type_remove_unknown_device(), [evm_eip712_effect_remove_unknown_device(), entry]];
+  }
+
+  // Every scope field, the grantee descriptor, the RP hash (a passkey grantee's
+  // labelled value; zero otherwise), the delegate's read key itself (its hash is
+  // what the record stores; zero when `read` is off), and the caller pin.
+  export circuit evm_eip712_parts_issue_grant(
+    grantee: EvmEip712GranteeDescriptor, sol_key: Vector<32, Uint<8>>,
+    op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean,
+    read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>,
+    per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>,
+    window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, h: EvmEip712IssueHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<32>,
+                  Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>,
+                  Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
+                  Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>, Bytes<32>,
+                  Bytes<31>, Bytes<1>, Bytes<32>]] {
+    const [child, s] = evm_eip712_grantee_descriptor_hash(grantee, sol_key, h.grantee);
+    // The passkey RP hash is a passkey grantee's own pin, and upstream
+    // reads it only on the passkey spend path (account-p256.compact): it is
+    // non-zero exactly for a passkey grantee whose scope can spend and zero
+    // otherwise, so that "not applicable" means exactly "no passkey
+    // pin is checked".
+    const rp_pinned = s == 4 && (op_withdraw_unshielded || op_withdraw_shielded || op_withdraw_shielded_to_contract);
+    assert(rp_pinned || rp_id_hash == pad(32, ""), "evm_eip712: an RP hash belongs to a spending passkey grant");
+    assert(!rp_pinned || rp_id_hash != pad(32, ""), "evm_eip712: a spending passkey grant's RP hash is zero");
+    // "any recipient" carries no recipient, so no shown value is without
+    // effect.
+    assert(recipient_kind != 0 || recipient == pad(32, ""), "evm_eip712: a recipient for any recipient");
+    const t = s == 0 ? evm_eip712_type_issue_grant__evm() : s == 1 ? evm_eip712_type_issue_grant__solana()
+            : s == 2 ? evm_eip712_type_issue_grant__jubjub() : s == 3 ? evm_eip712_type_issue_grant__k256()
+            : evm_eip712_type_issue_grant__passkey();
+    return [t, [evm_eip712_effect_issue_grant(), child,
+      pad(31, ""), boolb(op_withdraw_unshielded), pad(31, ""), boolb(op_withdraw_shielded),
+      pad(31, ""), boolb(op_withdraw_shielded_to_contract), pad(31, ""), boolb(read),
+      color, evm_eip712_recipient_kind_label(recipient_kind), recipient,
+      pad(16, ""), evm_eip712_be16(max_coin_value, h.max_coin_value), pad(16, ""), evm_eip712_be16(per_call_cap, h.per_call_cap),
+      pad(16, ""), evm_eip712_be16(cap, h.cap),
+      pad(24, ""), evm_eip712_be8(expires_at, h.expires_at), evm_eip712_expiry_hash(expires_at, h.expiry_text, h.year_split),
+      rp_id_hash, evm_eip712_passkey_rp_word(rp_id_hash),
+      read ? read_pk : pad(32, ""), pad(24, ""), evm_eip712_be8(window_len, h.window_len),
+      pad(16, ""), evm_eip712_be16(window_cap, h.window_cap), evm_eip712_window_word(window_len, window_cap),
+      pad(31, ""), boolb(caller.is_some), caller.is_some ? caller.value.bytes : pad(32, "")]];
+  }
+
+  export circuit evm_eip712_parts_revoke_grant(
+    grantee: EvmEip712GranteeDescriptor, sol_key: Vector<32, Uint<8>>, h: EvmEip712GranteeHint
+  ): [Bytes<32>, Bytes<32>] {
+    const [child, s] = evm_eip712_grantee_descriptor_hash(grantee, sol_key, h);
+    const t = s == 0 ? evm_eip712_type_revoke_grant__evm() : s == 1 ? evm_eip712_type_revoke_grant__solana()
+            : s == 2 ? evm_eip712_type_revoke_grant__jubjub() : s == 3 ? evm_eip712_type_revoke_grant__k256()
+            : evm_eip712_type_revoke_grant__passkey();
+    return [t, child];
+  }
+
+  export circuit evm_eip712_parts_revoke_all_grants(): Bytes<32> {
+    return evm_eip712_type_revoke_all_grants();
+  }
+
+  // JubJub coordinates and the phi Field values are shown little-endian;
+  // `bytes wrap` is the 64-byte wrap in full.
+  export circuit evm_eip712_parts_publish_recovery_session(
+    new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field,
+    phi_len: Uint<8>, wrap: Bytes<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<31>, Bytes<1>, Bytes<32>]] {
+    return [evm_eip712_type_publish_recovery_session(), [evm_eip712_effect_publish_recovery_session(),
+      jubjubPointX(new_recovery_pk) as Bytes<32>, jubjubPointY(new_recovery_pk) as Bytes<32>, session_nonce,
+      phi_1 as Bytes<32>, phi_2 as Bytes<32>, phi_3 as Bytes<32>, phi_4 as Bytes<32>,
+      pad(31, ""), u8b(phi_len), keccak256<Bytes<64>>(wrap)]];
+  }
+
+  export circuit evm_eip712_parts_cancel_recovery(): Bytes<32> {
+    return evm_eip712_type_cancel_recovery();
+  }
+
+  // The grantee role: color, amount, recipient (+ the change entry, its key and
+  // the coin for the shielded twins).
+  export circuit evm_eip712_parts_withdraw_unshielded_as_grantee(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, h: EvmEip712AmountHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]] {
+    return [evm_eip712_type_withdraw_unshielded_as_grantee(), [color, pad(16, ""), evm_eip712_be16(amount, h.amount),
+            evm_eip712_amount_label_hash(amount, h.label), recipient]];
+  }
+
+  circuit grantee_coin_tail(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>] {
+    const change = (coin_value - amount) as Uint<128>;
+    return [color, pad(16, ""), evm_eip712_be16(amount, h.amount), evm_eip712_amount_label_hash(amount, h.label), recipient,
+            keccak256<Bytes<192>>(change_entry), enc_pk,
+            coin_nonce, pad(16, ""), evm_eip712_be16(coin_value, h.value), pad(24, ""), evm_eip712_be8(coin_mt_index, h.mt_index),
+            pad(16, ""), evm_eip712_be16(change, h.change)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded_as_grantee(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded_as_grantee(),
+            grantee_coin_tail(color, amount, recipient, change_entry, enc_pk, coin_nonce, coin_value, coin_mt_index, h)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded_to_contract_as_grantee(
+    color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded_to_contract_as_grantee(),
+            grantee_coin_tail(color, amount, recipient_contract, change_entry, enc_pk, coin_nonce, coin_value, coin_mt_index, h)];
+  }
+
+  // ── Struct hashes: the exported oracles (frame + parts) ───────────────────
+  //
+  // Each takes the frame's values, the operation's values and their checked
+  // hints (`nonce_h` of auth_nonce; `h` of the operation's own values), as the
+  // seams do.
+
+  export pure circuit evm_eip712_struct_withdraw_unshielded(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, h: EvmEip712AmountHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_withdraw_unshielded(color, amount, recipient, h);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_withdraw_shielded(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_withdraw_shielded(color, amount, recipient, coin_nonce, coin_value, coin_mt_index, h);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_withdraw_shielded_to_contract(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract(color, amount, recipient_contract, coin_nonce, coin_value, coin_mt_index, h);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_append_inbox(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>, entry: Bytes<192>
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_append_inbox(entry);
+    return evm_eip712_device_struct<Bytes<32>>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_rotate_enc_key(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>, new_key: Bytes<32>
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_rotate_enc_key(new_key);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_add_device(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    new_device: EvmEip712Descriptor, sol_key: Vector<32, Uint<8>>, h: EvmEip712DescriptorHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_add_device(new_device, sol_key, h);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_remove_device(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    target: EvmEip712Descriptor, sol_key: Vector<32, Uint<8>>, target_epoch: Uint<32>, target_counter: Uint<64>, h: EvmEip712RemoveHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_remove_device(target, sol_key, target_epoch, target_counter, h);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_remove_unknown_device(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>, entry: Bytes<32>
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_remove_unknown_device(entry);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_issue_grant(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    grantee: EvmEip712GranteeDescriptor, sol_key: Vector<32, Uint<8>>,
+    op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean,
+    read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>,
+    per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>,
+    window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, h: EvmEip712IssueHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_issue_grant(grantee, sol_key, op_withdraw_unshielded, op_withdraw_shielded,
+      op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap,
+      expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, h);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>,
+                                     Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>,
+                                     Bytes<32>, Bytes<32>, Bytes<32>,
+                                     Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
+                                     Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>, Bytes<32>,
+                                     Bytes<31>, Bytes<1>, Bytes<32>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_revoke_grant(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>,
+    grantee: EvmEip712GranteeDescriptor, sol_key: Vector<32, Uint<8>>, h: EvmEip712GranteeHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_revoke_grant(grantee, sol_key, h);
+    return evm_eip712_device_struct<Bytes<32>>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_revoke_all_grants(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>
+  ): Bytes<32> {
+    return evm_eip712_device_struct_bare(evm_eip712_parts_revoke_all_grants(), account, device, auth_nonce, nonce_h);
+  }
+
+  export pure circuit evm_eip712_struct_publish_recovery_session(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>, new_recovery_pk: JubjubPoint,
+    session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field,
+    phi_len: Uint<8>, wrap: Bytes<64>
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_publish_recovery_session(new_recovery_pk, session_nonce,
+      phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                     Bytes<31>, Bytes<1>, Bytes<32>]>(t, account, device, auth_nonce, nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_cancel_recovery(
+    account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, nonce_h: Vector<8, Uint<8>>
+  ): Bytes<32> {
+    return evm_eip712_device_struct_bare(evm_eip712_parts_cancel_recovery(), account, device, auth_nonce, nonce_h);
+  }
+
+  // The grantee role: the grant is shown by its descriptor without the
+  // signer's own blind (a ledger-pinned opening): the grantee's address, site
+  // label and slot, then the record's issuedAt and nonce (never auth_nonce).
+  // `label_h`, `issued_at_h` and `grant_nonce_h` are the frame's checked hints.
+
+  export pure circuit evm_eip712_struct_withdraw_unshielded_as_grantee(
+    account: Bytes<32>, grantee: Bytes<20>, label: Bytes<32>, label_h: Vector<32, Uint<8>>, slot: Uint<8>,
+    issued_at: Uint<64>, issued_at_h: Vector<8, Uint<8>>, grant_nonce: Uint<64>, grant_nonce_h: Vector<8, Uint<8>>,
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, h: EvmEip712AmountHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_withdraw_unshielded_as_grantee(color, amount, recipient, h);
+    return evm_eip712_grantee_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]>(
+      t, account, grantee, label, label_h, slot, issued_at, issued_at_h, grant_nonce, grant_nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_withdraw_shielded_as_grantee(
+    account: Bytes<32>, grantee: Bytes<20>, label: Bytes<32>, label_h: Vector<32, Uint<8>>, slot: Uint<8>,
+    issued_at: Uint<64>, issued_at_h: Vector<8, Uint<8>>, grant_nonce: Uint<64>, grant_nonce_h: Vector<8, Uint<8>>,
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_withdraw_shielded_as_grantee(color, amount, recipient, change_entry, enc_pk,
+      coin_nonce, coin_value, coin_mt_index, h);
+    return evm_eip712_grantee_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, grantee, label, label_h, slot, issued_at, issued_at_h, grant_nonce, grant_nonce_h, tail);
+  }
+
+  export pure circuit evm_eip712_struct_withdraw_shielded_to_contract_as_grantee(
+    account: Bytes<32>, grantee: Bytes<20>, label: Bytes<32>, label_h: Vector<32, Uint<8>>, slot: Uint<8>,
+    issued_at: Uint<64>, issued_at_h: Vector<8, Uint<8>>, grant_nonce: Uint<64>, grant_nonce_h: Vector<8, Uint<8>>,
+    color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>, h: EvmEip712CoinHint
+  ): Bytes<32> {
+    const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract_as_grantee(color, amount, recipient_contract,
+      change_entry, enc_pk, coin_nonce, coin_value, coin_mt_index, h);
+    return evm_eip712_grantee_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, grantee, label, label_h, slot, issued_at, issued_at_h, grant_nonce, grant_nonce_h, tail);
+  }
+}

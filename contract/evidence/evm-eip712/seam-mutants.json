@@ -1,0 +1,1063 @@
+{
+  "what": "The arm's properties are held by functional tests, not by reading the source. Each mutant is a one-change edit of contracts/account-evm-eip712.compact or contracts/modules/EvmEip712.compact, compiled --skip-zk in its own copy and run against the offline layer (npm run test:evm_eip712-offline: evm-eip712-offline, -grants-offline, -recovery-sim, -seam-offline and -hints-offline, the generated JavaScript in the compact-runtime simulator); the hint and display mutants also against evm-eip712-prover-dry: the prover suite's JavaScript layer (EVM_EIP712_DRY=1, no proof server) for its sections hints, texts and isolate, where a mutant that lets a refused forgery through fails that case's simulator half. A mutant is killed when a suite shows its effect: an accepted forgery (a call the unmutated copy refuses goes through) or broken honest behaviour; a suite that only reports another refusal message does not count as a kill. The unmutated copy, compiled and run the same way, passes every suite (the control).",
+  "testsAt": {
+    "seamShapeAndProperty": "evm-arm ace595b (offline suites unchanged since)",
+    "hintsAndDisplay": "evm-arm b86b9ef"
+  },
+  "control": {
+    "verdict": "CONTROL PASS",
+    "failingSuites": []
+  },
+  "mutants": [
+    {
+      "id": "M1",
+      "mutation": "an export skips the seam (rotate_enc_key without the signature step)",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "accepted forgery",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee evm_eip712] the grantee key against the device seam (NOT refused)",
+        "✗ [owner k256 / grantee evm_eip712] the grantee key against the device seam (NOT refused)",
+        "✗ [owner jubjub / grantee evm_eip712] the grantee key against the device seam (NOT refused)"
+      ]
+    },
+    {
+      "id": "M2",
+      "mutation": "the one-type body frames another address",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: digest hint does not match the digest",
+        "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: digest hint does not match the digest",
+        "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: digest hint does not match the digest"
+      ]
+    },
+    {
+      "id": "M3",
+      "mutation": "the unshielded grantee twin hands its seam amount 0 for the scope checks",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "accepted forgery",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee evm_eip712] wrong spent_prev (NOT refused)",
+        "✗ [owner k256 / grantee evm_eip712] wrong spent_prev (NOT refused)",
+        "✗ [owner jubjub / grantee evm_eip712] wrong spent_prev (NOT refused)"
+      ]
+    },
+    {
+      "id": "M4",
+      "mutation": "the grant frame with a constant nonce",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ every shielded spend refuses a held coin of another colour (witness substitution): unexpected error failed assert: evm_eip712: word hint does not match its value",
+        "✗ the recipient pin on both shielded grantee twins (a recipient other than the pinned one, honestly signed): unexpected error failed assert: evm_eip712: word hint does not match its value"
+      ]
+    },
+    {
+      "id": "M5",
+      "mutation": "the one-type body frames another account",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: digest hint does not match the digest",
+        "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: digest hint does not match the digest",
+        "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: digest hint does not match the digest"
+      ]
+    },
+    {
+      "id": "M6",
+      "mutation": "the one-type body frames another nonce",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: word hint does not match its value",
+        "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: word hint does not match its value",
+        "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: word hint does not match its value"
+      ]
+    },
+    {
+      "id": "M7",
+      "mutation": "the unshielded grantee twin hands its seam another recipient for the scope checks",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: recipient not admitted by pin",
+        "✗ [owner k256 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: recipient not admitted by pin",
+        "✗ [owner jubjub / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: recipient not admitted by pin"
+      ]
+    },
+    {
+      "id": "M8",
+      "mutation": "the unshielded grantee twin hands its seam another colour for the scope checks",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: scope object mismatch",
+        "✗ [owner k256 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: scope object mismatch",
+        "✗ [owner jubjub / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: scope object mismatch"
+      ]
+    },
+    {
+      "id": "M9",
+      "mutation": "the two-form body frames the second form (the literal entry) with another address",
+      "killedBy": [
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ remove_device in both forms (descriptor; literal entry) by the evm device F: unexpected error failed assert: evm_eip712: digest hint does not match the digest",
+        "✗ every device-gated export refuses an approval it did not get (the device seam, three bodies): unexpected error failed assert: evm_eip712: digest hint does not match the digest",
+        "✗ a second device, so the last-device rule cannot refuse first"
+      ]
+    },
+    {
+      "id": "M10",
+      "mutation": "the bare body frames another nonce",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "accepted forgery",
+      "evidence": [
+        "✗ the grantee withdraws under the old grant after the finalisation (an honest approval over the live record) (NOT refused)"
+      ]
+    },
+    {
+      "id": "M11",
+      "mutation": "the unshielded grantee twin renders another amount than it executes",
+      "killedBy": [
+        "evm-eip712-grants-offline",
+        "evm-eip712-recovery-sim",
+        "evm-eip712-seam-offline",
+        "evm-eip712-hints-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: word hint does not match its value",
+        "✗ [owner k256 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: word hint does not match its value",
+        "✗ [owner jubjub / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: word hint does not match its value"
+      ]
+    }
+  ],
+  "propertyMutants": {
+    "what": "Every gated export with its seam call deleted (15), each body's zero-scalar assert deleted (4), the colour asserts and the rendered colour handed to the grantee scope (4), the pinned recipient handed to the scope (2), the grant seam without its epoch check, the shielded grant bounds deleted (2), and remove_device handing its self-removal guard a zero entry with the seam kept.",
+    "mutants": [
+      {
+        "id": "P1",
+        "mutation": "rotate_enc_key_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee evm_eip712] the grantee key against the device seam (NOT refused)",
+          "✗ [owner k256 / grantee evm_eip712] the grantee key against the device seam (NOT refused)",
+          "✗ [owner jubjub / grantee evm_eip712] the grantee key against the device seam (NOT refused)"
+        ]
+      },
+      {
+        "id": "P2",
+        "mutation": "withdraw_unshielded_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_unshielded: an approval over another account's frame, signed by the device (NOT refused)",
+          "✗ withdraw_unshielded: another key's signature with the device's entry opening (NOT refused)",
+          "✗ withdraw_unshielded: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P3",
+        "mutation": "withdraw_shielded_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded: an approval over another account's frame, signed by the device (NOT refused)",
+          "✗ withdraw_shielded: another key's signature with the device's entry opening (NOT refused)",
+          "✗ withdraw_shielded: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P4",
+        "mutation": "withdraw_shielded_to_contract_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_to_contract: an approval over another account's frame, signed by the device (NOT refused)",
+          "✗ withdraw_shielded_to_contract: another key's signature with the device's entry opening (NOT refused)",
+          "✗ withdraw_shielded_to_contract: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P5",
+        "mutation": "append_inbox_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ append_inbox: an approval over another account's frame, signed by the device (NOT refused)",
+          "✗ append_inbox: another key's signature with the device's entry opening (NOT refused)",
+          "✗ append_inbox: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P6",
+        "mutation": "add_device_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ add_device: an approval over another account's frame, signed by the device (NOT refused)"
+        ]
+      },
+      {
+        "id": "P7",
+        "mutation": "remove_device_with_evm_eip712 without its seam call (the caller entry the self-removal guard compares becomes zero)",
+        "killedBy": [
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ remove_device (descriptor form): an approval over another account's frame, signed by the device (NOT refused)",
+          "✗ remove_device: auth.hint.nonce with one byte flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "P8",
+        "mutation": "issue_grant_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] a caller pin added to a scope signed unrestricted (NOT refused)",
+          "✗ [owner evm_eip712 / grantee jubjub] a caller pin added to a scope signed unrestricted (NOT refused)",
+          "✗ [owner evm_eip712 / grantee evm_eip712] a caller pin added to a scope signed unrestricted (NOT refused)"
+        ]
+      },
+      {
+        "id": "P9",
+        "mutation": "revoke_grant_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ revoke_grant: an approval over another account's frame, signed by the device (NOT refused)"
+        ]
+      },
+      {
+        "id": "P10",
+        "mutation": "revoke_all_grants_with_evm_eip712 without its seam call (anyone revokes every grant)",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ revoke_all_grants: an approval over another account's frame, signed by the device (NOT refused)",
+          "✗ revoke_all_grants: another key's signature with the device's entry opening (NOT refused)",
+          "✗ revoke_all_grants: (r, s) = (0, 0) with the device's entry opening (the bare body's own assert) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P11",
+        "mutation": "publish_recovery_session_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ signed effect line changed, executed the original: refused (NOT refused)",
+          "✗ an unenrolled evm key signs the session (NOT refused)",
+          "✗ the grantee withdraws under the old grant after the finalisation (an honest approval over the live record) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P12",
+        "mutation": "recover_cancel_with_evm_eip712 without its seam call",
+        "killedBy": [
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ a RevokeAllGrants signature over the same bare frame presented as CancelRecovery (NOT refused)",
+          "✗ recover_cancel: an approval over another account's frame, signed by the device (NOT refused)"
+        ]
+      },
+      {
+        "id": "P13",
+        "mutation": "withdraw_unshielded_with_grant_evm_eip712 without its grant seam call",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee evm_eip712] identical resubmission (stale nonce) (NOT refused)",
+          "✗ [owner evm_eip712 / grantee evm_eip712] over per_call_cap (NOT refused)",
+          "✗ [owner evm_eip712 / grantee evm_eip712] wrong spent_prev (NOT refused)"
+        ]
+      },
+      {
+        "id": "P14",
+        "mutation": "withdraw_shielded_with_grant_evm_eip712 without its grant seam call",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ [caller pin, owner evm_eip712 / grantee evm_eip712] withdraw_shielded: another contract caller refused by the shared gate (NOT refused)",
+          "✗ [caller pin, owner jubjub / grantee evm_eip712] withdraw_shielded: another contract caller refused by the shared gate (NOT refused)",
+          "✗ withdraw_shielded_with_grant: an approval over another account's frame, signed by the grantee (NOT refused)"
+        ]
+      },
+      {
+        "id": "P15",
+        "mutation": "withdraw_shielded_to_contract_with_grant_evm_eip712 without its grant seam call",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ [caller pin, owner evm_eip712 / grantee evm_eip712] withdraw_shielded_to_contract: another contract caller refused by the shared gate (NOT refused)",
+          "✗ [caller pin, owner jubjub / grantee evm_eip712] withdraw_shielded_to_contract: another contract caller refused by the shared gate (NOT refused)",
+          "✗ withdraw_shielded_to_contract_with_grant: an approval over another account's frame, signed by the grantee (NOT refused)"
+        ]
+      },
+      {
+        "id": "P16",
+        "mutation": "the one-type device body without its r != 0 / s != 0 assert",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "EQUIVALENT (reason recorded; killed by message)",
+        "killKind": "message only",
+        "evidence": [
+          "✗ rotate_enc_key: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)",
+          "✗ append_inbox: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)",
+          "✗ withdraw_unshielded: (r, s) = (0, 0) with the device's entry opening (the one-type body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)"
+        ],
+        "equivalence": "property-equivalent in the circuit: s = 0 has no inverse (the ZKIR `inv` in the ECDSA relation is unsatisfiable for 0, zkir 3.1 inv_incircuit), and r = 0 needs the x-coordinate of u1·G to be 0 mod n, which no one can find; the assert is the attributable refusal and defence in depth. The offline suites still kill the mutant by its refusal message (the generated JavaScript's own inverse of 0 throws another error)"
+      },
+      {
+        "id": "P17",
+        "mutation": "the two-form device body (remove_device) without its r != 0 / s != 0 assert",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "EQUIVALENT (reason recorded; killed by message)",
+        "killKind": "message only",
+        "evidence": [
+          "✗ remove_device (descriptor form): (r, s) = (0, 0) with the device's entry opening (the two-form remove_device body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)",
+          "✗ remove_device (literal form): (r, s) = (0, 0) with the device's entry opening (the two-form remove_device body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)"
+        ],
+        "equivalence": "property-equivalent in the circuit: s = 0 has no inverse (the ZKIR `inv` in the ECDSA relation is unsatisfiable for 0, zkir 3.1 inv_incircuit), and r = 0 needs the x-coordinate of u1·G to be 0 mod n, which no one can find; the assert is the attributable refusal and defence in depth. The offline suites still kill the mutant by its refusal message (the generated JavaScript's own inverse of 0 throws another error)"
+      },
+      {
+        "id": "P18",
+        "mutation": "the bare device body (revoke_all_grants, recover_cancel) without its r != 0 / s != 0 assert",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "EQUIVALENT (reason recorded; killed by message)",
+        "killKind": "message only",
+        "evidence": [
+          "✗ recover_cancel: (r, s) = (0, 0) with the device's entry opening (the bare body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)",
+          "✗ revoke_all_grants: (r, s) = (0, 0) with the device's entry opening (the bare body's own assert) (refused by \"secp256k1 scalar field has no inverse for 0\", expected evm_eip712: signature scalar is zero)"
+        ],
+        "equivalence": "property-equivalent in the circuit: s = 0 has no inverse (the ZKIR `inv` in the ECDSA relation is unsatisfiable for 0, zkir 3.1 inv_incircuit), and r = 0 needs the x-coordinate of u1·G to be 0 mod n, which no one can find; the assert is the attributable refusal and defence in depth. The offline suites still kill the mutant by its refusal message (the generated JavaScript's own inverse of 0 throws another error)"
+      },
+      {
+        "id": "P19",
+        "mutation": "the grant seam without its r != 0 / s != 0 assert",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "EQUIVALENT (reason recorded; killed by message)",
+        "killKind": "message only",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee evm_eip712] evm grantee: r = 0 (refused by \"failed assert: invalid grant signature\", expected evm_eip712: signature scalar is zero)",
+          "✗ [owner k256 / grantee evm_eip712] evm grantee: r = 0 (refused by \"failed assert: invalid grant signature\", expected evm_eip712: signature scalar is zero)",
+          "✗ [owner jubjub / grantee evm_eip712] evm grantee: r = 0 (refused by \"failed assert: invalid grant signature\", expected evm_eip712: signature scalar is zero)"
+        ],
+        "equivalence": "property-equivalent in the circuit: s = 0 has no inverse (the ZKIR `inv` in the ECDSA relation is unsatisfiable for 0, zkir 3.1 inv_incircuit), and r = 0 needs the x-coordinate of u1·G to be 0 mod n, which no one can find; the assert is the attributable refusal and defence in depth. The offline suites still kill the mutant by its refusal message (the generated JavaScript's own inverse of 0 throws another error)"
+      },
+      {
+        "id": "P20",
+        "mutation": "the to-contract grantee twin without its colour assert, the scope handed the rendered colour",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_to_contract_with_grant: a coin of colour B under a grant and an approval for A (NOT refused)"
+        ]
+      },
+      {
+        "id": "P21",
+        "mutation": "the shielded grantee twin without its colour assert, the scope handed the rendered colour",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_with_grant: a coin of colour B under a grant and an approval for A (NOT refused)"
+        ]
+      },
+      {
+        "id": "P22",
+        "mutation": "withdraw_shielded_with_evm_eip712 (device) without its colour assert",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded (device): a coin of colour B under an approval for A (NOT refused)"
+        ]
+      },
+      {
+        "id": "P23",
+        "mutation": "withdraw_shielded_to_contract_with_evm_eip712 (device) without its colour assert",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_to_contract (device): a coin of colour B under an approval for A (NOT refused)"
+        ]
+      },
+      {
+        "id": "P24",
+        "mutation": "the shielded grantee twin hands its scope pinned_recipient as the recipient (the pin bypassed)",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_with_grant: another coin public key than the pinned one (NOT refused)"
+        ]
+      },
+      {
+        "id": "P25",
+        "mutation": "the to-contract grantee twin hands its scope pinned_recipient as the recipient (the pin bypassed)",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_to_contract_with_grant: another contract than the pinned one (NOT refused)"
+        ]
+      },
+      {
+        "id": "P26",
+        "mutation": "the grant seam without its stale-epoch check (grants outlive a recovery)",
+        "killedBy": [
+          "evm-eip712-recovery-sim"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ the grantee withdraws under the old grant after the finalisation (an honest approval over the live record) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P27",
+        "mutation": "withdraw_shielded_with_grant_evm_eip712 without check_shielded_grant_bounds",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_with_grant: a coin of value 1000 under a grant whose max coin value is 600 (NOT refused)"
+        ]
+      },
+      {
+        "id": "P28",
+        "mutation": "withdraw_shielded_to_contract_with_grant_evm_eip712 without check_shielded_grant_bounds",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ withdraw_shielded_to_contract_with_grant: a coin of value 1000 under a grant whose max coin value is 600 (NOT refused)"
+        ]
+      },
+      {
+        "id": "P29",
+        "mutation": "remove_device_with_evm_eip712 hands the self-removal guard a zero caller entry, the seam kept",
+        "killedBy": [
+          "evm-eip712-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ remove_device (descriptor form): the device names its own post-roll entry (NOT refused)"
+        ]
+      }
+    ]
+  },
+  "hintMutants": {
+    "what": "Each check of the checked byte arguments deleted, or its bytes misused (the address slice shifted, a word emitted unreversed, the digest read little-endian, the coordinates hashed little-endian, a label or descriptor coordinate taken unchecked).",
+    "mutants": [
+      {
+        "id": "H1",
+        "mutation": "evm_eip712_bytes_of without its check (every coordinate, key and label hint unchecked)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ issue_grant: hint.grantee.key with one byte flipped (NOT refused)",
+          "✗ evm_eip712_site_label_hash: the label hint flipped (NOT refused)",
+          "✗ evm_eip712_device_descriptor_hash: hint.key flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "H2",
+        "mutation": "evm_eip712_low20 without its check (the key hash and the account hash unchecked)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ activate: hint.key_hash with one byte flipped (NOT refused)",
+          "✗ rotate_enc_key: auth.hint.key.key_hash with one byte flipped (NOT refused)",
+          "✗ rotate_enc_key: auth.hint.account_hash with one byte flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "H3",
+        "mutation": "evm_eip712_low20 takes bytes 11..30 instead of 12..31",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: boot commitment mismatch",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: boot commitment mismatch",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: boot commitment mismatch"
+        ]
+      },
+      {
+        "id": "H4",
+        "mutation": "evm_eip712_be4 without its check (a removal epoch unchecked)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "H5",
+        "mutation": "evm_eip712_be8 without its check (auth_nonce, issuedAt, grantNonce, Merkle index, counters unchecked)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ evm_eip712_struct_withdraw_unshielded: the nonce hint flipped (NOT refused)",
+          "simulator: the call was NOT refused",
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "H6",
+        "mutation": "evm_eip712_be16 without its check (every amount and scope number unchecked)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ evm_eip712_struct_withdraw_unshielded: the amount hint flipped (NOT refused)",
+          "simulator: the call was NOT refused",
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "H7",
+        "mutation": "evm_eip712_be8 emits the hint in stored (little-endian) order",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "H8",
+        "mutation": "evm_eip712_ecdsa_verify without its digest check",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "simulator: the call was NOT refused",
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "H9",
+        "mutation": "evm_eip712_ecdsa_verify reads the digest little-endian",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "H10",
+        "mutation": "the address hashes the coordinates little-endian",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: hash hint does not match the hash",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: hash hint does not match the hash",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_eip712: hash hint does not match the hash"
+        ]
+      },
+      {
+        "id": "H11",
+        "mutation": "visible_21 without its check (a passkey origin hint unchecked)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ add_device: hint.origin with one byte flipped (NOT refused)",
+          "✗ issue_grant: hint.grantee.origin with one byte flipped (NOT refused)",
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "H12",
+        "mutation": "label_text with an unchecked hint (every site label rendering)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ evm_eip712_site_label_hash: the label hint flipped (NOT refused)",
+          "✗ evm_eip712_grantee_descriptor_hash: hint.label flipped (NOT refused)",
+          "✗ evm_eip712_struct_withdraw_unshielded_as_grantee: the label hint flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "H13",
+        "mutation": "rev32 with an unchecked hint (every k256 and P-256 descriptor coordinate)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ issue_grant: hint.grantee.key with one byte flipped (NOT refused)",
+          "✗ evm_eip712_device_descriptor_hash: hint.key flipped (NOT refused)",
+          "simulator: the call was NOT refused"
+        ]
+      }
+    ],
+    "deletedChecksLetThrough": {
+      "what": "for each deleted hint check, the forgeries of section isolate (and hints) that its mutant lets through: each is signed as the circuit renders the forged hint, so only that check refuses it on the unmutated copy",
+      "H1": [
+        "isolate: add_device: the k256 target's x hint with a byte changed, the shown x signed, the real x executed",
+        "isolate: issue_grant: the grantee's site label hint shown as \"cank.example\" and signed, \"bank.example\" executed",
+        "isolate: activation: the key's y hint with a byte changed, the boot commitment made over the address those bytes hash to"
+      ],
+      "H2": [
+        "hints: device seam: a byte of the key hash outside the address",
+        "hints: device seam: a byte of the account hash outside the verifying contract"
+      ],
+      "H4": [
+        "isolate: remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)"
+      ],
+      "H5": [
+        "isolate: rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
+        "isolate: remove_device: targetCounter 1 shown and signed, 0 executed (the counter hint of 1)",
+        "isolate: grantee twin: the approval made at grantNonce 0, replayed at grantNonce 1 with the nonce hint of 0 and the current spent opening"
+      ],
+      "H6": [
+        "isolate: withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
+        "isolate: withdraw_shielded: the change hint of 701, shown and signed, 700 executed",
+        "isolate: issue_grant: the cap hint of 1001, shown and signed, 1000 executed"
+      ],
+      "H8": [
+        "isolate: rotate_enc_key: the device's signature over an unrelated 32-byte value, passed as the digest hint",
+        "isolate: grantee twin: the grantee's signature over an unrelated 32-byte value, passed as the digest hint"
+      ],
+      "H11": [
+        "hints: add_device: a byte of a passkey target's origin"
+      ]
+    }
+  },
+  "displayMutants": {
+    "what": "The readable texts: the expiry's \"never\" and \"after\" selection, its bound and its length, the date unchecked; the window word ignoring the cap or inverted; the amount label unchecked or without its fixed words; a Solana device or grantee shown by its raw bytes; add_device and issue_grant showing the key of other bytes than the encoding the derivation checked.",
+    "mutants": [
+      {
+        "id": "D1",
+        "mutation": "the expiry shows the date of 0 instead of \"never\"",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D2",
+        "mutation": "the expiry shows the words \"after 9999-12-31 23:59:59 UTC\" from the last second of 9999 on (bound off by one)",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "a suite failed with no case line (its output or vectors differ)"
+        ]
+      },
+      {
+        "id": "D3",
+        "mutation": "the expiry date hashed without its last character",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D4",
+        "mutation": "the expiry text not checked against the value (the date is whatever the hint says)",
+        "killedBy": [
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ issue_grant: hint.year_split with one byte flipped (NOT refused)",
+          "simulator: the call was NOT refused",
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "D5",
+        "mutation": "the window word ignores the window cap (\"no window\" whenever the length is 0)",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "a suite failed with no case line (its output or vectors differ)"
+        ]
+      },
+      {
+        "id": "D6",
+        "mutation": "the window word inverted",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D7",
+        "mutation": "the amount label not checked against the amount (the label is whatever the site sends)",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ evm_eip712_struct_withdraw_unshielded: a digit of the amount label changed (NOT refused)",
+          "simulator: the call was NOT refused",
+          "simulator: the call was NOT refused"
+        ]
+      },
+      {
+        "id": "D8",
+        "mutation": "the amount label without its fixed words (the site's claim not marked as such)",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid grant signature",
+          "✗ [owner k256 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid grant signature",
+          "✗ [owner jubjub / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid grant signature"
+        ]
+      },
+      {
+        "id": "D9",
+        "mutation": "a Solana target device shown by its raw bytes instead of its base58 text",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ add_device (Solana target): the client library's hints == the hints of the executed values",
+          "✗ the Solana key inputs of a Solana target (add_device): unexpected error failed assert: invalid signature",
+          "✗ [hints] add_device: a byte of a Solana target's x coordinate: simulator PASS, copy FAIL (DRY)"
+        ]
+      },
+      {
+        "id": "D10",
+        "mutation": "a Solana grantee shown by its raw bytes instead of its base58 text",
+        "killedBy": [
+          "evm-eip712-offline",
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "a suite failed with no case line (its output or vectors differ)"
+        ]
+      },
+      {
+        "id": "D11",
+        "mutation": "add_device shows the key of its x bytes, not of the encoding the derivation checked",
+        "killedBy": [
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "✗ the grantee withdraws under the old grant after the finalisation (an honest approval over the live record) (NOT refused)"
+        ]
+      },
+      {
+        "id": "D12",
+        "mutation": "issue_grant shows the grantee key of its x bytes, not of the encoding the derivation checked",
+        "killedBy": [
+          "evm-eip712-grants-offline",
+          "evm-eip712-recovery-sim",
+          "evm-eip712-seam-offline",
+          "evm-eip712-hints-offline",
+          "evm-eip712-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "✗ [owner evm_eip712 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: display: the base58 digits do not match the value's low bytes",
+          "✗ [owner evm_eip712 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: display: the base58 digits do not match the value's low bytes",
+          "✗ [owner evm_eip712 / grantee evm_eip712] lifecycle and the unshielded grant twin: unexpected error failed assert: display: the base58 digits do not match the value's low bytes"
+        ]
+      }
+    ]
+  },
+  "killed": 61,
+  "equivalent": 4,
+  "total": 65,
+  "verdict": "PASS"
+}

@@ -80,6 +80,30 @@ once, below every arm.
   records a real Safari approval accepted on-node, with signed assertion
   evidence and an offline Node/OpenSSL verifier.
 
+- **Arm `evm_eip712`** — an Ethereum externally owned account (MetaMask,
+  or any EIP-712 wallet) as a device or a grantee, authorising every
+  operation with **readable EIP-712 typed data**: one type per operation
+  and role, whose members are every operand and every consumed witness
+  value, recomputed in-circuit with `keccak256` and verified by the
+  arm's ECDSA check (the standard library's algorithm over the digest's
+  checked bytes, both S forms). No challenge hash is signed;
+  four labelled values are the only hash-like members. The identity is
+  the 20-byte address, derived in-circuit from the presented point and
+  **blinded** with a per-account secret the client re-derives from a
+  `personal_sign` request, so the ledger holds only SHA-256 outputs over
+  address and blind. The other key in `add_device`, `remove_device`,
+  `issue_grant` and `revoke_grant` is a readable descriptor from which
+  the circuit derives that scheme's entry or grant id. A grant's expiry
+  is shown as its UTC date, a zero rate-limit window as "no window",
+  every amount with the site's label for it, and a Solana key in
+  base58, each text checked in-circuit against the value. Byte
+  encodings come in as checked arguments (each byte range-checked and
+  the value rebuilt). See
+  [EVM-EIP712.md](EVM-EIP712.md) (byte contract, frozen vectors,
+  acceptance policy) and [EVM-EIP712-MEASUREMENTS.md](EVM-EIP712-MEASUREMENTS.md).
+  The arm's specification, a delta to MIP-0030, is
+  [mip-xxxx-evm-eip712-arm.md](../docs/mps-mip/mips/mip-xxxx-evm-eip712-arm.md).
+
 Per-arm circuits instead of one circuit with an in-circuit scheme
 conditional: Compact compiles every exported circuit to its own proof, so
 a proof through a `_with_jubjub` circuit pays only the Schnorr
@@ -240,10 +264,20 @@ npm run test:recovery-sim            # recovery MIP circuit matrix in the simula
                                      # refusals, veto window, cancel, finalisation,
                                      # epoch-bump revocation
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
+npm run test:evm_eip712-offline      # evm_eip712: frozen EIP-712 vectors (contract ==
+                                     # client), the grant and recovery matrices,
+                                     # every gated export's authorisation and every
+                                     # checked byte argument forged, in the simulator
+VIEM_DIR=<viem 2.x> npx tsx src/tests/evm-eip712-viem.ts  # evm_eip712: the vectors,
+                                     # addresses, blinds and signatures against viem
+                                     # (not a dependency; loaded at run time)
 npm run verify:p256-browser         # recorded live assertion + account binding (Node/OpenSSL)
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
 npm run test:p256-browser           # interactive experiment: real browser passkey approval
+npm run test:evm_eip712              # evm_eip712: constraint-level negatives,
+                                     # each refused by the proof server after a
+                                     # positive control (needs only the proof server)
 npm run test:auth-coinless           # BOTH seams on-node + cross-arm enrolment + tamper aborts
 npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
 npm run test:custody-discovery      # MIP-0012 test 4
@@ -510,6 +544,9 @@ two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
 | `recovery-conformance` | n/a | n/a | Recovery MIP lifecycle on node: four-wave deploy with birth artefacts, session publish through the jubjub seam, on-node freshness rejection, reconstruction from chain data and the wrap round-trip, the signature-gate submission proved on the proof server, an early finalisation held by a real 60 s window, cancel, resubmission, finalisation after the window with nonce and round advanced, successor control and the old device dead, a post-recovery session (`evidence/rec-1-9-recovery-conformance.json`) |
 | `grants-unshielded` | 6 (the mirror, under a GRANT rather than a device) | n/a | MIP-scoped-grants: the UNSHIELDED grant twins included on node, which GRANTS-E2 could not run. Five groups, each its own evidence file and each selectable as a `GRANTS_E4_GROUPS` prefix: funding (a non-native color minted and deposited through `deposit_unshielded`, with the NIGHT arm skipped and priced), issue (ten `op_withdraw_unshielded` scopes across both device arms and both grantee arms, `object_commit` recomputed from each opening), spend (`withdraw_unshielded_with_grant_jubjub` and `withdraw_unshielded_with_grant_k256` included on node, the mirror debit, the per-grant nonce settle, the cumulative `spent_commit`, and a recipient pin honoured), rejections (fourteen rows labelled by class: twelve pre-custody, which abort before `do_withdraw_unshielded` is entered, and two in-custody, which reach it and are refused by the mirror gate; neither class emits an unshielded offer, because `debit_unshielded` runs before `sendUnshielded`), proving (the first proving times either unshielded twin has had); GR-2, GR-5, GR-7, GR-12, GR-13, GR-14, INV-8 |
 | `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
+| `evm-eip712-offline` (+ `-grants-offline`, `-recovery-sim`, `-seam-offline`, `-hints-offline`) | n/a | n/a | The `evm_eip712` arm off-node: the frozen EIP-712 vectors (contract pure circuits == client codec == the frozen hashes), the no-blob classification of every member, the enumerated-member labels and the readable texts (UTC expiry, window word, amount label, base58 key) against the base's text circuits, every checked byte argument with one byte changed and with the carry attack, the blind protocol, the grant matrices (owner and grantee on every scheme pair), the recovery matrix, and the authorisation of every gated export (a foreign frame, another key and zero scalars refused, then the honest call; colour and recipient pin on the shielded paths) — see [EVM-EIP712.md](EVM-EIP712.md) |
+| `evm-eip712-viem` | n/a | n/a | The `evm_eip712` frozen vectors, addresses, blinds and `signTypedData` bytes against viem (independent implementation; viem loaded at run time) |
+| `evm-eip712-prover` | n/a | n/a (arm-level) | The `evm_eip712` arm at the proof server: binding and replay matrices, degenerate keys and scalars, witness substitution, descriptors, the grant matrix of all three grantee twins, recovery, the forged-address mutant on every gated export, and forged byte arguments (one byte changed, and a byte above 8 bits refused by the range check), each refusal attributed to the circuit under test |
 
 Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
 exercise BOTH arms; the remaining on-node suites drive the k256 arm (the

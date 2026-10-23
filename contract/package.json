@@ -5,7 +5,7 @@
   "private": true,
   "description": "Reference implementation of Midnight account custody with co-resident JubJub Schnorr, secp256k1 ECDSA and profiled P-256 WebAuthn authorisation arms.",
   "scripts": {
-    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller",
+    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-wallet-arms-base.compact contracts/managed/probe-wallet-arms-base",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:p256-offline": "tsx src/tests/p256-offline.ts",
@@ -16,6 +16,8 @@
     "prove:webauthn-variable": "tsx src/tests/webauthn-variable/prove.ts",
     "resources:webauthn-variable": "tsx src/tests/webauthn-variable/resources.ts",
     "check:webauthn-transcripts": "tsx src/tests/webauthn-variable/check-transcripts.ts",
+    "test:evm_eip712-offline": "tsx src/tests/evm-eip712-offline.ts && tsx src/tests/evm-eip712-grants-offline.ts && tsx src/tests/evm-eip712-recovery-sim.ts && tsx src/tests/evm-eip712-seam-offline.ts && tsx src/tests/evm-eip712-hints-offline.ts",
+    "test:evm_eip712": "tsx src/tests/evm-eip712-prover.ts",
     "test:p256": "tsx src/tests/p256-conformance.ts",
     "test:p256-browser": "tsx src/tests/p256-browser.ts",
     "verify:p256-browser": "tsx src/tests/p256-browser-evidence.ts",
