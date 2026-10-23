@@ -1,0 +1,101 @@
+{
+ "what": "the disclosure review of the arm's contracts and the needle scan of every block of the arm's localnet runs, the current build's included: no Solana key, point, blind, signature or message in the clear, no entry or grant id under a zero or missing blind",
+ "disclosureReview": {
+  "contracts": "285d054",
+  "sites": [
+   {
+    "line": 214,
+    "expr": "disclose(current)",
+    "public": "the consumed device entry: SHA-256(tag | account | key | blind | epoch | counter)"
+   },
+   {
+    "line": 219,
+    "expr": "disclose(successor)",
+    "public": "the successor device entry: the same preimage at counter + 1"
+   },
+   {
+    "line": 623,
+    "expr": "disclose(gid)",
+    "public": "the grant id: SHA-256(grant-id tag | account | key | grantee blind | origin hash | slot)"
+   },
+   {
+    "line": 643,
+    "expr": "disclose(derive_grant_spent_commit(scope_salt, new_spent))",
+    "public": "the spent commitment: a commitment to the cumulative spend under the scope salt"
+   },
+   {
+    "line": 715,
+    "expr": "disclose(result.is_some)",
+    "public": "the change bit of the grantee's shielded withdrawal"
+   },
+   {
+    "line": 748,
+    "expr": "disclose(change.is_some)",
+    "public": "the change bit of the grantee's direct transfer"
+   }
+  ],
+  "baseModulesDisclose": {
+   "WalletArmRendering": 0,
+   "WalletArmDescriptors": 0
+  },
+  "privateInputsInsideDisclose": 0,
+  "neverDisclosed": [
+   "Curve25519Point (device, target, grantee)",
+   "32-byte key and its x bytes",
+   "blind (device, grantee)",
+   "signature (R, s) and R's bytes",
+   "signed message",
+   "use counter",
+   "display inputs (digits, base58, date, characters, nibbles)"
+  ],
+  "verdict": "PASS"
+ },
+ "needleScan": {
+  "ranAt": "2026-10-18T16:01:25.821Z",
+  "blocks": {
+   "from": 4300,
+   "to": 53133
+  },
+  "accounts": 44,
+  "identities": 140,
+  "needles": 14822,
+  "weakBlindNeedles": 746128,
+  "randomNeedles": 64,
+  "controls": {
+   "total": 135,
+   "found": 134,
+   "notApplicable": [
+    {
+     "account": "0265227433159770b611248bf0e9481605aab68ec4ba44ab30d4b3e3a1cfd5ee",
+     "kind": "recipe control: the activation entry by the SAME recipe as the weak needles, with the TRUE blind (epoch 0, counter 0)",
+     "reason": "not applicable: no call ever landed on this account (actions seen: ContractDeploy, ContractUpdate)"
+    }
+   ]
+  },
+  "evm": {
+   "identities": 7,
+   "controls": 8,
+   "found": 6,
+   "notApplicable": [
+    {
+     "account": "edd94c5dc803a9be6b486478a87af4dc3a1b464e56cac5215059dc1973da29d7",
+     "reason": "not applicable: this account has no contract action in the range (a message vector only)"
+    },
+    {
+     "account": "3c9e6f7d7c7424d362e1da167418831c6de2ee48a459c42577d31e40372d5930",
+     "reason": "not applicable: this account has no contract action in the range (a message vector only)"
+    }
+   ]
+  },
+  "identityHits": 0,
+  "randomHits": 0,
+  "weakOnChain": {
+   "needles": 746128,
+   "recipeControls": 38,
+   "recipeControlsFound": 38,
+   "findings": 0
+  },
+  "verdict": "PASS"
+ },
+ "verdict": "PASS"
+}

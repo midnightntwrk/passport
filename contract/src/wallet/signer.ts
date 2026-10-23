@@ -34,6 +34,8 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
 export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
+import { solEd25519AuthArgs, solEd25519GrantAuthArgs, type SolEd25519Authorisation, type SolEd25519GrantAuthorisation } from './signer-sol-ed25519.js';
+export type { SolEd25519Authorisation, SolEd25519GrantAuthorisation } from './signer-sol-ed25519.js';
 
 import {
   pureCircuits,
@@ -43,7 +45,7 @@ import {
 } from './contract.js';
 
 /** The authorisation arms the contract exports circuits for. */
-export type Arm = 'jubjub' | 'k256' | 'p256';
+export type Arm = 'jubjub' | 'k256' | 'p256' | 'sol_ed25519';
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */
@@ -420,11 +422,12 @@ export const k256Challenges = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AnyDevice = JubjubDevice | K256Device | P256Device;
-export type Authorisation = JubjubAuthorisation | K256Authorisation | P256Authorisation;
+export type Authorisation = JubjubAuthorisation | K256Authorisation | P256Authorisation | SolEd25519Authorisation;
 
 /** The trailing circuit arguments an Authorisation expands to, in the
  *  order the arm's gated circuits declare them. */
 export function authArgs(a: Authorisation): unknown[] {
+  if (a.arm === 'sol_ed25519') return solEd25519AuthArgs(a);
   if (a.arm === 'p256') {
     const { arm, ...auth } = a;
     return [auth];
@@ -711,7 +714,7 @@ export interface JubjubGrantAuthorisation {
   grind_nonce: bigint;
 }
 
-export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation;
+export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation | SolEd25519GrantAuthorisation;
 
 /**
  * A grantee key on the k256 arm. Unlike a device it has no use counter
@@ -890,6 +893,7 @@ export const jubjubGrantChallenges = {
  */
 export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[] {
   const openings = [o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev];
+  if (a.arm === 'sol_ed25519') return solEd25519GrantAuthArgs(o, a);
   if (a.arm === 'p256') {
     const { arm, ...auth } = a;
     return [o.originHash, o.slot, ...openings, auth];

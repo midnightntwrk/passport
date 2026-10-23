@@ -80,6 +80,28 @@ once, below every arm.
   records a real Safari approval accepted on-node, with signed assertion
   evidence and an offline Node/OpenSSL verifier.
 
+- **Arm `sol_ed25519`** — a Solana wallet (Phantom, or any wallet whose
+  `signMessage` signs raw bytes with RFC 8032 Ed25519) as a device or a
+  grantee, authorising every operation with **one readable message**:
+  printable ASCII, a circuit-fixed first line (`Midnight Passport approval
+  (sol v1)`), every operand and every consumed witness value in full (hex,
+  decimal digits, every Solana key in base58 as Solana wallets show it, a
+  grant's expiry also as a UTC date, words for exact protocol values),
+  rendered in-circuit from exactly the executed values and verified with
+  the standard library's Ed25519 algorithm plus an explicit `R != O`. No challenge hash is signed;
+  four labelled values are the only hash-like lines, and no message can
+  parse as a Solana transaction or off-chain message. The identity is the
+  wallet's 32-byte key, related in-circuit to its `Curve25519Point` and
+  **blinded** with a per-account secret the client re-derives from a
+  signed request, so the ledger holds only SHA-256 outputs over key and
+  blind. The other key in `add_device`, `remove_device`, `issue_grant` and
+  `revoke_grant` is a readable descriptor from which the circuit derives
+  that scheme's entry or grant id. See [SOL-ED25519.md](SOL-ED25519.md)
+  (message grammar, layouts, acceptance policy) and
+  [SOL-ED25519-MEASUREMENTS.md](SOL-ED25519-MEASUREMENTS.md).
+  The arm's specification, a delta to MIP-0030, is
+  [mip-xxxx-sol-ed25519-arm.md](../docs/mps-mip/mips/mip-xxxx-sol-ed25519-arm.md).
+
 Per-arm circuits instead of one circuit with an in-circuit scheme
 conditional: Compact compiles every exported circuit to its own proof, so
 a proof through a `_with_jubjub` circuit pays only the Schnorr
@@ -240,10 +262,17 @@ npm run test:recovery-sim            # recovery MIP circuit matrix in the simula
                                      # refusals, veto window, cancel, finalisation,
                                      # epoch-bump revocation
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
+npm run test:sol-ed25519-offline     # sol_ed25519: the frozen sol v1 corpus (contract ==
+                                     # independent renderer), the parse bound, the
+                                     # key relation and blind, and the seam, custody,
+                                     # device, grant and recovery matrices in the simulator
 npm run verify:p256-browser         # recorded live assertion + account binding (Node/OpenSSL)
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
 npm run test:p256-browser           # interactive experiment: real browser passkey approval
+npm run test:sol-ed25519             # sol_ed25519 at the constraint level: every negative
+                                     # refused by the proof server for the circuit under
+                                     # test after a positive control (needs only the proof server)
 npm run test:auth-coinless           # BOTH seams on-node + cross-arm enrolment + tamper aborts
 npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
 npm run test:custody-discovery      # MIP-0012 test 4
@@ -509,6 +538,8 @@ two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
 | `recovery-sim` | n/a | n/a | Recovery MIP Testing in the circuit simulator under explicit wall-clock control: session freshness (reused identifier and commitment, all-zero identifier after a real session), slot gating and the length bound, unauthorised publish, the signature gate's refusals (identity and small-order keys, missing co-signature, wrong secret, every signed binding tampered, reused successor commitment, a forgery against an identity birth key), delegation safety (no scalar among the arguments), pending exclusivity, the veto window, cancel and verbatim replay, finalisation effects (epoch, count, nonce, round, key rotation, vector cleared), epoch-bump revocation, and a post-recovery session; REC-1, REC-4, REC-6, REC-7, REC-8, REC-9, REC-11, AUTH-6 |
 | `recovery-conformance` | n/a | n/a | Recovery MIP lifecycle on node: four-wave deploy with birth artefacts, session publish through the jubjub seam, on-node freshness rejection, reconstruction from chain data and the wrap round-trip, the signature-gate submission proved on the proof server, an early finalisation held by a real 60 s window, cancel, resubmission, finalisation after the window with nonce and round advanced, successor control and the old device dead, a post-recovery session (`evidence/rec-1-9-recovery-conformance.json`) |
 | `grants-unshielded` | 6 (the mirror, under a GRANT rather than a device) | n/a | MIP-scoped-grants: the UNSHIELDED grant twins included on node, which GRANTS-E2 could not run. Five groups, each its own evidence file and each selectable as a `GRANTS_E4_GROUPS` prefix: funding (a non-native color minted and deposited through `deposit_unshielded`, with the NIGHT arm skipped and priced), issue (ten `op_withdraw_unshielded` scopes across both device arms and both grantee arms, `object_commit` recomputed from each opening), spend (`withdraw_unshielded_with_grant_jubjub` and `withdraw_unshielded_with_grant_k256` included on node, the mirror debit, the per-grant nonce settle, the cumulative `spent_commit`, and a recipient pin honoured), rejections (fourteen rows labelled by class: twelve pre-custody, which abort before `do_withdraw_unshielded` is entered, and two in-custody, which reach it and are refused by the mirror gate; neither class emits an unshielded offer, because `debit_unshielded` runs before `sendUnshielded`), proving (the first proving times either unshielded twin has had); GR-2, GR-5, GR-7, GR-12, GR-13, GR-14, INV-8 |
+| `sol-ed25519-offline` (+ `-message-`, `-seam-`, `-custody-`, `-devices-`, `-grants-offline`, `-recovery-sim`) | n/a | n/a | The `sol_ed25519` arm off-node: the RFC 8032 key relation against OpenSSL and noble, the blind protocol, the frozen `sol v1` corpus (contract pure circuits == the independent renderer), the Solana parse bound, the display-input checks, the seam's binding and replay matrix, custody with witness substitution, devices of all five schemes, the grant matrix and the recovery matrix incl. the entry planted at `device_epoch + 1` — see [SOL-ED25519.md](SOL-ED25519.md) |
+| `sol-ed25519` (prover) | n/a (local account states) | n/a | The `sol_ed25519` arm at the constraint level: every negative refused by the generated JavaScript and, with that check bypassed in a patched copy that first proved the honest call, by the proof server for the circuit under test (the activation, the device seam and its replays, custody and the shielded witness, devices, grants and every scope check of the three grantee twins, recovery, the canonical rendering of a `Field`, the exact words, the RP hash and any-recipient rules, the base modules' asserts it reaches); each refusal labelled by its layer — see [SOL-ED25519-MEASUREMENTS.md](SOL-ED25519-MEASUREMENTS.md) and `evidence/sol-ed25519/prover-suite.json` |
 | `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
 
 Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
