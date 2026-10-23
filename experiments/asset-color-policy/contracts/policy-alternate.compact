@@ -1,0 +1,17 @@
+pragma language_version 0.27;
+import CompactStandardLibrary;
+
+// A genuinely different implementation of the same Policy interface:
+// exact-key eligibility plus a global switch, rather than a per-key freeze map.
+export ledger eligible_key: Bytes<32>;
+export ledger enabled: Boolean;
+
+constructor(key: Bytes<32>, allow: Boolean) {
+  eligible_key = disclose(key);
+  enabled = disclose(allow);
+}
+
+export circuit check(key: Bytes<32>): [] {
+  assert(enabled, "alternate policy disabled");
+  assert(eligible_key == disclose(key), "alternate policy rejects asset");
+}
