@@ -1,0 +1,481 @@
+{
+  "result": "PASS",
+  "startedAt": "2026-10-22T12:46:07.198Z",
+  "completedAt": "2026-10-22T12:46:45.313Z",
+  "baseCommit": "35fac07431150d9f415a9214be371dea776d35e1",
+  "evidenceLayer": "Original ZKIR /check for positive and forged negative assignments; local proof-server generation; ledger-v9 structural wellFormed and in-memory apply; fee balancing disabled; no node submission",
+  "limitation": "ledger-v9 WASM omits the proof-verifying build feature. Its verification flags do not establish cryptographic proof verification; use the separate native verifier and its evidence.",
+  "compilerInfo": {
+    "compiler-version": "0.35.0",
+    "compiler-commit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
+    "language-version": "0.27.0",
+    "runtime-version": "0.20.0",
+    "circuits": [
+      {
+        "name": "verify_0",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 0
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_1",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 1
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_17",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 17
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_32",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      },
+      {
+        "name": "verify_100",
+        "pure": false,
+        "proof": true,
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "message",
+            "type": {
+              "type-name": "Bytes",
+              "length": 100
+            }
+          },
+          {
+            "name": "signature",
+            "type": {
+              "type-name": "Bytes",
+              "length": 64
+            }
+          }
+        ],
+        "result-type": {
+          "type-name": "Tuple",
+          "types": []
+        }
+      }
+    ],
+    "witnesses": [
+      {
+        "name": "bip340LiftX",
+        "arguments": [
+          {
+            "name": "publicKey",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          }
+        ],
+        "result type": {
+          "type-name": "Secp256k1Point"
+        }
+      }
+    ],
+    "contracts": [],
+    "ledger": [
+      {
+        "name": "accepted",
+        "index": 0,
+        "exported": true,
+        "storage": "Cell",
+        "type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      }
+    ]
+  },
+  "proofServerImage": "midnightntwrk/proof-server:9.0.0-rc.8@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+  "proofServerIdentity": {
+    "requestedImage": "midnightntwrk/proof-server:9.0.0-rc.8@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+    "repositoryDigest": "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+    "observedAt": "2026-10-22T12:46:07.237Z",
+    "containerId": "1ffd775d2c5df609a0ffb5167f86c93cf7751767722ff9ada320450f41187394",
+    "configuredImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+    "observedImageId": "sha256:2c9b9917d3dd81b6f47ccdab333064eb6bad0fa0f7b5a0c9087fc7cd1d26cade",
+    "observedRepositoryDigests": [
+      "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf"
+    ],
+    "endpoint": "http://127.0.0.1:6391",
+    "verification": "Local Docker inspection: running container image ID matches the pinned repository digest and publishes the loopback endpoint. This is local daemon evidence, not remote attestation."
+  },
+  "runtimeVersions": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5"
+  },
+  "fixture": {
+    "repository": "https://github.com/bitcoin/bips",
+    "revision": "130b8e0fa7f30fa45532f080b87b8db27a79e46e",
+    "path": "bip-0340/test-vectors.csv",
+    "sha256": "34c9d1d9c3a88d524bc80778540dc43f8306ec249a7485293063c376db851c2d"
+  },
+  "sources": {
+    "contracts/bip340.compact": "ba4d3fd02c9f2ef02282a8e6aa4e0d7249f5444dd6dbd49063e6f39816a28dab",
+    "contracts/probe-bip340.compact": "4bfb934658b8cc9feed56e3f29192340f2299c1b4f838af5948d9c13fa34f096",
+    "src/prove.ts": "1ad2e15b776f1efcaed844ac28969ec5d185e887186ca31a19175752a859baeb",
+    "src/witnesses.ts": "73682bcdb944c63314602d784edbffc2131a648d33d7178911137b038ebc4652",
+    "src/fixtures.ts": "5c2ec021a44b89e4df857084096663e131c8d79efef465542b8568bf87d8ab51",
+    "src/proof-provider.ts": "a8c1a63922714e79b79f7691d57d40b342063dd0f70069900049cd60083cd107",
+    "src/proof-server-identity.ts": "8e4dd45907a05eb851da68e9641674c5dc3d2c5529074a6398e4f7467346de55",
+    "docker-compose.yml": "4e5e4514a0ba5268902603affbbf327752ed47dddfdccf5c7f840d1486aceaf3"
+  },
+  "circuits": {
+    "verify_0": {
+      "verifierKeySha256": "ad7f97545138e0edc0aad43653c1894490d4f35d7074faf7094050536694a6d0",
+      "irSha256": "f13ea1d2f9126f6e3e605a8c0322dffa3e2aa72d5a01373d2e70cfe924ace56d"
+    },
+    "verify_1": {
+      "verifierKeySha256": "f84feeb0e50a979a2d3c61aa0a0288e5c10686356552cabd99ffb9cd258e683a",
+      "irSha256": "7f70e00bc39304a6c89812e4b0448c70cd490f98f27862de647f05306916f52c"
+    },
+    "verify_17": {
+      "verifierKeySha256": "7978d22fdf62a6c70b1cdc59556a8f629c427cc16064b00c8918bc0b9ca72741",
+      "irSha256": "4cbb9a994eac0203b86a4b879c84e4280cc517d2e4dbbef0b95662df27ffdcdd"
+    },
+    "verify_32": {
+      "verifierKeySha256": "b3134e41ed2a6cb2aba9fa0fca22bba2894e8915874c18ee8afc60baa49bd737",
+      "irSha256": "2765887b3c741d2f9cc8d1f1621cdb3ead752657757e73843a965ef6ba1c749d"
+    },
+    "verify_100": {
+      "verifierKeySha256": "08da9c17e629e657669ff40540153de2170e67b776c41d0348ae0f095d665c3b",
+      "irSha256": "d308a9a8621d01f0d575dc8d812798c5346f31f2b8a8ba20e2f8b9ede11524ab"
+    }
+  },
+  "checks": [
+    {
+      "name": "official vector 0",
+      "valid": true,
+      "messageBytes": 32,
+      "comment": "",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 1",
+      "valid": true,
+      "messageBytes": 32,
+      "comment": "",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 2",
+      "valid": true,
+      "messageBytes": 32,
+      "comment": "",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 3",
+      "valid": true,
+      "messageBytes": 32,
+      "comment": "test fails if msg is reduced modulo p or n",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 4",
+      "valid": true,
+      "messageBytes": 32,
+      "comment": "",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 5",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "public key not on the curve",
+      "result": "REJECTED",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "official vector 6",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "has_even_y(R) is false",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "official vector 7",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "negated message",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "official vector 8",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "negated s value",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "official vector 9",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "sG - eP is infinite. Test fails in single verification if has_even_y(inf) is defined as true and x(inf) as 0",
+      "result": "REJECTED",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "official vector 10",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "sG - eP is infinite. Test fails in single verification if has_even_y(inf) is defined as true and x(inf) as 1",
+      "result": "REJECTED",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "official vector 11",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "sig[0:32] is not an X coordinate on the curve",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "official vector 12",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "sig[0:32] is equal to field size",
+      "result": "REJECTED",
+      "reason": "bad input: `Failed direct assertion`"
+    },
+    {
+      "name": "official vector 13",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "sig[32:64] is equal to curve order",
+      "result": "REJECTED",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "official vector 14",
+      "valid": false,
+      "messageBytes": 32,
+      "comment": "public key is not a valid X coordinate because it exceeds the field size",
+      "result": "REJECTED",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "official vector 15",
+      "valid": true,
+      "messageBytes": 0,
+      "comment": "message of size 0 (added 2022-12)",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 16",
+      "valid": true,
+      "messageBytes": 1,
+      "comment": "message of size 1 (added 2022-12)",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 17",
+      "valid": true,
+      "messageBytes": 17,
+      "comment": "message of size 17 (added 2022-12)",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "official vector 18",
+      "valid": true,
+      "messageBytes": 100,
+      "comment": "message of size 100 (added 2022-12)",
+      "result": "ACCEPTED"
+    },
+    {
+      "name": "unrelated valid lift point",
+      "result": "REJECTED",
+      "rejectionLayer": "circuit",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "odd-Y lift point with the correct x",
+      "result": "REJECTED",
+      "rejectionLayer": "circuit",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "identity lift point",
+      "result": "REJECTED",
+      "rejectionLayer": "circuit",
+      "reason": "bad input: `Cannot extract coordinates of the Secp256k1 identity`"
+    },
+    {
+      "name": "off-curve lift point with the correct x and even y",
+      "result": "REJECTED",
+      "rejectionLayer": "native-point-decoding",
+      "reason": "bad input: `Failed to decode [Fq(0x000000000000000049344f85f89d5229b531c845836f99b08601f113bce036f8), Fq(0x000000000000000000000000000000000000000000000000f9308a019258c310), Fq(0x00000000000000000fe337e62a37f3566500a99934c2231b6cb9fd7584b8e673), Fq(0x000000000000000000000000000000000000000000000000388f7b0f632de814), Fq(0x0000000000000000000000000000000000000000000000000000000000000000)] as Secp256k1Point`"
+    },
+    {
+      "name": "official vector 0 real proof",
+      "result": "PASS",
+      "messageBytes": 32,
+      "transactionBytes": 6837,
+      "endToEndMilliseconds": 12604.576792,
+      "structuralCheckMilliseconds": 11.072292000000743,
+      "transactionSha256": "606017f7bcf6d059a36cd9643d5721d928cd7c05dcc621928028af344a2551a4"
+    },
+    {
+      "name": "official vector 15 real proof",
+      "result": "PASS",
+      "messageBytes": 0,
+      "transactionBytes": 6836,
+      "endToEndMilliseconds": 12507.961667,
+      "structuralCheckMilliseconds": 9.042499999999563,
+      "transactionSha256": "9c0d199412023da9526b444d51f317567d068cb93363bbde5051e60a8f04550f"
+    },
+    {
+      "name": "official vector 18 real proof",
+      "result": "PASS",
+      "messageBytes": 100,
+      "transactionBytes": 6837,
+      "endToEndMilliseconds": 12556.892917000001,
+      "structuralCheckMilliseconds": 8.673084000001836,
+      "transactionSha256": "c802e74f0db444df586a52591cc54a013f7abefe2d2ac52950c08dbb9ff98f10"
+    }
+  ],
+  "proofs": [
+    {
+      "circuit": "verify_32",
+      "proofBytes": 6364,
+      "proveRequestMilliseconds": 12565.9055,
+      "requestBytes": 234951847,
+      "proofSha256": "d1e708535da2dcb08ecd66b96e764295ad33478f5651a7012061f967540fdfa6"
+    },
+    {
+      "circuit": "verify_0",
+      "proofBytes": 6364,
+      "proveRequestMilliseconds": 12468.527250000001,
+      "requestBytes": 234951553,
+      "proofSha256": "93ffc2f1232b52fe74c808821edc9009df84797060b06f11a32f8f4dc45034db"
+    },
+    {
+      "circuit": "verify_100",
+      "proofBytes": 6364,
+      "proveRequestMilliseconds": 12518.999124999998,
+      "requestBytes": 234952176,
+      "proofSha256": "f8fc9bf1887fea5161a301169538ce9ba7611d468ec5029c77f4e1b340403765"
+    }
+  ]
+}

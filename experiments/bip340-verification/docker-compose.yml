@@ -1,0 +1,13 @@
+services:
+  proof-server:
+    image: midnightntwrk/proof-server:9.0.0-rc.8@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf
+    ports:
+      - '127.0.0.1:6391:6300'
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    environment:
+      PORT: '6300'
+      RAYON_NUM_THREADS: '4'
+      MIDNIGHT_PROOF_SERVER_NUM_WORKERS: '1'
+      MIDNIGHT_PROOF_SERVER_JOB_CAPACITY: '2'
+      MIDNIGHT_PROOF_SERVER_JOB_TIMEOUT: '1200'

@@ -1,0 +1,2 @@
+# Preserve the pinned upstream CSV bytes, including its CRLF line endings.
+test-vectors.csv -text whitespace=cr-at-eol

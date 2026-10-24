@@ -1,0 +1,31 @@
+{
+  "name": "@midnight-ntwrk/experiment-bip340-verification",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Experimental BIP-340 signature verification and proof evidence in Compact",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/probe-bip340.compact contracts/managed/probe-bip340",
+    "compile:js": "compact compile +0.35.0 --feature-zkir-v3 --skip-zk contracts/probe-bip340.compact contracts/managed/probe-bip340",
+    "check": "tsc -p tsconfig.json",
+    "test": "node --import tsx src/offline.ts",
+    "test:harness": "node --import tsx --test src/proof-provider.test.ts src/proof-server-identity.test.ts",
+    "test:native": "cargo test --locked --manifest-path native/Cargo.toml -p bip340-proof-verify",
+    "verify:native": "cargo run --release --locked --manifest-path native/Cargo.toml -- contracts/managed/probe-bip340/proof-artifacts",
+    "prove": "node --import tsx src/prove.ts",
+    "measure": "node --import tsx src/measure.ts"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "@noble/curves": "2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "tsx": "4.22.5",
+    "typescript": "5.9.3"
+  }
+}

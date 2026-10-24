@@ -199,7 +199,9 @@ reference contract. MIP-0030 preserves its signing bytes and sets no
 sunset policy. Its per-device signing envelope is what admits
 dApp-connector ECDSA signers today.
 
-**E — BIP-340 Schnorr over secp256k1 (Midnight wallet key).** Named
-candidate: every wallet signing surface already produces it, and
-verification is measured in-circuit at k=15 to k=16 on real wallet
-vectors. Blocked in Compact only on secp256k1 point operations.
+**E: BIP-340 Schnorr over secp256k1.** **Deferred 2026/10/22.** Compact
+0.35 resolves the earlier point-operation blocker. The standalone verifier
+experiment is retained, but Passport does not adopt BIP-340, including for
+scoped grants: the expected proving benefit over k256 or P-256 does not
+justify another supported signature scheme. See the
+[decision, evidence, and reconsideration criteria](../../../experiments/bip340-verification/README.md#decision-retain-the-experiment-defer-passport-integration).
