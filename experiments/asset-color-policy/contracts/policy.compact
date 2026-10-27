@@ -1,0 +1,26 @@
+pragma language_version 0.27;
+import CompactStandardLibrary;
+
+// EXPERIMENT ONLY. One read-only decision circuit, shared by many ACCs.
+// The map key is either a raw color or a salted color tag, chosen by the ACC.
+// Constructors publish keys; neither version publishes balances or owners.
+export ledger frozen: Map<Bytes<32>, Boolean>;
+export ledger admin_commitment: Bytes<32>;
+
+constructor(key: Bytes<32>, initially_frozen: Boolean, admin_hash: Bytes<32>) {
+  frozen.insert(disclose(key), disclose(initially_frozen));
+  admin_commitment = disclose(admin_hash);
+}
+
+export circuit check(key: Bytes<32>): [] {
+  assert(frozen.member(disclose(key)), "policy has no rule for asset");
+  assert(!frozen.lookup(disclose(key)), "asset frozen by policy");
+}
+
+// A private preimage gate is sufficient for this experiment's synthetic admin.
+// This is not a proposed production administration/authentication scheme.
+export circuit set_frozen(key: Bytes<32>, value: Boolean, admin_secret: Bytes<32>): [] {
+  assert(persistentHash<Bytes<32>>(admin_secret) == admin_commitment, "invalid policy admin");
+  assert(frozen.member(disclose(key)), "policy has no rule for asset");
+  frozen.insert(disclose(key), disclose(value));
+}

@@ -1,0 +1,2 @@
+compact compile +0.35.0 --feature-zkir-v3 contracts/policy-dispatch.compact contracts/managed/Dispatch
+Completed successfully.

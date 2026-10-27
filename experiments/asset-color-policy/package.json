@@ -1,0 +1,15 @@
+{
+  "name": "passport-asset-color-policy-experiment",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "node scripts/compile.mjs",
+    "test": "node scripts/probe.mjs && node scripts/registry-probe.mjs",
+    "cost": "node scripts/cost.mjs",
+    "experiment": "npm run compile && npm test && npm run cost"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@noble/curves": "2.4.0"
+  }
+}
