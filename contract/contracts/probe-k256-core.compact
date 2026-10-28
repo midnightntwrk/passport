@@ -1,0 +1,44 @@
+pragma language_version >= 0.17.0;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// PROBE (not part of the standard, never deployed by the account): compiles
+// and exports modules/K256Core on its own, so that the core's acceptance
+// rules are tested where nothing else checks first. Through an arm, the key
+// rule cannot be observed: the arm derives the key's address before it
+// verifies, and extracting the coordinates of the point at infinity already
+// fails there. Called directly, the verification must refuse that point
+// itself, or anyone passes it: with Q = O, u1·G + u2·Q = u1·G, so
+// digest = 1, s = 1 and r = x(G) verify without any private key.
+//
+//   k256_require_live_key   the key rule: not the point at infinity
+//   k256_ecdsa_verify       ECDSA over secp256k1 on a 32-byte digest: the
+//                           key rule, r != 0 and s != 0, the checked digest
+//                           hint, both S forms accepted
+//
+// Both are re-exported as pure circuits. The impure probe_* circuits wrap one
+// each and write a ledger cell: the public output stops the compiler from
+// treating them as pure helpers, so they have proving keys, and a test can
+// show that the proof itself enforces the rules (constraint-level negatives).
+// ---------------------------------------------------------------------------
+
+import "modules/K256Core";
+
+export { k256_require_live_key, k256_ecdsa_verify };
+
+// The result of the last verification probe.
+export ledger verified: Boolean;
+// How many keys the key-rule probe has admitted.
+export ledger keys_admitted: Counter;
+
+export circuit probe_k256_ecdsa_verify(
+  digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point
+): [] {
+  verified = disclose(k256_ecdsa_verify(digest, h, sig, pk));
+}
+
+export circuit probe_k256_require_live_key(pk: Secp256k1Point): [] {
+  k256_require_live_key(pk);
+  keys_admitted.increment(1);
+}

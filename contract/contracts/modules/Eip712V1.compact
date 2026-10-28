@@ -1,0 +1,74 @@
+// ---------------------------------------------------------------------------
+// EIP-712 V1: the signing format of the EVM arms on k256 keys. A wallet signs
+// typed data (`eth_signTypedData_v4`), and the bytes it signs are
+//
+//   digest = keccak256(0x19 || 0x01 || domainSeparator || hashStruct(message))
+//
+// under one fixed domain:
+//
+//   EIP712Domain(string name,string version,address verifyingContract)
+//   name               "Midnight Passport"
+//   version            "1"
+//   verifyingContract  P, the low 20 bytes of keccak256("midnight:passport:evm:v1"):
+//                      0x596e089eF2D7308208B9e8f7e1A147942a84104F
+//
+// P names the domain; no contract is deployed at it, and anyone can recompute
+// it from the text. The domain has no chainId, no salt and no network value:
+// a circuit cannot read the network id, so such a value could not be checked,
+// and wallets refuse to sign a chainId other than the chain they have active.
+// The account is bound by the message itself: every message type carries
+// `bytes32 account`, which the arm's seam takes from the executing contract.
+//
+// Every value of the domain is fixed, so the separator is a circuit constant
+// and the digest costs one keccak256 block (0x19 0x01, the separator and the
+// struct hash: 66 bytes). The type hash, the two string hashes and P are
+// exported beside it, so a client or a test can recompute the separator from
+// its parts and compare.
+//
+// The module computes what the k256 core verifies (the 32-byte digest) and
+// never verifies a signature itself. The message's hashStruct comes from the
+// arm's codec (modules/EvmK256). Everything here is pure: the exported
+// circuits are oracles on the compiled artefact, with no proving key and no
+// deploy cost.
+// ---------------------------------------------------------------------------
+
+module Eip712V1 {
+  import CompactStandardLibrary;
+
+  // keccak256("EIP712Domain(string name,string version,address verifyingContract)")
+  export pure circuit eip712_v1_domain_type_hash(): Bytes<32> {
+    return Bytes[0x91, 0xab, 0x3d, 0x17, 0xe3, 0xa5, 0x0a, 0x9d, 0x89, 0xe6, 0x3f, 0xd3, 0x0b, 0x92, 0xbe, 0x7f,
+                 0x53, 0x36, 0xb0, 0x3b, 0x28, 0x7b, 0xb9, 0x46, 0x78, 0x7a, 0x83, 0xa9, 0xd6, 0x2a, 0x27, 0x66];
+  }
+
+  // keccak256("Midnight Passport")
+  export pure circuit eip712_v1_name_hash(): Bytes<32> {
+    return Bytes[0xe5, 0x9d, 0xd8, 0x70, 0x51, 0x18, 0xa4, 0x64, 0x9b, 0xd1, 0xea, 0x3f, 0xc8, 0x17, 0x96, 0x8b,
+                 0xbd, 0x5d, 0x53, 0x95, 0xa5, 0xea, 0x91, 0x46, 0xd5, 0x4a, 0x9f, 0xe0, 0xd3, 0x2c, 0x30, 0x72];
+  }
+
+  // keccak256("1")
+  export pure circuit eip712_v1_version_hash(): Bytes<32> {
+    return Bytes[0xc8, 0x9e, 0xfd, 0xaa, 0x54, 0xc0, 0xf2, 0x0c, 0x7a, 0xdf, 0x61, 0x28, 0x82, 0xdf, 0x09, 0x50,
+                 0xf5, 0xa9, 0x51, 0x63, 0x7e, 0x03, 0x07, 0xcd, 0xcb, 0x4c, 0x67, 0x2f, 0x29, 0x8b, 0x8b, 0xc6];
+  }
+
+  // P = the low 20 bytes of keccak256("midnight:passport:evm:v1")
+  export pure circuit eip712_v1_verifying_contract(): Bytes<20> {
+    return Bytes[0x59, 0x6e, 0x08, 0x9e, 0xf2, 0xd7, 0x30, 0x82, 0x08, 0xb9,
+                 0xe8, 0xf7, 0xe1, 0xa1, 0x47, 0x94, 0x2a, 0x84, 0x10, 0x4f];
+  }
+
+  // The domain separator, hashStruct of the domain:
+  // keccak256(type hash || name hash || version hash || 12 zero bytes || P)
+  export pure circuit eip712_v1_domain_separator(): Bytes<32> {
+    return Bytes[0xc1, 0x99, 0xa5, 0x6c, 0x83, 0xcc, 0x5d, 0x03, 0x77, 0xe7, 0xf2, 0x61, 0xc3, 0x34, 0x91, 0xd1,
+                 0xee, 0x5f, 0xa3, 0x01, 0xde, 0x75, 0xf8, 0x3d, 0xfb, 0x8b, 0xc3, 0x2a, 0x21, 0xe0, 0x8a, 0xd8];
+  }
+
+  // The 32 bytes the wallet signs for a message whose hashStruct is
+  // `struct_hash`.
+  export pure circuit eip712_v1_digest(struct_hash: Bytes<32>): Bytes<32> {
+    return keccak256<[Bytes<2>, Bytes<32>, Bytes<32>]>([Bytes[0x19, 0x01], eip712_v1_domain_separator(), struct_hash]);
+  }
+}

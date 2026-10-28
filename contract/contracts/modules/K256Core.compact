@@ -1,0 +1,67 @@
+// ---------------------------------------------------------------------------
+// k256 core: ECDSA over secp256k1 (k256) on a 32-byte digest, for every arm
+// whose keys are secp256k1 keys. It knows no chain, wallet or signing format:
+// an arm's format computes the digest the wallet signs, and this module
+// verifies a signature over it. It holds the acceptance rules of a key and a
+// signature, so a caller adds none of its own: the key is not the point at
+// infinity, r and s are non-zero, and both S forms are accepted.
+//
+// CHECKED DIGEST BYTES. Taking bytes out of a value costs a full
+// decomposition per byte, so the caller passes the digest's bytes as a
+// checked hint: a Uint<8> vector (each element range-checked to 8 bits as a
+// circuit argument) that must equal the digest byte for byte. Only one vector
+// passes, and the check binds it before the bytes are read big-endian.
+//
+// The circuits read no ledger state, so the module is imported rather than
+// included.
+// ---------------------------------------------------------------------------
+
+module K256Core {
+  import CompactStandardLibrary;
+
+  // The key rule: a secp256k1 key is not the point at infinity, in either of
+  // its encodings. ECDSA is forgeable against it: the verification computes
+  // P = u1·G + u2·Q and compares x(P) with r, so with Q = O the key's term
+  // vanishes and anyone can take any k, set r = x(k·G) and s = z/k, and pass
+  // without a private key. A Secp256k1Point carries {x, y, identity}, and a
+  // comparison with the default point compares all three, so the unflagged
+  // {0, 0, not identity} would pass it; the rule compares the coordinates
+  // instead. Extracting the coordinates of the flagged {0, 0, identity}
+  // already fails (in the circuit and in the runtime), and the comparison
+  // refuses the all-zero coordinates of the other encoding. A circuit that
+  // admits a key without verifying a signature with it (an activation) calls
+  // this rule itself; the verification below calls it for every key.
+  export circuit k256_require_live_key(pk: Secp256k1Point): [] {
+    assert(!((secp256k1PointX(pk) as Bytes<32>) == pad(32, "") && (secp256k1PointY(pk) as Bytes<32>) == pad(32, "")),
+           "k256: the key is the point at infinity");
+  }
+
+  // ECDSA verification over secp256k1: the standard library's
+  // secp256k1EcdsaVerify with the same arithmetic and semantics (both S forms
+  // accepted, the digest read big-endian and reduced mod n, x(R) reduced mod
+  // n), with three differences: the key is refused by the key rule above
+  // instead of by a comparison with the default point; r = 0 and s = 0 are
+  // refused (FIPS 186-5 takes both in [1, n - 1]: s = 0 has no inverse, and
+  // r = 0 would need x(u1·G + u2·Q) to be 0 mod n); and the digest's
+  // big-endian bytes come from the checked hint `h` instead of being reversed
+  // byte by byte.
+  // compact row optimization | ECDSA verify with the digest from checked bytes | -38% rows
+  export circuit k256_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
+    // Extra safety check: a caller is expected to refuse the point at infinity
+    // before calling (an arm's seam does when it derives the key's address:
+    // extracting the coordinates of the flagged encoding fails, and the
+    // unflagged (0, 0) is not a point of the curve). The rule is repeated here
+    // so that this verification never depends on its caller.
+    k256_require_live_key(pk);
+    const {r, s} = sig;
+    assert(r != default<Secp256k1Scalar> && s != default<Secp256k1Scalar>, "k256: signature scalar is zero");
+    assert(Bytes[...h] == digest, "k256: digest hint does not match the digest");
+    const z = Bytes[h[31], h[30], h[29], h[28], h[27], h[26], h[25], h[24], h[23], h[22], h[21], h[20], h[19], h[18], h[17], h[16],
+                    h[15], h[14], h[13], h[12], h[11], h[10], h[9],  h[8],  h[7],  h[6],  h[5],  h[4],  h[3],  h[2],  h[1],  h[0]] as Secp256k1Scalar;
+    const w = inv(s);
+    const u1 = z * w;
+    const u2 = r * w;
+    const point = ecAdd(ecMulGenerator(u1), ecMul(pk, u2));
+    return (secp256k1PointX(point) as Bytes<32>) as Secp256k1Scalar == r;
+  }
+}

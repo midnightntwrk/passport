@@ -1,0 +1,1379 @@
+{
+  "what": "The arm's properties are held by functional tests, not by reading the source. Each mutant is a one-change edit of the arm's sources (contracts/account-evm-k256.compact, contracts/modules/EvmK256.compact, and the modules the arm's core, identity and format moved into: contracts/modules/K256Core.compact, contracts/modules/EvmIdentity.compact, contracts/modules/Eip712V1.compact), compiled --skip-zk in its own copy and run against the offline layer (every file of npm run test:evm_k256-offline, the shared wallet-arms suites, constraint-negative-offline and the viem cross-check) and the prover suite's JavaScript layer (EVM_K256_DRY=1, no proof server, every section), where a mutant that lets a refused forgery through fails that case's simulator half. A mutant is killed when a suite shows its effect: an accepted forgery (a call the unmutated copy refuses goes through), a broken honest call, or a changed output; a suite that only reports another refusal message does not count as a kill. The unmutated copy, compiled and run the same way, passes every suite (the control).",
+  "testsAt": {
+    "all": "wallet-arm-evm-eip712 0065058 (the tests and sources of that commit)",
+    "C18": "wallet-arm-evm-eip712 324bad9, the commit that adds the case killing it (it survived the tests of the commit above)",
+    "C4-C7-C8-P16": "the commit that adds contracts/probe-k256-core.compact and k256-core-probe-offline (the core alone); through the arm they are reviewed in each entry"
+  },
+  "control": {
+    "verdict": "CONTROL PASS",
+    "failingSuites": [],
+    "atTheTestCommit": "CONTROL PASS"
+  },
+  "mutants": [
+    {
+      "id": "M1",
+      "mutation": "an export skips the seam (rotate_enc_key without the signature step)",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "accepted forgery",
+      "evidence": [
+        "accepted forgery: ✗ [owner evm_k256 / grantee evm_k256] the grantee key against the device seam (NOT refused)",
+        "accepted forgery: ✗ [owner k256 / grantee evm_k256] the grantee key against the device seam (NOT refused)",
+        "accepted forgery: ✗ [owner jubjub / grantee evm_k256] the grantee key against the device seam (NOT refused)"
+      ]
+    },
+    {
+      "id": "M2",
+      "mutation": "the one-type body frames another address",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: k256: digest hint does not match the digest",
+        "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: k256: digest hint does not match the digest",
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: k256: digest hint does not match the digest"
+      ]
+    },
+    {
+      "id": "M3",
+      "mutation": "the unshielded grantee twin hands its seam amount 0 for the scope checks",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-prover-dry",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "accepted forgery",
+      "evidence": [
+        "accepted forgery: ✗ [owner evm_k256 / grantee evm_k256] wrong spent_prev (NOT refused)",
+        "accepted forgery: ✗ [owner k256 / grantee evm_k256] wrong spent_prev (NOT refused)",
+        "accepted forgery: ✗ [owner jubjub / grantee evm_k256] wrong spent_prev (NOT refused)"
+      ]
+    },
+    {
+      "id": "M4",
+      "mutation": "the grant frame with a constant nonce",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-prover-dry",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "accepted forgery",
+      "evidence": [
+        "honest flow broken: ✗ every shielded spend refuses a held coin of another colour (witness substitution): unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ the recipient pin on both shielded grantee twins (a recipient other than the pinned one, honestly signed): unexpected error failed assert: evm_k256: word hint does not match its value",
+        "accepted forgery (simulator): [isolate] grantee twin: the approval made at grantNonce 0, replayed at grantNonce 1 with the nonce hint of 0 and the current spent opening"
+      ]
+    },
+    {
+      "id": "M5",
+      "mutation": "the one-type body frames another account",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: k256: digest hint does not match the digest",
+        "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: k256: digest hint does not match the digest",
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: k256: digest hint does not match the digest"
+      ]
+    },
+    {
+      "id": "M6",
+      "mutation": "the one-type body frames another nonce",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value"
+      ]
+    },
+    {
+      "id": "M7",
+      "mutation": "the unshielded grantee twin hands its seam another recipient for the scope checks",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: recipient not admitted by pin",
+        "honest flow broken: ✗ [owner k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: recipient not admitted by pin",
+        "honest flow broken: ✗ [owner jubjub / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: recipient not admitted by pin"
+      ]
+    },
+    {
+      "id": "M8",
+      "mutation": "the unshielded grantee twin hands its seam another colour for the scope checks",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: scope object mismatch",
+        "honest flow broken: ✗ [owner k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: scope object mismatch",
+        "honest flow broken: ✗ [owner jubjub / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: scope object mismatch"
+      ]
+    },
+    {
+      "id": "M9",
+      "mutation": "the two-form body frames the second form (the literal entry) with another address",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-prover-dry",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ remove_device in both forms (descriptor; literal entry) by the evm device F: unexpected error failed assert: k256: digest hint does not match the digest",
+        "honest flow broken: ✗ every device-gated export refuses an approval it did not get (the device seam, three bodies): unexpected error failed assert: k256: digest hint does not match the digest",
+        "honest call broken: [devices] remove_device: the k256 entry by the literal form: DRY: execution failed failed assert: k256: digest hint does not match the digest"
+      ]
+    },
+    {
+      "id": "M10",
+      "mutation": "the bare body frames another nonce",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value"
+      ]
+    },
+    {
+      "id": "M11",
+      "mutation": "the unshielded grantee twin renders another amount than it executes",
+      "file": "contracts/account-evm-k256.compact",
+      "killedBy": [
+        "evm-k256-grants-offline",
+        "evm-k256-hints-offline",
+        "evm-k256-recovery-sim",
+        "evm-k256-seam-offline"
+      ],
+      "verdict": "KILLED",
+      "killKind": "broken honest behaviour",
+      "evidence": [
+        "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ [owner k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value",
+        "honest flow broken: ✗ [owner jubjub / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: word hint does not match its value"
+      ]
+    }
+  ],
+  "propertyMutants": {
+    "what": "Every gated export with its seam call deleted (15), the zero-scalar assert deleted (one assert, in K256Core, which every seam's verification calls), the colour asserts and the rendered colour handed to the grantee scope (4), the pinned recipient handed to the scope (2), the grant seam without its epoch check, the shielded grant bounds deleted (2), and remove_device handing its self-removal guard a zero entry with the seam kept.",
+    "mutants": [
+      {
+        "id": "P1",
+        "mutation": "rotate_enc_key_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ [owner evm_k256 / grantee evm_k256] the grantee key against the device seam (NOT refused)",
+          "accepted forgery: ✗ [owner k256 / grantee evm_k256] the grantee key against the device seam (NOT refused)",
+          "accepted forgery: ✗ [owner jubjub / grantee evm_k256] the grantee key against the device seam (NOT refused)"
+        ]
+      },
+      {
+        "id": "P2",
+        "mutation": "withdraw_unshielded_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_unshielded: an approval over another account's frame, signed by the device (NOT refused)",
+          "accepted forgery: ✗ withdraw_unshielded: another key's signature with the device's entry opening (NOT refused)",
+          "accepted forgery: ✗ withdraw_unshielded: (r, s) = (0, 0) with the device's entry opening (K256Core's assert, through the one-type body) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P3",
+        "mutation": "withdraw_shielded_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded: an approval over another account's frame, signed by the device (NOT refused)",
+          "accepted forgery: ✗ withdraw_shielded: another key's signature with the device's entry opening (NOT refused)",
+          "accepted forgery: ✗ withdraw_shielded: (r, s) = (0, 0) with the device's entry opening (K256Core's assert, through the one-type body) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P4",
+        "mutation": "withdraw_shielded_to_contract_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_to_contract: an approval over another account's frame, signed by the device (NOT refused)",
+          "accepted forgery: ✗ withdraw_shielded_to_contract: another key's signature with the device's entry opening (NOT refused)",
+          "accepted forgery: ✗ withdraw_shielded_to_contract: (r, s) = (0, 0) with the device's entry opening (K256Core's assert, through the one-type body) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P5",
+        "mutation": "append_inbox_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ append_inbox: an approval over another account's frame, signed by the device (NOT refused)",
+          "accepted forgery: ✗ append_inbox: another key's signature with the device's entry opening (NOT refused)",
+          "accepted forgery: ✗ append_inbox: (r, s) = (0, 0) with the device's entry opening (K256Core's assert, through the one-type body) (NOT refused)"
+        ]
+      },
+      {
+        "id": "P6",
+        "mutation": "add_device_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ add_device: an approval over another account's frame, signed by the device (NOT refused)",
+          "honest flow broken: ✗ every device-gated export refuses an approval it did not get (the device seam, three bodies): unexpected error failed assert: device entry already present",
+          "accepted forgery (simulator): [devices] add_device binding: k256 x changed after signing"
+        ]
+      },
+      {
+        "id": "P7",
+        "mutation": "remove_device_with_evm_k256 without its seam call (the caller entry the self-removal guard compares becomes zero)",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ remove_device (descriptor form): an approval over another account's frame, signed by the device (NOT refused)",
+          "honest flow broken: ✗ every device-gated export refuses an approval it did not get (the device seam, three bodies): unexpected error failed assert: cannot remove last device",
+          "accepted forgery: ✗ remove_device: auth.hint.nonce with one byte flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "P8",
+        "mutation": "issue_grant_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ [owner evm_k256 / grantee k256] a caller pin added to a scope signed unrestricted (NOT refused)",
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: grant already active",
+          "accepted forgery: ✗ [owner evm_k256 / grantee jubjub] a caller pin added to a scope signed unrestricted (NOT refused)"
+        ]
+      },
+      {
+        "id": "P9",
+        "mutation": "revoke_grant_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: unknown device entry",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: unknown device entry",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: unknown device entry"
+        ]
+      },
+      {
+        "id": "P10",
+        "mutation": "revoke_all_grants_with_evm_k256 without its seam call (anyone revokes every grant)",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: unknown device entry",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: unknown device entry",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: unknown device entry"
+        ]
+      },
+      {
+        "id": "P11",
+        "mutation": "publish_recovery_session_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ signed effect line changed, executed the original: refused (NOT refused)",
+          "accepted forgery: ✗ an unenrolled evm key signs the session (NOT refused)",
+          "honest flow broken: ✗ the shared recovery gate on an evm_k256 account; pending exclusivity; the veto window: unexpected error failed assert: invalid recovery signature"
+        ]
+      },
+      {
+        "id": "P12",
+        "mutation": "recover_cancel_with_evm_k256 without its seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ a RevokeAllGrants signature over the same bare frame presented as CancelRecovery (NOT refused)",
+          "honest flow broken: ✗ recover_cancel_with_evm_k256: binding, then the veto by a second evm device: unexpected error failed assert: no recovery pending",
+          "accepted forgery: ✗ recover_cancel: an approval over another account's frame, signed by the device (NOT refused)"
+        ]
+      },
+      {
+        "id": "P13",
+        "mutation": "withdraw_unshielded_with_grant_evm_k256 without its grant seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ [owner evm_k256 / grantee evm_k256] identical resubmission (stale nonce) (NOT refused)",
+          "accepted forgery: ✗ [owner evm_k256 / grantee evm_k256] over per_call_cap (NOT refused)",
+          "accepted forgery: ✗ [owner evm_k256 / grantee evm_k256] wrong spent_prev (NOT refused)"
+        ]
+      },
+      {
+        "id": "P14",
+        "mutation": "withdraw_shielded_with_grant_evm_k256 without its grant seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ [caller pin, owner evm_k256 / grantee evm_k256] withdraw_shielded: another contract caller refused by the shared gate (NOT refused)",
+          "accepted forgery: ✗ [caller pin, owner jubjub / grantee evm_k256] withdraw_shielded: another contract caller refused by the shared gate (NOT refused)",
+          "accepted forgery: ✗ withdraw_shielded_with_grant: an approval over another account's frame, signed by the grantee (NOT refused)"
+        ]
+      },
+      {
+        "id": "P15",
+        "mutation": "withdraw_shielded_to_contract_with_grant_evm_k256 without its grant seam call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ [caller pin, owner evm_k256 / grantee evm_k256] withdraw_shielded_to_contract: another contract caller refused by the shared gate (NOT refused)",
+          "accepted forgery: ✗ [caller pin, owner jubjub / grantee evm_k256] withdraw_shielded_to_contract: another contract caller refused by the shared gate (NOT refused)",
+          "accepted forgery: ✗ withdraw_shielded_to_contract_with_grant: an approval over another account's frame, signed by the grantee (NOT refused)"
+        ]
+      },
+      {
+        "id": "P16",
+        "mutation": "the zero-scalar assert deleted (r != 0 and s != 0: one assert in K256Core, which every seam's verification calls)",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "changed output at K256Core alone (r = 0 no longer refused; the verification returns false); no forgery a test can build",
+        "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ r = 0 is refused at the core (the honest key, digest and s) (NOT refused: the core accepted it); the pure circuit returned false",
+          "offline: evm-k256-seam-offline (r, s) = (0, 0) refused by \"secp256k1 scalar field has no inverse for 0\"; evm-k256-grants-offline r = 0 refused by \"invalid grant signature\"",
+          "prover: 16/16 r = 0 forgeries refused at /check (constraint), 17/17 s = 0 forgeries refused by the witness computation (cannot invert zero); 33/33 controls proved"
+        ],
+        "review": "reviewed (cross-agent audit, round 1): not equivalent; reclassified",
+        "argument": "Not equivalent: with r = 0, u2 = r/s = 0, so a signature verifies exactly when x(u1·G) is 0 mod n. That point exists (x = n is below the field prime, and (n, 0x98f66641cb0ae1776b463ebdee3d77fe2658f021db48e2c8ac7ab4c92f83621e) is on the curve), so for its discrete logarithm k, any non-zero digest scalar z and s = z/k give a signature with r = 0 that verifies under every key. No test can build that input (it needs k), and every r = 0 forgery a test can build is refused without the assert (the proof-server runs below). At K256Core alone the deletion is observable: r = 0 is no longer refused and the verification returns false, which k256-core-probe-offline catches. The assert stays: it refuses r = 0 outright instead of resting on the hardness of a discrete logarithm."
+      },
+      {
+        "id": "P20",
+        "mutation": "the to-contract grantee twin without its colour assert, the scope handed the rendered colour",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_to_contract_with_grant: a coin of colour B under a grant and an approval for A (NOT refused)",
+          "honest flow broken: ✗ every shielded spend refuses a held coin of another colour (witness substitution): unexpected error failed assert: spent opening mismatch",
+          "honest flow broken: ✗ the recipient pin on both shielded grantee twins (a recipient other than the pinned one, honestly signed): unexpected error failed assert: spent opening mismatch"
+        ]
+      },
+      {
+        "id": "P21",
+        "mutation": "the shielded grantee twin without its colour assert, the scope handed the rendered colour",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_with_grant: a coin of colour B under a grant and an approval for A (NOT refused)",
+          "honest flow broken: ✗ every shielded spend refuses a held coin of another colour (witness substitution): unexpected error failed assert: spent opening mismatch",
+          "honest flow broken: ✗ the recipient pin on both shielded grantee twins (a recipient other than the pinned one, honestly signed): unexpected error failed assert: spent opening mismatch"
+        ]
+      },
+      {
+        "id": "P22",
+        "mutation": "withdraw_shielded_with_evm_k256 (device) without its colour assert",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded (device): a coin of colour B under an approval for A (NOT refused)",
+          "accepted forgery (simulator): [witness] withdraw_shielded: valid signature for colour A, witness coin of colour B (same nonce, value, index)"
+        ]
+      },
+      {
+        "id": "P23",
+        "mutation": "withdraw_shielded_to_contract_with_evm_k256 (device) without its colour assert",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_to_contract (device): a coin of colour B under an approval for A (NOT refused)",
+          "accepted forgery (simulator): [witness] withdraw_shielded_to_contract: valid signature for colour A, witness coin of colour B (same nonce, value, index)"
+        ]
+      },
+      {
+        "id": "P24",
+        "mutation": "the shielded grantee twin hands its scope pinned_recipient as the recipient (the pin bypassed)",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_with_grant: another coin public key than the pinned one (NOT refused)",
+          "honest flow broken: ✗ the recipient pin on both shielded grantee twins (a recipient other than the pinned one, honestly signed): unexpected error failed assert: spent opening mismatch",
+          "accepted forgery (simulator): [grant-matrix] withdraw_shielded_with_grant: a recipient other than the pinned one, honestly signed"
+        ]
+      },
+      {
+        "id": "P25",
+        "mutation": "the to-contract grantee twin hands its scope pinned_recipient as the recipient (the pin bypassed)",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_to_contract_with_grant: another contract than the pinned one (NOT refused)",
+          "honest flow broken: ✗ the recipient pin on both shielded grantee twins (a recipient other than the pinned one, honestly signed): unexpected error failed assert: spent opening mismatch",
+          "accepted forgery (simulator): [grant-matrix] withdraw_shielded_to_contract_with_grant: a recipient other than the pinned one, honestly signed"
+        ]
+      },
+      {
+        "id": "P26",
+        "mutation": "the grant seam without its stale-epoch check (grants outlive a recovery)",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-recovery-sim"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ the grantee withdraws under the old grant after the finalisation (an honest approval over the live record) (NOT refused)",
+          "accepted forgery (simulator): [grant-matrix] withdraw_unshielded_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
+          "accepted forgery (simulator): [grant-matrix] withdraw_shielded_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval"
+        ]
+      },
+      {
+        "id": "P27",
+        "mutation": "withdraw_shielded_with_grant_evm_k256 without check_shielded_grant_bounds",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_with_grant: a coin of value 1000 under a grant whose max coin value is 600 (NOT refused)",
+          "honest flow broken: ✗ both shielded grantee twins check the coin bound and the live encryption key (honestly signed), then the honest call: unexpected error failed assert: spent opening mismatch",
+          "accepted forgery (simulator): [grant-matrix] withdraw_shielded_with_grant: a coin above the grant's max coin value (1000 > 600), honestly signed"
+        ]
+      },
+      {
+        "id": "P28",
+        "mutation": "withdraw_shielded_to_contract_with_grant_evm_k256 without check_shielded_grant_bounds",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ withdraw_shielded_to_contract_with_grant: a coin of value 1000 under a grant whose max coin value is 600 (NOT refused)",
+          "honest flow broken: ✗ both shielded grantee twins check the coin bound and the live encryption key (honestly signed), then the honest call: unexpected error failed assert: spent opening mismatch",
+          "accepted forgery (simulator): [grant-matrix] withdraw_shielded_to_contract_with_grant: a coin above the grant's max coin value (1000 > 600), honestly signed"
+        ]
+      },
+      {
+        "id": "P29",
+        "mutation": "remove_device_with_evm_k256 hands the self-removal guard a zero caller entry, the seam kept",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ remove_device (descriptor form): the device names its own post-roll entry (NOT refused)",
+          "honest flow broken: ✗ remove_device refuses the authorising device's own post-roll entry in both forms, then removes another device: unexpected error type error: remove_device_with_evm_k256 argument 8 (argument 9 as invoked from Typescript) at account-evm-k256",
+          "honest flow broken: ✗ revoke_all_grants refuses an approval it did not get (the bare body), then lands: unexpected error type error: revoke_all_grants_with_evm_k256 argument 1 (argument 2 as invoked from Typescript) at account-evm-k256.compact line 545 char 1;"
+        ]
+      }
+    ]
+  },
+  "hintMutants": {
+    "what": "Each check of the checked byte arguments deleted, or its bytes misused (the address slice shifted, a word emitted unreversed, the digest read little-endian, the coordinates hashed little-endian, a label or descriptor coordinate taken unchecked).",
+    "mutants": [
+      {
+        "id": "H1",
+        "mutation": "evm_bytes_of without its check (every coordinate, key and label hint unchecked)",
+        "file": "contracts/modules/EvmIdentity.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ issue_grant: hint.grantee.key with one byte flipped (NOT refused)",
+          "honest flow broken: ✗ the grantee and scope hints of issue_grant and revoke_grant: unexpected error failed assert: grant already active",
+          "honest flow broken: ✗ the grant seam: every seam hint and the operation hints of the grantee twins: unexpected error Cannot read properties of undefined (reading 'g')"
+        ]
+      },
+      {
+        "id": "H2",
+        "mutation": "evm_low20 without its check (the key hash unchecked)",
+        "file": "contracts/modules/EvmIdentity.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ activate: hint.key_hash with one byte flipped (NOT refused)",
+          "honest flow broken: ✗ activation: the key hint (coordinates and key hash): unexpected error failed assert: already activated",
+          "accepted forgery: ✗ rotate_enc_key: auth.hint.key.key_hash with one byte flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "H3",
+        "mutation": "evm_low20 takes bytes 11..30 instead of 12..31",
+        "file": "contracts/modules/EvmIdentity.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: boot commitment mismatch",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: boot commitment mismatch",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: boot commitment mismatch"
+        ]
+      },
+      {
+        "id": "H4",
+        "mutation": "evm_k256_be4 without its check (a removal epoch unchecked)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery (simulator): [isolate] remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)"
+        ]
+      },
+      {
+        "id": "H5",
+        "mutation": "evm_k256_be8 without its check (auth_nonce, issuedAt, grantNonce, Merkle index, counters unchecked)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ evm_k256_struct_withdraw_unshielded: the nonce hint flipped (NOT refused)",
+          "accepted forgery (simulator): [isolate] rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
+          "accepted forgery (simulator): [isolate] remove_device: targetCounter 1 shown and signed, 0 executed (the counter hint of 1)"
+        ]
+      },
+      {
+        "id": "H6",
+        "mutation": "evm_k256_be16 without its check (every amount and scope number unchecked)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ evm_k256_struct_withdraw_unshielded: the amount hint flipped (NOT refused)",
+          "accepted forgery (simulator): [isolate] withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
+          "accepted forgery (simulator): [isolate] withdraw_shielded: the change hint of 701, shown and signed, 700 executed"
+        ]
+      },
+      {
+        "id": "H7",
+        "mutation": "evm_k256_be8 emits the hint in stored (little-endian) order",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "H8",
+        "mutation": "k256_ecdsa_verify without its digest check",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery (simulator): [isolate] rotate_enc_key: the device's signature over an unrelated 32-byte value, passed as the digest hint",
+          "accepted forgery (simulator): [isolate] grantee twin: the grantee's signature over an unrelated 32-byte value, passed as the digest hint"
+        ]
+      },
+      {
+        "id": "H9",
+        "mutation": "k256_ecdsa_verify reads the digest little-endian",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "H10",
+        "mutation": "the address hashes the coordinates little-endian",
+        "file": "contracts/modules/EvmIdentity.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_identity: hash hint does not match the hash",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_identity: hash hint does not match the hash",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_identity: hash hint does not match the hash"
+        ]
+      },
+      {
+        "id": "H11",
+        "mutation": "visible_21 without its check (a passkey origin hint unchecked)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ add_device: hint.origin with one byte flipped (NOT refused)",
+          "honest flow broken: ✗ the descriptor hints of add_device and remove_device (the two-form body): unexpected error failed assert: device entry already present",
+          "accepted forgery: ✗ issue_grant: hint.grantee.origin with one byte flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "H12",
+        "mutation": "label_text with an unchecked hint (every site label rendering)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ evm_k256_site_label_hash: the label hint flipped (NOT refused)",
+          "accepted forgery: ✗ evm_k256_grantee_descriptor_hash: hint.label flipped (NOT refused)",
+          "accepted forgery: ✗ evm_k256_struct_withdraw_unshielded_as_grantee: the label hint flipped (NOT refused)"
+        ]
+      },
+      {
+        "id": "H13",
+        "mutation": "rev32 with an unchecked hint (every k256 and P-256 descriptor coordinate)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ issue_grant: hint.grantee.key with one byte flipped (NOT refused)",
+          "honest flow broken: ✗ the grantee and scope hints of issue_grant and revoke_grant: unexpected error failed assert: grant already active",
+          "honest flow broken: ✗ the grant seam: every seam hint and the operation hints of the grantee twins: unexpected error Cannot read properties of undefined (reading 'g')"
+        ]
+      }
+    ],
+    "deletedChecksLetThrough": {
+      "what": "for each deleted hint check, the forgeries of section isolate (and hints) that its mutant lets through: each is signed as the circuit renders the forged hint, so only that check refuses it on the unmutated copy",
+      "H1": [
+        "isolate: add_device: the k256 target's x hint with a byte changed, the shown x signed, the real x executed",
+        "isolate: issue_grant: the grantee's site label hint shown as \"cank.example\" and signed, \"bank.example\" executed",
+        "isolate: activation: the key's y hint with a byte changed, the boot commitment made over the address those bytes hash to"
+      ],
+      "H2": [
+        "hints: device seam: a byte of the key hash outside the address"
+      ],
+      "H4": [
+        "isolate: remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)"
+      ],
+      "H5": [
+        "isolate: rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
+        "isolate: remove_device: targetCounter 1 shown and signed, 0 executed (the counter hint of 1)",
+        "isolate: grantee twin: the approval made at grantNonce 0, replayed at grantNonce 1 with the nonce hint of 0 and the current spent opening"
+      ],
+      "H6": [
+        "isolate: withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
+        "isolate: withdraw_shielded: the change hint of 701, shown and signed, 700 executed",
+        "isolate: issue_grant: the cap hint of 1001, shown and signed, 1000 executed"
+      ],
+      "H8": [
+        "isolate: rotate_enc_key: the device's signature over an unrelated 32-byte value, passed as the digest hint",
+        "isolate: grantee twin: the grantee's signature over an unrelated 32-byte value, passed as the digest hint"
+      ],
+      "H11": [
+        "hints: add_device: a byte of a passkey target's origin"
+      ],
+      "H12": [
+        "isolate: issue_grant: the grantee's site label hint shown as \"cank.example\" and signed, \"bank.example\" executed"
+      ],
+      "H13": [
+        "isolate: add_device: the k256 target's x hint with a byte changed, the shown x signed, the real x executed"
+      ]
+    }
+  },
+  "displayMutants": {
+    "what": "The readable texts: the expiry's \"never\" and \"after\" selection, its bound and its length, the date unchecked; the window word ignoring the cap or inverted; the amount label unchecked or without its fixed words; an ed25519_base58 device or grantee shown by its raw bytes; add_device and issue_grant showing the key of other bytes than the encoding the derivation checked.",
+    "mutants": [
+      {
+        "id": "D1",
+        "mutation": "the expiry shows the date of 0 instead of \"never\"",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D2",
+        "mutation": "the expiry shows the words \"after 9999-12-31 23:59:59 UTC\" from the last second of 9999 on (bound off by one)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the issue_grant struct hash the contract computes for the frozen expiry vector #5 differs from the one viem computed from the typed data the wallet signs (evm-k256-offline and the viem cross-check: \"issue_grant/expiry#5: contract struct hash\"), so an honest approval of that grant is refused"
+        ]
+      },
+      {
+        "id": "D3",
+        "mutation": "the expiry date hashed without its last character",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D4",
+        "mutation": "the expiry text not checked against the value (the date is whatever the hint says)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ issue_grant: hint.year_split with one byte flipped (NOT refused)",
+          "honest flow broken: ✗ the grantee and scope hints of issue_grant and revoke_grant: unexpected error failed assert: grant already active",
+          "honest flow broken: ✗ the grant seam: every seam hint and the operation hints of the grantee twins: unexpected error Cannot read properties of undefined (reading 'g')"
+        ]
+      },
+      {
+        "id": "D5",
+        "mutation": "the window word ignores the window cap (\"no window\" whenever the length is 0)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the window word the contract renders differs from the client's for window 0 with a cap: \"window 0/7: contract digest == the pointer message\" fails (evm-k256-offline), so the honest approval is refused"
+        ]
+      },
+      {
+        "id": "D6",
+        "mutation": "the window word inverted",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D7",
+        "mutation": "the amount label not checked against the amount (the label is whatever the site sends)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-offline",
+          "evm-k256-prover-dry"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: AssertionError [ERR_ASSERTION]: Missing expected exception: site amount label with 19 decimals: the contract's pure circuit must refuse",
+          "accepted forgery: ✗ evm_k256_struct_withdraw_unshielded: a digit of the amount label changed (NOT refused)",
+          "accepted forgery (simulator): [texts] withdraw_unshielded: 10 shown as \"0.000010 TO\\nKEN\" (signed as shown)"
+        ]
+      },
+      {
+        "id": "D8",
+        "mutation": "the amount label without its fixed words (the site's claim not marked as such)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid grant signature",
+          "honest flow broken: ✗ [owner k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid grant signature",
+          "honest flow broken: ✗ [owner jubjub / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid grant signature"
+        ]
+      },
+      {
+        "id": "D9",
+        "mutation": "an ed25519_base58 target device shown by its raw bytes instead of its base58 text",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ the Solana key inputs of a Solana target (add_device): unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "D10",
+        "mutation": "an ed25519_base58 grantee shown by its raw bytes instead of its base58 text",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the issue_grant struct hash for a Solana grantee differs from viem's (\"issue_grant/sol_ed25519: contract struct hash\", evm-k256-offline and the viem cross-check), and the prover suite's JavaScript layer fails the places cases of that grantee's encoding (\"copy FAIL (DRY)\")"
+        ]
+      },
+      {
+        "id": "D11",
+        "mutation": "add_device shows the key of its x bytes, not of the encoding the derivation checked",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "honest flow broken: ✗ more devices: a second evm device and a JubJub device, and the upstream plant at device_epoch + 1: unexpected error failed assert: display: the base58 digits do not match the value's low bytes",
+          "honest flow broken: ✗ recover_cancel_with_evm_k256: binding, then the veto by a second evm device: unexpected error failed assert: unknown device entry",
+          "honest flow broken: ✗ finalisation clears every old device, the planted evm_k256 entry included (#183; replaces erratum 7): unexpected error failed assert: recovery already pending"
+        ]
+      },
+      {
+        "id": "D12",
+        "mutation": "issue_grant shows the grantee key of its x bytes, not of the encoding the derivation checked",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: display: the base58 digits do not match the value's low bytes",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: display: the base58 digits do not match the value's low bytes",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: display: the base58 digits do not match the value's low bytes"
+        ]
+      }
+    ]
+  },
+  "coreAndFormatMutants": {
+    "what": "The k256 core, the EVM identity and the EIP-712 V1 format, and the enrolment kinds: the core returning true, r ≠ 0 and s ≠ 0 deleted one at a time, the key rule deleted and each of its two calls skipped, a 0x04 prefix hashed into the address, one byte of each domain constant, the 0x19 0x01 prefix changed, the struct hash and the separator swapped, a personal_sign digest accepted beside V1, a kind dropped, two kinds sharing an entry, a kind under another payload form and one byte of a kind's type hash.",
+    "mutants": [
+      {
+        "id": "C3",
+        "mutation": "O18 the k256 core returns true (every signature verifies)",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-prover-dry",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ [owner evm_k256 / grantee k256] a caller pin added to a scope signed unrestricted (NOT refused)",
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: grant already active",
+          "accepted forgery: ✗ [owner evm_k256 / grantee jubjub] a caller pin added to a scope signed unrestricted (NOT refused)"
+        ]
+      },
+      {
+        "id": "C4",
+        "mutation": "O1 r != 0 deleted (s != 0 kept)",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "changed output at K256Core alone (r = 0 no longer refused; the verification returns false); no forgery a test can build",
+        "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ r = 0 is refused at the core (the honest key, digest and s) (NOT refused: the core accepted it); the pure circuit returned false",
+          "offline: r = 0 refused by \"invalid (grant) signature\" instead of the zero-scalar message",
+          "prover: P16's runs, the 16 r = 0 forgeries"
+        ],
+        "review": "reviewed (cross-agent audit, round 1): not equivalent; reclassified",
+        "argument": "Not equivalent: with r = 0, u2 = r/s = 0, so a signature verifies exactly when x(u1·G) is 0 mod n. That point exists (x = n is below the field prime, and (n, 0x98f66641cb0ae1776b463ebdee3d77fe2658f021db48e2c8ac7ab4c92f83621e) is on the curve), so for its discrete logarithm k, any non-zero digest scalar z and s = z/k give a signature with r = 0 that verifies under every key. No test can build that input (it needs k), and every r = 0 forgery a test can build is refused without the assert (the proof-server runs below). At K256Core alone the deletion is observable: r = 0 is no longer refused and the verification returns false, which k256-core-probe-offline catches. The assert stays: it refuses r = 0 outright instead of resting on the hardness of a discrete logarithm."
+      },
+      {
+        "id": "C5",
+        "mutation": "O1 s != 0 deleted (r != 0 kept)",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [],
+        "verdict": "EQUIVALENT",
+        "killKind": "message only (offline); refused at the proof server",
+        "equivalence": "s ≠ 0 deleted, r ≠ 0 kept: an input with s = 0 and r ≠ 0 meets the same circuit as P16's, and P16's proof-server runs refuse every s = 0 forgery (the in-circuit inverse of 0 has no witness); (0, 0) is still refused by the r ≠ 0 assert. The offline suites refuse s = 0 with another message (\"secp256k1 scalar field has no inverse for 0\").",
+        "evidence": [
+          "offline: s = 0 refused by the runtime's inverse of 0",
+          "prover: P16's runs, the 17 s = 0 forgeries"
+        ],
+        "review": "not reviewed"
+      },
+      {
+        "id": "C7",
+        "mutation": "O1 the key rule deleted (the point at infinity admitted by activation and by every verification)",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery at K256Core alone (the flagged point at infinity as the key: digest 1, s = 1, r = x(G)); the unflagged (0, 0) is refused by the generated argument check before the core, and is no evidence for or against this mutant",
+        "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ the key rule refuses the point at infinity (flagged) (NOT refused: the core accepted it)",
+          "k256-core-probe-offline (probe-k256-core): ✗ the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G) (NOT refused: the core accepted it); the pure circuit returned true",
+          "prover: 19/19 key-at-infinity forgeries refused (18 constraint, 1 decoding), 19/19 controls proved"
+        ],
+        "review": "reviewed (cross-agent audit, round 1): equivalent through the arm only; killed at the core",
+        "throughTheArm": "equivalent: No input distinguishes it: with K256Core's key rule deleted, the point at infinity still has no address. Extracting the coordinates of its flagged encoding fails in the circuit (and in the runtime), and its unflagged encoding (0, 0) is not a point of the curve (the circuit's point assignment, and the honest decoder, refuse it). The offline suites pass (every infinity key is refused by the runtime's checks); the prover suite's JavaScript layer cannot build its patched copies (the key rule's text is gone, a harness limitation, not a kill). At the proof server, against the mutant's own full key generation with the bypass lists naming only the asserts it still has (sections activation, seam and core): all 19 key-at-infinity forgeries (the activation, flagged and unflagged; every one of the 15 gated exports with an entry or grant planted for the identity's address and a signature that verifies against it; the device seam) refused, 18 by a constraint of the circuit under test at /check, the unflagged activation key by the proof server's input decoding, each after the honest call proved through the same patched copy. The key rule is the extra safety check its comment names."
+      },
+      {
+        "id": "C8",
+        "mutation": "O13 the verification without its own key-rule call (the extra safety check)",
+        "file": "contracts/modules/K256Core.compact",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery at K256Core alone (the flagged point at infinity as the key: digest 1, s = 1, r = x(G)); the unflagged (0, 0) is refused by the generated argument check before the core, and is no evidence for or against this mutant",
+        "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G) (NOT refused: the core accepted it); the pure circuit returned true",
+          "prover: C7's runs, the 15 core-section gated exports and the seam case"
+        ],
+        "review": "reviewed (cross-agent audit, round 1): equivalent through the arm only; killed at the core",
+        "throughTheArm": "equivalent: The verification without its own key-rule call: at every gated export the key is the presented point whose address the seam derives first, and C7 (the rule deleted everywhere, so at these call sites exactly C8) refuses all 15 gated exports' key-at-infinity forgeries at the proof server. The offline layer differs only in which check names the refusal (\"expected assert no longer fires\")."
+      },
+      {
+        "id": "C9",
+        "mutation": "O13 the activation without its key-rule call",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [],
+        "verdict": "EQUIVALENT",
+        "killKind": "message only (offline); refused at the proof server",
+        "equivalence": "The activation without its key-rule call: the activation derives the key's address next, which fails in-circuit for the flagged identity, and C7 (the rule deleted everywhere, so at the activation exactly C9) refuses both activation forgeries at the proof server. The offline layer differs only in which check names the refusal.",
+        "evidence": [
+          "prover: C7's runs, the activation cases (flagged: constraint; unflagged: decoding) and the core section's activation case"
+        ],
+        "review": "not reviewed"
+      },
+      {
+        "id": "C10",
+        "mutation": "O9 the address hashes a 0x04 prefix before the coordinates",
+        "file": "contracts/modules/EvmIdentity.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_identity: hash hint does not match the hash",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_identity: hash hint does not match the hash",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_identity: hash hint does not match the hash"
+        ]
+      },
+      {
+        "id": "C11",
+        "mutation": "O4 one byte of the domain type hash (the exported oracle)",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the exported domain type-hash oracle returns a value other than keccak256 of the EIP712Domain type string: evm-k256-offline (\"contract: the domain type hash\") and the viem cross-check (\"domain: the contract type hash\") compare the contract's output with the specified value and fail"
+        ]
+      },
+      {
+        "id": "C12",
+        "mutation": "O4 one byte of the name hash (the exported oracle)",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the exported name-hash oracle's output differs from keccak256(\"Midnight Passport\"): evm-k256-offline (\"contract: the name hash\") and the viem cross-check fail"
+        ]
+      },
+      {
+        "id": "C13",
+        "mutation": "O4 one byte of the version hash (the exported oracle)",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the exported version-hash oracle's output differs from keccak256(\"1\"): evm-k256-offline (\"contract: the version hash\") and the viem cross-check fail"
+        ]
+      },
+      {
+        "id": "C14",
+        "mutation": "O4 one byte of P (the exported oracle)",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [],
+        "verdict": "KILLED",
+        "killKind": "changed output",
+        "evidence": [
+          "the exported verifyingContract oracle's output differs from P: evm-k256-offline (\"contract: P\") and the viem cross-check fail"
+        ]
+      },
+      {
+        "id": "C15",
+        "mutation": "O4 one byte of the domain separator (every digest)",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "C16",
+        "mutation": "O4 the 0x19 0x01 prefix changed to 0x19 0x00",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "C17",
+        "mutation": "O5 the struct hash and the separator swapped in the digest",
+        "file": "contracts/modules/Eip712V1.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: invalid signature"
+        ]
+      },
+      {
+        "id": "C18",
+        "mutation": "O13 a personal_sign path added back: every seam accepts the EIP-191 digest of the struct hash beside V1 (FR-010)",
+        "file": "contracts/account-evm-k256.compact",
+        "killedBy": [
+          "evm-k256-hints-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "accepted forgery: ✗ rotate_enc_key: the device's personal_sign of the struct hash, with the digest hint of what it signs (NOT refused)",
+          "accepted forgery: ✗ withdraw_unshielded_with_grant: the grantee's personal_sign of the struct hash, with the digest hint of what it signs (NOT refused)",
+          "honest flow broken: ✗ the grant seam: every seam hint and the operation hints of the grantee twins: unexpected error failed assert: spent opening mismatch"
+        ],
+        "note": "killed by the hints suite case that signs an approval's struct hash with personal_sign (it passed the tests before that case was added)"
+      },
+      {
+        "id": "C19",
+        "mutation": "O11 a kind dropped from evm_k256_kinds() (jubjub)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not a 64-byte grant-id tag",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: not a registered grant-id tag",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not a 64-byte grant-id tag"
+        ]
+      },
+      {
+        "id": "C20",
+        "mutation": "O11 two kinds sharing one entry (the jubjub entry listed in the k256 place)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: evm_k256: not a registered grant-id tag",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not a 65-byte grant-id tag",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not a 65-byte grant-id tag"
+        ]
+      },
+      {
+        "id": "C21",
+        "mutation": "O11 a kind mapped to another payload form (sol_ed25519 under the jubjub form)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-grants-offline",
+          "evm-k256-hints-offline",
+          "evm-k256-recovery-sim",
+          "evm-k256-seam-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "broken honest behaviour",
+        "evidence": [
+          "honest flow broken: ✗ [owner evm_k256 / grantee k256] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not an Ed25519 grant-id tag",
+          "honest flow broken: ✗ [owner evm_k256 / grantee jubjub] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not an Ed25519 grant-id tag",
+          "honest flow broken: ✗ [owner evm_k256 / grantee evm_k256] lifecycle and the unshielded grant twin: unexpected error failed assert: descriptor: not an Ed25519 grant-id tag"
+        ]
+      },
+      {
+        "id": "C22",
+        "mutation": "O4 one byte of a kind's type hash (evm_k256 AddDevice)",
+        "file": "contracts/modules/EvmK256.compact",
+        "killedBy": [
+          "evm-k256-recovery-sim"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery",
+        "evidence": [
+          "honest flow broken: ✗ more devices: a second evm device and a JubJub device, and the upstream plant at device_epoch + 1: unexpected error failed assert: invalid signature",
+          "honest flow broken: ✗ recover_cancel_with_evm_k256: binding, then the veto by a second evm device: unexpected error failed assert: unknown device entry",
+          "honest flow broken: ✗ finalisation clears every old device, the planted evm_k256 entry included (#183; replaces erratum 7): unexpected error failed assert: recovery already pending"
+        ]
+      }
+    ]
+  },
+  "killed": 79,
+  "equivalent": 2,
+  "total": 81,
+  "verdict": "PASS"
+}

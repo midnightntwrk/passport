@@ -9,7 +9,8 @@
 // the ledger fee computation refuses it up front ("exceeded block limit in
 // transaction fee computation"). The 30-circuit roster prices at 74,286
 // verifier bytes and is refused by a wider margin. The account therefore
-// deploys in budgeted waves (52 circuits with recovery and P-256):
+// deploys in budgeted waves (the roster of allCircuits: four shared circuits
+// and sixteen per arm of ARMS, recovery included):
 //
 //   wave 1  a prefix of the deposits + initial device's arm, the
 //           constructor's ledger state, and the maintenance authority;
@@ -53,7 +54,7 @@ import {
 } from '@midnight-ntwrk/midnight-js-contracts';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
-import type { Arm } from './signer.js';
+import { ARMS, type Arm } from './signer.js';
 
 const GATED_BASES = [
   'withdraw_unshielded',
@@ -108,9 +109,11 @@ export const SHARED_CIRCUITS = ['deposit_unshielded', 'deposit_shielded'];
  *  finalisation, arm-independent (recovery MIP 6). */
 export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
 
-export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256'];
+/** The arms, in the order the wave plan packs them: the arm registry's
+ *  order (signer.ts ARM_REGISTRY). */
+export { ARMS };
 
-/** All 52 impure circuits: four shared and sixteen per credential arm. */
+/** Every impure circuit: four shared and sixteen per arm of ARMS. */
 export const allCircuits = (): string[] => [
   ...SHARED_CIRCUITS,
   ...ARMS.flatMap(armCircuits),

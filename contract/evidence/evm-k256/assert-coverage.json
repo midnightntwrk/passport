@@ -1,0 +1,3984 @@
+{
+ "suite": "evm-k256-prover (npm run test:evm_k256)",
+ "commit": "0065058",
+ "what": "every assert site of the arm (contracts/account-evm-k256.compact, contracts/modules/EvmK256.compact, contracts/modules/K256Core.compact, contracts/modules/EvmIdentity.compact, contracts/modules/Eip712V1.compact) and of the shared modules it reaches (contracts/modules/WalletArmRendering.compact, contracts/modules/WalletArmDescriptors.compact, contracts/modules/Ed25519Core.compact), by its enclosing circuit; a site counts when its circuit is reachable by the call graph from one of the arm's exported circuits (its own and the pure circuits it re-exports); each reached site with the cases of the run of record that refuse it at the constraint level as their own expected refusal (the circuit under test reaches no other site with that message, or that site's deletion mutant alone lets the case's forgery through), after the honest call proved through the same patched copy; otherwise why not",
+ "roots": [
+  "activate_initial_device_with_evm_k256",
+  "add_device_with_evm_k256",
+  "append_inbox_with_evm_k256",
+  "compute_public_point_with_evm_k256",
+  "derive_boot_commitment_with_evm_k256",
+  "derive_device_entry_with_evm_k256",
+  "derive_grant_id_with_evm_k256",
+  "issue_grant_with_evm_k256",
+  "publish_recovery_session_with_evm_k256",
+  "recover_cancel_with_evm_k256",
+  "remove_device_with_evm_k256",
+  "revoke_all_grants_with_evm_k256",
+  "revoke_grant_with_evm_k256",
+  "rotate_enc_key_with_evm_k256",
+  "withdraw_shielded_to_contract_with_evm_k256",
+  "withdraw_shielded_to_contract_with_grant_evm_k256",
+  "withdraw_shielded_with_evm_k256",
+  "withdraw_shielded_with_grant_evm_k256",
+  "withdraw_unshielded_with_evm_k256",
+  "withdraw_unshielded_with_grant_evm_k256"
+ ],
+ "pureReexports": [
+  "blind_tag_evm_k256",
+  "blind_tag_sol_ed25519",
+  "boot_tag_evm_k256",
+  "boot_tag_sol_ed25519",
+  "derive_blind",
+  "derive_descriptor_boot_ed25519",
+  "derive_descriptor_boot_w52",
+  "derive_descriptor_entry_ed25519",
+  "derive_descriptor_entry_w117",
+  "derive_descriptor_entry_w52",
+  "derive_descriptor_entry_w64",
+  "derive_descriptor_entry_w65",
+  "derive_descriptor_grant_id_ed25519",
+  "derive_descriptor_grant_id_w52",
+  "derive_descriptor_grant_id_w64",
+  "derive_descriptor_grant_id_w65",
+  "derive_grant_origin_hash_label",
+  "derive_grant_origin_hash_origin",
+  "derive_grant_scope_salt",
+  "device_tag_evm_k256",
+  "device_tag_jubjub",
+  "device_tag_k256",
+  "device_tag_p256",
+  "device_tag_sol_ed25519",
+  "eip712_v1_digest",
+  "eip712_v1_domain_separator",
+  "eip712_v1_domain_type_hash",
+  "eip712_v1_name_hash",
+  "eip712_v1_verifying_contract",
+  "eip712_v1_version_hash",
+  "encode_public_key_ed25519",
+  "evm_address",
+  "evm_k256_descriptor_entry",
+  "evm_k256_device_descriptor_hash",
+  "evm_k256_device_kind",
+  "evm_k256_ed25519_device_target",
+  "evm_k256_ed25519_grantee_target",
+  "evm_k256_grantee_descriptor_hash",
+  "evm_k256_grantee_grant_id",
+  "evm_k256_grantee_kind",
+  "evm_k256_grantee_origin_hash",
+  "evm_k256_kinds",
+  "evm_k256_site_label_hash",
+  "evm_k256_struct_add_device",
+  "evm_k256_struct_append_inbox",
+  "evm_k256_struct_cancel_recovery",
+  "evm_k256_struct_issue_grant",
+  "evm_k256_struct_publish_recovery_session",
+  "evm_k256_struct_remove_device",
+  "evm_k256_struct_remove_unknown_device",
+  "evm_k256_struct_revoke_all_grants",
+  "evm_k256_struct_revoke_grant",
+  "evm_k256_struct_rotate_enc_key",
+  "evm_k256_struct_withdraw_shielded",
+  "evm_k256_struct_withdraw_shielded_as_grantee",
+  "evm_k256_struct_withdraw_shielded_to_contract",
+  "evm_k256_struct_withdraw_shielded_to_contract_as_grantee",
+  "evm_k256_struct_withdraw_unshielded",
+  "evm_k256_struct_withdraw_unshielded_as_grantee",
+  "grant_id_tag_evm_k256",
+  "grant_id_tag_jubjub",
+  "grant_id_tag_k256",
+  "grant_id_tag_p256",
+  "grant_id_tag_sol_ed25519",
+  "grant_origin_tag",
+  "is_registered_blind_tag",
+  "is_registered_boot_tag",
+  "is_registered_device_tag",
+  "is_registered_grant_id_tag",
+  "is_registered_salt_tag",
+  "readable_arms",
+  "salt_tag_evm_k256",
+  "salt_tag_sol_ed25519"
+ ],
+ "arm": {
+  "sites": 47,
+  "sitesRefusedAtConstraintLevel": 42,
+  "messages": 32,
+  "messagesRefusedAtConstraintLevel": 30,
+  "unreachedSites": []
+ },
+ "baseModules": {
+  "sites": 35,
+  "sitesRefusedAtConstraintLevel": 22,
+  "messages": 35,
+  "messagesRefusedAtConstraintLevel": 22,
+  "unreachedSites": [
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 72,
+    "helper": "decimal_text",
+    "message": "display: not a left-aligned decimal"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 73,
+    "helper": "decimal_text",
+    "message": "display: empty decimal"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 74,
+    "helper": "decimal_text",
+    "message": "display: leading zero"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 75,
+    "helper": "decimal_text",
+    "message": "display: digits do not match the value"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 446,
+    "helper": "label_text",
+    "message": "display: not a zero-padded label"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 459,
+    "helper": "visible_text",
+    "message": "display: not visible ASCII"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 492,
+    "helper": "recipient_kind_text",
+    "message": "display: unknown recipient kind"
+   },
+   {
+    "file": "contracts/modules/WalletArmRendering.compact",
+    "line": 500,
+    "helper": "k256_envelope_text",
+    "message": "display: unknown signing envelope"
+   },
+   {
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "line": 480,
+    "helper": "derive_signer_entries_ed25519",
+    "message": "descriptor: not an Ed25519 device tag"
+   },
+   {
+    "file": "contracts/modules/Ed25519Core.compact",
+    "line": 120,
+    "helper": "ed25519_verify",
+    "message": "ed25519: the key is the identity"
+   },
+   {
+    "file": "contracts/modules/Ed25519Core.compact",
+    "line": 123,
+    "helper": "ed25519_verify",
+    "message": "ed25519: R is the identity"
+   }
+  ]
+ },
+ "hintChecks": {
+  "digest": {
+   "site": "contracts/modules/K256Core.compact:58",
+   "deletionMutant": "H8",
+   "isolatingCases": [
+    "isolate: rotate_enc_key: the device's signature over an unrelated 32-byte value, passed as the digest hint",
+    "isolate: grantee twin: the grantee's signature over an unrelated 32-byte value, passed as the digest hint"
+   ],
+   "refusedTogetherWithOthers": [
+    "hints: device seam: a byte of the digest",
+    "hints: grant seam: a byte of the digest"
+   ]
+  },
+  "be4": {
+   "site": "contracts/modules/EvmK256.compact:362",
+   "deletionMutant": "H4",
+   "isolatingCases": [
+    "isolate: remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)"
+   ],
+   "refusedTogetherWithOthers": []
+  },
+  "be8": {
+   "site": "contracts/modules/EvmK256.compact:367",
+   "deletionMutant": "H5",
+   "isolatingCases": [
+    "isolate: rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
+    "isolate: remove_device: targetCounter 1 shown and signed, 0 executed (the counter hint of 1)",
+    "isolate: grantee twin: the approval made at grantNonce 0, replayed at grantNonce 1 with the nonce hint of 0 and the current spent opening"
+   ],
+   "refusedTogetherWithOthers": [
+    "hints: device seam: a byte of auth_nonce"
+   ]
+  },
+  "be16": {
+   "site": "contracts/modules/EvmK256.compact:372",
+   "deletionMutant": "H6",
+   "isolatingCases": [
+    "isolate: withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
+    "isolate: withdraw_shielded: the change hint of 701, shown and signed, 700 executed",
+    "isolate: issue_grant: the cap hint of 1001, shown and signed, 1000 executed"
+   ],
+   "refusedTogetherWithOthers": []
+  },
+  "bytes_of": {
+   "site": "contracts/modules/EvmIdentity.compact:34",
+   "deletionMutant": "H1",
+   "isolatingCases": [
+    "isolate: add_device: the k256 target's x hint with a byte changed, the shown x signed, the real x executed",
+    "isolate: issue_grant: the grantee's site label hint shown as \"cank.example\" and signed, \"bank.example\" executed",
+    "isolate: activation: the key's y hint with a byte changed, the boot commitment made over the address those bytes hash to"
+   ],
+   "refusedTogetherWithOthers": [
+    "hints: device seam: a byte of the key's x coordinate",
+    "hints: activation: a byte of the key's y coordinate",
+    "hints: add_device: a byte of the target's x coordinate",
+    "hints: issue_grant: a byte of the grantee's site label",
+    "hints: grant seam: a byte of the frame's site label"
+   ]
+  },
+  "low20": {
+   "site": "contracts/modules/EvmIdentity.compact:48",
+   "deletionMutant": "H2",
+   "isolatingCases": [
+    "hints: device seam: a byte of the key hash outside the address"
+   ],
+   "refusedTogetherWithOthers": []
+  },
+  "visible_21": {
+   "site": "contracts/modules/EvmK256.compact:404",
+   "deletionMutant": "H11",
+   "isolatingCases": [
+    "hints: add_device: a byte of a passkey target's origin"
+   ],
+   "refusedTogetherWithOthers": []
+  }
+ },
+ "sites": [
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 164,
+   "helper": "activate_initial_device_with_evm_k256",
+   "message": "already activated",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "reactivation: activate a booted account again (same device)",
+     "circuit": "activate_initial_device_with_evm_k256",
+     "section": "reactivation",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 167,
+   "helper": "activate_initial_device_with_evm_k256",
+   "message": "boot commitment mismatch",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "activation: wrong blind",
+     "circuit": "activate_initial_device_with_evm_k256",
+     "section": "activation",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "activation: wrong address (another key, the committed blind)",
+     "circuit": "activate_initial_device_with_evm_k256",
+     "section": "activation",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 228,
+   "helper": "require_authorised_with_evm_k256",
+   "message": "unknown device entry",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_unshielded_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "seam: auth: an unenrolled key signs the right message",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: auth: the right key with another blind",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: auth: a wrong use counter",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/nonce: the low-S original after its high-S twin executed (entry consumed)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame: rotate_enc_key: the attacker's key with the victim's address forged into the derivation",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "frame",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame: append_inbox: the attacker's key with the victim's address forged into the derivation",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "frame",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame: withdraw_unshielded: the attacker's key with the victim's address forged into the derivation",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "frame",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame: withdraw_shielded: the attacker's key with the victim's address forged into the derivation",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "frame",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame: withdraw_shielded_to_contract: the attacker's key with the victim's address forged into the derivation",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "frame",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: add_device: the attacker's key with the victim device's address forged into the derivation",
+     "circuit": "add_device_with_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: issue_grant: the attacker's key with the victim device's address forged into the derivation",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: revoke_grant: the attacker's key with the victim device's address forged into the derivation",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish replay: the landed session approval replayed (entry consumed, nonce advanced, stored values)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish: an unenrolled evm key signs the session",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish: the device key with another blind",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish: the attacker's key with the victim's address forged into the derivation (frame mutant)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: after the recovery: the planted entry's device W (counter 0 at the new epoch) publishes",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: after the recovery: the original device publishes",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: after the recovery: the second evm device publishes",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 229,
+   "helper": "require_authorised_with_evm_k256",
+   "message": "invalid signature",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_unshielded_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "seam: binding: newKey: signed K', executed K",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: account member: another account",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: device member: another address",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: authNonce: n + 1",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: effect line: another text",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: domain name (\"Midnight Passport Account\", not \"Midnight Passport\")",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: domain version (\"2\", not the frozen \"1\")",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: domain verifyingContract",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: domain verifyingContract: P with its last byte changed",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: primary type name",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: binding: a member renamed (newKey -> key)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/account: a signature for account B executed on account A",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/arm: a k256 signature for the same key presented to the evm arm",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/operation: a CancelRecovery signature (same frame)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/operation: a RevokeAllGrants signature (same frame)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/role: a grantee-role signature by the same key",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: replay/nonce: the old signature with the current counter (nonce advanced)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: append_inbox binding: entry signed E2, executed E1",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: append_inbox binding: the last ciphertext byte flipped",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: append_inbox replay/operation: a RotateEncKey signature",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: withdraw_unshielded binding: amount signed 400, executed 401",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: withdraw_unshielded binding: colour signed U, executed X",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: withdraw_unshielded binding: another recipient",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: withdraw_unshielded binding: the amount label of another decimal point signed",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "custody: withdraw_unshielded replay/operation: an AppendInbox signature",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "custody",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "witness: withdraw_shielded: valid signature for coin value 1000, witness coin of value 999",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "witness: withdraw_shielded: valid signature for coin nonce N, witness coin of nonce N'",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "witness: withdraw_shielded: valid signature for Merkle index 1, witness coin at index 2",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "witness: withdraw_shielded_to_contract: valid signature for coin value 1000, witness coin of value 999",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "witness: withdraw_shielded_to_contract: valid signature for coin nonce N, witness coin of nonce N'",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "witness: withdraw_shielded_to_contract: valid signature for Merkle index 1, witness coin at index 2",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: k256 x changed after signing",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: k256 envelope changed after signing",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: passkey origin changed after signing",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: passkey RP hash changed after signing",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: EVM target privacy salt changed after signing",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: EVM target address changed after signing",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device: the effect line changed in the signed message",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device binding: a JubjubDevice signature executed under the Solana tag (same 64 payload bytes)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant binding: cap signed 450, executed 451",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant binding: a caller pin added after signing",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant binding: the grantee's site label changed after signing",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant binding: the grantee slot changed after signing",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant binding: a k256 grantee's labelled origin hash changed after signing",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the effect line changed in the signed message",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the expiry word \"never\" signed for a non-zero expiresAt (forged word)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the date of 0 signed for expiresAt 0 in place of \"never\" (forged text)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the date one second later signed for expiresAt 1893456000 (forged text)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the words \"after 9999-12-31 23:59:59 UTC\" signed for an expiry in range (forged text)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the expiry date space-padded to 29 bytes (the exact text is signed)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the window pointer signed for a zero window in place of \"no window\" (forged word)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the passkeyRp word \"not applicable\" signed for a passkey grantee's RP hash (forged word)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: the passkeyRp pointer signed for a non-passkey grant (forged word)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: revoke_grant binding: signed for slot 0, executed for the live slot-1 grant",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "qa-s3: phi1 shown as the non-canonical rendering of the executed value (value + r, little-endian)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "qa-s3",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "qa-s3: phi2 shown as the non-canonical rendering of the executed value (value + r, little-endian)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "qa-s3",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "qa-s3: phi3 shown as the non-canonical rendering of the executed value (value + r, little-endian)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "qa-s3",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "qa-s3: recoveryKeyX shown as the non-canonical rendering of the executed value (value + r, little-endian)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "qa-s3",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "qa-s3: recoveryKeyY shown as the non-canonical rendering of the executed value (value + r, little-endian)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "qa-s3",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: the effect line changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: recoveryKeyX changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: recoveryKeyY changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: sessionNonce changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: phi1 changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: phi2 changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: phi3 (signed non-zero, executed zero) changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: phi4 (signed non-zero, executed zero) changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: phiLength (signed 3, executed 2) changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: wrap (one byte) changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish binding: authNonce (n + 1) changed in the signed message",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish replay/operation: a CancelRecovery signature (bare frame) presented as the session approval",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: rotate_enc_key: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: rotate_enc_key: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: append_inbox: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: append_inbox: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_unshielded: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_unshielded: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded_to_contract: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded_to_contract: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: add_device: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: add_device: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: issue_grant: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: issue_grant: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: revoke_grant: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: revoke_grant: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: publish_recovery_session: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: publish_recovery_session: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 251,
+   "helper": "require_authorised_with_evm_k256_either",
+   "message": "unknown device entry",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "frame-lifecycle: remove_device (descriptor form): the attacker's key with the victim device's address forged into the derivation",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: remove_device (literal form): the attacker's key with the victim device's address forged into the derivation",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: remove_device: an unenrolled evm key signs the removal of a live device (the two-form body's membership check)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 252,
+   "helper": "require_authorised_with_evm_k256_either",
+   "message": "invalid signature",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: remove_device binding: targetCounter signed 0, executed 1",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device binding: the literal entry changed after signing",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device form swap: a RemoveUnknownDevice signature executed in the descriptor form",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device form swap: a RemoveDevice signature executed in the literal form",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device (literal form): the fixed revocation line changed in the signed message",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: remove_device: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: remove_device: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 272,
+   "helper": "require_authorised_with_evm_k256_bare",
+   "message": "unknown device entry",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "recover_cancel_with_evm_k256",
+    "revoke_all_grants_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "frame-lifecycle: revoke_all_grants: the attacker's key with the victim device's address forged into the derivation",
+     "circuit": "revoke_all_grants_with_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel: an unenrolled evm key",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel replay: the landed cancel replayed (entry consumed, nonce advanced, nothing pending)",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel: the attacker's key with the victim's address forged into the derivation (frame mutant)",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: after the recovery: the planted entry's device W (counter 0 at the new epoch) cancels a pending recovery",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: after the recovery: the original device cancels a pending recovery",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: after the recovery: the second evm device cancels a pending recovery",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 273,
+   "helper": "require_authorised_with_evm_k256_bare",
+   "message": "invalid signature",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "recover_cancel_with_evm_k256",
+    "revoke_all_grants_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: revoke_all_grants replay/operation: a CancelRecovery signature (same bare frame)",
+     "circuit": "revoke_all_grants_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel binding: a RevokeAllGrants signature over the same bare frame",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel binding: a CancelRecovery signature over authNonce + 1",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel binding: a CancelRecovery signature for another account",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: revoke_all_grants: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "revoke_all_grants_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: revoke_all_grants: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "revoke_all_grants_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: recover_cancel: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: recover_cancel: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 342,
+   "helper": "withdraw_shielded_with_evm_k256",
+   "message": "held coin colour does not match the withdrawn colour",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_with_evm_k256"
+   ],
+   "deletionMutant": "P22",
+   "constraint": [
+    {
+     "case": "witness: withdraw_shielded: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 343,
+   "helper": "withdraw_shielded_with_evm_k256",
+   "message": "amount above the spent coin's value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "Refused by the generated JavaScript; with that check bypassed, the change (value - amount) is negative and the runtime's type encoder refuses it before any proof request. In the circuit the assert, the subtraction's range check and the signature over the shown value refuse it."
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 366,
+   "helper": "withdraw_shielded_to_contract_with_evm_k256",
+   "message": "held coin colour does not match the withdrawn colour",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256"
+   ],
+   "deletionMutant": "P23",
+   "constraint": [
+    {
+     "case": "witness: withdraw_shielded_to_contract: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "witness",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 367,
+   "helper": "withdraw_shielded_to_contract_with_evm_k256",
+   "message": "amount above the spent coin's value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "Refused by the generated JavaScript; with that check bypassed, the change (value - amount) is negative and the runtime's type encoder refuses it before any proof request. In the circuit the assert, the subtraction's range check and the signature over the shown value refuse it."
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 441,
+   "helper": "remove_device_with_evm_k256",
+   "message": "noncanonical absent entry",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: remove_device: a non-canonical absent literal entry",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 511,
+   "helper": "issue_grant_with_evm_k256",
+   "message": "evm_k256: a read key without read",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: a read key without read (signed with readKey zero, executed with a key)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 512,
+   "helper": "issue_grant_with_evm_k256",
+   "message": "evm_k256: read without a read key",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: read on with a zero read key, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 662,
+   "helper": "require_grant_with_evm_k256",
+   "message": "unknown grant",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: grant seam: the attacker's key with the grantee's address forged into the derivation",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grants",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: withdraw_unshielded_with_grant: grant seam, the attacker's key with the grantee's address forged into the derivation",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: withdraw_shielded_with_grant: grant seam, the attacker's key with the grantee's address forged into the derivation",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "frame-lifecycle: withdraw_shielded_to_contract_with_grant: grant seam, the attacker's key with the grantee's address forged into the derivation",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "frame-lifecycle",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 664,
+   "helper": "require_grant_with_evm_k256",
+   "message": "grant revoked",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: a revoked grant (tombstone), valid approval over its record",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: a revoked grant (tombstone), valid approval over its record",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: a revoked grant (tombstone), valid approval over its record",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 665,
+   "helper": "require_grant_with_evm_k256",
+   "message": "grant epoch stale",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "P26",
+   "constraint": [
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 666,
+   "helper": "require_grant_with_evm_k256",
+   "message": "grant generation stale",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 667,
+   "helper": "require_grant_with_evm_k256",
+   "message": "grant expired",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: an expired grant (expires_at 1), valid approval",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: an expired grant (expires_at 1), valid approval",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: an expired grant (expires_at 1), valid approval",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 675,
+   "helper": "require_grant_with_evm_k256",
+   "message": "invalid grant signature",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: grantee binding: amount signed 200, executed 201",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: grantee replay: the approval of the first call after the record nonce advanced",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: grantee replay/role: a device-role WithdrawUnshielded signature by the grantee key",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: grantee shielded: valid approval for coin value 1000, witness coin of value 999",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: coin nonce: signed N, witness coin N' (same colour, value, index)",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: Merkle index: signed 1, witness coin at index 2",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: change ciphertext: signed C1, executed C2",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: encryption key: signed a stale key, executed with the live key",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: amount: signed 300, executed 301",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: coin nonce: signed N, witness coin N' (same colour, value, index)",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: Merkle index: signed 1, witness coin at index 2",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: change ciphertext: signed C1, executed C2",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: encryption key: signed a stale key, executed with the live key",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: amount: signed 300, executed 301",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: valid approval for coin value 1000, witness coin of value 999",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_unshielded_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_unshielded_with_grant: the grantee's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded_with_grant: the grantee's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded_to_contract_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "domain: withdraw_shielded_to_contract_with_grant: the grantee's key signs the honest message under the V1 domain with a chainId (3791715944)",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "domain",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 745,
+   "helper": "withdraw_shielded_with_grant_evm_k256",
+   "message": "held coin colour does not match the withdrawn colour",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: grantee shielded: valid approval for colour A, witness coin of colour B (a grant scoped to B)",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 746,
+   "helper": "withdraw_shielded_with_grant_evm_k256",
+   "message": "amount above the spent coin's value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_with_grant_evm_k256"
+   ],
+   "constraint": [],
+   "why": "Refused by the generated JavaScript; with that check bypassed, the change (value - amount) is negative and the runtime's type encoder refuses it before any proof request. In the circuit the assert, the subtraction's range check and the signature over the shown value refuse it."
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 781,
+   "helper": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "message": "held coin colour does not match the withdrawn colour",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: valid approval for colour A, witness coin of colour B (a grant scoped to B)",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 782,
+   "helper": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "message": "amount above the spent coin's value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256"
+   ],
+   "constraint": [],
+   "why": "Refused by the generated JavaScript; with that check bypassed, the change (value - amount) is negative and the runtime's type encoder refuses it before any proof request. In the circuit the assert, the subtraction's range check and the signature over the shown value refuse it."
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 362,
+   "helper": "evm_k256_be4",
+   "message": "evm_k256: word hint does not match its value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "remove_device_with_evm_k256"
+   ],
+   "deletionMutant": "H4",
+   "constraint": [
+    {
+     "case": "isolate: remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "its forgery goes through on H4, which deletes this site alone (the unmutated copy refuses it)"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 367,
+   "helper": "evm_k256_be8",
+   "message": "evm_k256: word hint does not match its value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "H5",
+   "constraint": [
+    {
+     "case": "hints: device seam: a byte of auth_nonce",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: remove_device: targetCounter 1 shown and signed, 0 executed (the counter hint of 1)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "its forgery goes through on H5, which deletes this site alone (the unmutated copy refuses it)"
+    },
+    {
+     "case": "isolate: grantee twin: the approval made at grantNonce 0, replayed at grantNonce 1 with the nonce hint of 0 and the current spent opening",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "its forgery goes through on H5, which deletes this site alone (the unmutated copy refuses it)"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 372,
+   "helper": "evm_k256_be16",
+   "message": "evm_k256: word hint does not match its value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "H6",
+   "constraint": [
+    {
+     "case": "isolate: withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "its forgery goes through on H6, which deletes this site alone (the unmutated copy refuses it)"
+    },
+    {
+     "case": "isolate: withdraw_shielded: the change hint of 701, shown and signed, 700 executed",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "its forgery goes through on H6, which deletes this site alone (the unmutated copy refuses it)"
+    },
+    {
+     "case": "isolate: issue_grant: the cap hint of 1001, shown and signed, 1000 executed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "its forgery goes through on H6, which deletes this site alone (the unmutated copy refuses it)"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 404,
+   "helper": "visible_21",
+   "message": "evm_k256: byte hint does not match its value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "deletionMutant": "H11",
+   "constraint": [
+    {
+     "case": "hints: add_device: a byte of a passkey target's origin",
+     "circuit": "add_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 438,
+   "helper": "evm_k256_site_label_hash",
+   "message": "evm_k256: not a site label",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: a grant planted for the grantee under a site label with two spaces, the approval showing that label in its frame",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: a grant planted for the grantee under a site label with two spaces, the approval showing that label in its frame",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: a grant planted for the grantee under a site label with two spaces, the approval showing that label in its frame",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 449,
+   "helper": "evm_k256_recipient_kind_label",
+   "message": "evm_k256: not a recipient kind",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: recipient kind 4, shown with the kind-3 label the circuit selects, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 771,
+   "helper": "evm_k256_device_kind",
+   "message": "evm_k256: not a registered device tag",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: add_device: an unregistered tag, valid signature over the EVM target's fields (the 52-byte class assert refuses the same tag)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: add_device: another recipe's tag (k256 boot), valid signature over the EVM target's fields (the 52-byte class assert refuses the same tag)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 780,
+   "helper": "evm_k256_grantee_kind",
+   "message": "evm_k256: not a registered grant-id tag",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: an unregistered grant-id tag on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: another recipe's tag (the passkey device tag) on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: revoke_grant: a planted grant named with an unregistered grant-id tag on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 846,
+   "helper": "evm_k256_device_descriptor_hash",
+   "message": "evm_k256: the passkey origin is not visible ASCII",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: add_device: a passkey target whose origin holds a space, honestly signed",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device (descriptor form): a passkey target whose origin holds a space, honestly signed",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 849,
+   "helper": "evm_k256_device_descriptor_hash",
+   "message": "evm_k256: a passkey's RP hash is zero",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: add_device: a passkey target with a zero RP hash, honestly signed",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device (descriptor form): a passkey target with a zero RP hash, honestly signed",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 854,
+   "helper": "evm_k256_device_descriptor_hash",
+   "message": "evm_k256: not a k256 envelope",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: add_device: a k256 target with envelope 2, shown with the envelope-1 label the circuit selects, honestly signed",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device (descriptor form): a k256 target with envelope 2, shown with the envelope-1 label, honestly signed",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 941,
+   "helper": "evm_k256_grantee_descriptor_hash",
+   "message": "evm_k256: not a site label",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: an evm_k256 grantee whose site label has two spaces in a row, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: revoke_grant: a planted grant named by an evm_k256 grantee whose site label has two spaces in a row, honestly signed",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 943,
+   "helper": "evm_k256_grantee_descriptor_hash",
+   "message": "evm_k256: the passkey origin is not visible ASCII",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: a passkey grantee whose origin holds a space, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: revoke_grant: a planted grant named by a passkey grantee whose origin holds a space, honestly signed",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 944,
+   "helper": "evm_k256_grantee_descriptor_hash",
+   "message": "evm_k256: not a k256 envelope",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: a k256 grantee with envelope 2, shown with the envelope-1 label the circuit selects, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: revoke_grant: a planted grant named by a k256 grantee with envelope 2, shown with the envelope-1 label, honestly signed",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 1103,
+   "helper": "evm_k256_parts_issue_grant",
+   "message": "evm_k256: an RP hash belongs to a spending passkey grant",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: an RP hash for a non-passkey grantee, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grants: issue_grant: a read-only passkey grant with its RP hash, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 1104,
+   "helper": "evm_k256_parts_issue_grant",
+   "message": "evm_k256: a spending passkey grant's RP hash is zero",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: a spending passkey grant with a zero RP hash, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 1107,
+   "helper": "evm_k256_parts_issue_grant",
+   "message": "evm_k256: a recipient for any recipient",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "grants: issue_grant: \"any recipient\" with a recipient, honestly signed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "grants",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/K256Core.compact",
+   "line": 35,
+   "helper": "k256_require_live_key",
+   "message": "k256: the key is the point at infinity",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256",
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [],
+   "why": "Named only beside other asserts: no input isolates it. The flagged identity also fails the coordinate extraction, and on a gated call the entry and the signature."
+  },
+  {
+   "file": "contracts/modules/K256Core.compact",
+   "line": 57,
+   "helper": "k256_ecdsa_verify",
+   "message": "k256: signature scalar is zero",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "P16",
+   "constraint": [
+    {
+     "case": "seam: signature r = 0: the zero-scalar assert and the signature check",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: signature s = 0: the zero-scalar assert and the signature check",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "seam: (r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "seam",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "devices: remove_device: (r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: signature r = 0 on the grantee path: the zero-scalar assert and the signature check",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy): the zero-scalar assert and the signature check",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_unshielded_with_grant: (r, s) = (0, 0) on the grantee path, which verifies against the identity point when inverses of 0 are taken as 0",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: signature r = 0 on the grantee path: the zero-scalar assert and the signature check",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy): the zero-scalar assert and the signature check",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_with_grant: (r, s) = (0, 0) on the grantee path, which verifies against the identity point when inverses of 0 are taken as 0",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: signature r = 0 on the grantee path: the zero-scalar assert and the signature check",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy): the zero-scalar assert and the signature check",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "grant-matrix: withdraw_shielded_to_contract_with_grant: (r, s) = (0, 0) on the grantee path, which verifies against the identity point when inverses of 0 are taken as 0",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "grant-matrix",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: publish: signature r = 0: the zero-scalar assert and the signature check",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel: signature r = 0: the zero-scalar assert and the signature check",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "recovery: cancel: (r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "recovery",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: rotate_enc_key: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: rotate_enc_key: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: append_inbox: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: append_inbox: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "append_inbox_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_unshielded: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_unshielded: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "withdraw_shielded_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded_to_contract: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded_to_contract: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: add_device: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: add_device: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: remove_device: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: remove_device: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: issue_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: issue_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: revoke_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: revoke_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: revoke_all_grants: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "revoke_all_grants_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: revoke_all_grants: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "revoke_all_grants_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: publish_recovery_session: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: publish_recovery_session: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "publish_recovery_session_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: recover_cancel: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: recover_cancel: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "recover_cancel_with_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_unshielded_with_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_unshielded_with_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded_with_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded_with_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "withdraw_shielded_with_grant_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded_to_contract_with_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "core: withdraw_shielded_to_contract_with_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+     "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+     "section": "core",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/K256Core.compact",
+   "line": 58,
+   "helper": "k256_ecdsa_verify",
+   "message": "k256: digest hint does not match the digest",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "H8",
+   "constraint": [
+    {
+     "case": "hints: device seam: a byte of the digest",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "hints: grant seam: a byte of the digest",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: rotate_enc_key: the device's signature over an unrelated 32-byte value, passed as the digest hint",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: grantee twin: the grantee's signature over an unrelated 32-byte value, passed as the digest hint",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmIdentity.compact",
+   "line": 34,
+   "helper": "evm_bytes_of",
+   "message": "evm_identity: byte hint does not match its value",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256",
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "H1",
+   "constraint": [
+    {
+     "case": "hints: device seam: a byte of the key's x coordinate",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "hints: activation: a byte of the key's y coordinate",
+     "circuit": "activate_initial_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "hints: add_device: a byte of the target's x coordinate",
+     "circuit": "add_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "hints: issue_grant: a byte of the grantee's site label",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "hints: grant seam: a byte of the frame's site label",
+     "circuit": "withdraw_unshielded_with_grant_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: add_device: the k256 target's x hint with a byte changed, the shown x signed, the real x executed",
+     "circuit": "add_device_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: issue_grant: the grantee's site label hint shown as \"cank.example\" and signed, \"bank.example\" executed",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "isolate: activation: the key's y hint with a byte changed, the boot commitment made over the address those bytes hash to",
+     "circuit": "activate_initial_device_with_evm_k256",
+     "section": "isolate",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/EvmIdentity.compact",
+   "line": 48,
+   "helper": "evm_low20",
+   "message": "evm_identity: hash hint does not match the hash",
+   "group": "arm",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256",
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "deletionMutant": "H2",
+   "constraint": [
+    {
+     "case": "hints: device seam: a byte of the key hash outside the address",
+     "circuit": "rotate_enc_key_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 72,
+   "helper": "decimal_text",
+   "message": "display: not a left-aligned decimal",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 73,
+   "helper": "decimal_text",
+   "message": "display: empty decimal",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 74,
+   "helper": "decimal_text",
+   "message": "display: leading zero",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 75,
+   "helper": "decimal_text",
+   "message": "display: digits do not match the value",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 236,
+   "helper": "utc_datetime_text",
+   "message": "display: not a UTC date and time",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: issue_grant: expiry 0 (\"never\" shown) with a date text of another shape, 1970/01-01",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 237,
+   "helper": "utc_datetime_text",
+   "message": "display: month out of range",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: issue_grant: 1970-12-01 shown as month 13 of 1970 (signed as shown)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 238,
+   "helper": "utc_datetime_text",
+   "message": "display: day out of range",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: issue_grant: 2100-03-01 shown as 2100-02-29 (signed as shown)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 239,
+   "helper": "utc_datetime_text",
+   "message": "display: time of day out of range",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: issue_grant: 86400 shown as 1970-01-01 24:00:00 (signed as shown)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 240,
+   "helper": "utc_datetime_text",
+   "message": "display: the year split is not canonical",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: issue_grant: 2026-06-01 with the year split of 2027",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: issue_grant: 2026-06-01 shown as 2026-06-02 with the year split (5, 0, 5, 5), which keeps the equation and breaks the bound (signed as shown)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 241,
+   "helper": "utc_datetime_text",
+   "message": "display: the date and time do not match the value",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "hints: issue_grant: a digit of the expiry's UTC date",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "texts: issue_grant: 2030-01-01 00:00:00 shown as 00:00:01 (signed as shown)",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 242,
+   "helper": "utc_datetime_text",
+   "message": "display: not the words for a time after 9999-12-31 23:59:59 UTC",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: issue_grant: 253402300800 (the words shown) with the date text 9999-12-31 23:59:59",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 415,
+   "helper": "base58_text_32",
+   "message": "display: not a left-aligned base58 text",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: add_device (k256 target): the filler key's base58 digits with a digit of 58 or more (the value kept)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 416,
+   "helper": "base58_text_32",
+   "message": "display: the leading base58 ones do not match the leading zero bytes",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: add_device (Solana target): its key shown with a leading \"1\" too many (signed as shown)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 417,
+   "helper": "base58_text_32",
+   "message": "display: the base58 carry hints do not split the leading digits",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "hints: add_device: a digit of a Solana target's base58 text",
+     "circuit": "add_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "texts: add_device (k256 target): the filler key's base58 digits with one digit changed, the read-back hints kept",
+     "circuit": "add_device_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 419,
+   "helper": "base58_text_32",
+   "message": "display: the base58 digits do not match the value's low bytes",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: add_device (k256 target): the filler key's base58 digits of a value with byte 20 changed",
+     "circuit": "add_device_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 421,
+   "helper": "base58_text_32",
+   "message": "display: the base58 digits do not match the value's high bytes",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: add_device (k256 target): the filler key's base58 digits of a value with byte 3 changed",
+     "circuit": "add_device_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 446,
+   "helper": "label_text",
+   "message": "display: not a zero-padded label",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 459,
+   "helper": "visible_text",
+   "message": "display: not visible ASCII",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 492,
+   "helper": "recipient_kind_text",
+   "message": "display: unknown recipient kind",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 500,
+   "helper": "k256_envelope_text",
+   "message": "display: unknown signing envelope",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 549,
+   "helper": "site_amount_label_text",
+   "message": "display: not a site amount label",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: withdraw_unshielded: 10 shown as \"0.000010 TO\\nKEN\" (signed as shown)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 550,
+   "helper": "site_amount_label_text",
+   "message": "display: the symbol does not start with a letter",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: withdraw_unshielded: 10 shown as \"0.000010 .5\" (signed as shown)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 551,
+   "helper": "site_amount_label_text",
+   "message": "display: more than 18 decimals",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: withdraw_unshielded: 1 shown as \"0.0000000000000000001 TOKEN\" (signed as shown)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 552,
+   "helper": "site_amount_label_text",
+   "message": "display: symbol longer than 8",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: withdraw_unshielded: 10 shown as \"0.000010 ABCDEFGHI\" (signed as shown)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 553,
+   "helper": "site_amount_label_text",
+   "message": "display: leading zero in the site amount label",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "texts: withdraw_unshielded: 15 shown as \"01.5 X\" (signed as shown)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmRendering.compact",
+   "line": 554,
+   "helper": "site_amount_label_text",
+   "message": "display: the site amount label does not match the value",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "hints: withdraw_unshielded: a digit of the site's amount label",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "texts: withdraw_unshielded: 10 shown as \"0.000011 TOKEN\" (signed as shown)",
+     "circuit": "withdraw_unshielded_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 254,
+   "helper": "derive_descriptor_entry_w52",
+   "message": "descriptor: not a 52-byte device tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256",
+    "add_device_with_evm_k256",
+    "append_inbox_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "publish_recovery_session_with_evm_k256",
+    "recover_cancel_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_all_grants_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "rotate_enc_key_with_evm_k256",
+    "withdraw_shielded_to_contract_with_evm_k256",
+    "withdraw_shielded_with_evm_k256",
+    "withdraw_unshielded_with_evm_k256"
+   ],
+   "deletionMutant": "W1",
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 270,
+   "helper": "derive_descriptor_entry_w64",
+   "message": "descriptor: not a 64-byte device tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 287,
+   "helper": "derive_descriptor_entry_w65",
+   "message": "descriptor: not a 65-byte device tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 307,
+   "helper": "derive_descriptor_entry_w117",
+   "message": "descriptor: not a 117-byte device tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 328,
+   "helper": "derive_descriptor_boot_w52",
+   "message": "descriptor: not a 52-byte boot tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "activate_initial_device_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 349,
+   "helper": "derive_descriptor_grant_id_w52",
+   "message": "descriptor: not a 52-byte grant-id tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256",
+    "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "withdraw_shielded_with_grant_evm_k256",
+    "withdraw_unshielded_with_grant_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 363,
+   "helper": "derive_descriptor_grant_id_w64",
+   "message": "descriptor: not a 64-byte grant-id tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 379,
+   "helper": "derive_descriptor_grant_id_w65",
+   "message": "descriptor: not a 65-byte grant-id tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 414,
+   "helper": "ed25519_descriptor_key",
+   "message": "descriptor: the Ed25519 key is the identity",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "devices: add_device: a Solana target at the identity point, honestly signed (the approval shows its encoding 01 00…00)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "devices",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 429,
+   "helper": "derive_descriptor_entry_ed25519",
+   "message": "descriptor: not an Ed25519 device tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "remove_device_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 444,
+   "helper": "derive_descriptor_boot_ed25519",
+   "message": "descriptor: not an Ed25519 boot tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it. Only a pure export of the arm reaches it (computed in JavaScript, never proved)."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 460,
+   "helper": "derive_descriptor_grant_id_ed25519",
+   "message": "descriptor: not an Ed25519 grant-id tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 480,
+   "helper": "derive_signer_entries_ed25519",
+   "message": "descriptor: not an Ed25519 device tag",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 509,
+   "helper": "derive_blind",
+   "message": "descriptor: not a blind tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it. Only a pure export of the arm reaches it (computed in JavaScript, never proved)."
+  },
+  {
+   "file": "contracts/modules/WalletArmDescriptors.compact",
+   "line": 525,
+   "helper": "derive_grant_scope_salt",
+   "message": "descriptor: not a grant salt tag",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "issue_grant_with_evm_k256"
+   ],
+   "constraint": [],
+   "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's registered-tag check first, and the 117-byte device and 64-byte grant-id classes it falls through to are refused together with it."
+  },
+  {
+   "file": "contracts/modules/Ed25519Core.compact",
+   "line": 57,
+   "helper": "ed25519_checked_encoding",
+   "message": "ed25519: the encoding does not match the point's y",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "constraint": [
+    {
+     "case": "hints: add_device: a byte of the filler key's encoding (k256 target)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "hints: add_device: a byte of a Solana target's encoding (the key shown)",
+     "circuit": "add_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": false,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: add_device: the Solana target's encoding with one byte of y changed, shown in base58 and signed as shown",
+     "circuit": "add_device_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: issue_grant: the Solana grantee's encoding with one byte of y changed, shown in base58 and signed as shown",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: remove_device: the Solana target's encoding with one byte of y changed (its entry planted), shown in base58 and signed as shown",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: revoke_grant: the Solana grantee's encoding with one byte of y changed (its grant planted), shown in base58 and signed as shown",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/Ed25519Core.compact",
+   "line": 63,
+   "helper": "ed25519_checked_encoding",
+   "message": "ed25519: the x bytes do not match the point's x",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "deletionMutant": "X2",
+   "constraint": [
+    {
+     "case": "hints: add_device: a byte of a Solana target's x coordinate",
+     "circuit": "add_device_with_evm_k256",
+     "section": "hints",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: issue_grant: the Solana grantee's x bytes with one byte changed (x's parity kept), under the honest approval",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: remove_device: the Solana target's x bytes with one byte changed (x's parity kept), under the honest approval",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: revoke_grant: the Solana grantee's x bytes with one byte changed (x's parity kept), under the honest approval",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/Ed25519Core.compact",
+   "line": 64,
+   "helper": "ed25519_checked_encoding",
+   "message": "ed25519: the sign bit is not x's parity",
+   "group": "base",
+   "reachable": true,
+   "inProvedCircuit": true,
+   "reachedFromProvedExports": [
+    "add_device_with_evm_k256",
+    "issue_grant_with_evm_k256",
+    "remove_device_with_evm_k256",
+    "revoke_grant_with_evm_k256"
+   ],
+   "deletionMutant": "X3",
+   "constraint": [
+    {
+     "case": "texts: add_device (k256 target): the filler key's encoding with the other sign bit",
+     "circuit": "add_device_with_evm_k256",
+     "section": "texts",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: add_device: the Solana target's encoding with the other sign bit, shown in base58 and signed as shown",
+     "circuit": "add_device_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: issue_grant: the Solana grantee's encoding with the other sign bit, shown in base58 and signed as shown",
+     "circuit": "issue_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: remove_device: the Solana target's encoding with the other sign bit (its entry planted), shown in base58 and signed as shown",
+     "circuit": "remove_device_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    },
+    {
+     "case": "places: revoke_grant: the Solana grantee's encoding with the other sign bit (its grant planted), shown in base58 and signed as shown",
+     "circuit": "revoke_grant_with_evm_k256",
+     "section": "places",
+     "namesItAlone": true,
+     "by": "the only site of the message its circuit reaches"
+    }
+   ]
+  },
+  {
+   "file": "contracts/modules/Ed25519Core.compact",
+   "line": 120,
+   "helper": "ed25519_verify",
+   "message": "ed25519: the key is the identity",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  },
+  {
+   "file": "contracts/modules/Ed25519Core.compact",
+   "line": 123,
+   "helper": "ed25519_verify",
+   "message": "ed25519: R is the identity",
+   "group": "base",
+   "reachable": false,
+   "inProvedCircuit": false,
+   "reachedFromProvedExports": [],
+   "constraint": []
+  }
+ ],
+ "casesNotAttributedToOneSite": [
+  {
+   "case": "hints: withdraw_unshielded: a byte of the amount",
+   "expect": "evm_k256: word hint does not match its value",
+   "sites": [
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
+   ],
+   "mutantHits": [],
+   "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
+  },
+  {
+   "case": "hints: withdraw_shielded: a byte of the change",
+   "expect": "evm_k256: word hint does not match its value",
+   "sites": [
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
+   ],
+   "mutantHits": [],
+   "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
+  },
+  {
+   "case": "hints: issue_grant: a byte of the scope's cap",
+   "expect": "evm_k256: word hint does not match its value",
+   "sites": [
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
+   ],
+   "mutantHits": [],
+   "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
+  },
+  {
+   "case": "hints: grant seam: a byte of the record's issuedAt",
+   "expect": "evm_k256: word hint does not match its value",
+   "sites": [
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
+   ],
+   "mutantHits": [],
+   "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
+  }
+ ],
+ "casesOnUpstreamAsserts": 69,
+ "casesOnOtherArmsCircuits": [
+  {
+   "case": "seam: replay/arm: the EIP-712 signature presented to the k256 arm",
+   "circuit": "rotate_enc_key_with_k256"
+  }
+ ],
+ "unexplained": [],
+ "verdict": "PASS"
+}

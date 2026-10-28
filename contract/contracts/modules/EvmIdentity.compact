@@ -1,0 +1,72 @@
+// ---------------------------------------------------------------------------
+// EVM identity: the Ethereum address of a secp256k1 key, the low 20 bytes of
+// keccak256 of the key's coordinates, each 32 bytes big-endian (64 bytes, no
+// 0x04 prefix), as Ethereum defines it.
+//
+// CHECKED BYTE HINTS. Taking bytes out of a value costs a full decomposition
+// per byte, so the circuits take a value's bytes as a hint instead: a
+// Uint<8> vector (each element range-checked to 8 bits as a circuit
+// argument) that must be exactly the value's bytes in the order Compact
+// stores them. Each check rebuilds the value from the vector and compares;
+// base-256 digits are unique, so no other vector passes.
+//
+// The circuits read no ledger state, so the module is imported rather than
+// included.
+// ---------------------------------------------------------------------------
+
+module EvmIdentity {
+  import CompactStandardLibrary;
+
+  // The checked byte hints of a key's address: `x` and `y` are the bytes of the
+  // key's coordinates as `Bytes<32>` stores them (little-endian), and
+  // `key_hash` the bytes of keccak256 of the big-endian x || y. Each is checked
+  // against the value the circuit computes, so a hint passes only when it is
+  // exactly that value's bytes.
+  export struct EvmAddressHint {
+    x:        Vector<32, Uint<8>>;
+    y:        Vector<32, Uint<8>>;
+    key_hash: Vector<32, Uint<8>>;
+  }
+
+  // `h` must be the bytes of `b`; returns them.
+  // compact row optimization | 32 bytes from a checked hint instead of a decomposition | -83% rows
+  export circuit evm_bytes_of(b: Bytes<32>, h: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
+    assert(Bytes[...h] == b, "evm_identity: byte hint does not match its value");
+    return h;
+  }
+
+  // The vector in reverse order (no constraint: only element positions move).
+  export circuit evm_reversed(v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
+    return [v[31], v[30], v[29], v[28], v[27], v[26], v[25], v[24], v[23], v[22], v[21], v[20], v[19], v[18], v[17], v[16],
+            v[15], v[14], v[13], v[12], v[11], v[10], v[9],  v[8],  v[7],  v[6],  v[5],  v[4],  v[3],  v[2],  v[1],  v[0]];
+  }
+
+  // The low 20 bytes of a keccak256 output (an Ethereum address), from a
+  // checked hint `h` of the output's bytes.
+  // compact row optimization | address bytes of a hash from a checked hint | -85% rows
+  export circuit evm_low20(hash: Bytes<32>, h: Vector<32, Uint<8>>): Bytes<20> {
+    assert(Bytes[...h] == hash, "evm_identity: hash hint does not match the hash");
+    return Bytes[h[12], h[13], h[14], h[15], h[16], h[17], h[18], h[19], h[20], h[21],
+                 h[22], h[23], h[24], h[25], h[26], h[27], h[28], h[29], h[30], h[31]];
+  }
+
+  // The key's address, derived from the presented point: the low 20 bytes of
+  // keccak256 of its big-endian x || y, as Ethereum defines it. The
+  // coordinates' bytes and the hash's bytes come from checked hints instead
+  // of byte-by-byte extraction. The point at infinity has no address:
+  // extracting the coordinates of its flagged encoding {0, 0, identity} fails
+  // (in the circuit and in the runtime), and its unflagged encoding (0, 0) is
+  // not a point of the curve, so the runtime's type check and the circuit's
+  // point assignment refuse it. A circuit that admits a key applies
+  // K256Core's key rule as well, which refuses both encodings by their
+  // coordinates. An arm re-exports this circuit, so that clients and tests
+  // obtain the address through the contract's own code.
+  // compact row optimization | Ethereum address from checked coordinate and hash bytes | -78% rows
+  export pure circuit evm_address(pk: Secp256k1Point, hint: EvmAddressHint): Bytes<20> {
+    const x = secp256k1PointX(pk) as Bytes<32>;
+    const y = secp256k1PointY(pk) as Bytes<32>;
+    const hash = keccak256<[Vector<32, Uint<8>>, Vector<32, Uint<8>>]>([
+      evm_reversed(evm_bytes_of(x, hint.x)), evm_reversed(evm_bytes_of(y, hint.y))]);
+    return evm_low20(hash, hint.key_hash);
+  }
+}

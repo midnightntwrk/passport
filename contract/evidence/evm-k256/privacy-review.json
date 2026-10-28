@@ -1,0 +1,155 @@
+{
+ "what": "the disclosure review of the arm's contracts and the needle scan of every block of the arm's localnet runs on the final build: no secp256k1 point, address, blind, signature or signed message in the clear, and no entry or grant id under a zero or missing blind",
+ "disclosureReview": {
+  "contracts": "197f92a",
+  "sites": [
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 254,
+    "circuit": "require_authorised_with_evm_k256",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
+    "public": "the consumed device entry: SHA-256(device tag | account | address | blind | epoch | counter), the value the membership check tests"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 264,
+    "circuit": "require_authorised_with_evm_k256",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
+    "public": "the successor entry: the same preimage at counter + 1, inserted in place of the consumed one"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 280,
+    "circuit": "require_authorised_with_evm_k256_either",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
+    "public": "the consumed device entry: SHA-256(device tag | account | address | blind | epoch | counter), the value the membership check tests"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 290,
+    "circuit": "require_authorised_with_evm_k256_either",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
+    "public": "the successor entry: the same preimage at counter + 1, inserted in place of the consumed one"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 304,
+    "circuit": "require_authorised_with_evm_k256_bare",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
+    "public": "the consumed device entry: SHA-256(device tag | account | address | blind | epoch | counter), the value the membership check tests"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 314,
+    "circuit": "require_authorised_with_evm_k256_bare",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
+    "public": "the successor entry: the same preimage at counter + 1, inserted in place of the consumed one"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 689,
+    "circuit": "require_grant_with_evm_k256",
+    "expr": "disclose(derive_grant_id_with_evm_k256(kernel.self(), address, auth.blind, derive_grant_origin_hash_label(label), slot))",
+    "public": "the grant id: SHA-256(grant-id tag | account | address | grantee blind | origin hash of the site label | slot), the record the grant seam looks up"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 714,
+    "circuit": "require_grant_with_evm_k256",
+    "expr": "disclose(derive_grant_spent_commit(scope_salt, new_spent))",
+    "public": "the spent commitment: a commitment to the grant's cumulative spend under the scope salt"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 787,
+    "circuit": "withdraw_shielded_with_grant_evm_k256",
+    "expr": "disclose(result.is_some)",
+    "public": "the change bit of the grantee's shielded withdrawal"
+   },
+   {
+    "file": "contracts/account-evm-k256.compact",
+    "line": 823,
+    "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+    "expr": "disclose(change.is_some)",
+    "public": "the change bit of the grantee's withdrawal to a contract"
+   }
+  ],
+  "baseModulesDisclose": {
+   "WalletArmRendering": 0,
+   "WalletArmDescriptors": 0
+  },
+  "everyDisclosedValue": "a SHA-256 output over the address and the blind, a commitment under the scope salt, or a branch bit",
+  "neverDisclosed": [
+   "the secp256k1 point (device and grantee)",
+   "the 20-byte address (only inside SHA-256 with the blind, and inside the keccak256 struct hashes, which are never disclosed)",
+   "the blind (device and grantee)",
+   "the signature (r, s)",
+   "the EIP-712 digest and struct hashes",
+   "the use counter",
+   "the checked byte hints and display inputs (key bytes, hash bytes, words, labels, base58 digits, date text, year split)"
+  ],
+  "verdict": "PASS"
+ },
+ "needleScan": {
+  "build": "wallet-arm-evm-eip712 0065058 (its full key generation)",
+  "ranAt": "2026-10-24T20:19:01.870Z",
+  "network": "undeployed",
+  "blocks": {
+   "from": 1,
+   "to": 2281
+  },
+  "scanned": {
+   "blocks": 2281,
+   "transactions": 119,
+   "transactionBytes": 1699819,
+   "contractStates": 131,
+   "stateBytes": 5786520,
+   "laneTransactions": 110,
+   "laneStates": 112
+  },
+  "accounts": 10,
+  "identities": 20,
+  "otherIdentities": 10,
+  "needles": 447,
+  "randomNeedles": 64,
+  "what": "every transaction's raw bytes and every contract state after each action, in every block of the arm's localnet runs, searched for each evm_k256 identity the arm's tests used: the 20-byte address (and reversed), the point's coordinates (big- and little-endian, and the circuit's limb form), the blind (and reversed), and their text forms (hex, EIP-55), each by windows at both ends; and for the keys of the other schemes the tests used. Positive controls must be found by the same search; random needles must not",
+  "controls": {
+   "deviceEntries": {
+    "accounts": 8,
+    "foundUnderExactlyOneTag": 8,
+    "note": "the entry recipe's control is searched under the device tag of both build generations; each account's entry is found under exactly one of them"
+   },
+   "others": {
+    "total": 31,
+    "found": 31,
+    "kinds": [
+     "control: jubjub device target jubjub J: its entry at (epoch 0, counter 0)",
+     "control: jubjub grantee jubjub J: its grant id (slot 0)",
+     "control: k256 device target k256 K: its entry at (epoch 0, counter 0)",
+     "control: k256 grantee k256 K: its grant id (slot 0)",
+     "control: p256 device target passkey P: its entry at (epoch 0, counter 0)",
+     "control: p256 grantee passkey P: its grant id (slot 0)",
+     "control: sol_ed25519 device target Solana S: its entry at (epoch 0, counter 0)",
+     "control: sol_ed25519 grantee Solana S: its grant id (slot 0)",
+     "control: the S9 session identifier (disclosed by publish_recovery_session_with_evm_k256)",
+     "control: the account's own contract address (in its transactions)",
+     "control: the encryption public key the account disclosed at deploy (in its state)"
+    ]
+   }
+  },
+  "identityHits": 0,
+  "randomHits": 0,
+  "weakBlinds": {
+   "needles": 36040,
+   "labels": [
+    "bank.example",
+    "wallet.example"
+   ],
+   "controlHitsFound": true,
+   "findings": 0,
+   "what": "the entries and grant ids a zero or missing blind would give for every address seen, searched on chain; the control account was built with a zero blind on purpose and is found"
+  },
+  "verdict": "PASS"
+ },
+ "verdict": "PASS"
+}

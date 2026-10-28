@@ -1,0 +1,8 @@
+pragma language_version >= 0.17.0;
+
+import CompactStandardLibrary;
+import "modules/EvmK256";
+
+// Test-only pure export: exercises every key-text form, including forms
+// with no registered enrolment kind. Never deployed by an account.
+export { EvmK256KeyText, EvmK256Base58Hint, evm_k256_key_text_hash };
