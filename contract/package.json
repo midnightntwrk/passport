@@ -6,7 +6,7 @@
   "description": "Reference implementation of Midnight account custody with co-resident JubJub Schnorr, secp256k1 ECDSA and profiled P-256 WebAuthn authorisation arms.",
   "scripts": {
     "compile:ecc": "compact compile +0.35.0 --feature-zkir-v3 --skip-zk contracts/account.compact contracts/managed/account",
-    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller",
+    "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-wallet-arms-base.compact contracts/managed/probe-wallet-arms-base && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-sol-ed25519-fixtures.compact contracts/managed/probe-sol-ed25519-fixtures",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:ecc": "node --import tsx src/tests/ecc-validation.ts",
@@ -22,6 +22,9 @@
     "prove:webauthn-variable": "tsx src/tests/webauthn-variable/prove.ts",
     "resources:webauthn-variable": "tsx src/tests/webauthn-variable/resources.ts",
     "check:webauthn-transcripts": "tsx src/tests/webauthn-variable/check-transcripts.ts",
+    "test:sol-ed25519-offline": "tsx src/tests/sol-ed25519-offline.ts && tsx src/tests/sol-ed25519-message-offline.ts && tsx src/tests/sol-ed25519-seam-offline.ts && tsx src/tests/sol-ed25519-custody-offline.ts && tsx src/tests/sol-ed25519-devices-offline.ts && tsx src/tests/sol-ed25519-grants-offline.ts && tsx src/tests/sol-ed25519-recovery-sim.ts && tsx src/tests/sol-ed25519-taint-offline.ts && tsx src/tests/sol-ed25519-client-offline.ts && tsx src/tests/sol-ed25519-fixtures-offline.ts",
+    "check:sol-ed25519-taint-controls": "tsx src/tests/sol-ed25519-taint-controls.ts",
+    "test:sol-ed25519": "tsx src/tests/sol-ed25519-prover.ts",
     "test:p256": "tsx src/tests/p256-conformance.ts",
     "test:p256-browser": "tsx src/tests/p256-browser.ts",
     "verify:p256-browser": "tsx src/tests/p256-browser-evidence.ts",

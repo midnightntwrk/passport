@@ -1,0 +1,436 @@
+{
+  "testId": "sol-ed25519-full-roster",
+  "name": "The 68-circuit account (k256, jubjub, p256, sol_ed25519 in the client's arm registry) deployed in waves by upstream deployAccountInWaves and used through upstream client paths",
+  "ranAt": "2026-10-25T02:22:19.290Z",
+  "finishedAt": "2026-10-25T02:35:39.278Z",
+  "build": "wallet-arm-sol-ed25519 c4c9bd1 (full keys; the 52 upstream account circuits byte-identical to upstream 0d7bb0b)",
+  "stack": "node 2.1.0-rc.4, indexer 4.4.0-rc.6, proof server 9.0.0-rc.8 (localnet)",
+  "arms": [
+    "k256",
+    "jubjub",
+    "p256",
+    "sol_ed25519"
+  ],
+  "budgetVerifierBytesPerWave": 15000,
+  "rosterSize": 68,
+  "rosterVerifierBytes": 186276,
+  "planWavesPerFirstArm": {
+    "k256": {
+      "waves": 14,
+      "largestWaveVerifierBytes": 14454,
+      "everyWaveWithinBudget": true
+    },
+    "jubjub": {
+      "waves": 14,
+      "largestWaveVerifierBytes": 14742,
+      "everyWaveWithinBudget": true
+    },
+    "p256": {
+      "waves": 14,
+      "largestWaveVerifierBytes": 14742,
+      "everyWaveWithinBudget": true
+    },
+    "sol_ed25519": {
+      "waves": 14,
+      "largestWaveVerifierBytes": 14742,
+      "everyWaveWithinBudget": true
+    }
+  },
+  "deploy": {
+    "firstArm": "sol_ed25519",
+    "address": "ece7ee6006c72454b65f5d3817491fd7a623eb424bdc3ba55a873ff8a09fc000",
+    "deployMs": 251311,
+    "blocks": {
+      "from": 114,
+      "to": 156
+    },
+    "feesSpeck": "50809950772018800",
+    "feesDust": 50.81,
+    "feeNote": "each wave transaction's paid fee as the indexer reports it (RegularTransaction.fee), in SPECK; 1 DUST = 10^15 SPECK",
+    "waves": [
+      {
+        "index": 1,
+        "kind": "deploy",
+        "circuits": [
+          "deposit_unshielded",
+          "deposit_shielded",
+          "activate_initial_device_with_sol_ed25519",
+          "withdraw_unshielded_with_sol_ed25519",
+          "append_inbox_with_sol_ed25519"
+        ],
+        "verifierBytes": 12861,
+        "retiresAuthority": false,
+        "block": 117,
+        "txHash": "38e3186111f39600ceaf16090bee01c2bae15b4b069282248d3172925ed24321",
+        "actions": [
+          "ContractDeploy"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "4012592147998303"
+      },
+      {
+        "index": 2,
+        "kind": "maintenance",
+        "circuits": [
+          "withdraw_shielded_with_sol_ed25519",
+          "withdraw_shielded_to_contract_with_sol_ed25519",
+          "rotate_enc_key_with_sol_ed25519",
+          "add_device_with_sol_ed25519"
+        ],
+        "verifierBytes": 13476,
+        "retiresAuthority": false,
+        "block": 120,
+        "txHash": "7ff0db160e8dad399525776a25906d4054f25c401413ed48fcc104302e597f2f",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3150226471873473"
+      },
+      {
+        "index": 3,
+        "kind": "maintenance",
+        "circuits": [
+          "remove_device_with_sol_ed25519",
+          "activate_initial_device_with_k256",
+          "withdraw_unshielded_with_k256",
+          "append_inbox_with_k256",
+          "withdraw_shielded_with_k256"
+        ],
+        "verifierBytes": 14349,
+        "retiresAuthority": false,
+        "block": 123,
+        "txHash": "80e05da1e18b69856880e4b916e1377bc2c8f9e122482c5473a7a777f8661124",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3430171612440977"
+      },
+      {
+        "index": 4,
+        "kind": "maintenance",
+        "circuits": [
+          "withdraw_shielded_to_contract_with_k256",
+          "rotate_enc_key_with_k256",
+          "add_device_with_k256",
+          "remove_device_with_k256",
+          "activate_initial_device_with_jubjub"
+        ],
+        "verifierBytes": 13293,
+        "retiresAuthority": false,
+        "block": 126,
+        "txHash": "ffbe4e4ae9f59d01418c7702f2154090a62842c9bffe0b81111c1c4e5d48acd4",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3268355220215714"
+      },
+      {
+        "index": 5,
+        "kind": "maintenance",
+        "circuits": [
+          "withdraw_unshielded_with_jubjub",
+          "append_inbox_with_jubjub",
+          "withdraw_shielded_with_jubjub",
+          "withdraw_shielded_to_contract_with_jubjub",
+          "rotate_enc_key_with_jubjub",
+          "add_device_with_jubjub"
+        ],
+        "verifierBytes": 13878,
+        "retiresAuthority": false,
+        "block": 129,
+        "txHash": "ddca5998fb6bf70a5ae93130cd20af6a77e20de8eabe96917e775ef49cae47f0",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3497511445289436"
+      },
+      {
+        "index": 6,
+        "kind": "maintenance",
+        "circuits": [
+          "remove_device_with_jubjub",
+          "activate_initial_device_with_p256",
+          "withdraw_unshielded_with_p256",
+          "append_inbox_with_p256",
+          "withdraw_shielded_with_p256"
+        ],
+        "verifierBytes": 13293,
+        "retiresAuthority": false,
+        "block": 132,
+        "txHash": "4e30f45780f3ddd303fb70e4f639c8b3c2c543e2126e0080f01f9b5ece57573c",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3427361719009964"
+      },
+      {
+        "index": 7,
+        "kind": "maintenance",
+        "circuits": [
+          "withdraw_shielded_to_contract_with_p256",
+          "rotate_enc_key_with_p256",
+          "add_device_with_p256",
+          "remove_device_with_p256",
+          "withdraw_unshielded_with_grant_sol_ed25519"
+        ],
+        "verifierBytes": 14349,
+        "retiresAuthority": false,
+        "block": 135,
+        "txHash": "9f5d1d1652166724a11f1fd3179b1024c41d70925089c1cfc4021cea7f0fec98",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3777607069575015"
+      },
+      {
+        "index": 8,
+        "kind": "maintenance",
+        "circuits": [
+          "withdraw_shielded_with_grant_sol_ed25519",
+          "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+          "issue_grant_with_sol_ed25519",
+          "revoke_grant_with_sol_ed25519"
+        ],
+        "verifierBytes": 13476,
+        "retiresAuthority": false,
+        "block": 138,
+        "txHash": "484c4605e679db3eac97eed941c7e1451f21e136b02f6487da4a39ddf59af66f",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3641244110403365"
+      },
+      {
+        "index": 9,
+        "kind": "maintenance",
+        "circuits": [
+          "revoke_all_grants_with_sol_ed25519",
+          "withdraw_unshielded_with_grant_k256",
+          "withdraw_shielded_with_grant_k256",
+          "withdraw_shielded_to_contract_with_grant_k256",
+          "issue_grant_with_k256"
+        ],
+        "verifierBytes": 14349,
+        "retiresAuthority": false,
+        "block": 141,
+        "txHash": "e2d5a621bda2f50e9f83630f80bc1c5fdb41d46bb077911bd10d42b75e5cd466",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3964045722950221"
+      },
+      {
+        "index": 10,
+        "kind": "maintenance",
+        "circuits": [
+          "revoke_grant_with_k256",
+          "revoke_all_grants_with_k256",
+          "withdraw_unshielded_with_grant_jubjub",
+          "withdraw_shielded_with_grant_jubjub",
+          "withdraw_shielded_to_contract_with_grant_jubjub",
+          "issue_grant_with_jubjub"
+        ],
+        "verifierBytes": 14742,
+        "retiresAuthority": false,
+        "block": 144,
+        "txHash": "e078d30e3bcafb7f99d283d46ebcf6bc4df57d34085d682b4f259b3b69717503",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "4172227476813853"
+      },
+      {
+        "index": 11,
+        "kind": "maintenance",
+        "circuits": [
+          "revoke_grant_with_jubjub",
+          "revoke_all_grants_with_jubjub",
+          "withdraw_unshielded_with_grant_p256",
+          "withdraw_shielded_with_grant_p256",
+          "withdraw_shielded_to_contract_with_grant_p256"
+        ],
+        "verifierBytes": 12861,
+        "retiresAuthority": false,
+        "block": 147,
+        "txHash": "6025b2845648aab5a901ad47099d53095ab1028cf11448939f1fe1cbef19c0c5",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3740366810601527"
+      },
+      {
+        "index": 12,
+        "kind": "maintenance",
+        "circuits": [
+          "issue_grant_with_p256",
+          "revoke_grant_with_p256",
+          "revoke_all_grants_with_p256",
+          "recover_submit",
+          "recover_finalise"
+        ],
+        "verifierBytes": 12141,
+        "retiresAuthority": false,
+        "block": 150,
+        "txHash": "1332f9881e7de4783b526531b57774f201e3d969e08cd735094334c8eed089a3",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3601259380684801"
+      },
+      {
+        "index": 13,
+        "kind": "maintenance",
+        "circuits": [
+          "publish_recovery_session_with_sol_ed25519",
+          "recover_cancel_with_sol_ed25519",
+          "publish_recovery_session_with_k256",
+          "recover_cancel_with_k256"
+        ],
+        "verifierBytes": 12804,
+        "retiresAuthority": false,
+        "block": 153,
+        "txHash": "41400a4451857babee5445557d4c98c4126dd3fcb5fa68c94754f47f199b8655",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3876932605712204"
+      },
+      {
+        "index": 14,
+        "kind": "maintenance",
+        "circuits": [
+          "publish_recovery_session_with_jubjub",
+          "recover_cancel_with_jubjub",
+          "publish_recovery_session_with_p256",
+          "recover_cancel_with_p256"
+        ],
+        "verifierBytes": 10404,
+        "retiresAuthority": true,
+        "block": 156,
+        "txHash": "2ecf253ef345a4b3a38f6ca12c70deaffda5d06b92d5dd0cac3a8650836fd8c5",
+        "actions": [
+          "ContractUpdate"
+        ],
+        "result": "SUCCESS",
+        "feeSpeck": "3250048978449947"
+      }
+    ]
+  },
+  "onChain": {
+    "operations": 68,
+    "authority": {
+      "committee": 0,
+      "threshold": 1,
+      "counter": "13"
+    },
+    "mismatches": []
+  },
+  "calls": [
+    {
+      "circuit": "activate_initial_device_with_sol_ed25519",
+      "what": "activation through the found contract (callTx)",
+      "txId": "0035430623c6b512a4a136d4b133ba1d3c7b9580bbc7b6823571bcab9d4a235587",
+      "block": 161,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "rotate_enc_key_with_sol_ed25519",
+      "what": "S rotates the encryption key (facade → CustodyAccount.rotateEncKeyWithAuth)",
+      "txId": "002b9ed0078beff56a5f7b08585b01e3c527d86c4d40c21366ab56b208f9b4034e",
+      "block": 169,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "deposit_unshielded",
+      "what": "fund the mirror with a faucet token (upstream CustodyAccount.depositUnshielded)",
+      "txId": "003dc8901f465926178c07a1a673d472b8318bc4a58ddac18d52dfed69bf3aa6cf",
+      "block": 178,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "withdraw_unshielded_with_sol_ed25519",
+      "what": "S withdraws 600 to the funding wallet (facade → CustodyAccount.withdrawUnshieldedWithAuth)",
+      "txId": "00469eb894ffc3f8f20b1aa110f6c9bd80a609b1d0ac121f06fbd664c18d151e86",
+      "block": 186,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "add_device_with_sol_ed25519",
+      "what": "S enrols a k256 device by readable descriptor",
+      "txId": "00c3456966ff60b844a595a3e45797aed43e7619b6bc4c3652e2717120e7fdf530",
+      "block": 198,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "rotate_enc_key_with_k256",
+      "what": "the k256 device authorises its own call through upstream CustodyAccount.rotateEncKey",
+      "txId": "0006b03c0d1f1d5261a1e2d1cd1a030128b3aa77836736b712bdba97761e9698a4",
+      "block": 205,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "remove_device_with_sol_ed25519",
+      "what": "S removes the k256 device by descriptor (its counter 1)",
+      "txId": "0086d3b90cc19d4dc002ce044d2b4058356018065e454c4a275ac05d7bf01b8754",
+      "block": 218,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "revoke_all_grants_with_sol_ed25519",
+      "what": "S revokes all grants",
+      "txId": "003e0b021dd33e2f7aaaa0a52b17ab9749ae30a71aeef5f345f7a89981e91cf2d4",
+      "block": 226,
+      "status": "SUCCESS"
+    },
+    {
+      "circuit": "publish_recovery_session_with_sol_ed25519",
+      "what": "S publishes a recovery session (facade over the circuit handle)",
+      "txId": "0073cb5e52cbbf742bbae185097856b6a089c25a3c7a377ec4c910f0f6205981bc",
+      "block": 238,
+      "status": "SUCCESS"
+    }
+  ],
+  "final": {
+    "auth_nonce": "7",
+    "device_count": "1",
+    "grant_generation": "1"
+  },
+  "checks": {
+    "planWaves(k256-first): every wave <= 15000 verifier bytes (SC-010)": true,
+    "planWaves(k256-first): the waves carry exactly allCircuits() (68)": true,
+    "planWaves(jubjub-first): every wave <= 15000 verifier bytes (SC-010)": true,
+    "planWaves(jubjub-first): the waves carry exactly allCircuits() (68)": true,
+    "planWaves(p256-first): every wave <= 15000 verifier bytes (SC-010)": true,
+    "planWaves(p256-first): the waves carry exactly allCircuits() (68)": true,
+    "planWaves(sol_ed25519-first): every wave <= 15000 verifier bytes (SC-010)": true,
+    "planWaves(sol_ed25519-first): the waves carry exactly allCircuits() (68)": true,
+    "allCircuits(): 68 circuits, 16 of them sol_ed25519": true,
+    "every wave transaction SUCCESS (the ledger's SucceedEntirely) by the indexer": true,
+    "every wave transaction has a recorded fee": true,
+    "one deploy transaction then one maintenance transaction per later wave, in order": true,
+    "every wave <= 15,000 verifier bytes (SC-010)": true,
+    "on chain: the operation set == allCircuits() (68)": true,
+    "on chain: every verifier key == the local key": true,
+    "maintenance authority retired (empty committee)": true,
+    "CustodyAccount.connect succeeds on the full roster": true,
+    "rotate: enc_key == the new key": true,
+    "unshielded mirror 1500 - 600 = 900": true,
+    "k256 (upstream arm) call lands on the 68-circuit account": true,
+    "final: auth_nonce 7 (rotate, withdraw, add, k256 rotate, remove, revoke-all, publish), device_count 1, grant_generation 1, a recovery vector of 2": true,
+    "no sol key or blind in state": true,
+    "every call landed entirely (indexer status SUCCESS)": true
+  },
+  "verdict": "PASS"
+}

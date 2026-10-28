@@ -1,0 +1,530 @@
+{
+ "measuredAt": "2026-10-25",
+ "what": "the 16 sol_ed25519 circuits of the current contracts: k and rows by zkir-v3 mock-compile, k also by the proof server's /k on these keys, ZKIR and key sizes and sha256 from the keyed build; the signed message is the 50-byte head of the signing format, then the text; proving times observed on these keys",
+ "compiler": "0.35.0",
+ "zkirVersion": "midnight-zkir 3.1.0-rc.1",
+ "timings": {
+  "measuredAt": "2026-10-25",
+  "note": "prove: wall times of /prove requests for the circuit's own key (the build's verifier key) during the constraint-level suite's run of record (2026-10-25 06:55-09:09 UTC, every section from a freshly restarted proof server): the honest calls and the positive controls through patched copies; nothing else ran in Docker but the local stack (node and indexer idle) and the suite, and the host ran no build or test during the run",
+  "hardware": {
+   "cpu": "Apple M4 Max",
+   "logicalCpus": 16,
+   "memoryGiB": 48,
+   "platform": "darwin",
+   "arch": "arm64"
+  },
+  "proofServer": {
+   "container": "a local proof server (Docker), one worker (MIDNIGHT_PROOF_SERVER_NUM_WORKERS=1, MALLOC_ARENA_MAX=2), restarted before each section",
+   "image": "midnightntwrk/proof-server:9.0.0-rc.8",
+   "imageId": "sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+   "repoDigests": "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
+   "arch": "arm64",
+   "cpus": 12,
+   "cpuLimit": "none (all engine CPUs)",
+   "memoryLimit": "none (engine memory 32279617536 bytes)",
+   "engineMemTotalBytes": 32279617536,
+   "engineVersion": "29.8.2",
+   "memoryPeakGiB": 21.09,
+   "memoryPeakNote": "the highest of docker stats samples taken once a minute during the run",
+   "transportRetries": 0
+  }
+ },
+ "circuits": [
+  {
+   "contract": "account",
+   "circuit": "activate_initial_device_with_sol_ed25519",
+   "k": 14,
+   "kProofServer": 14,
+   "rows": 15867,
+   "textBytes": null,
+   "signedMessageBytes": null,
+   "sha512Blocks": null,
+   "assets": {
+    "zkir": {
+     "bytes": 41562,
+     "sha256": "a7ddd8e6f65570f65fe0d9a3bd565be0664212be85fd4c5b82fc57a999f85842"
+    },
+    "prover": {
+     "bytes": 28328504,
+     "sha256": "08a8cadb41b90b315ff04b416f92ecec0339c0445a1e662723c84c8133810063"
+    },
+    "verifier": {
+     "bytes": 2649,
+     "sha256": "d8ff9ff9c036fad6a3208affc91e881ca6a6c12ede35535c55e0f2e1433b7e2e"
+    }
+   },
+   "prove": {
+    "n": 8,
+    "minMs": 848,
+    "medianMs": 966,
+    "maxMs": 1266,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "revoke_all_grants_with_sol_ed25519",
+   "k": 17,
+   "kProofServer": 17,
+   "rows": 98139,
+   "textBytes": 369,
+   "signedMessageBytes": 419,
+   "sha512Blocks": 4,
+   "assets": {
+    "zkir": {
+     "bytes": 347756,
+     "sha256": "c91e7f50ffdadd3dfb637d454c49bc7f794b5da37409c77ccc306a73522dae21"
+    },
+    "prover": {
+     "bytes": 289523217,
+     "sha256": "d8eb1c6821450e3c97b1f4d123269be47d807d5f4564bb3b34de6c578aea3e63"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "920bc46b1233fac41950271834aa8d1f9bec36e748319c57e871ec2c54fb16a7"
+    }
+   },
+   "prove": {
+    "n": 5,
+    "minMs": 7424,
+    "medianMs": 9672,
+    "maxMs": 9836,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "recover_cancel_with_sol_ed25519",
+   "k": 17,
+   "kProofServer": 17,
+   "rows": 98853,
+   "textBytes": 371,
+   "signedMessageBytes": 421,
+   "sha512Blocks": 4,
+   "assets": {
+    "zkir": {
+     "bytes": 349370,
+     "sha256": "133871d543fe198b2da2fc049f3c16a879a86cef38e45fe19a46e658c55bb53d"
+    },
+    "prover": {
+     "bytes": 302107236,
+     "sha256": "49a0cb7f98e62532d68ba791d1de25b04171f2afd83738efc6ce837878ecbe01"
+    },
+    "verifier": {
+     "bytes": 3513,
+     "sha256": "1692cb4aa487f82dd5492f2e04cd0a057e7d97d63c0afa1ee103a0b823c1bc95"
+    }
+   },
+   "prove": {
+    "n": 11,
+    "minMs": 7495,
+    "medianMs": 7561,
+    "maxMs": 9904,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "rotate_enc_key_with_sol_ed25519",
+   "k": 17,
+   "kProofServer": 17,
+   "rows": 104415,
+   "textBytes": 491,
+   "signedMessageBytes": 541,
+   "sha512Blocks": 5,
+   "assets": {
+    "zkir": {
+     "bytes": 406719,
+     "sha256": "c00b8820073b61098a1724c6437d6486a85403a6494aea60b34b15c38be9db24"
+    },
+    "prover": {
+     "bytes": 289540169,
+     "sha256": "a2794e0d042fab314fb148c5024cf080cff99c4d03cc55b200aa1f4fa6f28dfd"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "4777e0432e566051f27ad72b21c44fe5b595f3a91af14c83380e10c292368cd8"
+    }
+   },
+   "prove": {
+    "n": 32,
+    "minMs": 7392,
+    "medianMs": 7497.5,
+    "maxMs": 9907,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "withdraw_unshielded_with_sol_ed25519",
+   "k": 17,
+   "kProofServer": 17,
+   "rows": 120327,
+   "textBytes": 600,
+   "signedMessageBytes": 650,
+   "sha512Blocks": 6,
+   "assets": {
+    "zkir": {
+     "bytes": 852058,
+     "sha256": "942cf5fd8c3e8086cf590fcba7937b1f0ef46f88427196b8db966cb87236e3eb"
+    },
+    "prover": {
+     "bytes": 289686292,
+     "sha256": "bed4ab5d58e1977824ba3450e56767d7e7db7b5440c8870d6358782d82b6d9a9"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "725616dbb98379ce737861ae1b6c67c2cf295e9f2353b5908e7e6c27df464b1c"
+    }
+   },
+   "prove": {
+    "n": 18,
+    "minMs": 7632,
+    "medianMs": 7698.5,
+    "maxMs": 10044,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "append_inbox_with_sol_ed25519",
+   "k": 17,
+   "kProofServer": 17,
+   "rows": 128377,
+   "textBytes": 813,
+   "signedMessageBytes": 863,
+   "sha512Blocks": 8,
+   "assets": {
+    "zkir": {
+     "bytes": 701152,
+     "sha256": "27bd2f36fde3fd70e35faee70e4f2b4f517ec5ed369f2aa4a636715fa942439c"
+    },
+    "prover": {
+     "bytes": 289624511,
+     "sha256": "03b37cb5c337da5aa64aa2246aa39d1691a47ba3fa5d98d3b6ca8ab11fdcaaf9"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "bc301f2792fca1b24e6b9b994440b79f03f9d71d67ddf7c5628b4f3c99ab14d1"
+    }
+   },
+   "prove": {
+    "n": 6,
+    "minMs": 7794,
+    "medianMs": 8883.5,
+    "maxMs": 10159,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 138453,
+   "textBytes": 726,
+   "signedMessageBytes": 776,
+   "sha512Blocks": 7,
+   "assets": {
+    "zkir": {
+     "bytes": 957587,
+     "sha256": "9ad6a53cfb8745d9dfefba776ccbba17021ee087e0496630c3abc9ebb73618b8"
+    },
+    "prover": {
+     "bytes": 579127748,
+     "sha256": "ef848feff62b8da2cea8402475191461f1305eb2e7f331831b2f6f93a1f757a2"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "cdf33b3273aab1e2c14471fc64199dd30584d555aaf6e6b0a2e33b8657397d16"
+    }
+   },
+   "prove": {
+    "n": 27,
+    "minMs": 14309,
+    "medianMs": 14438,
+    "maxMs": 20506,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "publish_recovery_session_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 145008,
+   "textBytes": 1230,
+   "signedMessageBytes": 1280,
+   "sha512Blocks": 11,
+   "assets": {
+    "zkir": {
+     "bytes": 898098,
+     "sha256": "9c78bf982d9993b92c060db26835b2158cf4feb756516af146020ecf93836cdb"
+    },
+    "prover": {
+     "bytes": 604255342,
+     "sha256": "d7692a6f1d11c6084a0f2bad78311abbff0834db795f5ce4827d13b9b4111ad1"
+    },
+    "verifier": {
+     "bytes": 3513,
+     "sha256": "70334c4dfd85a77b421a092818dd48c10f1d0c7ce373f9207a2f09079e6f45e4"
+    }
+   },
+   "prove": {
+    "n": 21,
+    "minMs": 14710,
+    "medianMs": 14800,
+    "maxMs": 19952,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "withdraw_shielded_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 148297,
+   "textBytes": 841,
+   "signedMessageBytes": 891,
+   "sha512Blocks": 8,
+   "assets": {
+    "zkir": {
+     "bytes": 1076704,
+     "sha256": "f18297238a5f2a82728cf15f4fcdbdb4962704ed34efedee1396351223a100b2"
+    },
+    "prover": {
+     "bytes": 579165942,
+     "sha256": "5813d25132c48d6184fa62c5b88dfe3bf2034e4488359ca4f34c1d61cb578395"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "70dea8ac456c9fed9a391b45c9708270c009afa5d78d39244b037b716cb87c09"
+    }
+   },
+   "prove": {
+    "n": 11,
+    "minMs": 14301,
+    "medianMs": 14519,
+    "maxMs": 20479,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "add_device_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 154192,
+   "textBytes": 685,
+   "signedMessageBytes": 735,
+   "sha512Blocks": 7,
+   "assets": {
+    "zkir": {
+     "bytes": 859869,
+     "sha256": "e1032c552ff2e31bf623329876dc578a7099cd8505b7b38c797f01b94d1c8665"
+    },
+    "prover": {
+     "bytes": 579090148,
+     "sha256": "28b834bb737843625162defb82d6429ca87719114f7197e6aade648218f32fe4"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "87ddfa0d6c9c76c8b0c24940275f130bca1307754d59a78d3c8ab1d9174cade6"
+    }
+   },
+   "prove": {
+    "n": 38,
+    "minMs": 14232,
+    "medianMs": 14511.5,
+    "maxMs": 21133,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "withdraw_shielded_to_contract_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 153915,
+   "textBytes": 851,
+   "signedMessageBytes": 901,
+   "sha512Blocks": 8,
+   "assets": {
+    "zkir": {
+     "bytes": 1076118,
+     "sha256": "82ee26154af71c563f22f69532580ed14a9b479e9d8d3e57db1f500dd0a47292"
+    },
+    "prover": {
+     "bytes": 579165927,
+     "sha256": "11e06263aa1639709271b1003752b3f396086b0bcbc380549fecd7274ef11825"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "5e7373daa4f468fc6912d41eefbe9855c27971f10d7fede125406290db0d0585"
+    }
+   },
+   "prove": {
+    "n": 10,
+    "minMs": 14415,
+    "medianMs": 14819,
+    "maxMs": 21406,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "revoke_grant_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 154310,
+   "textBytes": 730,
+   "signedMessageBytes": 780,
+   "sha512Blocks": 7,
+   "assets": {
+    "zkir": {
+     "bytes": 948863,
+     "sha256": "d996214ef4713beb3576c24b567f36540b5f03c2dcd4c198a729bfc089504ec7"
+    },
+    "prover": {
+     "bytes": 579121155,
+     "sha256": "4dd49c840ecab9ded9c4bc8a949861c71d9d12e33594e54a225610feff613bb9"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "974c22ecd2566f1e330717b840ecc770d12f96c99260459249e89c2924fb3ab1"
+    }
+   },
+   "prove": {
+    "n": 5,
+    "minMs": 14415,
+    "medianMs": 19095,
+    "maxMs": 20241,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "remove_device_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 159787,
+   "textBytes": 761,
+   "signedMessageBytes": 811,
+   "sha512Blocks": 7,
+   "assets": {
+    "zkir": {
+     "bytes": 1039324,
+     "sha256": "472b609fb7f2e1804812eba68711e35155c29e43cab52dc5e1483c691019a84a"
+    },
+    "prover": {
+     "bytes": 579149324,
+     "sha256": "ad4493abeb1cdb43d60efe5b04e796834976e2afdd18d6ab50713a928147a99d"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "7713dad073159a4a026b7bd24ef5b105d298459b08d0e8ce61a19c28a9508d27"
+    }
+   },
+   "prove": {
+    "n": 17,
+    "minMs": 14334,
+    "medianMs": 14549,
+    "maxMs": 22019,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "withdraw_shielded_with_grant_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 206572,
+   "textBytes": 1566,
+   "signedMessageBytes": 1616,
+   "sha512Blocks": 14,
+   "assets": {
+    "zkir": {
+     "bytes": 1611238,
+     "sha256": "ddc4ce8435b822eb06e8fc005e6a43c0253000723e8a8cb3ce1c7bc11d8043c7"
+    },
+    "prover": {
+     "bytes": 579332684,
+     "sha256": "285e9674ac5e76bac07e02a6dd06561b7e3abb20f00b9e28e0dfc16eef4880c5"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "4989068e18075387d8be29cbcc23eb59569bb14518f67e01276154b36a3952ef"
+    }
+   },
+   "prove": {
+    "n": 25,
+    "minMs": 14845,
+    "medianMs": 14913,
+    "maxMs": 21800,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 212342,
+   "textBytes": 1576,
+   "signedMessageBytes": 1626,
+   "sha512Blocks": 14,
+   "assets": {
+    "zkir": {
+     "bytes": 1614048,
+     "sha256": "7492c30faa2ee223be013b7149859a394179c283d89b3a8e34908e07708f4892"
+    },
+    "prover": {
+     "bytes": 579333544,
+     "sha256": "ad392e1cb9890bb908e1506c677283ca50b9e460f90edcd27411a37686cfa253"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "3f26f9a4e6af470ac06510ef6e36ef9f57bc0eed93677070feba2f667683834d"
+    }
+   },
+   "prove": {
+    "n": 25,
+    "minMs": 14828,
+    "medianMs": 14919,
+    "maxMs": 22486,
+    "otherKeyObservations": 0
+   }
+  },
+  {
+   "contract": "account",
+   "circuit": "issue_grant_with_sol_ed25519",
+   "k": 18,
+   "kProofServer": 18,
+   "rows": 232048,
+   "textBytes": 1690,
+   "signedMessageBytes": 1740,
+   "sha512Blocks": 15,
+   "assets": {
+    "zkir": {
+     "bytes": 1681890,
+     "sha256": "b9eb28439ca47e58e8471f6dae9faf9f4053fef94a2359ef897f052db8961b5f"
+    },
+    "prover": {
+     "bytes": 579361214,
+     "sha256": "8a81ad9399dbb82bff8f3b2bd80ea320c71da69ebd07c72f91748862c1651789"
+    },
+    "verifier": {
+     "bytes": 3369,
+     "sha256": "455952713c60d6f3380a3ce3f725362c34e50295589d699069cf90074e16c822"
+    }
+   },
+   "prove": {
+    "n": 48,
+    "minMs": 14280,
+    "medianMs": 15103.5,
+    "maxMs": 22431,
+    "otherKeyObservations": 0
+   }
+  }
+ ]
+}

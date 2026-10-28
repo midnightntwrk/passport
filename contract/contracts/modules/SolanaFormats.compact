@@ -1,0 +1,62 @@
+// ---------------------------------------------------------------------------
+// Solana signing formats: the bytes a Solana wallet signs for an approval
+// text. It knows no account, wallet or operation, and verifies nothing: it
+// returns the message, and the Ed25519 core verifies the signature over it.
+//
+// TWO FORMATS. Wallets differ in what they can sign: a software wallet's
+// `signMessage` signs the bytes it is given; a hardware wallet (Ledger,
+// Trezor), and a software wallet's `signOffchainMessage`, signs a text only
+// inside the Solana off-chain message envelope. Both formats put 50 bytes
+// before the same approval text:
+//   raw            the line "Midnight Passport, Solana signMessage format
+//                  (v1)" and a line feed (ASCII);
+//   off-chain v1   ff || "solana offchain" (the signing domain, 16 bytes)
+//                  || 01 (the version) || 01 (the signer count) || the
+//                  signing key's 32-byte encoding (the one signer).
+// The message is head || text, hashed once by the core's SHA-512 over
+// R || A || message. Each format's bytes are what that format's wallets
+// sign, so a signature made in one format verifies only in that format: the
+// two heads differ in their first byte (0x4d, 0xff).
+//
+// THE FLAG. `offchain` selects the head. A circuit passes it as a private
+// input and never discloses it, so the chain does not learn which kind of
+// wallet signed: the head enters only the hash, never a ledger operation, and
+// both formats run the same instructions (one circuit and one verifier key
+// for both).
+//
+// THE OFF-CHAIN SIGNER. The envelope's signer is `key`, the signing key's
+// encoding that the caller has checked against the key the signature is
+// verified under, so an envelope naming any other signer is not the message
+// this circuit verifies.
+//
+// ATOMS. The head is returned as two parts, its first 18 bytes and its last
+// 32, rather than one 50-byte value: the off-chain head's last 32 bytes are
+// the key value itself, so each part is one selection between two values
+// of its width. Packing the head into one Bytes<50> from the key's byte
+// inputs measured 287 rows more per circuit. The core hashes the tuple
+// [head18, head32, text] as the concatenation of its elements. Its type is
+// exported as SolanaSignedMessage<n>, the message type a caller passes to
+// the core's ed25519_verify<T>, so no caller depends on the parts.
+// ---------------------------------------------------------------------------
+
+module SolanaFormats {
+  import CompactStandardLibrary;
+
+  // The message a Solana wallet signs for an n-byte text: [head (18 bytes),
+  // head (32 bytes), text].
+  export type SolanaSignedMessage<#n> = [Bytes<18>, Bytes<32>, Bytes<n>];
+
+  // The message a Solana wallet signs for `text` in the format `offchain`
+  // selects.
+  export circuit solana_signed_message<#n>(offchain: Boolean, key: Bytes<32>, text: Bytes<n>): SolanaSignedMessage<n> {
+    // ff "solana offchain" 01 01, or "Midnight Passport,"
+    const head18 = offchain
+      ? Bytes[255, 115, 111, 108, 97, 110, 97, 32, 111, 102, 102, 99, 104, 97, 105, 110, 1, 1]
+      : Bytes[77, 105, 100, 110, 105, 103, 104, 116, 32, 80, 97, 115, 115, 112, 111, 114, 116, 44];
+    // the signer's key, or " Solana signMessage format (v1)" LF
+    const head32 = offchain
+      ? key
+      : Bytes[32, 83, 111, 108, 97, 110, 97, 32, 115, 105, 103, 110, 77, 101, 115, 115, 97, 103, 101, 32, 102, 111, 114, 109, 97, 116, 32, 40, 118, 49, 41, 10];
+    return [head18, head32, text];
+  }
+}

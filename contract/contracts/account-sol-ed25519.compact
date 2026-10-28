@@ -1,0 +1,1908 @@
+// ---------------------------------------------------------------------------
+// Arm `sol_ed25519`: a Solana wallet as a device and as a grantee, included by
+// account.compact. All custody, grant-scope and recovery mutations use the
+// existing shared chips.
+//
+// SCHEME. RFC 8032 PureEdDSA over edwards25519 (Ed25519), the scheme of
+// every Solana wallet. A wallet signs the approval text in one of two
+// formats (modules/SolanaFormats), each a fixed 50-byte head followed by the
+// same text: raw, what `signMessage` signs (Phantom and other software
+// wallets), the head being a line that names the format; or off-chain
+// message v1, what hardware wallets (Ledger, Trezor) and
+// `signOffchainMessage` sign, the head being the Solana off-chain envelope
+// that names the signing key. The authorisation's flag `offchain` selects
+// the format. It is a private input and never disclosed, so one circuit
+// serves both formats and the chain does not learn which kind of wallet
+// signed; a device is its key, whatever the format it signs in (IDENTITY
+// below). Verification is the Ed25519 core's `ed25519_verify<T>`
+// (modules/Ed25519Core: the standard library's `ed25519Verify<#n>` with R's
+// and A's encodings taken from checked inputs instead of byte explosions,
+// and R = O refused, which the standard library accepts), over head || text.
+//
+// IDENTITY. The device is the wallet's public key A. The circuit takes A as a
+// `Curve25519Point`, whose type admits only points of the prime-order
+// subgroup (ZKIR `FromCoordinates` is unsatisfiable outside it, and the
+// runtime refuses such points at the type boundary), together with the
+// 32-byte RFC 8032 encoding the wallet exports (section 5.1.2: y
+// little-endian, the low bit of x in bit 255) and the x-coordinate's 32 bytes
+// little-endian, both checked in-circuit against the point. Entries, boot
+// commitments and grant ids bind those 32 bytes, never the point's internal
+// form, so the identity a person compares with the wallet is exactly the one
+// hashed.
+//
+// BLIND. The 32 bytes are public (they are the Solana address),
+// so every entry and grant id also binds the account's blind, a per-account
+// secret the client re-derives from the wallet's signature over a readable,
+// non-authorising request message (src/wallet/blind.ts):
+//   blind    = SHA-256(pad32("midnight:account:blind:sol:v1") || signature(64))
+//   entry    = SHA-256(pad32("midnight:account:device:sol:v1") || account
+//                      || key(32) || blind(32) || le4(epoch) || le8(counter))
+//   boot     = SHA-256(pad32("midnight:account:boot:sol:v1") || salt
+//                      || key(32) || blind(32))
+//   grant id = SHA-256(pad32("midnight:account:grant:id:sol:v1") || account
+//                      || key(32) || blind(32) || origin_hash || le1(slot))
+// These are the shared module's ed25519-class recipes
+// (modules/WalletArmDescriptors), so a device of any readable arm derives
+// exactly the same entry for a `sol_ed25519` target from its point.
+//
+// KEY ADMISSIBILITY (SOL-ED25519.md, section 1).
+//   - canonical y < p, on the curve: the client decodes the wallet's 32 bytes
+//     strictly before they become a point; the circuit compares the bytes it
+//     is given with the canonical bytes of the point's coordinates, so only
+//     the canonical encoding passes;
+//   - prime-order subgroup (small-order and mixed-order keys): the point type
+//     (runtime type check; ZKIR FromCoordinates at the prover);
+//   - A != O: the descriptor module's ed25519 class asserts it on every
+//     derivation (the identity is the only prime-order point whose
+//     x-coordinate is zero); the Ed25519 core's `ed25519_verify` asserts the
+//     same on every verification.
+// ---------------------------------------------------------------------------
+
+import "modules/Ed25519Core";
+import "modules/SolanaFormats";
+import "modules/WalletArmDescriptors";
+import "modules/WalletArmRendering";
+
+// ── The 32-byte key and the derivations (the descriptor module's ed25519
+//    class) ──────────────────────────────────────────────────────────────
+//
+// The key's 32-byte RFC 8032 encoding is the Ed25519 core's one shared
+// function, encode_public_key_ed25519 (y little-endian, x's parity in bit
+// 255; for a point of the prime-order subgroup the one canonical encoding a
+// strict decoder accepts). It takes the point with the encoding's bytes
+// (`pk_bytes`) and the x-coordinate's bytes little-endian (`pk_x`) as inputs
+// and checks both against the point, so no byte is taken out of a point
+// in-circuit. Every derivation of this arm, the seam's included, goes
+// through the descriptor module's ed25519 class, which takes those three
+// inputs, asserts A != O, checks the encoding with the core's checked
+// encoding, and returns the key with the derived value: enrolment, removal,
+// grants and signing use one encoding of one key.
+// Exported for clients, with the core's derivation of a key from an RFC 8032
+// seed (compute_public_key_ed25519), which software signers and tests use.
+export { encode_public_key_ed25519, compute_public_key_ed25519 };
+
+export pure circuit derive_boot_commitment_with_sol_ed25519(
+  salt:     Bytes<32>,
+  pk:       Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>,
+  pk_x:     Vector<32, Uint<8>>,
+  blind:    Bytes<32>,
+): Bytes<32> {
+  return derive_descriptor_boot_ed25519(boot_tag_sol_ed25519(), salt, pk, pk_bytes, pk_x, blind)[1];
+}
+
+export pure circuit derive_device_entry_with_sol_ed25519(
+  self_addr: ContractAddress,
+  pk:        Curve25519Point,
+  pk_bytes:  Vector<32, Uint<8>>,
+  pk_x:      Vector<32, Uint<8>>,
+  blind:     Bytes<32>,
+  epoch:     Uint<32>,
+  counter:   Uint<64>,
+): Bytes<32> {
+  return derive_descriptor_entry_ed25519(device_tag_sol_ed25519(), self_addr, pk, pk_bytes, pk_x, blind, epoch, counter)[1];
+}
+
+export pure circuit derive_grant_id_with_sol_ed25519(
+  self_addr:   ContractAddress,
+  pk:          Curve25519Point,
+  pk_bytes:    Vector<32, Uint<8>>,
+  pk_x:        Vector<32, Uint<8>>,
+  blind:       Bytes<32>,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): Bytes<32> {
+  return derive_descriptor_grant_id_ed25519(grant_id_tag_sol_ed25519(), self_addr, pk, pk_bytes, pk_x, blind, origin_hash, slot)[1];
+}
+
+// The blind from the wallet's raw 64-byte signature over the request message
+// (src/wallet/blind.ts). Computed by the client, before an account exists;
+// exported so that every implementation reproduces it with the contract's
+// own toolchain. No circuit accepts the request message as an authorisation.
+export pure circuit derive_blind_with_sol_ed25519(signature: Bytes<64>): Bytes<32> {
+  return derive_blind(blind_tag_sol_ed25519(), signature);
+}
+
+// ── Bootstrap ───────────────────────────────────────────────────────────────
+
+// Permissionless, as every arm's activation: the boot commitment binds the
+// key and the blind, so only the committed device can be activated, and the
+// caller learns nothing it did not already hold.
+export circuit activate_initial_device_with_sol_ed25519(
+  pk:       Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>,
+  pk_x:     Vector<32, Uint<8>>,
+  salt:     Bytes<32>,
+  blind:    Bytes<32>,
+): [] {
+  assert(!booted, "already activated");
+  assert(derive_boot_commitment_with_sol_ed25519(salt, pk, pk_bytes, pk_x, blind) == boot, "boot commitment mismatch");
+  do_activate_initial_device(derive_device_entry_with_sol_ed25519(
+    kernel.self(), pk, pk_bytes, pk_x, blind, device_epoch, 0 as Uint<64>
+  ));
+}
+
+// ── The device seam ─────────────────────────────────────────────────────────
+//
+// The authorising material of a device-gated call. Internal (as upstream's
+// P256Auth): the generated JavaScript takes it as one object argument.
+// `pk_bytes` and `pk_x` are the key's 32-byte RFC 8032 encoding and its
+// x-coordinate little-endian; `r_bytes` and `r_x` the same for R (for an
+// accepted signature, `r_bytes` is its first 32 bytes). Each pair is checked
+// against its point by the Ed25519 core's checked encoding, so no byte is
+// taken out of a point in-circuit. `offchain` names the format the signature
+// is in (false: raw `signMessage`; true: off-chain message v1); it selects
+// the signed head and is never disclosed.
+struct SolEd25519Auth {
+  pk:          Curve25519Point;
+  pk_bytes:    Vector<32, Uint<8>>;
+  pk_x:        Vector<32, Uint<8>>;
+  blind:       Bytes<32>;
+  use_counter: Uint<64>;
+  offchain:    Boolean;
+  sig:         Ed25519Signature;
+  r_bytes:     Vector<32, Uint<8>>;
+  r_x:         Vector<32, Uint<8>>;
+}
+
+// The seam owns everything that identifies the signer and the call's
+// freshness: it derives the 32-byte key (and the current and next entries,
+// from one encoding: the module's derive_signer_entries_ed25519 under this
+// arm's device tag, which asserts A != O) from the point the signature is
+// verified under, and renders the message's common frame itself — the
+// first line, the account (kernel.self()), the signing key, and the
+// auth_nonce line — around the title and body the gated circuit supplies. No
+// gated circuit passes a key, an account, a nonce or a frame of its own.
+//
+// Then, in upstream p256's order: membership of the device's current
+// single-use entry (bound to that key and the account's blind),
+// verification by the Ed25519 core's ed25519_verify over the text in the
+// format `auth.offchain` selects (modules/SolanaFormats: cofactorless
+// [s]B == R + [k]A with k = SHA-512(R || A || head || text) mod L, A's
+// encoding the key derived above, which is also the off-chain envelope's
+// signer; it refuses A = O and R = O; s < L and the prime-order subgroup for
+// A and R hold by type), the entry rolled to its successor,
+// auth_nonce advanced, round bumped. Any failed assert aborts the
+// whole call. Returns the caller's post-roll entry (remove_device's S13
+// guard).
+circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
+  title: Vector<t, Uint<8>>,
+  body:  Vector<b, Uint<8>>,
+  show:  SolShow,
+  frame: SolFrame,
+  auth:  SolEd25519Auth,
+): Bytes<32> {
+  const [key, current, successor] = derive_signer_entries_ed25519(device_tag_sol_ed25519(), kernel.self(), auth.pk, auth.pk_bytes,
+    auth.pk_x, auth.blind, device_epoch, auth.use_counter);
+  const text = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
+  const entry = disclose(current);
+  assert(devices.member(entry), "unknown device entry");
+  const message = solana_signed_message<n>(auth.offchain, key, text);
+  assert(ed25519_verify<SolanaSignedMessage<n>>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
+  devices.remove(entry);
+  const next = disclose(successor);
+  devices.insert(next);
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+  bump_round();
+  return next;
+}
+
+// ── Gated circuits ──────────────────────────────────────────────────────────
+//
+// Arguments: the operation's operands, the message's display inputs (the
+// operation's own, then `show`, `frame` and `hex`), then the authorisation.
+// Each passes the seam only its circuit-fixed title and the body it renders
+// from its operands.
+
+export circuit rotate_enc_key_with_sol_ed25519(
+  new_key: Bytes<32>,
+  show:    SolShow,
+  frame:   SolFrame,
+  hex:     Vector<64, Uint<0..16>>,
+  auth:    SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<37, 184, 491>(sol_title_rotate_enc_key(), sol_body_rotate_enc_key(new_key, hex), show, frame, auth);
+  do_rotate_enc_key(new_key);
+}
+
+// ── Custody (MIP-0012) ──────────────────────────────────────────────────────
+//
+// Deposits are upstream's permissionless deposit_unshielded and
+// deposit_shielded. Each export below renders its message from exactly the
+// values it executes on (the operands, and for a shielded spend the coin the
+// held_coin witness returned) and hands the seam only its title and body.
+
+// The change-coin backfill (MIP-0012 §6.2): the approval shows the 192-byte
+// InboxEntry v1 ciphertext in full, six lines of 64 hex digits.
+export circuit append_inbox_with_sol_ed25519(
+  entry: Bytes<192>,
+  show:  SolShow,
+  frame: SolFrame,
+  hex:   Vector<384, Uint<0..16>>,
+  auth:  SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<33, 510, 813>(sol_title_append_inbox(), sol_body_append_inbox(entry, hex), show, frame, auth);
+  do_append_inbox(entry);
+}
+
+// Unshielded (MIP-0012 §5): the approval shows the token colour, the amount
+// in base units with the site's label for it (marked as the site's claim),
+// and the recipient's 32-byte user address; the mirror check and the send
+// are the shared chip's.
+export circuit withdraw_unshielded_with_sol_ed25519(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: UserAddress,
+  a:         SolAmountShow,
+  show:      SolShow,
+  frame:     SolFrame,
+  hex:       Vector<128, Uint<0..16>>,
+  auth:      SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<38, 292, 600>(sol_title_withdraw_unshielded(),
+    sol_body_withdraw_unshielded(color, amount, recipient, a, hex), show, frame, auth);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+// Shielded (MIP-0012 §6). The coin enters through the held_coin witness
+// (never from ledger state), and the message is rendered from the coin the
+// witness actually returned: it shows every value of it the spend consumes
+// (the colour, as the Token line, the value, the nonce and the Merkle index)
+// and the change that returns to this account (value - amount; the amount
+// is bounded by the coin's value where the change is rendered). A valid
+// signature over one coin therefore never spends another (AUTH-10).
+//
+// The colour is shown once, as `color`, so the export ASSERTS that the spent
+// coin is of that colour: without it a
+// dishonest prover could pair a valid signature over a coin of colour A with
+// a witness coin of colour B carrying the same nonce, value and index.
+export circuit withdraw_shielded_with_sol_ed25519(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  a:         SolAmountShow,
+  c:         SolCoinShow,
+  show:      SolShow,
+  frame:     SolFrame,
+  hex:       Vector<192, Uint<0..16>>,
+  auth:      SolEd25519Auth,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  require_authorised_with_sol_ed25519<36, 535, 841>(sol_title_withdraw_shielded(),
+    sol_body_withdraw_shielded(recipient, color, amount, coin, a, c, hex), show, frame, auth);
+  return do_withdraw_shielded(recipient, amount, coin);
+}
+
+// The contract-recipient spend: the direct-transfer mode of MIP-0012 §6.6
+// (the output MUST be claimed by the receiving contract's deposit path in the
+// same client-composed transaction; both addresses are public by design).
+// The message shows the recipient contract's 32-byte address; the coin, the
+// colour assert and the change are as above. Returns [sent, change].
+export circuit withdraw_shielded_to_contract_with_sol_ed25519(
+  recipient: ContractAddress,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  a:         SolAmountShow,
+  c:         SolCoinShow,
+  show:      SolShow,
+  frame:     SolFrame,
+  hex:       Vector<192, Uint<0..16>>,
+  auth:      SolEd25519Auth,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  require_authorised_with_sol_ed25519<50, 531, 851>(sol_title_withdraw_shielded_to_contract(),
+    sol_body_withdraw_shielded_to_contract(recipient, color, amount, coin, a, c, hex), show, frame, auth);
+  return do_withdraw_shielded_to_contract(recipient, amount, coin);
+}
+
+// ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
+//
+// The other key is a readable DESCRIPTOR: the registered device tag of the
+// target's kind and its key payload (an EVM target by its address and privacy
+// salt, a Solana target by its 32-byte key and privacy salt, a k256 target by
+// x, y and envelope, a passkey by x, y, its exact origin and the RP hash, a
+// JubJub target by its point). The message shows exactly those values
+// (coordinates in COORDINATE_DISPLAY_ORDER), and the circuit derives the
+// target's entry from them with the recipe of the kind's key class
+// (sol_kinds(); modules/WalletArmDescriptors). An unregistered tag is
+// refused, so a descriptor never enrols an entry that no arm recognises by
+// its tag.
+
+// add_device derives at the CURRENT device_epoch and counter 0, never at a
+// caller-chosen epoch or counter: this arm cannot plant an entry at
+// device_epoch + 1 (README erratum 7), whatever the descriptor says.
+export circuit add_device_with_sol_ed25519(
+  target:    SolTarget,
+  target_pk: SolKey,
+  ts:        SolTargetShow,
+  show:   SolShow,
+  frame:  SolFrame,
+  hex:    Vector<232, Uint<0..16>>,
+  auth:   SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<24, 391, 685>(sol_title_add_device(), sol_body_add_device(target, target_pk.pk_bytes, ts, hex), show, frame, auth);
+  do_add_device(sol_device_entry(target, target_pk, kernel.self(), device_epoch, 0 as Uint<64>));
+}
+
+// Two forms in one circuit, selected by `literal`:
+//   - the target's descriptor with its use counter and epoch (removal only
+//     reduces authority, so an explicit epoch is allowed: a device can evict
+//     an entry an upstream arm's raw add_device planted at device_epoch + 1);
+//     `entry` is then zero;
+//   - the revocation-only literal entry, for an entry the wallet cannot
+//     describe, shown in full under the fixed line "Removes a device this
+//     wallet cannot identify"; the descriptor, counter and epoch are then
+//     zero.
+// The unused form's values are not shown, so each must be zero, and the
+// literal form's display inputs must be those of an empty target (one
+// encoding per call). Either way the caller's own post-roll entry can never be
+// removed (AUTH-5, S13: do_remove_device's guard, the entry derived here as
+// upstream's p256 arm derives it), nor the last device.
+export circuit remove_device_with_sol_ed25519(
+  literal:   Boolean,
+  target:    SolTarget,
+  target_pk: SolKey,
+  counter:   Uint<64>,
+  epoch:   Uint<32>,
+  entry:   Bytes<32>,
+  ts:      SolTargetShow,
+  show:    SolShow,
+  frame:   SolFrame,
+  hex:     Vector<296, Uint<0..16>>,
+  auth:    SolEd25519Auth,
+): [] {
+  const caller_entry = require_authorised_with_sol_ed25519<27, 464, 761>(sol_title_remove_device(),
+    sol_body_remove_device(literal, target, target_pk.pk_bytes, counter, epoch, entry, ts, hex), show, frame, auth);
+  const self_addr = kernel.self();
+  if (literal) {
+    assert(target.tag == pad(32, "") && target.address == pad(20, "") && target.a == pad(32, "") && target.b == pad(32, "")
+             && target.c == pad(32, "") && target.origin == pad(21, "") && target.envelope == 0 && counter == 0 && epoch == 0
+             && (curve25519PointX(target_pk.pk) as Bytes<32>) == pad(32, "")
+             && Bytes[...target_pk.pk_bytes] == pad(32, "") && Bytes[...target_pk.pk_x] == pad(32, ""),
+           "remove_device: a literal removal carries no descriptor");
+  } else {
+    assert(entry == pad(32, ""), "remove_device: a descriptor removal carries no literal entry");
+  }
+  // One ledger operation for both forms (a branch around it would disclose
+  // the form); the descriptor's derivation and its checks apply only to the
+  // descriptor form.
+  do_remove_device(literal ? entry : sol_device_entry(target, target_pk, self_addr, epoch, counter), caller_entry);
+}
+
+// ── Scoped grants: the device role (the scoped-grants MIP) ──────────────────
+//
+// The device issues, revokes and revokes all grants through the device seam
+// (over auth_nonce). The grantee is shown by its readable descriptor: its
+// kind's key (an ed25519-class grantee as a point), the site label (or, for
+// a k256 or JubJub grantee, the labelled origin hash; for a passkey, its
+// exact origin) and the slot; the circuit derives the grant id from exactly
+// those values with the grant-id recipe of the kind's key class
+// (sol_kinds()). Every scope field is shown, the caller pin included (#176). The
+// issue rules themselves are upstream's shared chip's.
+//
+// The delegate's read key is shown itself; the record stores its hash (the
+// MIP's read_pk_hash), and zero when `read` is off, in which case the key
+// must be zero too (nothing is stored that the wallet did not show). The passkey RP hash belongs to a passkey grantee and must be
+// zero for every other grantee, so that no other hash-like value is shown.
+// An absent caller pin must carry a zero address (upstream's caller
+// commitment refuses any other encoding).
+//
+// The grant's scope salt is not an argument: the circuit derives it from
+// the issuing device's blind (bound by the device entry the seam checks),
+// the account and the auth_nonce the device signed, under the arm's salt
+// tag (derive_grant_scope_salt). No proof builder can choose a public or a
+// reused salt, so the grant's commitments stay hiding and each issuance has
+// its own salt; the issuing client computes the same value and hands it to
+// the grantee, which opens the commitments with it when it spends.
+export circuit issue_grant_with_sol_ed25519(
+  grantee:                          SolGrantee,
+  grantee_pk:                       SolKey,
+  op_withdraw_unshielded:           Boolean,
+  op_withdraw_shielded:             Boolean,
+  op_withdraw_shielded_to_contract: Boolean,
+  read:                             Boolean,
+  color:                            Bytes<32>,
+  recipient_kind:                   Uint<8>,
+  recipient:                        Bytes<32>,
+  max_coin_value:                   Uint<128>,
+  per_call_cap:                     Uint<128>,
+  cap:                              Uint<128>,
+  expires_at:                       Uint<64>,
+  rp_id_hash:                       Bytes<32>,
+  read_pk:                          Bytes<32>,
+  window_len:                       Uint<64>,
+  window_cap:                       Uint<128>,
+  caller:                           Maybe<ContractAddress>,
+  gs:                               SolGranteeShow,
+  ss:                               SolScopeShow,
+  show:                             SolShow,
+  frame:                            SolFrame,
+  hex:                              Vector<552, Uint<0..16>>,
+  auth:                             SolEd25519Auth,
+): [] {
+  assert(read || read_pk == pad(32, ""), "sol_ed25519: a read key without read");
+  assert(read_pk != pad(32, "") || !read, "sol_ed25519: read without a read key");
+  const c = sol_grantee_kind(grantee.tag).key_class;
+  assert(c == SolClass.passkey || rp_id_hash == pad(32, ""), "sol_ed25519: an RP hash belongs to a passkey grantee");
+  // The RP hash is non-zero exactly when the grantee is a passkey AND the
+  // scope can spend: upstream checks a grant's RP pin only
+  // on the passkey spend path, so a read-only grant carries none and shows
+  // "not applicable", and a spending passkey grant shows its real hash.
+  const spends = op_withdraw_unshielded || op_withdraw_shielded || op_withdraw_shielded_to_contract;
+  assert(c != SolClass.passkey || !spends || rp_id_hash != pad(32, ""), "sol_ed25519: a passkey grantee's RP hash is zero");
+  assert(spends || rp_id_hash == pad(32, ""), "sol_ed25519: a read-only grant carries no RP hash");
+  // Any recipient (kind 0) carries no recipient: the wallet
+  // never shows a recipient that nothing enforces.
+  assert(recipient_kind != 0 || recipient == pad(32, ""), "sol_ed25519: a recipient without a recipient kind");
+  // before the seam advances auth_nonce: the value the device signed
+  const self_addr = kernel.self();
+  const scope_salt = derive_grant_scope_salt(salt_tag_sol_ed25519(), auth.blind, self_addr, auth_nonce);
+  require_authorised_with_sol_ed25519<32, 1388, 1690>(sol_title_issue_grant(),
+    sol_body_issue_grant(grantee, grantee_pk.pk_bytes, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color,
+      recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap,
+      caller, gs, ss, hex), show, frame, auth);
+  do_issue_grant(sol_grantee_id(grantee, grantee_pk, c, self_addr, sol_grantee_origin_hash(grantee, c)),
+    op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
+    max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read ? persistentHash<Bytes<32>>(read_pk) : pad(32, ""),
+    window_len, window_cap, caller, scope_salt);
+}
+
+// Revocation shows the grantee's descriptor; the grant id is re-derived.
+export circuit revoke_grant_with_sol_ed25519(
+  grantee:    SolGrantee,
+  grantee_pk: SolKey,
+  gs:         SolGranteeShow,
+  show:       SolShow,
+  frame:      SolFrame,
+  hex:        Vector<232, Uint<0..16>>,
+  auth:       SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<33, 427, 730>(sol_title_revoke_grant(), sol_body_revoke_grant(grantee, grantee_pk.pk_bytes, gs, hex), show, frame, auth);
+  const c = sol_grantee_kind(grantee.tag).key_class;
+  const self_addr = kernel.self();
+  do_revoke_grant(sol_grantee_id(grantee, grantee_pk, c, self_addr, sol_grantee_origin_hash(grantee, c)));
+}
+
+export circuit revoke_all_grants_with_sol_ed25519(
+  show:  SolShow,
+  frame: SolFrame,
+  auth:  SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<36, 63, 369>(sol_title_revoke_all_grants(), sol_body_revoke_all_grants(), show, frame, auth);
+  do_revoke_all_grants();
+}
+
+// ── Recovery: the device role (recovery MIP §5, §6 step 5) ──────────────────
+//
+// The artefact-publishing session and the veto, through the device seam
+// (over auth_nonce); the recovery gate itself (recover_submit,
+// recover_finalise) is upstream's, arm-independent and unchanged. The
+// session's approval shows every operand in full: the new recovery
+// key's JubJub coordinates and the four backup vector values as 64 hex
+// digits each, little-endian (upstream's Field and JubJub byte order), the session identifier, the vector length in decimal, and the
+// 64-byte key wrap in two lines; under the circuit-fixed consequence line
+// "sets this account's recovery key". The chip's own asserts (no
+// pending recovery, the length and the zero slots, a fresh non-zero session
+// identifier, a fresh live recovery key) are upstream's
+// do_publish_recovery_session. Finalisation clears every device entry
+// (upstream #183), sol entries included.
+export circuit publish_recovery_session_with_sol_ed25519(
+  new_recovery_pk: JubjubPoint,
+  session_nonce:   Bytes<32>,
+  phi_1:           Field,
+  phi_2:           Field,
+  phi_3:           Field,
+  phi_4:           Field,
+  phi_len:         Uint<8>,
+  wrap:            Bytes<64>,
+  phi_len_digits:  Vector<3, Uint<8>>,
+  show:            SolShow,
+  frame:           SolFrame,
+  hex:             Vector<576, Uint<0..16>>,
+  auth:            SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<38, 922, 1230>(sol_title_publish_recovery_session(),
+    sol_body_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap, phi_len_digits, hex),
+    show, frame, auth);
+  do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+}
+
+// The veto (recovery MIP §6 step 5): any live device clears a pending
+// recovery inside the window; the approval carries the frame and the
+// circuit-fixed consequence line only (the operation has no operand).
+export circuit recover_cancel_with_sol_ed25519(
+  show:  SolShow,
+  frame: SolFrame,
+  auth:  SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<37, 64, 371>(sol_title_recover_cancel(), sol_body_recover_cancel(), show, frame, auth);
+  do_recover_cancel();
+}
+
+// ── The grant seam (grantee role) ───────────────────────────────────────────
+//
+// A Solana key as a GRANTEE: its grant id is
+//   H(pad32("midnight:account:grant:id:sol:v1") || account || key(32)
+//     || blind(32) || origin_hash || le1(slot)),
+// origin_hash = H(pad32("midnight:account:grant:origin:v1") || label(32)) of
+// the 32-byte site label. The grantee signs the grantee-role message: the
+// common frame (account, its own key, "Role: grantee of a scoped grant"),
+// the operation, then the grant's label, slot, issued-at nonce and use
+// nonce, never auth_nonce (GR-5): a grant call reads and advances
+// only its record's nonce and never touches a device entry.
+//
+// As the device seam does, this seam owns the
+// frame: it derives the key bytes from the point the signature is verified
+// under, the grant id from that key, the blind and the label and slot the
+// message shows, and takes issued_at and the nonce from the record itself.
+// An export passes only its title and body, its operation (1 unshielded, 2
+// shielded, 3 shielded to a contract), and the values the scope checks. The
+// MIP's steps in order: identity (the record by id), liveness (active,
+// epoch, generation, expiry), the spend scope (upstream's check_spend_scope),
+// then the signature over the text in the format `auth.offchain` selects
+// (modules/SolanaFormats; the Ed25519 core's ed25519_verify, which also
+// refuses R = O), the record written back with its nonce advanced and the new
+// spent commitment, and round bumped. As for a device, `offchain` is private
+// and never disclosed.
+struct SolEd25519GrantAuth {
+  pk:       Curve25519Point;
+  pk_bytes: Vector<32, Uint<8>>;
+  pk_x:     Vector<32, Uint<8>>;
+  blind:    Bytes<32>;
+  label:    Bytes<32>;
+  offchain: Boolean;
+  sig:      Ed25519Signature;
+  r_bytes:  Vector<32, Uint<8>>;
+  r_x:      Vector<32, Uint<8>>;
+}
+
+circuit require_grant_with_sol_ed25519<#t, #b, #n>(
+  title:            Vector<t, Uint<8>>,
+  body:             Vector<b, Uint<8>>,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            SolFrame,
+  auth:             SolEd25519GrantAuth,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  op:               Uint<8>,
+  obj_color:        Bytes<32>,
+  amount:           Uint<128>,
+  recipient_bytes:  Bytes<32>,
+): [] {
+  const self_addr = kernel.self();
+  const [key, gid] = derive_descriptor_grant_id_ed25519(grant_id_tag_sol_ed25519(), self_addr, auth.pk, auth.pk_bytes, auth.pk_x, auth.blind,
+    derive_grant_origin_hash_label(auth.label), slot);
+  const id = disclose(gid);
+  assert(grants.member(id), "unknown grant");
+  const gr = grants.lookup(id);
+  assert(gr.active, "grant revoked");
+  assert(gr.epoch == device_epoch, "grant epoch stale");
+  assert(gr.gen == grant_generation, "grant generation stale");
+  assert(gr.scope.expires_at == (0 as Uint<64>) || kernel.blockTimeLessThan(gr.scope.expires_at), "grant expired");
+  const admitted = op == 1 ? gr.scope.op_withdraw_unshielded
+                 : op == 2 ? gr.scope.op_withdraw_shielded
+                 : gr.scope.op_withdraw_shielded_to_contract;
+  const new_spent = check_spend_scope(gr, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
+    max_coin_value, amount, spent_prev, op, recipient_bytes);
+  const text = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
+  const message = solana_signed_message<n>(auth.offchain, key, text);
+  assert(ed25519_verify<SolanaSignedMessage<n>>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
+  grants.insert(id, GrantRecord {
+    epoch:        gr.epoch,
+    gen:          gr.gen,
+    issued_at:    gr.issued_at,
+    nonce:        ((gr.nonce + (1 as Uint<64>)) as Uint<64>),
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),
+    window_start: gr.window_start,
+    window_spent: gr.window_spent,
+    active:       gr.active,
+    scope:        gr.scope
+  });
+  bump_round();
+}
+
+// ── Grant twins (grantee role) ──────────────────────────────────────────────
+//
+// Operation arguments first, then the grant opening in the order this arm's
+// client passes it (signer.ts grantAuthArgs): the slot, scope_salt, the
+// recipient kind and pin, the max coin value, the cumulative spend so far;
+// then the message's display inputs and the grantee's authorisation (whose
+// label is the grant's site label).
+
+export circuit withdraw_unshielded_with_grant_sol_ed25519(
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  recipient:        UserAddress,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  a:                SolAmountShow,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            SolFrame,
+  hex:              Vector<128, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+): [] {
+  require_grant_with_sol_ed25519<52, 292, 726>(sol_title_withdraw_unshielded_with_grant(),
+    sol_body_withdraw_unshielded_with_grant(color, amount, recipient, a, hex), show, g, frame, auth,
+    slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, 1, color, amount, recipient.bytes);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+// The shielded twins: the spent coin (from the held_coin witness) is shown by
+// its value, nonce and Merkle index under the approved colour (asserted),
+// with the change; the change entry the grantee sealed to the live
+// enc_key and that key are shown too, and the change entry is appended when
+// the send produces change (INV-4 under a grant).
+export circuit withdraw_shielded_with_grant_sol_ed25519(
+  recipient:        ZswapCoinPublicKey,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  a:                SolAmountShow,
+  c:                SolCoinShow,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            SolFrame,
+  hex:              Vector<640, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  require_grant_with_sol_ed25519<50, 1134, 1566>(sol_title_withdraw_shielded_with_grant(),
+    sol_body_withdraw_shielded_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame, auth,
+    slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, 2, coin.color, amount, recipient.bytes);
+  const result = do_withdraw_shielded(recipient, amount, coin);
+  if (disclose(result.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return result;
+}
+
+export circuit withdraw_shielded_to_contract_with_grant_sol_ed25519(
+  recipient:        ContractAddress,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  a:                SolAmountShow,
+  c:                SolCoinShow,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            SolFrame,
+  hex:              Vector<640, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  require_grant_with_sol_ed25519<64, 1130, 1576>(sol_title_withdraw_shielded_to_contract_with_grant(),
+    sol_body_withdraw_shielded_to_contract_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame, auth,
+    slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, 3, coin.color, amount, recipient.bytes);
+  const [sent, change] = do_withdraw_shielded_to_contract(recipient, amount, coin);
+  if (disclose(change.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return [sent, change];
+}
+
+// ── Signed messages, format sol v1 ──────────────────────────────────────────
+//
+// Every gated circuit renders its approval text from the values it executes
+// on, and verifies the wallet's signature over exactly that text after the
+// head of the authorisation's format (modules/SolanaFormats), so the text is
+// what the wallet shows: a raw `signMessage` wallet shows the head's line,
+// then the text; an off-chain wallet shows the text of its envelope. The
+// text's grammar:
+//
+//   Midnight Passport approval (sol v1)       circuit-fixed first line
+//   Operation: <title>                        fixed per circuit
+//   Site: <label>                             the site's words, marked as such
+//   Role: device of this account              or: grantee of a scoped grant
+//   Account: <64 hex>                         the account's contract address
+//   Signing key: <base58, 44>                 the signer's Ed25519 key as
+//                                             Solana wallets show it
+//   <operation lines>                         every operand and consumed
+//                                             witness value, in full
+//   Consequence: <...>                        fixed, on authority-granting
+//                                             operations
+//   Device nonce: <decimal>                   device role: auth_nonce
+//   Grant label/slot/issued at/use nonce      grantee role: the grant's
+//                                             identity and freshness
+//
+// Rules: printable ASCII and LF only; every line starts with circuit-fixed
+// text; nothing the site chooses can contain a line break or start a line;
+// values are shown in full (hex: two lowercase digits per byte, in full;
+// decimals: every digit, left-aligned and space-padded to the type's width;
+// a Solana key: its base58 text, left-aligned and space-padded to 44 bytes;
+// a grant's expiry also as a UTC date, and a zero window as words; so each
+// layout has one fixed length); no digest, fingerprint or truncation. The two site-chosen texts are the label after "Site: " and, on
+// a moved amount, the decimal point and symbol after "This site labels it: ";
+// both are checked for shape, and neither can move value. The only hash-like
+// values ever shown are these four, each under its fixed label: a
+// k256/jubjub grantee's origin hash ("Grantee site label (hash)"), a
+// passkey's RP hash ("Passkey RP (hash)"), a target's or a grantee's blind
+// ("Device privacy salt", "Grantee privacy salt"), and the literal entry of a
+// revocation-only removal. Enumerated values (a recipient kind, a k256
+// envelope) are shown as the rendering module's fixed labels.
+//
+// DISPLAY INPUTS. Compact has no division and turning bytes into characters
+// is expensive in-circuit, so the caller supplies every text the circuit
+// cannot cheaply derive: decimal digits, hex nibbles, base58 digits with
+// their read-back hints, a date's text with its year split, the label and
+// origin characters. Each is CHECKED against the value it describes (digits
+// read back to the value; nibbles and characters assemble to the value's
+// bytes; base58 digits and dates by the base rendering module), so for each
+// value exactly one input is valid and none adds freedom.
+//
+// No raw message (the raw head, then the text) can be read as a Solana
+// transaction or off-chain message: it starts with "Midn" (77 105 100 110),
+// as a legacy message header that claims 110 account keys, i.e. at least
+// 3 + 1 + 110*32 + 32 + 1 = 3,557 bytes, and every raw message here is
+// shorter, at most 50 + 1,690 = 1,740 bytes (and such a header never
+// sanitizes: 105 read-only signers of 77); the first byte is below 0x80 (no
+// versioned message) and is not 0xff (no off-chain envelope); as a signed
+// transaction it would carry 77 signatures. An off-chain message is the
+// off-chain envelope by design: it starts with the signing domain
+// 0xff "solana offchain", which parses as no Solana message or transaction
+// (as a message, a versioned message of version 127, which does not exist;
+// as a transaction, a count of 14,847 signatures, far more bytes than any
+// message here). The length table is in SOL-ED25519.md.
+
+// Every message: the site's label (32 characters, zero-padded; visible words
+// separated by single spaces) and the decimal digits of the freshness nonce
+// (auth_nonce for a device, the grant's nonce for a grantee).
+export struct SolShow {
+  site:  Vector<32, Uint<8>>;
+  nonce: Vector<20, Uint<8>>;
+}
+
+// A 32-byte key's base58 text as Solana wallets show it: the base rendering
+// module's display inputs (each character's base58 digit, 58 for padding,
+// and the read-back hints), checked by base58_text_32 against the key's
+// bytes.
+export struct SolBase58 {
+  digits: Vector<44, Uint<8>>;
+  carry:  Uint<120>;
+  low:    Uint<128>;
+  top:    Uint<16>;
+}
+
+// The common frame's display inputs: the account's hex nibbles and the
+// signing key's base58 text.
+export struct SolFrame {
+  account: Vector<64, Uint<0..16>>;
+  key:     SolBase58;
+}
+
+// A grantee's identity and freshness: the characters of its grant label
+// (checked against the label bytes the grant id binds), the slot and
+// issued_at in decimal.
+export struct SolGrantShow {
+  label:  Vector<32, Uint<8>>;
+  slot:   Vector<3, Uint<8>>;
+  issued: Vector<20, Uint<8>>;
+}
+
+// A moved amount: its base units in decimal, and the site's label for it:
+// "<the same digits with the site's decimal point> <symbol>".
+export struct SolAmountShow {
+  units: Vector<39, Uint<8>>;
+  claim: Vector<49, Uint<8>>;
+}
+
+// A spent shielded coin: its value, Merkle index and the change, in decimal.
+export struct SolCoinShow {
+  value:  Vector<39, Uint<8>>;
+  index:  Vector<20, Uint<8>>;
+  change: Vector<39, Uint<8>>;
+}
+
+// A readable target (add_device, remove_device): the registered device tag
+// of its kind and the key payload of the kind's key class (SolClass, which
+// lists the fields each class uses). An ed25519-class target is also a
+// POINT with its checked byte inputs (SolKey), passed beside the struct to
+// the gated circuits: `a` must be its 32-byte encoding, checked in-circuit
+// with A != O by the same function the seam uses for the signing key, so the
+// key enrolled is a key that can sign; any other class passes the identity
+// with zero bytes. Fields a class does not use must be zero, so each target
+// has one encoding.
+export struct SolTarget {
+  tag:      Bytes<32>;
+  address:  Bytes<20>;
+  a:        Bytes<32>;
+  b:        Bytes<32>;
+  c:        Bytes<32>;
+  origin:   Bytes<21>;
+  envelope: Uint<8>;
+}
+
+// An ed25519-class target's or grantee's key as the gated circuits take it:
+// the point, the key's 32-byte RFC 8032 encoding and its x-coordinate
+// little-endian, both byte vectors checked against the point by the Ed25519
+// core's checked encoding. Any other class passes the identity and zero
+// bytes. Internal, as SolEd25519Auth: the generated JavaScript takes it as one
+// object argument.
+struct SolKey {
+  pk:       Curve25519Point;
+  pk_bytes: Vector<32, Uint<8>>;
+  pk_x:     Vector<32, Uint<8>>;
+}
+
+// A target's display inputs: the digits of the removal's use counter and
+// epoch, the characters of a passkey origin, and the base58 digits and
+// read-back hints of an ed25519-class target's key (those of 32 zero bytes
+// for every other class). (A k256 envelope is shown as a circuit-fixed label.)
+export struct SolTargetShow {
+  counter:  Vector<20, Uint<8>>;
+  epoch:    Vector<10, Uint<8>>;
+  origin:   Vector<21, Uint<8>>;
+  key:      SolBase58;
+}
+
+// A grantee (issue_grant, revoke_grant): the grant-id recipe of its kind's
+// key class binds (key, origin_hash, slot); an ed25519-class grantee is also
+// a point, as a target is, and a passkey grantee binds its key only (its RP
+// is a scope field). origin_hash: a readable grantee's 32-byte label (shown
+// as text), a passkey's 21-byte origin (shown as text), or, for k256 and
+// JubJub grantees, the labelled hash itself.
+export struct SolGrantee {
+  tag:         Bytes<32>;
+  address:     Bytes<20>;
+  a:           Bytes<32>;
+  b:           Bytes<32>;
+  envelope:    Uint<8>;
+  label:       Bytes<32>;
+  origin:      Bytes<21>;
+  origin_hash: Bytes<32>;
+  slot:        Uint<8>;
+}
+
+// A grantee's display inputs: the digits of its slot, the characters of its
+// label and of a passkey origin, and the base58 digits and read-back hints of
+// an ed25519-class grantee's key (those of 32 zero bytes for every other
+// class).
+export struct SolGranteeShow {
+  slot:     Vector<3, Uint<8>>;
+  label:    Vector<32, Uint<8>>;
+  origin:   Vector<21, Uint<8>>;
+  key:      SolBase58;
+}
+
+// A grant scope's display inputs (issue_grant): the digits of its amounts,
+// caps and expiry, the expiry's UTC text with its checked year split, and the
+// digits of the window length and cap.
+export struct SolScopeShow {
+  max_coin:      Vector<39, Uint<8>>;
+  per_call:      Vector<39, Uint<8>>;
+  cap:           Vector<39, Uint<8>>;
+  expires:       Vector<20, Uint<8>>;
+  expires_utc:   Vector<29, Uint<8>>;
+  expires_split: Vector<4, Uint<8>>;
+  window:        Vector<20, Uint<8>>;
+  window_cap:    Vector<39, Uint<8>>;
+}
+
+// ── Pieces ──────────────────────────────────────────────────────────────────
+
+// A zero-padded label's characters, shown with the zero bytes as spaces: one
+// or more words of visible characters (0x21..0x7e) separated by single
+// spaces, then zero bytes only; it starts with a visible character and never
+// ends with a space, so the display is one-to-one (the shared module's
+// label_text, over characters instead of Bytes).
+circuit sol_label_chars(v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
+  const r = fold((s: [Boolean, Boolean, Boolean], c: Uint<8>): [Boolean, Boolean, Boolean] => {
+    const zero = c == 0;
+    const space = c == 32;
+    const shown = c >= 33 && c <= 126;
+    const fits = s[1] ? zero : zero ? !s[0] : shown || (space && !s[0]);
+    return [space, s[1] || zero, s[2] && fits];
+  }, [true, false, true], v);
+  assert(r[2] && !r[0], "display: not a zero-padded label");
+  return map((c: Uint<8>): Uint<8> => (c == 0 ? 32 : c) as Uint<8>, v);
+}
+
+// "Midnight Passport approval (sol v1)" and LF.
+circuit sol_first_line(): Vector<36, Uint<8>> {
+  return [...pad(35, "Midnight Passport approval (sol v1)"), 10];
+}
+
+// n spaces.
+circuit sol_spaces<#n>(): Vector<n, Uint<8>> {
+  return map((c: Uint<8>): Uint<8> => (c + 32) as Uint<8>, default<Vector<n, Uint<8>>>);
+}
+
+// "yes" or "no " (3 bytes).
+circuit sol_yes_no(b: Boolean): Vector<3, Uint<8>> {
+  return map((y: Uint<8>, n: Uint<8>): Uint<8> => (b ? y : (n == 0 ? 32 : n)) as Uint<8>,
+             pad(3, "yes") as Vector<3, Uint<8>>, pad(3, "no") as Vector<3, Uint<8>>);
+}
+
+// Characters checked against bytes (a passkey origin, a grant label).
+circuit sol_chars21(b: Bytes<21>, v: Vector<21, Uint<8>>): Vector<21, Uint<8>> {
+  assert(Bytes[...v] == b, "display: characters do not match the value");
+  return v;
+}
+circuit sol_chars32(b: Bytes<32>, v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
+  assert(Bytes[...v] == b, "display: characters do not match the value");
+  return v;
+}
+
+// ── Enrolment kinds: the keys this arm enrols and grants to ─────────────────
+//
+// add_device and remove_device take a TARGET device, and issue_grant and
+// revoke_grant a GRANTEE, as a readable descriptor whose tag names its KIND.
+// sol_kinds() lists the kinds, one entry each: the kind's device tag, its
+// grant-id tag and the class of its key. The class selects the descriptor
+// fields the kind uses and the derivation circuit of
+// modules/WalletArmDescriptors that derives its entry or grant id; the tag is
+// shown as its own text. A tag that no entry lists is refused. Each kind also
+// has its key lines, one row per kind in sol_kinds() order: in the device
+// block (sol_device_block) and in the grantee block (sol_grantee_block).
+//
+// A kind of an existing class is added as its entry in sol_kinds(), its row
+// in each of the two blocks and the count in SolKinds, which types every
+// per-kind list, so a block without the new kind's row does not compile. The
+// descriptor module admits a readable kind's tags once its arm is registered
+// there (readable_arms()). The client lists the same kinds in the same order
+// (SOL_KINDS, src/wallet/sol-ed25519-message.ts).
+
+// The class of a kind's key: the descriptor fields it uses (every other
+// field is zero) and how its entry and grant id are derived.
+//   w52      a readable arm's 20-byte identity (`evm_k256`: the Ethereum
+//            address) with the account's blind: address, a = blind
+//   w64      a JubJub point: a = x_le, b = y_le
+//   ed25519  a readable arm's Ed25519 key, by its point (SolKey) and its
+//            32-byte encoding, with the account's blind: a = key, b = blind
+//   w65      a secp256k1 key and its signing envelope: a = x_le, b = y_le,
+//            envelope
+//   passkey  a P-256 passkey: a = x_le, b = y_le; as a device also its
+//            WebAuthn policy (c = rp_id_hash, origin: the w117 recipe); as a
+//            grantee its key only (the w64 grant-id recipe), its origin_hash
+//            derived from its exact origin (its RP hash is a scope field)
+enum SolClass { w52, w64, ed25519, w65, passkey }
+
+struct SolKind {
+  device:    Bytes<32>;
+  grant_id:  Bytes<32>;
+  key_class: SolClass;
+}
+
+// The number of kinds: the length of sol_kinds() and of every per-kind list.
+type SolKinds<T> = Vector<5, T>;
+
+circuit sol_kinds(): SolKinds<SolKind> {
+  return [
+    SolKind { device: device_tag_evm_k256(),    grant_id: grant_id_tag_evm_k256(),    key_class: SolClass.w52 },
+    SolKind { device: device_tag_jubjub(),      grant_id: grant_id_tag_jubjub(),      key_class: SolClass.w64 },
+    SolKind { device: device_tag_sol_ed25519(), grant_id: grant_id_tag_sol_ed25519(), key_class: SolClass.ed25519 },
+    SolKind { device: device_tag_k256(),        grant_id: grant_id_tag_k256(),        key_class: SolClass.w65 },
+    SolKind { device: device_tag_p256(),        grant_id: grant_id_tag_p256(),        key_class: SolClass.passkey },
+  ];
+}
+
+// The kind a tag names: one flag per entry of sol_kinds(), at most one of
+// them set (the tags are distinct), and that kind's key class.
+struct SolKindOf {
+  hit:       SolKinds<Boolean>;
+  key_class: SolClass;
+}
+
+// The flags of a target's (device) or a grantee's (grant id) tag, unchecked:
+// none is set for a tag that no kind lists.
+circuit sol_device_hits(tag: Bytes<32>): SolKinds<Boolean> {
+  return map((k: SolKind): Boolean => tag == k.device, sol_kinds());
+}
+circuit sol_grantee_hits(tag: Bytes<32>): SolKinds<Boolean> {
+  return map((k: SolKind): Boolean => tag == k.grant_id, sol_kinds());
+}
+
+circuit sol_any(hit: SolKinds<Boolean>): Boolean {
+  return fold((any: Boolean, h: Boolean): Boolean => any || h, false, hit);
+}
+
+// The key class of the kind whose flag is set (the first kind's when none
+// is, which the kind circuits below refuse).
+circuit sol_kind_class(hit: SolKinds<Boolean>): SolClass {
+  return fold((c: SolClass, h: Boolean, k: SolKind): SolClass => h ? k.key_class : c, sol_kinds()[0].key_class, hit, sol_kinds());
+}
+
+// The kind of a target's or a grantee's tag; an unregistered tag is refused.
+circuit sol_device_kind(tag: Bytes<32>): SolKindOf {
+  const hit = sol_device_hits(tag);
+  assert(sol_any(hit), "descriptor: not a registered device tag");
+  return SolKindOf { hit: hit, key_class: sol_kind_class(hit) };
+}
+circuit sol_grantee_kind(tag: Bytes<32>): SolKindOf {
+  const hit = sol_grantee_hits(tag);
+  assert(sol_any(hit), "descriptor: not a registered grant-id tag");
+  return SolKindOf { hit: hit, key_class: sol_kind_class(hit) };
+}
+
+// The row of the kind whose flag is set, from one row per kind in
+// sol_kinds() order. The choice starts from the first row (a choice between
+// two equal rows costs nothing), so it costs one selection per byte for
+// each further kind.
+circuit sol_kind_row<#w>(hit: SolKinds<Boolean>, rows: SolKinds<Vector<w, Uint<8>>>): Vector<w, Uint<8>> {
+  return fold((s: Vector<w, Uint<8>>, h: Boolean, r: Vector<w, Uint<8>>): Vector<w, Uint<8>> => h ? r : s, rows[0], hit, rows);
+}
+
+// Whether a class is a readable arm's: an identity with the account's
+// blind, shown as a grantee with the grant's site label.
+circuit sol_readable(c: SolClass): Boolean {
+  return c == SolClass.w52 || c == SolClass.ed25519;
+}
+
+// The fields a class does not use must be zero (one encoding per target).
+circuit sol_require_canonical_device(t: SolTarget, c: SolClass): [] {
+  assert(c == SolClass.w52 || t.address == pad(20, ""), "descriptor: unused address must be zero");
+  assert(c != SolClass.w52 || t.b == pad(32, ""), "descriptor: unused second field must be zero");
+  assert(c == SolClass.passkey || t.c == pad(32, ""), "descriptor: unused rp hash must be zero");
+  assert(c == SolClass.passkey || t.origin == pad(21, ""), "descriptor: unused origin must be zero");
+  assert(c == SolClass.w65 || t.envelope == 0, "descriptor: unused envelope must be zero");
+}
+
+// A class other than ed25519 has no key point: it passes the identity and
+// zero bytes (one encoding per target or grantee).
+circuit sol_require_unused_key(k: SolKey, c: SolClass): [] {
+  assert(c == SolClass.ed25519 || (curve25519PointX(k.pk) as Bytes<32>) == pad(32, ""), "descriptor: unused point must be the identity");
+  assert(c == SolClass.ed25519 || (Bytes[...k.pk_bytes] == pad(32, "") && Bytes[...k.pk_x] == pad(32, "")),
+         "descriptor: unused key bytes must be zero");
+}
+
+// The entry of a target device at (epoch, counter), by its kind's class.
+// An ed25519-class target is its point with its checked bytes (`k`): the
+// module's ed25519 class checks the bytes, derives the entry (A != O) and
+// returns the key it encoded, which must be the key the message shows
+// (`t.a`). Any other class carries the identity as its unused point (x = 0)
+// and zero bytes.
+circuit sol_device_entry(t: SolTarget, k: SolKey, self_addr: ContractAddress, epoch: Uint<32>, counter: Uint<64>): Bytes<32> {
+  const c = sol_device_kind(t.tag).key_class;
+  sol_require_canonical_device(t, c);
+  sol_require_unused_key(k, c);
+  // A passkey's own RP hash is never zero: the passkey device
+  // block shows it in hex, and no zero value enrols or removes a passkey.
+  assert(c != SolClass.passkey || t.c != pad(32, ""), "descriptor: a passkey's RP hash is zero");
+  if (c == SolClass.w52) {
+    return derive_descriptor_entry_w52(t.tag, self_addr, t.address, t.a, epoch, counter);
+  }
+  if (c == SolClass.w64) {
+    return derive_descriptor_entry_w64(t.tag, self_addr, t.a, t.b, epoch, counter);
+  }
+  if (c == SolClass.ed25519) {
+    const [key, entry] = derive_descriptor_entry_ed25519(t.tag, self_addr, k.pk, k.pk_bytes, k.pk_x, t.b, epoch, counter);
+    assert(key == t.a, "descriptor: the Ed25519 key is not the point's encoding");
+    return entry;
+  }
+  if (c == SolClass.w65) {
+    return derive_descriptor_entry_w65(t.tag, self_addr, t.a, t.b, t.envelope, epoch, counter);
+  }
+  return derive_descriptor_entry_w117(t.tag, self_addr, t.a, t.b, t.c, t.origin, epoch, counter);
+}
+
+// The grantee's origin_hash by its kind's class, the unused fields zero.
+circuit sol_grantee_origin_hash(t: SolGrantee, c: SolClass): Bytes<32> {
+  assert(c == SolClass.w52 || t.address == pad(20, ""), "descriptor: unused address must be zero");
+  assert(c != SolClass.w52 || t.b == pad(32, ""), "descriptor: unused second field must be zero");
+  assert(c == SolClass.w65 || t.envelope == 0, "descriptor: unused envelope must be zero");
+  const readable = sol_readable(c);
+  assert(readable || t.label == pad(32, ""), "descriptor: unused label must be zero");
+  assert(c == SolClass.passkey || t.origin == pad(21, ""), "descriptor: unused origin must be zero");
+  if (readable) {
+    assert(t.origin_hash == pad(32, ""), "descriptor: a readable grantee's origin hash is derived");
+    return derive_grant_origin_hash_label(t.label);
+  }
+  if (c == SolClass.passkey) {
+    assert(t.origin_hash == pad(32, ""), "descriptor: a passkey grantee's origin hash is derived");
+    return derive_grant_origin_hash_origin(t.origin);
+  }
+  return t.origin_hash;
+}
+
+// An ed25519-class grantee is its point with its checked bytes, as such a
+// target is (see sol_device_entry).
+circuit sol_grantee_id(t: SolGrantee, k: SolKey, c: SolClass, self_addr: ContractAddress, origin_hash: Bytes<32>): Bytes<32> {
+  sol_require_unused_key(k, c);
+  if (c == SolClass.ed25519) {
+    const [key, id] = derive_descriptor_grant_id_ed25519(t.tag, self_addr, k.pk, k.pk_bytes, k.pk_x, t.b, origin_hash, t.slot);
+    assert(key == t.a, "descriptor: the Ed25519 key is not the point's encoding");
+    return id;
+  }
+  if (c == SolClass.w52) {
+    return derive_descriptor_grant_id_w52(t.tag, self_addr, t.address, t.a, origin_hash, t.slot);
+  }
+  if (c == SolClass.w65) {
+    return derive_descriptor_grant_id_w65(t.tag, self_addr, t.a, t.b, t.envelope, origin_hash, t.slot);
+  }
+  return derive_descriptor_grant_id_w64(t.tag, self_addr, t.a, t.b, origin_hash, t.slot);
+}
+
+
+// ── Hex digits from checked nibble display inputs ───────────────────────────
+//
+// Turning a Bytes value into bytes costs about 140 rows per byte in-circuit
+// (a chain of 8-bit divisions); assembling bytes costs a few rows per byte.
+// So the caller passes, for every value a message shows in hex, its nibbles
+// (high, then low, per byte, in the value's stored byte order): the circuit
+// assembles the bytes from them and asserts they equal the value, then makes
+// each digit with one comparison. Exactly one nibble vector assembles to a
+// value, so the input adds no freedom; the decimal digits work the same way.
+
+circuit sol_nib_digit(n: Uint<0..16>): Uint<8> {
+  return (n < 10 ? (n as Uint<8>) + 48 : (n as Uint<8>) + 87) as Uint<8>;
+}
+
+circuit sol_nib_byte(hi: Uint<0..16>, lo: Uint<0..16>): Uint<8> {
+  return ((hi as Uint<8>) * 16 + (lo as Uint<8>)) as Uint<8>;
+}
+
+circuit sol_hex20(b: Bytes<20>, n: Vector<40, Uint<0..16>>): Vector<40, Uint<8>> {
+  assert(Bytes[sol_nib_byte(n[0], n[1]), sol_nib_byte(n[2], n[3]), sol_nib_byte(n[4], n[5]), sol_nib_byte(n[6], n[7]), sol_nib_byte(n[8], n[9]), sol_nib_byte(n[10], n[11]), sol_nib_byte(n[12], n[13]), sol_nib_byte(n[14], n[15]), sol_nib_byte(n[16], n[17]), sol_nib_byte(n[18], n[19]), sol_nib_byte(n[20], n[21]), sol_nib_byte(n[22], n[23]), sol_nib_byte(n[24], n[25]), sol_nib_byte(n[26], n[27]), sol_nib_byte(n[28], n[29]), sol_nib_byte(n[30], n[31]), sol_nib_byte(n[32], n[33]), sol_nib_byte(n[34], n[35]), sol_nib_byte(n[36], n[37]), sol_nib_byte(n[38], n[39])] == b, "display: hex digits do not match the value");
+  return map(sol_nib_digit, n);
+}
+
+circuit sol_hex32(b: Bytes<32>, n: Vector<64, Uint<0..16>>): Vector<64, Uint<8>> {
+  assert(Bytes[sol_nib_byte(n[0], n[1]), sol_nib_byte(n[2], n[3]), sol_nib_byte(n[4], n[5]), sol_nib_byte(n[6], n[7]), sol_nib_byte(n[8], n[9]), sol_nib_byte(n[10], n[11]), sol_nib_byte(n[12], n[13]), sol_nib_byte(n[14], n[15]), sol_nib_byte(n[16], n[17]), sol_nib_byte(n[18], n[19]), sol_nib_byte(n[20], n[21]), sol_nib_byte(n[22], n[23]), sol_nib_byte(n[24], n[25]), sol_nib_byte(n[26], n[27]), sol_nib_byte(n[28], n[29]), sol_nib_byte(n[30], n[31]), sol_nib_byte(n[32], n[33]), sol_nib_byte(n[34], n[35]), sol_nib_byte(n[36], n[37]), sol_nib_byte(n[38], n[39]), sol_nib_byte(n[40], n[41]), sol_nib_byte(n[42], n[43]), sol_nib_byte(n[44], n[45]), sol_nib_byte(n[46], n[47]), sol_nib_byte(n[48], n[49]), sol_nib_byte(n[50], n[51]), sol_nib_byte(n[52], n[53]), sol_nib_byte(n[54], n[55]), sol_nib_byte(n[56], n[57]), sol_nib_byte(n[58], n[59]), sol_nib_byte(n[60], n[61]), sol_nib_byte(n[62], n[63])] == b, "display: hex digits do not match the value");
+  return map(sol_nib_digit, n);
+}
+
+circuit sol_hex64(b: Bytes<64>, n: Vector<128, Uint<0..16>>): Vector<128, Uint<8>> {
+  assert(Bytes[sol_nib_byte(n[0], n[1]), sol_nib_byte(n[2], n[3]), sol_nib_byte(n[4], n[5]), sol_nib_byte(n[6], n[7]), sol_nib_byte(n[8], n[9]), sol_nib_byte(n[10], n[11]), sol_nib_byte(n[12], n[13]), sol_nib_byte(n[14], n[15]), sol_nib_byte(n[16], n[17]), sol_nib_byte(n[18], n[19]), sol_nib_byte(n[20], n[21]), sol_nib_byte(n[22], n[23]), sol_nib_byte(n[24], n[25]), sol_nib_byte(n[26], n[27]), sol_nib_byte(n[28], n[29]), sol_nib_byte(n[30], n[31]), sol_nib_byte(n[32], n[33]), sol_nib_byte(n[34], n[35]), sol_nib_byte(n[36], n[37]), sol_nib_byte(n[38], n[39]), sol_nib_byte(n[40], n[41]), sol_nib_byte(n[42], n[43]), sol_nib_byte(n[44], n[45]), sol_nib_byte(n[46], n[47]), sol_nib_byte(n[48], n[49]), sol_nib_byte(n[50], n[51]), sol_nib_byte(n[52], n[53]), sol_nib_byte(n[54], n[55]), sol_nib_byte(n[56], n[57]), sol_nib_byte(n[58], n[59]), sol_nib_byte(n[60], n[61]), sol_nib_byte(n[62], n[63]), sol_nib_byte(n[64], n[65]), sol_nib_byte(n[66], n[67]), sol_nib_byte(n[68], n[69]), sol_nib_byte(n[70], n[71]), sol_nib_byte(n[72], n[73]), sol_nib_byte(n[74], n[75]), sol_nib_byte(n[76], n[77]), sol_nib_byte(n[78], n[79]), sol_nib_byte(n[80], n[81]), sol_nib_byte(n[82], n[83]), sol_nib_byte(n[84], n[85]), sol_nib_byte(n[86], n[87]), sol_nib_byte(n[88], n[89]), sol_nib_byte(n[90], n[91]), sol_nib_byte(n[92], n[93]), sol_nib_byte(n[94], n[95]), sol_nib_byte(n[96], n[97]), sol_nib_byte(n[98], n[99]), sol_nib_byte(n[100], n[101]), sol_nib_byte(n[102], n[103]), sol_nib_byte(n[104], n[105]), sol_nib_byte(n[106], n[107]), sol_nib_byte(n[108], n[109]), sol_nib_byte(n[110], n[111]), sol_nib_byte(n[112], n[113]), sol_nib_byte(n[114], n[115]), sol_nib_byte(n[116], n[117]), sol_nib_byte(n[118], n[119]), sol_nib_byte(n[120], n[121]), sol_nib_byte(n[122], n[123]), sol_nib_byte(n[124], n[125]), sol_nib_byte(n[126], n[127])] == b, "display: hex digits do not match the value");
+  return map(sol_nib_digit, n);
+}
+
+circuit sol_hex192(b: Bytes<192>, n: Vector<384, Uint<0..16>>): Vector<384, Uint<8>> {
+  assert(Bytes[sol_nib_byte(n[0], n[1]), sol_nib_byte(n[2], n[3]), sol_nib_byte(n[4], n[5]), sol_nib_byte(n[6], n[7]), sol_nib_byte(n[8], n[9]), sol_nib_byte(n[10], n[11]), sol_nib_byte(n[12], n[13]), sol_nib_byte(n[14], n[15]), sol_nib_byte(n[16], n[17]), sol_nib_byte(n[18], n[19]), sol_nib_byte(n[20], n[21]), sol_nib_byte(n[22], n[23]), sol_nib_byte(n[24], n[25]), sol_nib_byte(n[26], n[27]), sol_nib_byte(n[28], n[29]), sol_nib_byte(n[30], n[31]), sol_nib_byte(n[32], n[33]), sol_nib_byte(n[34], n[35]), sol_nib_byte(n[36], n[37]), sol_nib_byte(n[38], n[39]), sol_nib_byte(n[40], n[41]), sol_nib_byte(n[42], n[43]), sol_nib_byte(n[44], n[45]), sol_nib_byte(n[46], n[47]), sol_nib_byte(n[48], n[49]), sol_nib_byte(n[50], n[51]), sol_nib_byte(n[52], n[53]), sol_nib_byte(n[54], n[55]), sol_nib_byte(n[56], n[57]), sol_nib_byte(n[58], n[59]), sol_nib_byte(n[60], n[61]), sol_nib_byte(n[62], n[63]), sol_nib_byte(n[64], n[65]), sol_nib_byte(n[66], n[67]), sol_nib_byte(n[68], n[69]), sol_nib_byte(n[70], n[71]), sol_nib_byte(n[72], n[73]), sol_nib_byte(n[74], n[75]), sol_nib_byte(n[76], n[77]), sol_nib_byte(n[78], n[79]), sol_nib_byte(n[80], n[81]), sol_nib_byte(n[82], n[83]), sol_nib_byte(n[84], n[85]), sol_nib_byte(n[86], n[87]), sol_nib_byte(n[88], n[89]), sol_nib_byte(n[90], n[91]), sol_nib_byte(n[92], n[93]), sol_nib_byte(n[94], n[95]), sol_nib_byte(n[96], n[97]), sol_nib_byte(n[98], n[99]), sol_nib_byte(n[100], n[101]), sol_nib_byte(n[102], n[103]), sol_nib_byte(n[104], n[105]), sol_nib_byte(n[106], n[107]), sol_nib_byte(n[108], n[109]), sol_nib_byte(n[110], n[111]), sol_nib_byte(n[112], n[113]), sol_nib_byte(n[114], n[115]), sol_nib_byte(n[116], n[117]), sol_nib_byte(n[118], n[119]), sol_nib_byte(n[120], n[121]), sol_nib_byte(n[122], n[123]), sol_nib_byte(n[124], n[125]), sol_nib_byte(n[126], n[127]), sol_nib_byte(n[128], n[129]), sol_nib_byte(n[130], n[131]), sol_nib_byte(n[132], n[133]), sol_nib_byte(n[134], n[135]), sol_nib_byte(n[136], n[137]), sol_nib_byte(n[138], n[139]), sol_nib_byte(n[140], n[141]), sol_nib_byte(n[142], n[143]), sol_nib_byte(n[144], n[145]), sol_nib_byte(n[146], n[147]), sol_nib_byte(n[148], n[149]), sol_nib_byte(n[150], n[151]), sol_nib_byte(n[152], n[153]), sol_nib_byte(n[154], n[155]), sol_nib_byte(n[156], n[157]), sol_nib_byte(n[158], n[159]), sol_nib_byte(n[160], n[161]), sol_nib_byte(n[162], n[163]), sol_nib_byte(n[164], n[165]), sol_nib_byte(n[166], n[167]), sol_nib_byte(n[168], n[169]), sol_nib_byte(n[170], n[171]), sol_nib_byte(n[172], n[173]), sol_nib_byte(n[174], n[175]), sol_nib_byte(n[176], n[177]), sol_nib_byte(n[178], n[179]), sol_nib_byte(n[180], n[181]), sol_nib_byte(n[182], n[183]), sol_nib_byte(n[184], n[185]), sol_nib_byte(n[186], n[187]), sol_nib_byte(n[188], n[189]), sol_nib_byte(n[190], n[191]), sol_nib_byte(n[192], n[193]), sol_nib_byte(n[194], n[195]), sol_nib_byte(n[196], n[197]), sol_nib_byte(n[198], n[199]), sol_nib_byte(n[200], n[201]), sol_nib_byte(n[202], n[203]), sol_nib_byte(n[204], n[205]), sol_nib_byte(n[206], n[207]), sol_nib_byte(n[208], n[209]), sol_nib_byte(n[210], n[211]), sol_nib_byte(n[212], n[213]), sol_nib_byte(n[214], n[215]), sol_nib_byte(n[216], n[217]), sol_nib_byte(n[218], n[219]), sol_nib_byte(n[220], n[221]), sol_nib_byte(n[222], n[223]), sol_nib_byte(n[224], n[225]), sol_nib_byte(n[226], n[227]), sol_nib_byte(n[228], n[229]), sol_nib_byte(n[230], n[231]), sol_nib_byte(n[232], n[233]), sol_nib_byte(n[234], n[235]), sol_nib_byte(n[236], n[237]), sol_nib_byte(n[238], n[239]), sol_nib_byte(n[240], n[241]), sol_nib_byte(n[242], n[243]), sol_nib_byte(n[244], n[245]), sol_nib_byte(n[246], n[247]), sol_nib_byte(n[248], n[249]), sol_nib_byte(n[250], n[251]), sol_nib_byte(n[252], n[253]), sol_nib_byte(n[254], n[255]), sol_nib_byte(n[256], n[257]), sol_nib_byte(n[258], n[259]), sol_nib_byte(n[260], n[261]), sol_nib_byte(n[262], n[263]), sol_nib_byte(n[264], n[265]), sol_nib_byte(n[266], n[267]), sol_nib_byte(n[268], n[269]), sol_nib_byte(n[270], n[271]), sol_nib_byte(n[272], n[273]), sol_nib_byte(n[274], n[275]), sol_nib_byte(n[276], n[277]), sol_nib_byte(n[278], n[279]), sol_nib_byte(n[280], n[281]), sol_nib_byte(n[282], n[283]), sol_nib_byte(n[284], n[285]), sol_nib_byte(n[286], n[287]), sol_nib_byte(n[288], n[289]), sol_nib_byte(n[290], n[291]), sol_nib_byte(n[292], n[293]), sol_nib_byte(n[294], n[295]), sol_nib_byte(n[296], n[297]), sol_nib_byte(n[298], n[299]), sol_nib_byte(n[300], n[301]), sol_nib_byte(n[302], n[303]), sol_nib_byte(n[304], n[305]), sol_nib_byte(n[306], n[307]), sol_nib_byte(n[308], n[309]), sol_nib_byte(n[310], n[311]), sol_nib_byte(n[312], n[313]), sol_nib_byte(n[314], n[315]), sol_nib_byte(n[316], n[317]), sol_nib_byte(n[318], n[319]), sol_nib_byte(n[320], n[321]), sol_nib_byte(n[322], n[323]), sol_nib_byte(n[324], n[325]), sol_nib_byte(n[326], n[327]), sol_nib_byte(n[328], n[329]), sol_nib_byte(n[330], n[331]), sol_nib_byte(n[332], n[333]), sol_nib_byte(n[334], n[335]), sol_nib_byte(n[336], n[337]), sol_nib_byte(n[338], n[339]), sol_nib_byte(n[340], n[341]), sol_nib_byte(n[342], n[343]), sol_nib_byte(n[344], n[345]), sol_nib_byte(n[346], n[347]), sol_nib_byte(n[348], n[349]), sol_nib_byte(n[350], n[351]), sol_nib_byte(n[352], n[353]), sol_nib_byte(n[354], n[355]), sol_nib_byte(n[356], n[357]), sol_nib_byte(n[358], n[359]), sol_nib_byte(n[360], n[361]), sol_nib_byte(n[362], n[363]), sol_nib_byte(n[364], n[365]), sol_nib_byte(n[366], n[367]), sol_nib_byte(n[368], n[369]), sol_nib_byte(n[370], n[371]), sol_nib_byte(n[372], n[373]), sol_nib_byte(n[374], n[375]), sol_nib_byte(n[376], n[377]), sol_nib_byte(n[378], n[379]), sol_nib_byte(n[380], n[381]), sol_nib_byte(n[382], n[383])] == b, "display: hex digits do not match the value");
+  return map(sol_nib_digit, n);
+}
+
+// A Field shown through its canonical 32-byte little-endian encoding.
+circuit sol_hex_field(f: Field, n: Vector<64, Uint<0..16>>): Vector<64, Uint<8>> {
+  return sol_hex32(f as Bytes<32>, n);
+}
+
+// The common frame of every message: the first line, the title, the site,
+// the role, the account (from the `frame` nibbles, checked against the
+// account) and the signing key in base58 (from `frame`'s base58 inputs,
+// checked against the key's bytes), the operation's body, and the freshness
+// tail. The SEAM calls these with the key bytes it checked against the
+// verified point and with the ledger's own nonce, so no gated circuit passes
+// an identity or a frame of its own; the pure message circuits call them
+// with their parameters, so a client gets the same bytes.
+circuit sol_device_message<#t, #b, #n>(self_addr: ContractAddress, key: Vector<32, Uint<8>>, nonce_value: Uint<64>,
+                                       title: Vector<t, Uint<8>>, body: Vector<b, Uint<8>>, show: SolShow,
+                                       frame: SolFrame): Bytes<n> {
+  return Bytes[...sol_first_line(), ...title,
+               ...sol_device_lines(show.site, sol_hex32(self_addr.bytes, frame.account), sol_key_text(key, frame.key)),
+               ...body, ...sol_device_nonce(nonce_value, show.nonce)];
+}
+circuit sol_grantee_message<#t, #b, #n>(self_addr: ContractAddress, key: Vector<32, Uint<8>>, label: Bytes<32>, slot: Uint<8>,
+                                        issued_at: Uint<64>, nonce_value: Uint<64>, title: Vector<t, Uint<8>>,
+                                        body: Vector<b, Uint<8>>, show: SolShow, g: SolGrantShow,
+                                        frame: SolFrame): Bytes<n> {
+  return Bytes[...sol_first_line(), ...title,
+               ...sol_grantee_lines(show.site, sol_hex32(self_addr.bytes, frame.account), sol_key_text(key, frame.key)),
+               ...body, ...sol_grant_tail(label, slot, issued_at, nonce_value, g, show.nonce)];
+}
+
+// A 32-byte key as its base58 text, left-aligned and space-padded to 44
+// bytes (the base rendering module's base58_text_32 over the key's bytes).
+circuit sol_key_text(key: Vector<32, Uint<8>>, k: SolBase58): Vector<44, Uint<8>> {
+  return base58_text_32(key, k.digits, k.carry, k.low, k.top);
+}
+
+// The key bytes a target's or grantee's message shows, for the pure message
+// circuits: the 32-byte key of a kind of the ed25519 class, zero for every
+// other kind and for an unregistered tag (refused by the message itself). A
+// gated circuit shows the key bytes its key argument carries instead, which
+// it checks against the point and requires to equal these.
+circuit sol_has_point(hit: SolKinds<Boolean>): Boolean {
+  return fold((p: Boolean, h: Boolean, k: SolKind): Boolean => p || (h && k.key_class == SolClass.ed25519), false, hit, sol_kinds());
+}
+circuit sol_target_key_bytes(t: SolTarget): Vector<32, Uint<8>> {
+  return (sol_has_point(sol_device_hits(t.tag)) ? t.a : pad(32, "")) as Vector<32, Uint<8>>;
+}
+circuit sol_grantee_key_bytes(t: SolGrantee): Vector<32, Uint<8>> {
+  return (sol_has_point(sol_grantee_hits(t.tag)) ? t.a : pad(32, "")) as Vector<32, Uint<8>>;
+}
+
+// The digits of a little-endian 32-byte value in big-endian order (the pairs
+// reversed; wiring only): secp256k1 and P-256 coordinates are shown
+// big-endian, as SEC1 and their wallets show them.
+circuit sol_be(h: Vector<64, Uint<8>>): Vector<64, Uint<8>> {
+  return [h[62], h[63], h[60], h[61], h[58], h[59], h[56], h[57], h[54], h[55], h[52], h[53], h[50], h[51], h[48], h[49], h[46], h[47], h[44], h[45], h[42], h[43], h[40], h[41], h[38], h[39], h[36], h[37], h[34], h[35], h[32], h[33], h[30], h[31], h[28], h[29], h[26], h[27], h[24], h[25], h[22], h[23], h[20], h[21], h[18], h[19], h[16], h[17], h[14], h[15], h[12], h[13], h[10], h[11], h[8], h[9], h[6], h[7], h[4], h[5], h[2], h[3], h[0], h[1]];
+}
+
+
+
+// ── Lines and blocks over digit vectors ─────────────────────────────────────
+
+// The lines after the title for the device role (200 bytes):
+// Site / Role / Account / Signing key (base58, 44 bytes).
+circuit sol_device_lines(site: Vector<32, Uint<8>>, h_account: Vector<64, Uint<8>>, h_key: Vector<44, Uint<8>>): Vector<200, Uint<8>> {
+  return [...pad(6, "Site: "), ...sol_label_chars(site), 10,
+          ...pad(28, "Role: device of this account"), 10,
+          ...pad(9, "Account: "), ...h_account, 10,
+          ...pad(13, "Signing key: "), ...h_key, 10];
+}
+
+// The same for the grantee role (203 bytes).
+circuit sol_grantee_lines(site: Vector<32, Uint<8>>, h_account: Vector<64, Uint<8>>, h_key: Vector<44, Uint<8>>): Vector<203, Uint<8>> {
+  return [...pad(6, "Site: "), ...sol_label_chars(site), 10,
+          ...pad(31, "Role: grantee of a scoped grant"), 10,
+          ...pad(9, "Account: "), ...h_account, 10,
+          ...pad(13, "Signing key: "), ...h_key, 10];
+}
+
+// The device role's last line (34 bytes, no LF): the auth_nonce.
+circuit sol_device_nonce(nonce_value: Uint<64>, digits: Vector<20, Uint<8>>): Vector<34, Uint<8>> {
+  return [...pad(14, "Device nonce: "), ...uint64_text(nonce_value, digits)];
+}
+
+// The grantee role's last lines (143 bytes, no final LF): the grant's label
+// (the characters checked against the label bytes the grant id binds), slot,
+// issued_at (the account's auth_nonce when it was issued) and use nonce.
+circuit sol_grant_tail(label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>,
+                       g: SolGrantShow, nonce: Vector<20, Uint<8>>): Vector<143, Uint<8>> {
+  return [...pad(13, "Grant label: "), ...sol_label_chars(sol_chars32(label, g.label)), 10,
+          ...pad(12, "Grant slot: "), ...uint8_text(slot, g.slot), 10,
+          ...pad(23, "Grant issued at nonce: "), ...uint64_text(issued_at, g.issued), 10,
+          ...pad(17, "Grant use nonce: "), ...uint64_text(nonce_value, nonce)];
+}
+
+// A moved amount (204 bytes): the token, the base units, the site's label.
+// Every number is shown in full digits.
+circuit sol_amount_lines(h_color: Vector<64, Uint<8>>, amount: Uint<128>, a: SolAmountShow): Vector<204, Uint<8>> {
+  return [...pad(7, "Token: "), ...h_color, 10,
+          ...pad(21, "Amount (base units): "), ...uint128_text(amount, a.units), 10,
+          ...pad(21, "This site labels it: "), ...site_amount_label_text(amount, a.claim), 10];
+}
+
+// A spent shielded coin (249 bytes): its value, nonce, Merkle index, and the
+// change that returns to this account (value - amount). Its colour is the
+// Token line: every shielded export asserts coin.color == color.
+circuit sol_coin_lines(coin: QualifiedShieldedCoinInfo, amount: Uint<128>, h_nonce: Vector<64, Uint<8>>, c: SolCoinShow): Vector<249, Uint<8>> {
+  assert(amount <= coin.value, "amount above the spent coin's value");
+  return [...pad(18, "Spent coin value: "), ...uint128_text(coin.value, c.value), 10,
+          ...pad(18, "Spent coin nonce: "), ...h_nonce, 10,
+          ...pad(18, "Spent coin index: "), ...uint64_text(coin.mt_index, c.index), 10,
+          ...pad(29, "Change back to this account: "), ...uint128_text((coin.value - amount) as Uint<128>, c.change), 10];
+}
+
+// A registered tag's text (32 bytes, the zero padding shown as spaces): the
+// text of the kind's own tag, selected among the constant tags of
+// sol_kinds(), so it equals the tag bytes the kind's flag compared and costs
+// no per-byte conversion of the tag.
+circuit sol_tag_shown(tag: Bytes<32>): Vector<32, Uint<8>> {
+  return map((x: Uint<8>): Uint<8> => (x == 0 ? 32 : x) as Uint<8>, tag as Vector<32, Uint<8>>);
+}
+circuit sol_device_tag_text(tag: Bytes<32>): Vector<32, Uint<8>> {
+  return sol_kind_row<32>(sol_device_kind(tag).hit, map((k: SolKind): Vector<32, Uint<8>> => sol_tag_shown(k.device), sol_kinds()));
+}
+circuit sol_grantee_tag_text(tag: Bytes<32>): Vector<32, Uint<8>> {
+  return sol_kind_row<32>(sol_grantee_kind(tag).hit, map((k: SolKind): Vector<32, Uint<8>> => sol_tag_shown(k.grant_id), sol_kinds()));
+}
+
+// A passkey origin's characters, checked against its bytes and visible for
+// the passkey class (the other classes carry zero, never shown).
+circuit sol_origin_chars(origin: Bytes<21>, v: Vector<21, Uint<8>>, passkey: Boolean): Vector<21, Uint<8>> {
+  const o = sol_chars21(origin, v);
+  for (const c of o) {
+    assert(!passkey || (c >= 33 && c <= 126), "display: passkey origin not visible ASCII");
+  }
+  return o;
+}
+
+// The key lines of a target device (282 bytes): one row per kind, in
+// sol_kinds() order, each padded to the block's length with spaces before
+// its last line break. Keys are shown in the form their own wallets show (an
+// EVM address, the 32-byte Solana key in base58, a passkey origin) or as
+// coordinates in COORDINATE_DISPLAY_ORDER: secp256k1 and P-256 big-endian
+// (SEC1), JubJub little-endian (Midnight's encoding, the bytes the entry
+// binds). `key` is the key of an ed25519-class kind (zero for the others),
+// `h_address`, `h_a`, `h_b` and `h_c` the target's fields in hex.
+circuit sol_device_block(t: SolTarget, ts: SolTargetShow, key: Vector<32, Uint<8>>, h_address: Vector<40, Uint<8>>,
+                         h_a: Vector<64, Uint<8>>, h_b: Vector<64, Uint<8>>, h_c: Vector<64, Uint<8>>): Vector<282, Uint<8>> {
+  const kind = sol_device_kind(t.tag);
+  const xa = sol_be(h_a);
+  const yb = sol_be(h_b);
+  return sol_kind_row<282>(kind.hit, [
+    // evm_k256
+    [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
+     ...pad(21, "Device privacy salt: "), ...h_a, ...sol_spaces<135>(), 10],
+    // jubjub
+    [...pad(14, "JubJub key x: "), ...h_a, 10,
+     ...pad(14, "JubJub key y: "), ...h_b, ...sol_spaces<124>(), 10],
+    // sol_ed25519
+    [...pad(12, "Solana key: "), ...sol_key_text(key, ts.key), 10,
+     ...pad(21, "Device privacy salt: "), ...h_b, ...sol_spaces<139>(), 10],
+    // k256
+    [...pad(17, "secp256k1 key x: "), ...xa, 10,
+     ...pad(17, "secp256k1 key y: "), ...yb, 10,
+     ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), ...sol_spaces<75>(), 10],
+    // p256
+    [...pad(15, "Passkey key x: "), ...xa, 10,
+     ...pad(15, "Passkey key y: "), ...yb, 10,
+     ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, ts.origin, kind.key_class == SolClass.passkey), 10,
+     ...pad(19, "Passkey RP (hash): "), ...h_c, 10],
+  ]);
+}
+
+// The grantee's key and origin lines (299 bytes): one row per kind, in
+// sol_kinds() order, padded as the device block's (coordinates in the same
+// order). `h_oh` is the grantee's origin_hash in hex.
+circuit sol_grantee_block(t: SolGrantee, gs: SolGranteeShow, key: Vector<32, Uint<8>>, h_address: Vector<40, Uint<8>>,
+                          h_a: Vector<64, Uint<8>>, h_b: Vector<64, Uint<8>>, h_oh: Vector<64, Uint<8>>): Vector<299, Uint<8>> {
+  const kind = sol_grantee_kind(t.tag);
+  const xa = sol_be(h_a);
+  const yb = sol_be(h_b);
+  // Only a readable grantee has a label; the others carry zero, which the
+  // label grammar refuses, so its grammar is checked only there.
+  const chars = sol_chars32(t.label, gs.label);
+  const lab = sol_label_chars(sol_readable(kind.key_class) ? chars : [45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  return sol_kind_row<299>(kind.hit, [
+    // evm_k256
+    [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
+     ...pad(22, "Grantee privacy salt: "), ...h_a, 10,
+     ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<103>(), 10],
+    // jubjub
+    [...pad(14, "JubJub key x: "), ...h_a, 10,
+     ...pad(14, "JubJub key y: "), ...h_b, 10,
+     ...pad(27, "Grantee site label (hash): "), ...h_oh, ...sol_spaces<49>(), 10],
+    // sol_ed25519
+    [...pad(12, "Solana key: "), ...sol_key_text(key, gs.key), 10,
+     ...pad(22, "Grantee privacy salt: "), ...h_b, 10,
+     ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<107>(), 10],
+    // k256
+    [...pad(17, "secp256k1 key x: "), ...xa, 10,
+     ...pad(17, "secp256k1 key y: "), ...yb, 10,
+     ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), 10,
+     ...pad(27, "Grantee site label (hash): "), ...h_oh, 10],
+    // p256
+    [...pad(15, "Passkey key x: "), ...xa, 10,
+     ...pad(15, "Passkey key y: "), ...yb, 10,
+     ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, gs.origin, kind.key_class == SolClass.passkey), ...sol_spaces<101>(), 10],
+  ]);
+}
+
+
+// A 192-byte inbox ciphertext in full (510 bytes): six lines of 64 hex.
+circuit sol_entry_lines(h: Vector<384, Uint<8>>): Vector<510, Uint<8>> {
+  return [...pad(20, "Inbox entry 1 of 6: "), h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15], h[16], h[17], h[18], h[19], h[20], h[21], h[22], h[23], h[24], h[25], h[26], h[27], h[28], h[29], h[30], h[31], h[32], h[33], h[34], h[35], h[36], h[37], h[38], h[39], h[40], h[41], h[42], h[43], h[44], h[45], h[46], h[47], h[48], h[49], h[50], h[51], h[52], h[53], h[54], h[55], h[56], h[57], h[58], h[59], h[60], h[61], h[62], h[63], 10,
+          ...pad(20, "Inbox entry 2 of 6: "), h[64], h[65], h[66], h[67], h[68], h[69], h[70], h[71], h[72], h[73], h[74], h[75], h[76], h[77], h[78], h[79], h[80], h[81], h[82], h[83], h[84], h[85], h[86], h[87], h[88], h[89], h[90], h[91], h[92], h[93], h[94], h[95], h[96], h[97], h[98], h[99], h[100], h[101], h[102], h[103], h[104], h[105], h[106], h[107], h[108], h[109], h[110], h[111], h[112], h[113], h[114], h[115], h[116], h[117], h[118], h[119], h[120], h[121], h[122], h[123], h[124], h[125], h[126], h[127], 10,
+          ...pad(20, "Inbox entry 3 of 6: "), h[128], h[129], h[130], h[131], h[132], h[133], h[134], h[135], h[136], h[137], h[138], h[139], h[140], h[141], h[142], h[143], h[144], h[145], h[146], h[147], h[148], h[149], h[150], h[151], h[152], h[153], h[154], h[155], h[156], h[157], h[158], h[159], h[160], h[161], h[162], h[163], h[164], h[165], h[166], h[167], h[168], h[169], h[170], h[171], h[172], h[173], h[174], h[175], h[176], h[177], h[178], h[179], h[180], h[181], h[182], h[183], h[184], h[185], h[186], h[187], h[188], h[189], h[190], h[191], 10,
+          ...pad(20, "Inbox entry 4 of 6: "), h[192], h[193], h[194], h[195], h[196], h[197], h[198], h[199], h[200], h[201], h[202], h[203], h[204], h[205], h[206], h[207], h[208], h[209], h[210], h[211], h[212], h[213], h[214], h[215], h[216], h[217], h[218], h[219], h[220], h[221], h[222], h[223], h[224], h[225], h[226], h[227], h[228], h[229], h[230], h[231], h[232], h[233], h[234], h[235], h[236], h[237], h[238], h[239], h[240], h[241], h[242], h[243], h[244], h[245], h[246], h[247], h[248], h[249], h[250], h[251], h[252], h[253], h[254], h[255], 10,
+          ...pad(20, "Inbox entry 5 of 6: "), h[256], h[257], h[258], h[259], h[260], h[261], h[262], h[263], h[264], h[265], h[266], h[267], h[268], h[269], h[270], h[271], h[272], h[273], h[274], h[275], h[276], h[277], h[278], h[279], h[280], h[281], h[282], h[283], h[284], h[285], h[286], h[287], h[288], h[289], h[290], h[291], h[292], h[293], h[294], h[295], h[296], h[297], h[298], h[299], h[300], h[301], h[302], h[303], h[304], h[305], h[306], h[307], h[308], h[309], h[310], h[311], h[312], h[313], h[314], h[315], h[316], h[317], h[318], h[319], 10,
+          ...pad(20, "Inbox entry 6 of 6: "), h[320], h[321], h[322], h[323], h[324], h[325], h[326], h[327], h[328], h[329], h[330], h[331], h[332], h[333], h[334], h[335], h[336], h[337], h[338], h[339], h[340], h[341], h[342], h[343], h[344], h[345], h[346], h[347], h[348], h[349], h[350], h[351], h[352], h[353], h[354], h[355], h[356], h[357], h[358], h[359], h[360], h[361], h[362], h[363], h[364], h[365], h[366], h[367], h[368], h[369], h[370], h[371], h[372], h[373], h[374], h[375], h[376], h[377], h[378], h[379], h[380], h[381], h[382], h[383], 10];
+}
+
+// The two forms of a removal, one length (396 bytes): the descriptor form
+// (scheme, key lines, use counter, epoch) or the revocation-only literal form
+// padded with spaces before its last line break. Only the
+// taken form's checks apply (the literal form carries no descriptor).
+circuit sol_remove_lines(literal: Boolean, target: SolTarget, key: Vector<32, Uint<8>>, counter: Uint<64>, epoch: Uint<32>, ts: SolTargetShow,
+                         h_t_address: Vector<40, Uint<8>>, h_t_a: Vector<64, Uint<8>>, h_t_b: Vector<64, Uint<8>>,
+                         h_t_c: Vector<64, Uint<8>>, h_entry: Vector<64, Uint<8>>): Vector<396, Uint<8>> {
+  if (literal) {
+    // The literal form shows none of the target's values, so its display
+    // inputs must be the ones of an empty target (the digits of 0, a zero
+    // origin, the base58 inputs of 32 zero bytes): one input per call.
+    assert(Bytes[...ts.counter] == pad(20, "0                   ") && Bytes[...ts.epoch] == pad(10, "0         ")
+             && Bytes[...ts.origin] == pad(21, "")
+             && Bytes[...ts.key.digits] == Bytes[...pad(32, ""), ...pad(12, "::::::::::::")]
+             && ts.key.carry == 0 && ts.key.low == 0 && ts.key.top == 0,
+           "display: a literal removal's display inputs are not those of an empty target");
+    return [...pad(44, "Removes a device this wallet cannot identify"), 10, ...pad(14, "Device entry: "), ...h_entry, ...sol_spaces<272>(), 10];
+  }
+  return [...pad(15, "Device scheme: "), ...sol_device_tag_text(target.tag), 10, ...sol_device_block(target, ts, key, h_t_address, h_t_a, h_t_b, h_t_c), ...pad(20, "Device use counter: "), ...uint64_text(counter, ts.counter), 10, ...pad(14, "Device epoch: "), ...uint32_text(epoch, ts.epoch), 10];
+}
+
+// ── The messages: one pure circuit per operation and role ─────────────────────
+//
+// Exported, and therefore free (no proving key): a dApp, a relay or an
+// auditor obtains the contract's own bytes for any call, and
+// src/wallet/sol-ed25519-message.ts is an independent TypeScript renderer
+// held byte for byte to these (src/tests/sol-ed25519-message-offline.ts).
+// `frame` is the account's nibbles and the signing key's base58 inputs; `hex`
+// the nibbles of every other value the message shows in hex, in the order of
+// the layout table in SOL-ED25519.md.
+
+// Rotate the encryption key (device role): the body, 184 bytes; 64 body nibbles.
+circuit sol_body_rotate_enc_key(new_key: Bytes<32>, hex: Vector<64, Uint<0..16>>): Vector<184, Uint<8>> {
+  const h_new_key = sol_hex32(new_key, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  return [...pad(20, "New encryption key: "),
+          ...h_new_key,
+          10,
+          ...pad(98, "Consequence: coins deposited from now on are encrypted to this key; only its holder can read them."),
+          10];
+}
+circuit sol_title_rotate_enc_key(): Vector<37, Uint<8>> {
+  return [...pad(36, "Operation: Rotate the encryption key"), 10];
+}
+
+// Rotate the encryption key (device role): 491 bytes.
+export pure circuit sol_message_rotate_enc_key(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, new_key: Bytes<32>, show: SolShow, frame: SolFrame, hex: Vector<64, Uint<0..16>>
+): Bytes<491> {
+  return sol_device_message<37, 184, 491>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_rotate_enc_key(), sol_body_rotate_enc_key(new_key, hex), show, frame);
+}
+
+// Append an inbox entry (device role): the body, 510 bytes; 384 body nibbles.
+circuit sol_body_append_inbox(entry: Bytes<192>, hex: Vector<384, Uint<0..16>>): Vector<510, Uint<8>> {
+  const h_entry = sol_hex192(entry, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383]]);
+  return [...sol_entry_lines(h_entry)];
+}
+circuit sol_title_append_inbox(): Vector<33, Uint<8>> {
+  return [...pad(32, "Operation: Append an inbox entry"), 10];
+}
+
+// Append an inbox entry (device role): 813 bytes.
+export pure circuit sol_message_append_inbox(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, entry: Bytes<192>, show: SolShow, frame: SolFrame, hex: Vector<384, Uint<0..16>>
+): Bytes<813> {
+  return sol_device_message<33, 510, 813>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_append_inbox(), sol_body_append_inbox(entry, hex), show, frame);
+}
+
+// Withdraw unshielded tokens (device role): the body, 292 bytes; 128 body nibbles.
+circuit sol_body_withdraw_unshielded(color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, hex: Vector<128, Uint<0..16>>): Vector<292, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(23, "To unshielded address: "),
+          ...h_recipient,
+          10];
+}
+circuit sol_title_withdraw_unshielded(): Vector<38, Uint<8>> {
+  return [...pad(37, "Operation: Withdraw unshielded tokens"), 10];
+}
+
+// Withdraw unshielded tokens (device role): 600 bytes.
+export pure circuit sol_message_withdraw_unshielded(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, show: SolShow, frame: SolFrame, hex: Vector<128, Uint<0..16>>
+): Bytes<600> {
+  return sol_device_message<38, 292, 600>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_withdraw_unshielded(), sol_body_withdraw_unshielded(color, amount, recipient, a, hex), show, frame);
+}
+
+// Withdraw shielded tokens (device role): the body, 535 bytes; 192 body nibbles.
+circuit sol_body_withdraw_shielded(recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<192, Uint<0..16>>): Vector<535, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(17, "To shielded key: "),
+          ...h_recipient,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded(): Vector<36, Uint<8>> {
+  return [...pad(35, "Operation: Withdraw shielded tokens"), 10];
+}
+
+// Withdraw shielded tokens (device role): 841 bytes.
+export pure circuit sol_message_withdraw_shielded(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, frame: SolFrame, hex: Vector<192, Uint<0..16>>
+): Bytes<841> {
+  return sol_device_message<36, 535, 841>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_withdraw_shielded(), sol_body_withdraw_shielded(recipient, color, amount, coin, a, c, hex), show, frame);
+}
+
+// Withdraw shielded tokens to a contract (device role): the body, 531 bytes; 192 body nibbles.
+circuit sol_body_withdraw_shielded_to_contract(recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<192, Uint<0..16>>): Vector<531, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(13, "To contract: "),
+          ...h_recipient,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded_to_contract(): Vector<50, Uint<8>> {
+  return [...pad(49, "Operation: Withdraw shielded tokens to a contract"), 10];
+}
+
+// Withdraw shielded tokens to a contract (device role): 851 bytes.
+export pure circuit sol_message_withdraw_shielded_to_contract(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, frame: SolFrame, hex: Vector<192, Uint<0..16>>
+): Bytes<851> {
+  return sol_device_message<50, 531, 851>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_withdraw_shielded_to_contract(), sol_body_withdraw_shielded_to_contract(recipient, color, amount, coin, a, c, hex), show, frame);
+}
+
+// Add a device (device role): the body, 391 bytes; 232 body nibbles.
+circuit sol_body_add_device(target: SolTarget, key: Vector<32, Uint<8>>, ts: SolTargetShow, hex: Vector<232, Uint<0..16>>): Vector<391, Uint<8>> {
+  const h_t_address = sol_hex20(target.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_t_a = sol_hex32(target.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_t_b = sol_hex32(target.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_t_c = sol_hex32(target.c, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  return [...pad(60, "Consequence: gives this device FULL control of this account."),
+          10,
+          ...pad(15, "Device scheme: "),
+          ...sol_device_tag_text(target.tag),
+          10,
+          ...sol_device_block(target, ts, key, h_t_address, h_t_a, h_t_b, h_t_c)];
+}
+circuit sol_title_add_device(): Vector<24, Uint<8>> {
+  return [...pad(23, "Operation: Add a device"), 10];
+}
+
+// Add a device (device role): 685 bytes.
+export pure circuit sol_message_add_device(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, target: SolTarget, ts: SolTargetShow, show: SolShow, frame: SolFrame, hex: Vector<232, Uint<0..16>>
+): Bytes<685> {
+  return sol_device_message<24, 391, 685>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_add_device(), sol_body_add_device(target, sol_target_key_bytes(target), ts, hex), show, frame);
+}
+
+// Remove a device (device role): the body, 464 bytes; 296 body nibbles.
+circuit sol_body_remove_device(literal: Boolean, target: SolTarget, key: Vector<32, Uint<8>>, counter: Uint<64>, epoch: Uint<32>, entry: Bytes<32>, ts: SolTargetShow, hex: Vector<296, Uint<0..16>>): Vector<464, Uint<8>> {
+  const h_t_address = sol_hex20(target.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_t_a = sol_hex32(target.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_t_b = sol_hex32(target.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_t_c = sol_hex32(target.c, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  const h_entry = sol_hex32(entry, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
+  return [...pad(67, "Consequence: the removed device can no longer act for this account."),
+          10,
+          ...sol_remove_lines(literal, target, key, counter, epoch, ts, h_t_address, h_t_a, h_t_b, h_t_c, h_entry)];
+}
+circuit sol_title_remove_device(): Vector<27, Uint<8>> {
+  return [...pad(26, "Operation: Remove a device"), 10];
+}
+
+// Remove a device (device role): 761 bytes.
+export pure circuit sol_message_remove_device(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, literal: Boolean, target: SolTarget, counter: Uint<64>, epoch: Uint<32>, entry: Bytes<32>, ts: SolTargetShow, show: SolShow, frame: SolFrame, hex: Vector<296, Uint<0..16>>
+): Bytes<761> {
+  return sol_device_message<27, 464, 761>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_remove_device(), sol_body_remove_device(literal, target, sol_target_key_bytes(target), counter, epoch, entry, ts, hex), show, frame);
+}
+
+// Issue a scoped grant (device role): the body, 1388 bytes; 552 body nibbles.
+circuit sol_body_issue_grant(grantee: SolGrantee, key: Vector<32, Uint<8>>, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, hex: Vector<552, Uint<0..16>>): Vector<1388, Uint<8>> {
+  const h_g_address = sol_hex20(grantee.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_g_a = sol_hex32(grantee.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_g_b = sol_hex32(grantee.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_g_oh = sol_hex32(grantee.origin_hash, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  const h_color = sol_hex32(color, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
+  const h_recipient = sol_hex32(recipient, [hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359]]);
+  const h_rp = sol_hex32(rp_id_hash, [hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423]]);
+  const h_read_pk = sol_hex32(read_pk, [hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487]]);
+  const h_caller = sol_hex32(caller.value.bytes, [hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551]]);
+  return [...pad(84, "Consequence: lets the grantee key below spend from this account within these limits."),
+          10,
+          ...pad(16, "Grantee scheme: "),
+          ...sol_grantee_tag_text(grantee.tag),
+          10,
+          ...sol_grantee_block(grantee, gs, key, h_g_address, h_g_a, h_g_b, h_g_oh),
+          ...pad(14, "Grantee slot: "),
+          ...uint8_text(grantee.slot, gs.slot),
+          10,
+          ...pad(25, "May withdraw unshielded: "),
+          ...sol_yes_no(op_withdraw_unshielded),
+          10,
+          ...pad(23, "May withdraw shielded: "),
+          ...sol_yes_no(op_withdraw_shielded),
+          10,
+          ...pad(37, "May withdraw shielded to a contract: "),
+          ...sol_yes_no(op_withdraw_shielded_to_contract),
+          10,
+          ...pad(20, "May read the inbox: "),
+          ...sol_yes_no(read),
+          10,
+          ...pad(7, "Token: "),
+          ...h_color,
+          10,
+          ...pad(16, "Recipient kind: "),
+          ...recipient_kind_text(recipient_kind),
+          10,
+          ...pad(11, "Recipient: "),
+          ...h_recipient,
+          10,
+          ...pad(16, "Max coin value: "),
+          ...uint128_text(max_coin_value, ss.max_coin),
+          10,
+          ...pad(14, "Per-call cap: "),
+          ...uint128_text(per_call_cap, ss.per_call),
+          10,
+          ...pad(11, "Total cap: "),
+          ...uint128_text(cap, ss.cap),
+          10,
+          ...pad(34, "Expires at (block time, seconds): "),
+          ...expiry_text(expires_at, ss.expires),
+          10,
+          ...pad(18, "Expires at (UTC): "),
+          ...expiry_datetime_text(expires_at, ss.expires_utc, ss.expires_split),
+          10,
+          ...pad(19, "Passkey RP (hash): "),
+          ...rp_hash_text_from_hex(rp_id_hash, h_rp),
+          10,
+          ...pad(16, "Inbox read key: "),
+          ...h_read_pk,
+          10,
+          ...pad(15, "Window length: "),
+          ...window_text(window_len, ss.window),
+          10,
+          ...pad(12, "Window cap: "),
+          ...window_cap_text(window_len, window_cap, ss.window_cap),
+          10,
+          ...pad(33, "Caller restricted to a contract: "),
+          ...sol_yes_no(caller.is_some),
+          10,
+          ...pad(8, "Caller: "),
+          ...h_caller,
+          10];
+}
+circuit sol_title_issue_grant(): Vector<32, Uint<8>> {
+  return [...pad(31, "Operation: Issue a scoped grant"), 10];
+}
+
+// Issue a scoped grant (device role): 1690 bytes.
+export pure circuit sol_message_issue_grant(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, show: SolShow, frame: SolFrame, hex: Vector<552, Uint<0..16>>
+): Bytes<1690> {
+  return sol_device_message<32, 1388, 1690>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_issue_grant(), sol_body_issue_grant(grantee, sol_grantee_key_bytes(grantee), op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, gs, ss, hex), show, frame);
+}
+
+// Revoke a scoped grant (device role): the body, 427 bytes; 232 body nibbles.
+circuit sol_body_revoke_grant(grantee: SolGrantee, key: Vector<32, Uint<8>>, gs: SolGranteeShow, hex: Vector<232, Uint<0..16>>): Vector<427, Uint<8>> {
+  const h_g_address = sol_hex20(grantee.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_g_a = sol_hex32(grantee.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_g_b = sol_hex32(grantee.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_g_oh = sol_hex32(grantee.origin_hash, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  return [...pad(60, "Consequence: the grantee can no longer act under this grant."),
+          10,
+          ...pad(16, "Grantee scheme: "),
+          ...sol_grantee_tag_text(grantee.tag),
+          10,
+          ...sol_grantee_block(grantee, gs, key, h_g_address, h_g_a, h_g_b, h_g_oh),
+          ...pad(14, "Grantee slot: "),
+          ...uint8_text(grantee.slot, gs.slot),
+          10];
+}
+circuit sol_title_revoke_grant(): Vector<33, Uint<8>> {
+  return [...pad(32, "Operation: Revoke a scoped grant"), 10];
+}
+
+// Revoke a scoped grant (device role): 730 bytes.
+export pure circuit sol_message_revoke_grant(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, gs: SolGranteeShow, show: SolShow, frame: SolFrame, hex: Vector<232, Uint<0..16>>
+): Bytes<730> {
+  return sol_device_message<33, 427, 730>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_revoke_grant(), sol_body_revoke_grant(grantee, sol_grantee_key_bytes(grantee), gs, hex), show, frame);
+}
+
+// Revoke all scoped grants (device role): the body, 63 bytes; 0 body nibbles.
+circuit sol_body_revoke_all_grants(): Vector<63, Uint<8>> {
+  return [...pad(62, "Consequence: every scoped grant of this account stops working."),
+          10];
+}
+circuit sol_title_revoke_all_grants(): Vector<36, Uint<8>> {
+  return [...pad(35, "Operation: Revoke all scoped grants"), 10];
+}
+
+// Revoke all scoped grants (device role): 369 bytes.
+export pure circuit sol_message_revoke_all_grants(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, show: SolShow, frame: SolFrame
+): Bytes<369> {
+  return sol_device_message<36, 63, 369>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_revoke_all_grants(), sol_body_revoke_all_grants(), show, frame);
+}
+
+// Publish a recovery session (device role): the body, 922 bytes; 576 body nibbles.
+circuit sol_body_publish_recovery_session(new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field, phi_len: Uint<8>, wrap: Bytes<64>, phi_len_digits: Vector<3, Uint<8>>, hex: Vector<576, Uint<0..16>>): Vector<922, Uint<8>> {
+  const h_rx = sol_hex_field(jubjubPointX(new_recovery_pk), [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_ry = sol_hex_field(jubjubPointY(new_recovery_pk), [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_session = sol_hex32(session_nonce, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
+  const h_phi1 = sol_hex_field(phi_1, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
+  const h_phi2 = sol_hex_field(phi_2, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319]]);
+  const h_phi3 = sol_hex_field(phi_3, [hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383]]);
+  const h_phi4 = sol_hex_field(phi_4, [hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447]]);
+  const h_wrap = sol_hex64(wrap, [hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
+  return [...pad(107, "Consequence: sets this account's recovery key; its holder can take over this account after the veto window."),
+          10,
+          ...pad(16, "Recovery key x: "),
+          ...h_rx,
+          10,
+          ...pad(16, "Recovery key y: "),
+          ...h_ry,
+          10,
+          ...pad(15, "Session nonce: "),
+          ...h_session,
+          10,
+          ...pad(28, "Backup vector value 1 of 4: "),
+          ...h_phi1,
+          10,
+          ...pad(28, "Backup vector value 2 of 4: "),
+          ...h_phi2,
+          10,
+          ...pad(28, "Backup vector value 3 of 4: "),
+          ...h_phi3,
+          10,
+          ...pad(28, "Backup vector value 4 of 4: "),
+          ...h_phi4,
+          10,
+          ...pad(22, "Backup vector length: "),
+          ...uint8_text(phi_len, phi_len_digits),
+          10,
+          ...pad(22, "Key wrap part 1 of 2: "),
+          ...[h_wrap[0], h_wrap[1], h_wrap[2], h_wrap[3], h_wrap[4], h_wrap[5], h_wrap[6], h_wrap[7], h_wrap[8], h_wrap[9], h_wrap[10], h_wrap[11], h_wrap[12], h_wrap[13], h_wrap[14], h_wrap[15], h_wrap[16], h_wrap[17], h_wrap[18], h_wrap[19], h_wrap[20], h_wrap[21], h_wrap[22], h_wrap[23], h_wrap[24], h_wrap[25], h_wrap[26], h_wrap[27], h_wrap[28], h_wrap[29], h_wrap[30], h_wrap[31], h_wrap[32], h_wrap[33], h_wrap[34], h_wrap[35], h_wrap[36], h_wrap[37], h_wrap[38], h_wrap[39], h_wrap[40], h_wrap[41], h_wrap[42], h_wrap[43], h_wrap[44], h_wrap[45], h_wrap[46], h_wrap[47], h_wrap[48], h_wrap[49], h_wrap[50], h_wrap[51], h_wrap[52], h_wrap[53], h_wrap[54], h_wrap[55], h_wrap[56], h_wrap[57], h_wrap[58], h_wrap[59], h_wrap[60], h_wrap[61], h_wrap[62], h_wrap[63]],
+          10,
+          ...pad(22, "Key wrap part 2 of 2: "),
+          ...[h_wrap[64], h_wrap[65], h_wrap[66], h_wrap[67], h_wrap[68], h_wrap[69], h_wrap[70], h_wrap[71], h_wrap[72], h_wrap[73], h_wrap[74], h_wrap[75], h_wrap[76], h_wrap[77], h_wrap[78], h_wrap[79], h_wrap[80], h_wrap[81], h_wrap[82], h_wrap[83], h_wrap[84], h_wrap[85], h_wrap[86], h_wrap[87], h_wrap[88], h_wrap[89], h_wrap[90], h_wrap[91], h_wrap[92], h_wrap[93], h_wrap[94], h_wrap[95], h_wrap[96], h_wrap[97], h_wrap[98], h_wrap[99], h_wrap[100], h_wrap[101], h_wrap[102], h_wrap[103], h_wrap[104], h_wrap[105], h_wrap[106], h_wrap[107], h_wrap[108], h_wrap[109], h_wrap[110], h_wrap[111], h_wrap[112], h_wrap[113], h_wrap[114], h_wrap[115], h_wrap[116], h_wrap[117], h_wrap[118], h_wrap[119], h_wrap[120], h_wrap[121], h_wrap[122], h_wrap[123], h_wrap[124], h_wrap[125], h_wrap[126], h_wrap[127]],
+          10];
+}
+circuit sol_title_publish_recovery_session(): Vector<38, Uint<8>> {
+  return [...pad(37, "Operation: Publish a recovery session"), 10];
+}
+
+// Publish a recovery session (device role): 1230 bytes.
+export pure circuit sol_message_publish_recovery_session(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field, phi_len: Uint<8>, wrap: Bytes<64>, phi_len_digits: Vector<3, Uint<8>>, show: SolShow, frame: SolFrame, hex: Vector<576, Uint<0..16>>
+): Bytes<1230> {
+  return sol_device_message<38, 922, 1230>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_publish_recovery_session(), sol_body_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap, phi_len_digits, hex), show, frame);
+}
+
+// Cancel a pending recovery (device role): the body, 64 bytes; 0 body nibbles.
+circuit sol_body_recover_cancel(): Vector<64, Uint<8>> {
+  return [...pad(63, "Consequence: the pending recovery of this account is cancelled."),
+          10];
+}
+circuit sol_title_recover_cancel(): Vector<37, Uint<8>> {
+  return [...pad(36, "Operation: Cancel a pending recovery"), 10];
+}
+
+// Cancel a pending recovery (device role): 371 bytes.
+export pure circuit sol_message_recover_cancel(
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, show: SolShow, frame: SolFrame
+): Bytes<371> {
+  return sol_device_message<37, 64, 371>(self_addr, key as Vector<32, Uint<8>>, nonce_value, sol_title_recover_cancel(), sol_body_recover_cancel(), show, frame);
+}
+
+// Withdraw unshielded tokens under a grant (grantee role): the body, 292 bytes; 128 body nibbles.
+circuit sol_body_withdraw_unshielded_with_grant(color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, hex: Vector<128, Uint<0..16>>): Vector<292, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(23, "To unshielded address: "),
+          ...h_recipient,
+          10];
+}
+circuit sol_title_withdraw_unshielded_with_grant(): Vector<52, Uint<8>> {
+  return [...pad(51, "Operation: Withdraw unshielded tokens under a grant"), 10];
+}
+
+// Withdraw unshielded tokens under a grant (grantee role): 726 bytes.
+export pure circuit sol_message_withdraw_unshielded_with_grant(
+  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, show: SolShow, g: SolGrantShow, frame: SolFrame, hex: Vector<128, Uint<0..16>>
+): Bytes<726> {
+  return sol_grantee_message<52, 292, 726>(self_addr, key as Vector<32, Uint<8>>, label, slot, issued_at, nonce_value, sol_title_withdraw_unshielded_with_grant(), sol_body_withdraw_unshielded_with_grant(color, amount, recipient, a, hex), show, g, frame);
+}
+
+// Withdraw shielded tokens under a grant (grantee role): the body, 1134 bytes; 640 body nibbles.
+circuit sol_body_withdraw_shielded_with_grant(recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<640, Uint<0..16>>): Vector<1134, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_change = sol_hex192(change_entry, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511]]);
+  const h_enc_pk = sol_hex32(enc_pk, [hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(17, "To shielded key: "),
+          ...h_recipient,
+          10,
+          ...pad(21, "Change entry 1 of 6: "),
+          ...[h_change[0], h_change[1], h_change[2], h_change[3], h_change[4], h_change[5], h_change[6], h_change[7], h_change[8], h_change[9], h_change[10], h_change[11], h_change[12], h_change[13], h_change[14], h_change[15], h_change[16], h_change[17], h_change[18], h_change[19], h_change[20], h_change[21], h_change[22], h_change[23], h_change[24], h_change[25], h_change[26], h_change[27], h_change[28], h_change[29], h_change[30], h_change[31], h_change[32], h_change[33], h_change[34], h_change[35], h_change[36], h_change[37], h_change[38], h_change[39], h_change[40], h_change[41], h_change[42], h_change[43], h_change[44], h_change[45], h_change[46], h_change[47], h_change[48], h_change[49], h_change[50], h_change[51], h_change[52], h_change[53], h_change[54], h_change[55], h_change[56], h_change[57], h_change[58], h_change[59], h_change[60], h_change[61], h_change[62], h_change[63]],
+          10,
+          ...pad(21, "Change entry 2 of 6: "),
+          ...[h_change[64], h_change[65], h_change[66], h_change[67], h_change[68], h_change[69], h_change[70], h_change[71], h_change[72], h_change[73], h_change[74], h_change[75], h_change[76], h_change[77], h_change[78], h_change[79], h_change[80], h_change[81], h_change[82], h_change[83], h_change[84], h_change[85], h_change[86], h_change[87], h_change[88], h_change[89], h_change[90], h_change[91], h_change[92], h_change[93], h_change[94], h_change[95], h_change[96], h_change[97], h_change[98], h_change[99], h_change[100], h_change[101], h_change[102], h_change[103], h_change[104], h_change[105], h_change[106], h_change[107], h_change[108], h_change[109], h_change[110], h_change[111], h_change[112], h_change[113], h_change[114], h_change[115], h_change[116], h_change[117], h_change[118], h_change[119], h_change[120], h_change[121], h_change[122], h_change[123], h_change[124], h_change[125], h_change[126], h_change[127]],
+          10,
+          ...pad(21, "Change entry 3 of 6: "),
+          ...[h_change[128], h_change[129], h_change[130], h_change[131], h_change[132], h_change[133], h_change[134], h_change[135], h_change[136], h_change[137], h_change[138], h_change[139], h_change[140], h_change[141], h_change[142], h_change[143], h_change[144], h_change[145], h_change[146], h_change[147], h_change[148], h_change[149], h_change[150], h_change[151], h_change[152], h_change[153], h_change[154], h_change[155], h_change[156], h_change[157], h_change[158], h_change[159], h_change[160], h_change[161], h_change[162], h_change[163], h_change[164], h_change[165], h_change[166], h_change[167], h_change[168], h_change[169], h_change[170], h_change[171], h_change[172], h_change[173], h_change[174], h_change[175], h_change[176], h_change[177], h_change[178], h_change[179], h_change[180], h_change[181], h_change[182], h_change[183], h_change[184], h_change[185], h_change[186], h_change[187], h_change[188], h_change[189], h_change[190], h_change[191]],
+          10,
+          ...pad(21, "Change entry 4 of 6: "),
+          ...[h_change[192], h_change[193], h_change[194], h_change[195], h_change[196], h_change[197], h_change[198], h_change[199], h_change[200], h_change[201], h_change[202], h_change[203], h_change[204], h_change[205], h_change[206], h_change[207], h_change[208], h_change[209], h_change[210], h_change[211], h_change[212], h_change[213], h_change[214], h_change[215], h_change[216], h_change[217], h_change[218], h_change[219], h_change[220], h_change[221], h_change[222], h_change[223], h_change[224], h_change[225], h_change[226], h_change[227], h_change[228], h_change[229], h_change[230], h_change[231], h_change[232], h_change[233], h_change[234], h_change[235], h_change[236], h_change[237], h_change[238], h_change[239], h_change[240], h_change[241], h_change[242], h_change[243], h_change[244], h_change[245], h_change[246], h_change[247], h_change[248], h_change[249], h_change[250], h_change[251], h_change[252], h_change[253], h_change[254], h_change[255]],
+          10,
+          ...pad(21, "Change entry 5 of 6: "),
+          ...[h_change[256], h_change[257], h_change[258], h_change[259], h_change[260], h_change[261], h_change[262], h_change[263], h_change[264], h_change[265], h_change[266], h_change[267], h_change[268], h_change[269], h_change[270], h_change[271], h_change[272], h_change[273], h_change[274], h_change[275], h_change[276], h_change[277], h_change[278], h_change[279], h_change[280], h_change[281], h_change[282], h_change[283], h_change[284], h_change[285], h_change[286], h_change[287], h_change[288], h_change[289], h_change[290], h_change[291], h_change[292], h_change[293], h_change[294], h_change[295], h_change[296], h_change[297], h_change[298], h_change[299], h_change[300], h_change[301], h_change[302], h_change[303], h_change[304], h_change[305], h_change[306], h_change[307], h_change[308], h_change[309], h_change[310], h_change[311], h_change[312], h_change[313], h_change[314], h_change[315], h_change[316], h_change[317], h_change[318], h_change[319]],
+          10,
+          ...pad(21, "Change entry 6 of 6: "),
+          ...[h_change[320], h_change[321], h_change[322], h_change[323], h_change[324], h_change[325], h_change[326], h_change[327], h_change[328], h_change[329], h_change[330], h_change[331], h_change[332], h_change[333], h_change[334], h_change[335], h_change[336], h_change[337], h_change[338], h_change[339], h_change[340], h_change[341], h_change[342], h_change[343], h_change[344], h_change[345], h_change[346], h_change[347], h_change[348], h_change[349], h_change[350], h_change[351], h_change[352], h_change[353], h_change[354], h_change[355], h_change[356], h_change[357], h_change[358], h_change[359], h_change[360], h_change[361], h_change[362], h_change[363], h_change[364], h_change[365], h_change[366], h_change[367], h_change[368], h_change[369], h_change[370], h_change[371], h_change[372], h_change[373], h_change[374], h_change[375], h_change[376], h_change[377], h_change[378], h_change[379], h_change[380], h_change[381], h_change[382], h_change[383]],
+          10,
+          ...pad(18, "Change entry key: "),
+          ...h_enc_pk,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded_with_grant(): Vector<50, Uint<8>> {
+  return [...pad(49, "Operation: Withdraw shielded tokens under a grant"), 10];
+}
+
+// Withdraw shielded tokens under a grant (grantee role): 1566 bytes.
+export pure circuit sol_message_withdraw_shielded_with_grant(
+  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, g: SolGrantShow, frame: SolFrame, hex: Vector<640, Uint<0..16>>
+): Bytes<1566> {
+  return sol_grantee_message<50, 1134, 1566>(self_addr, key as Vector<32, Uint<8>>, label, slot, issued_at, nonce_value, sol_title_withdraw_shielded_with_grant(), sol_body_withdraw_shielded_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame);
+}
+
+// Withdraw shielded tokens to a contract under a grant (grantee role): the body, 1130 bytes; 640 body nibbles.
+circuit sol_body_withdraw_shielded_to_contract_with_grant(recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<640, Uint<0..16>>): Vector<1130, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_change = sol_hex192(change_entry, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511]]);
+  const h_enc_pk = sol_hex32(enc_pk, [hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(13, "To contract: "),
+          ...h_recipient,
+          10,
+          ...pad(21, "Change entry 1 of 6: "),
+          ...[h_change[0], h_change[1], h_change[2], h_change[3], h_change[4], h_change[5], h_change[6], h_change[7], h_change[8], h_change[9], h_change[10], h_change[11], h_change[12], h_change[13], h_change[14], h_change[15], h_change[16], h_change[17], h_change[18], h_change[19], h_change[20], h_change[21], h_change[22], h_change[23], h_change[24], h_change[25], h_change[26], h_change[27], h_change[28], h_change[29], h_change[30], h_change[31], h_change[32], h_change[33], h_change[34], h_change[35], h_change[36], h_change[37], h_change[38], h_change[39], h_change[40], h_change[41], h_change[42], h_change[43], h_change[44], h_change[45], h_change[46], h_change[47], h_change[48], h_change[49], h_change[50], h_change[51], h_change[52], h_change[53], h_change[54], h_change[55], h_change[56], h_change[57], h_change[58], h_change[59], h_change[60], h_change[61], h_change[62], h_change[63]],
+          10,
+          ...pad(21, "Change entry 2 of 6: "),
+          ...[h_change[64], h_change[65], h_change[66], h_change[67], h_change[68], h_change[69], h_change[70], h_change[71], h_change[72], h_change[73], h_change[74], h_change[75], h_change[76], h_change[77], h_change[78], h_change[79], h_change[80], h_change[81], h_change[82], h_change[83], h_change[84], h_change[85], h_change[86], h_change[87], h_change[88], h_change[89], h_change[90], h_change[91], h_change[92], h_change[93], h_change[94], h_change[95], h_change[96], h_change[97], h_change[98], h_change[99], h_change[100], h_change[101], h_change[102], h_change[103], h_change[104], h_change[105], h_change[106], h_change[107], h_change[108], h_change[109], h_change[110], h_change[111], h_change[112], h_change[113], h_change[114], h_change[115], h_change[116], h_change[117], h_change[118], h_change[119], h_change[120], h_change[121], h_change[122], h_change[123], h_change[124], h_change[125], h_change[126], h_change[127]],
+          10,
+          ...pad(21, "Change entry 3 of 6: "),
+          ...[h_change[128], h_change[129], h_change[130], h_change[131], h_change[132], h_change[133], h_change[134], h_change[135], h_change[136], h_change[137], h_change[138], h_change[139], h_change[140], h_change[141], h_change[142], h_change[143], h_change[144], h_change[145], h_change[146], h_change[147], h_change[148], h_change[149], h_change[150], h_change[151], h_change[152], h_change[153], h_change[154], h_change[155], h_change[156], h_change[157], h_change[158], h_change[159], h_change[160], h_change[161], h_change[162], h_change[163], h_change[164], h_change[165], h_change[166], h_change[167], h_change[168], h_change[169], h_change[170], h_change[171], h_change[172], h_change[173], h_change[174], h_change[175], h_change[176], h_change[177], h_change[178], h_change[179], h_change[180], h_change[181], h_change[182], h_change[183], h_change[184], h_change[185], h_change[186], h_change[187], h_change[188], h_change[189], h_change[190], h_change[191]],
+          10,
+          ...pad(21, "Change entry 4 of 6: "),
+          ...[h_change[192], h_change[193], h_change[194], h_change[195], h_change[196], h_change[197], h_change[198], h_change[199], h_change[200], h_change[201], h_change[202], h_change[203], h_change[204], h_change[205], h_change[206], h_change[207], h_change[208], h_change[209], h_change[210], h_change[211], h_change[212], h_change[213], h_change[214], h_change[215], h_change[216], h_change[217], h_change[218], h_change[219], h_change[220], h_change[221], h_change[222], h_change[223], h_change[224], h_change[225], h_change[226], h_change[227], h_change[228], h_change[229], h_change[230], h_change[231], h_change[232], h_change[233], h_change[234], h_change[235], h_change[236], h_change[237], h_change[238], h_change[239], h_change[240], h_change[241], h_change[242], h_change[243], h_change[244], h_change[245], h_change[246], h_change[247], h_change[248], h_change[249], h_change[250], h_change[251], h_change[252], h_change[253], h_change[254], h_change[255]],
+          10,
+          ...pad(21, "Change entry 5 of 6: "),
+          ...[h_change[256], h_change[257], h_change[258], h_change[259], h_change[260], h_change[261], h_change[262], h_change[263], h_change[264], h_change[265], h_change[266], h_change[267], h_change[268], h_change[269], h_change[270], h_change[271], h_change[272], h_change[273], h_change[274], h_change[275], h_change[276], h_change[277], h_change[278], h_change[279], h_change[280], h_change[281], h_change[282], h_change[283], h_change[284], h_change[285], h_change[286], h_change[287], h_change[288], h_change[289], h_change[290], h_change[291], h_change[292], h_change[293], h_change[294], h_change[295], h_change[296], h_change[297], h_change[298], h_change[299], h_change[300], h_change[301], h_change[302], h_change[303], h_change[304], h_change[305], h_change[306], h_change[307], h_change[308], h_change[309], h_change[310], h_change[311], h_change[312], h_change[313], h_change[314], h_change[315], h_change[316], h_change[317], h_change[318], h_change[319]],
+          10,
+          ...pad(21, "Change entry 6 of 6: "),
+          ...[h_change[320], h_change[321], h_change[322], h_change[323], h_change[324], h_change[325], h_change[326], h_change[327], h_change[328], h_change[329], h_change[330], h_change[331], h_change[332], h_change[333], h_change[334], h_change[335], h_change[336], h_change[337], h_change[338], h_change[339], h_change[340], h_change[341], h_change[342], h_change[343], h_change[344], h_change[345], h_change[346], h_change[347], h_change[348], h_change[349], h_change[350], h_change[351], h_change[352], h_change[353], h_change[354], h_change[355], h_change[356], h_change[357], h_change[358], h_change[359], h_change[360], h_change[361], h_change[362], h_change[363], h_change[364], h_change[365], h_change[366], h_change[367], h_change[368], h_change[369], h_change[370], h_change[371], h_change[372], h_change[373], h_change[374], h_change[375], h_change[376], h_change[377], h_change[378], h_change[379], h_change[380], h_change[381], h_change[382], h_change[383]],
+          10,
+          ...pad(18, "Change entry key: "),
+          ...h_enc_pk,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded_to_contract_with_grant(): Vector<64, Uint<8>> {
+  return [...pad(63, "Operation: Withdraw shielded tokens to a contract under a grant"), 10];
+}
+
+// Withdraw shielded tokens to a contract under a grant (grantee role): 1576 bytes.
+export pure circuit sol_message_withdraw_shielded_to_contract_with_grant(
+  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, g: SolGrantShow, frame: SolFrame, hex: Vector<640, Uint<0..16>>
+): Bytes<1576> {
+  return sol_grantee_message<64, 1130, 1576>(self_addr, key as Vector<32, Uint<8>>, label, slot, issued_at, nonce_value, sol_title_withdraw_shielded_to_contract_with_grant(), sol_body_withdraw_shielded_to_contract_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame);
+}

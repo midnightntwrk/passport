@@ -1,0 +1,8 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+// Control for the format flag's privacy: a public value selected by the flag,
+// not disclosed. The compiler must refuse it.
+export ledger accepted: Bytes<32>;
+export circuit leak(offchain: Boolean, key: Bytes<32>): [] {
+  accepted = offchain ? disclose(key) : pad(32, "");
+}

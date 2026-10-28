@@ -1,0 +1,1513 @@
+{
+ "suite": "sol-ed25519-prover (npm run test:sol-ed25519)",
+ "what": "every assert site of the arm and of the base modules, by its enclosing circuit; a site counts when its circuit is reachable by the call graph from one of the arm's exported impure circuits; each reached message with the cases of the run of record that refuse it at the constraint level as their own expected refusal (under a valid signature over what the circuit renders, after the honest call proved through the same patched copy); otherwise why not",
+ "roots": [
+  "activate_initial_device_with_sol_ed25519",
+  "add_device_with_sol_ed25519",
+  "append_inbox_with_sol_ed25519",
+  "compute_public_key_ed25519",
+  "derive_blind_with_sol_ed25519",
+  "derive_boot_commitment_with_sol_ed25519",
+  "derive_device_entry_with_sol_ed25519",
+  "derive_grant_id_with_sol_ed25519",
+  "encode_public_key_ed25519",
+  "issue_grant_with_sol_ed25519",
+  "publish_recovery_session_with_sol_ed25519",
+  "recover_cancel_with_sol_ed25519",
+  "remove_device_with_sol_ed25519",
+  "revoke_all_grants_with_sol_ed25519",
+  "revoke_grant_with_sol_ed25519",
+  "rotate_enc_key_with_sol_ed25519",
+  "sol_message_add_device",
+  "sol_message_append_inbox",
+  "sol_message_issue_grant",
+  "sol_message_publish_recovery_session",
+  "sol_message_recover_cancel",
+  "sol_message_remove_device",
+  "sol_message_revoke_all_grants",
+  "sol_message_revoke_grant",
+  "sol_message_rotate_enc_key",
+  "sol_message_withdraw_shielded",
+  "sol_message_withdraw_shielded_to_contract",
+  "sol_message_withdraw_shielded_to_contract_with_grant",
+  "sol_message_withdraw_shielded_with_grant",
+  "sol_message_withdraw_unshielded",
+  "sol_message_withdraw_unshielded_with_grant",
+  "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+  "withdraw_shielded_to_contract_with_sol_ed25519",
+  "withdraw_shielded_with_grant_sol_ed25519",
+  "withdraw_shielded_with_sol_ed25519",
+  "withdraw_unshielded_with_grant_sol_ed25519",
+  "withdraw_unshielded_with_sol_ed25519"
+ ],
+ "provedRoots": [
+  "activate_initial_device_with_sol_ed25519",
+  "add_device_with_sol_ed25519",
+  "append_inbox_with_sol_ed25519",
+  "issue_grant_with_sol_ed25519",
+  "publish_recovery_session_with_sol_ed25519",
+  "recover_cancel_with_sol_ed25519",
+  "remove_device_with_sol_ed25519",
+  "revoke_all_grants_with_sol_ed25519",
+  "revoke_grant_with_sol_ed25519",
+  "rotate_enc_key_with_sol_ed25519",
+  "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+  "withdraw_shielded_to_contract_with_sol_ed25519",
+  "withdraw_shielded_with_grant_sol_ed25519",
+  "withdraw_shielded_with_sol_ed25519",
+  "withdraw_unshielded_with_grant_sol_ed25519",
+  "withdraw_unshielded_with_sol_ed25519"
+ ],
+ "arm": {
+  "messages": 39,
+  "sites": 51,
+  "refusedAtConstraintLevel": 38,
+  "asserts": [
+   {
+    "message": "already activated",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 138,
+      "helper": "activate_initial_device_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: activation: the activated account activated again with its own honest arguments"
+    ]
+   },
+   {
+    "message": "amount above the spent coin's value",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1309,
+      "helper": "sol_coin_lines",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "Refused by the generated JavaScript; with that check bypassed, the change (value - amount) is negative and the runtime's type encoder refuses it before any proof request. In the circuit the assert and the subtraction's range check refuse it."
+   },
+   {
+    "message": "boot commitment mismatch",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 139,
+      "helper": "activate_initial_device_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "activation: wrong blind",
+     "activation: wrong salt",
+     "activation: another key (the committed blind)"
+    ]
+   },
+   {
+    "message": "descriptor: a passkey grantee's origin hash is derived",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1140,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: issue_grant: a passkey grantee carrying an origin hash (a passkey grantee's is derived from its origin), not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "descriptor: a passkey's RP hash is zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1109,
+      "helper": "sol_device_entry",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "rules: add_device of a passkey target whose RP hash is zero, under a valid signature over the contract's bytes",
+     "rules: remove_device by descriptor of a passkey target whose RP hash is zero (its entry live), under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "descriptor: a readable grantee's origin hash is derived",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1136,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: issue_grant: a sol_ed25519 grantee carrying an origin hash (a readable grantee's is derived from its label), not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "descriptor: not a registered device tag",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1057,
+      "helper": "sol_device_kind",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)"
+    ]
+   },
+   {
+    "message": "descriptor: not a registered grant-id tag",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1062,
+      "helper": "sol_grantee_kind",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "module: issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both"
+    ]
+   },
+   {
+    "message": "descriptor: the Ed25519 key is not the point's encoding",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1118,
+      "helper": "sol_device_entry",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1152,
+      "helper": "sol_grantee_id",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: a sol target whose descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)",
+     "grants: issue: the grantee's descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)"
+    ]
+   },
+   {
+    "message": "descriptor: unused address must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1082,
+      "helper": "sol_require_canonical_device",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1129,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: add_device, a jubjub target carrying a non-zero address (not shown; refused by the canonical-descriptor check)"
+    ]
+   },
+   {
+    "message": "descriptor: unused envelope must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1086,
+      "helper": "sol_require_canonical_device",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1131,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: add_device, a jubjub target carrying a non-zero envelope (not shown; refused by the canonical-descriptor check)"
+    ]
+   },
+   {
+    "message": "descriptor: unused key bytes must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1093,
+      "helper": "sol_require_unused_key",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "hints: add_device: a jubjub target passing non-zero key bytes (its point the identity; their base58 inputs supplied, a jubjub block shows no Solana key)"
+    ]
+   },
+   {
+    "message": "descriptor: unused label must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1133,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: issue_grant: a k256 grantee carrying a label, not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "descriptor: unused origin must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1085,
+      "helper": "sol_require_canonical_device",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1134,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: add_device: a jubjub target with a non-zero origin (its characters equal its bytes), not shown, under a valid signature over the contract's bytes",
+     "arm-asserts: issue_grant: a jubjub grantee with a non-zero origin (its characters equal its bytes), not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "descriptor: unused point must be the identity",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1092,
+      "helper": "sol_require_unused_key",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: a jubjub target carrying a non-identity point (not shown; refused by the canonical-descriptor check)"
+    ]
+   },
+   {
+    "message": "descriptor: unused rp hash must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1084,
+      "helper": "sol_require_canonical_device",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: add_device: a jubjub target with a non-zero RP hash, not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "descriptor: unused second field must be zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1083,
+      "helper": "sol_require_canonical_device",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1130,
+      "helper": "sol_grantee_origin_hash",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: add_device: an evm_k256 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
+     "arm-asserts: issue_grant: an evm_k256 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "display: a literal removal's display inputs are not those of an empty target",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1435,
+      "helper": "sol_remove_lines",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: remove_device by the literal form with display inputs other than the empty target's (use counter digits 7 and epoch digits 9; the message is unchanged, the wallet's signature over it stands)",
+     "arm-asserts: remove_device by the literal form with display inputs other than the empty target's (an origin of 21 non-zero bytes; the message is unchanged, the wallet's signature over it stands)",
+     "arm-asserts: remove_device by the literal form with display inputs other than the empty target's (base58 digits 57 with arbitrary read-back hints; the message is unchanged, the wallet's signature over it stands)"
+    ]
+   },
+   {
+    "message": "display: characters do not match the value",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 967,
+      "helper": "sol_chars21",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 971,
+      "helper": "sol_chars32",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: issue_grant: a grantee label shown as other characters than its bytes, signed over the text shown: refused by the character check",
+     "arm-asserts: add_device: a passkey target's origin shown as another origin's characters, signed over the text shown: refused by the character check"
+    ]
+   },
+   {
+    "message": "display: hex digits do not match the value",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1184,
+      "helper": "sol_hex20",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1189,
+      "helper": "sol_hex32",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1194,
+      "helper": "sol_hex64",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1199,
+      "helper": "sol_hex192",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "seam: display: the hex nibbles of the signed key while another key executes",
+     "seam: frame: the frame shows a foreign account (signed over it)",
+     "frame: append_inbox: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame: withdraw_unshielded: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame: withdraw_shielded: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame: withdraw_shielded_to_contract: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "custody: append_inbox display: E2 executed with the signed entry's nibbles",
+     "witness: withdraw_shielded: witness coin of nonce N' with the signed nonce's nibbles (display check)",
+     "witness: withdraw_shielded_to_contract: witness coin of nonce N' with the signed nonce's nibbles (display check)",
+     "grants: withdraw_unshielded_with_grant: the grantee signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: add_device: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: remove_device (descriptor form): the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: remove_device (literal form): the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: issue_grant: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: revoke_grant: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: revoke_all_grants: the wallet signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: withdraw_shielded_with_grant: the grantee signed a message showing a foreign account (seam-owned frame)",
+     "frame-lifecycle: withdraw_shielded_to_contract_with_grant: the grantee signed a message showing a foreign account (seam-owned frame)",
+     "recovery: publish: the seam owns the frame — the wallet signed the session showing a foreign account (its frame nibbles with it)",
+     "recovery: publish display: the hex nibbles and the signed message show another backup vector value 1; the call executes the session's",
+     "recovery: cancel: the seam owns the frame — the wallet signed a cancel showing a foreign account (its frame nibbles with it)",
+     "field-rendering: backup vector value 1 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
+     "field-rendering: backup vector value 2 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
+     "field-rendering: backup vector value 3 (zero) shown as 0 + r (the executed value is f; the wallet signed the non-canonical rendering)",
+     "field-rendering: the recovery key's x shown as x + r (the executed value is f; the wallet signed the non-canonical rendering)",
+     "field-rendering: the recovery key's y shown as y + r (the executed value is f; the wallet signed the non-canonical rendering)"
+    ]
+   },
+   {
+    "message": "display: not a zero-padded label",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 945,
+      "helper": "sol_label_chars",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: rotate_enc_key: a site label with two spaces between its words, signed over that text: refused by the label grammar",
+     "arm-asserts: issue_grant: a sol_ed25519 grantee whose label has two spaces between its words, signed over that text: refused by the label grammar"
+    ]
+   },
+   {
+    "message": "display: passkey origin not visible ASCII",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 1335,
+      "helper": "sol_origin_chars",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: add_device: a passkey target whose origin ends in a control byte, signed over the text shown: refused by the origin visibility check"
+    ]
+   },
+   {
+    "message": "grant epoch stale",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 606,
+      "helper": "require_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grantee-scope: withdraw_unshielded_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
+     "grantee-scope: withdraw_shielded_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval"
+    ]
+   },
+   {
+    "message": "grant expired",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 608,
+      "helper": "require_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grantee-scope: withdraw_unshielded_with_grant: an expired grant (expires_at 1, slot 3), a valid approval",
+     "grantee-scope: withdraw_shielded_with_grant: an expired grant (expires_at 1, slot 3), a valid approval",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: an expired grant (expires_at 1, slot 3), a valid approval"
+    ]
+   },
+   {
+    "message": "grant generation stale",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 607,
+      "helper": "require_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grantee-scope: withdraw_unshielded_with_grant: a grant of a stale generation — UNREACHABLE today (revoke_all_grants clears the map, account.compact do_revoke_all_grants); the state built by copying the generation cell [1,3] — a valid approval",
+     "grantee-scope: withdraw_shielded_with_grant: a grant of a stale generation — UNREACHABLE today (revoke_all_grants clears the map, account.compact do_revoke_all_grants); the state built by copying the generation cell [1,3] — a valid approval",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: a grant of a stale generation — UNREACHABLE today (revoke_all_grants clears the map, account.compact do_revoke_all_grants); the state built by copying the generation cell [1,3] — a valid approval"
+    ]
+   },
+   {
+    "message": "grant revoked",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 605,
+      "helper": "require_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grantee-scope: withdraw_unshielded_with_grant: a revoked grant (its tombstone), a valid approval over its record",
+     "grantee-scope: withdraw_shielded_with_grant: a revoked grant (its tombstone), a valid approval over its record",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: a revoked grant (its tombstone), a valid approval over its record"
+    ]
+   },
+   {
+    "message": "held coin colour does not match the withdrawn colour",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 291,
+      "helper": "withdraw_shielded_with_sol_ed25519",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 314,
+      "helper": "withdraw_shielded_to_contract_with_sol_ed25519",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 688,
+      "helper": "withdraw_shielded_with_grant_sol_ed25519",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 721,
+      "helper": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "witness: withdraw_shielded: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
+     "witness: withdraw_shielded_to_contract: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
+     "grantee-scope: withdraw_shielded_with_grant: the colour assert on its own: a grant scoped to B (slot 4), a valid approval withdrawing A, the witness coin of colour B",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: the colour assert on its own: a grant scoped to B (slot 4), a valid approval withdrawing A, the witness coin of colour B"
+    ]
+   },
+   {
+    "message": "invalid grant signature",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 616,
+      "helper": "require_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grants: grantee binding: the amount changed at execution (consistent display inputs)",
+     "grants: grantee replay: the landed approval with the current opening and display inputs for the current record nonce",
+     "grants: roles: the same key's device-role approval of the same withdrawal presented to the grant seam",
+     "grantee-scope: withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
+     "grantee-scope: withdraw_shielded_with_grant: substitution, the Merkle index: signed 1, the witness coin at index 2",
+     "grantee-scope: withdraw_shielded_with_grant: substitution, the change entry: signed C1, executed C2",
+     "grantee-scope: withdraw_shielded_with_grant: substitution, the encryption key: signed a stale key, executed with the live key",
+     "grantee-scope: withdraw_shielded_with_grant: substitution, the coin value: signed 1000, the witness coin of value 999",
+     "grantee-scope: withdraw_shielded_with_grant: substitution, the amount: signed 300, executed 301",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the Merkle index: signed 1, the witness coin at index 2",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the change entry: signed C1, executed C2",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the encryption key: signed a stale key, executed with the live key",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the coin value: signed 1000, the witness coin of value 999",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the amount: signed 300, executed 301",
+     "readability: forged amount: the grantee signed \"250000\" for an executed 2500000",
+     "formats: withdraw_unshielded_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_unshielded_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract_grant: the off-chain signature presented as raw (same key, validly enrolled device)"
+    ]
+   },
+   {
+    "message": "invalid signature",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 201,
+      "helper": "require_authorised_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "seam: binding: another new key at execution (consistent display inputs)",
+     "seam: binding: another site label at execution (consistent display inputs)",
+     "seam: binding: device B's signature with A's key",
+     "seam: operation: the signature of another operation (append_inbox)",
+     "seam: replay: the landed signature at the current counter",
+     "seam: seam: a flipped S bit",
+     "replay: replay/arm: the k256 arm's rotate_enc_key challenge (same account, nonce, key) signed by the Solana key",
+     "replay: replay/arm: the p256 arm's rotate_enc_key challenge (same account, nonce, key) signed by the Solana key",
+     "replay: replay/purpose: the blind request (non-authorising) signed by the same key",
+     "replay: replay/operation: an append_inbox approval (same frame) signed by the same key",
+     "custody: append_inbox binding: signed E1, executed E2 (consistent display inputs)",
+     "custody: append_inbox binding: the last ciphertext byte flipped (consistent display inputs)",
+     "custody: append_inbox operation: a rotate_enc_key signature over the same nonce",
+     "custody: withdraw_unshielded binding: amount signed 400, executed 401",
+     "custody: withdraw_unshielded binding: colour signed U, executed X",
+     "custody: withdraw_unshielded binding: another recipient",
+     "custody: withdraw_unshielded binding: the site's decimal point moved (4.00 shown as 0.400)",
+     "custody: withdraw_unshielded operation: an append_inbox signature over the same nonce",
+     "witness: withdraw_shielded: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
+     "witness: withdraw_shielded: valid signature for coin nonce N, witness coin of nonce N' (display inputs consistent with the substitute)",
+     "witness: withdraw_shielded: valid signature for Merkle index 1, witness coin H at index 2 (display inputs consistent with the substitute)",
+     "witness: withdraw_shielded_to_contract: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
+     "witness: withdraw_shielded_to_contract: valid signature for coin nonce N, witness coin of nonce N' (display inputs consistent with the substitute)",
+     "witness: withdraw_shielded_to_contract: valid signature for Merkle index 1, witness coin H at index 2 (display inputs consistent with the substitute)",
+     "devices: binding: add_device, the jubjub x coordinate changed at execution",
+     "devices: binding: add_device, the k256 envelope (0 -> 1) changed at execution",
+     "devices: binding: add_device, the passkey origin changed at execution",
+     "devices: binding: add_device, the passkey RP hash changed at execution",
+     "devices: binding: add_device, the evm address changed at execution",
+     "devices: binding: add_device, the sol key (another valid key) changed at execution",
+     "devices: binding: add_device, the device privacy salt (sol) changed at execution",
+     "devices: binding: add_device, the scheme: a jubjub key signed, the same bytes executed as an evm target changed at execution",
+     "devices: binding: remove_device, the counter changed at execution (0 -> 1; J's counter-1 entry live)",
+     "devices: binding: remove_device, the epoch changed at execution (J's entry at epoch + 1 live)",
+     "devices: binding: remove_device, the literal entry changed at execution",
+     "devices: binding: remove_device, the form swapped (a literal approval of J's entry executed as J's descriptor)",
+     "grants: issue binding: the cap changed at execution",
+     "grants: issue binding: a caller pin added at execution",
+     "grants: issue binding: the grantee label changed",
+     "grants: issue binding: the grantee slot changed",
+     "grants: issue binding: the k256 grantee's labelled origin hash changed",
+     "grants: revoke binding: another slot executed (a live grant at slot 1; the approval names slot 0)",
+     "grants: revoke_all operation: a recover_cancel signature presented as revoke_all_grants",
+     "grants: roles: the same key's grantee-role approval presented to the device seam",
+     "recovery: publish binding: the recovery key — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: the session identifier — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: backup vector value 1 — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: backup vector value 2 — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: backup vector value 3 (an unused slot) and the length — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: the length (3, slot 3 zero) — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: the wrap — the wallet signed the session, the call executes another value",
+     "recovery: publish binding: the nonce — the approval shows auth_nonce + 1",
+     "recovery: publish operation: a recover_cancel approval presented as the session approval",
+     "recovery: cancel operation: a revoke_all_grants approval over the same frame presented as the cancel",
+     "recovery: cancel binding: the approval shows auth_nonce + 1",
+     "recovery: cancel binding: the approval shows another account (this account's frame nibbles)",
+     "readability: forged amount: the wallet signed \"100000\" for an executed 1000000",
+     "readability: forged change: the wallet signed the change as 70",
+     "readability: forged word: the wallet signed \"not applicable\" for a passkey target's RP hash",
+     "readability: forged cap: the wallet signed \"no limit\" for the total cap",
+     "readability: forged word: the wallet signed \"0\" instead of \"never\" for an expiry of 0",
+     "readability: forged word: the wallet signed 64 zeros for a non-passkey grantee's zero RP hash",
+     "readability: forged date: the wallet signed a UTC date for an expiry of 0",
+     "readability: forged word: the wallet signed \"0\" for a zero window",
+     "readability: forged key: the wallet signed the signing key in hex instead of base58",
+     "readability: forged word: the wallet signed \"never\" for an expiry of 1000",
+     "readability: forged word: the wallet signed \"not applicable\" for a passkey grantee's RP hash",
+     "formats: rotate_enc_key: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: rotate_enc_key: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: append_inbox: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: append_inbox: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: publish_recovery_session: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: publish_recovery_session: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_unshielded: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_unshielded: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: add_device: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: add_device: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: remove_device: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: remove_device: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: issue_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: issue_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: revoke_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: revoke_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: revoke_all_grants: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: revoke_all_grants: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: recover_cancel: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: recover_cancel: the off-chain signature presented as raw (same key, validly enrolled device)"
+    ]
+   },
+   {
+    "message": "remove_device: a descriptor removal carries no literal entry",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 386,
+      "helper": "remove_device_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: remove_device descriptor form carrying a non-zero literal entry (not shown; never executed)"
+    ]
+   },
+   {
+    "message": "remove_device: a literal removal carries no descriptor",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 380,
+      "helper": "remove_device_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "devices: guards: remove_device literal form carrying a non-zero descriptor (not shown; never executed)"
+    ]
+   },
+   {
+    "message": "sol_ed25519: a passkey grantee's RP hash is zero",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 454,
+      "helper": "issue_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "rules: a spending grant to a passkey grantee whose RP hash is zero, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "sol_ed25519: a read key without read",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 445,
+      "helper": "issue_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grants: issue rule: a read key without read (a valid signature over the contract's bytes; the renderer refuses this message)"
+    ]
+   },
+   {
+    "message": "sol_ed25519: a read-only grant carries no RP hash",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 455,
+      "helper": "issue_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "rules: a read-only grant to a passkey grantee carrying its RP hash (which nothing would check), under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "sol_ed25519: a recipient without a recipient kind",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 458,
+      "helper": "issue_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "rules: issue_grant to any recipient (kind 0) carrying a recipient, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "sol_ed25519: an RP hash belongs to a passkey grantee",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 448,
+      "helper": "issue_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grants: issue rule: an RP hash on a non-passkey grantee (a valid signature over the contract's bytes; the renderer refuses this message)"
+    ]
+   },
+   {
+    "message": "sol_ed25519: read without a read key",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 446,
+      "helper": "issue_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "arm-asserts: issue_grant: the read flag set with a zero read key, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "message": "unknown device entry",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 199,
+      "helper": "require_authorised_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "seam: seam: another use counter",
+     "seam: seam: another blind",
+     "seam: replay: the landed authorisation (consumed entry; its old nonce fails the signature too)",
+     "recovery: seam: publish, an unenrolled sol key signs the session",
+     "recovery: seam: publish, the device key with another blind",
+     "recovery: seam: publish, a stale use counter (counter 0, already rolled)",
+     "recovery: replay: publish, the landed session approval replayed with display inputs for the current nonce (entry consumed, stored values)",
+     "recovery: seam: cancel, an unenrolled sol key",
+     "recovery: replay: cancel, the landed cancel replayed with display inputs for the current nonce (entry consumed, nothing pending)",
+     "recovery: after the recovery: the planted entry's device W (counter 0 at the new epoch) publishes",
+     "recovery: after the recovery: the planted entry's device W (counter 0 at the new epoch) cancels a pending recovery",
+     "recovery: after the recovery: the original device S (its last counter 3) publishes",
+     "recovery: after the recovery: the original device S (its last counter 3) cancels a pending recovery",
+     "recovery: after the recovery: the second sol device S2 (its last counter 1) publishes",
+     "recovery: after the recovery: the second sol device S2 (its last counter 1) cancels a pending recovery"
+    ]
+   },
+   {
+    "message": "unknown grant",
+    "sites": [
+     {
+      "file": "account-sol-ed25519.compact",
+      "line": 603,
+      "helper": "require_grant_with_sol_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "grantee-scope: withdraw_unshielded_with_grant: an unknown grant: another blind (a grant id with no record), the copy's JavaScript deriving the real grant's id from it (forged grant-id mutant)",
+     "grantee-scope: withdraw_shielded_with_grant: an unknown grant: another blind (a grant id with no record), the copy's JavaScript deriving the real grant's id from it (forged grant-id mutant)",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: an unknown grant: another blind (a grant id with no record), the copy's JavaScript deriving the real grant's id from it (forged grant-id mutant)"
+    ]
+   }
+  ],
+  "unreachedSites": []
+ },
+ "baseModules": {
+  "messages": 42,
+  "sites": 43,
+  "refusedAtConstraintLevel": 29,
+  "asserts": [
+   {
+    "message": "descriptor: not a 117-byte device tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 307,
+      "helper": "derive_descriptor_entry_w117",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a 52-byte device tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 254,
+      "helper": "derive_descriptor_entry_w52",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "refusedTogetherWithAnother": [
+     "devices: guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)"
+    ],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a 52-byte grant-id tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 349,
+      "helper": "derive_descriptor_grant_id_w52",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "refusedTogetherWithAnother": [
+     "module: issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both"
+    ],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a 64-byte device tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 270,
+      "helper": "derive_descriptor_entry_w64",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a 64-byte grant-id tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 363,
+      "helper": "derive_descriptor_grant_id_w64",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a 65-byte device tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 287,
+      "helper": "derive_descriptor_entry_w65",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a 65-byte grant-id tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 379,
+      "helper": "derive_descriptor_grant_id_w65",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not a blind tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 509,
+      "helper": "derive_blind",
+      "inProvedCircuit": false
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first. Only a pure export of the arm reaches it (computed in JavaScript, never proved)."
+   },
+   {
+    "message": "descriptor: not a grant salt tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 525,
+      "helper": "derive_grant_scope_salt",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not an Ed25519 boot tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 444,
+      "helper": "derive_descriptor_boot_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not an Ed25519 device tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 429,
+      "helper": "derive_descriptor_entry_ed25519",
+      "inProvedCircuit": true
+     },
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 480,
+      "helper": "derive_signer_entries_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: not an Ed25519 grant-id tag",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 460,
+      "helper": "derive_descriptor_grant_id_ed25519",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
+   },
+   {
+    "message": "descriptor: the Ed25519 key is the identity",
+    "sites": [
+     {
+      "file": "WalletArmDescriptors.compact",
+      "line": 414,
+      "helper": "ed25519_descriptor_key",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "activation: the identity as the device key (its boot commitment committed): refused by the descriptor module's A != O",
+     "devices: guards: the identity point as a sol target (its encoding 0100..00 shown and signed): refused by A != O in the derivation",
+     "devices: guards (e): the seam's A != O — a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)",
+     "module: issue_grant: the identity as a sol_ed25519 grantee (its encoding shown and signed): refused by the Ed25519 class's A != O in the grant-id derivation"
+    ]
+   },
+   {
+    "message": "display: day out of range",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 238,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: issue_grant: the UTC expiry line with day 32 of January (the seconds of 1 February) (\"2026-01-32 00:00:00 UTC\"), signed over that text"
+    ]
+   },
+   {
+    "message": "display: digits do not match the value",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 75,
+      "helper": "decimal_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "seam: display: the wallet shown nonce 2 while the call executes at nonce 1 (signed over the wrong digits)",
+     "custody: withdraw_unshielded display: 401 executed with the signed amount's digits",
+     "witness: withdraw_shielded: witness coin of value 999 with the signed coin's digits (display check)",
+     "witness: withdraw_shielded: witness coin at index 2 with the signed index's digits (display check)",
+     "witness: withdraw_shielded_to_contract: witness coin of value 999 with the signed coin's digits (display check)",
+     "witness: withdraw_shielded_to_contract: witness coin at index 2 with the signed index's digits (display check)",
+     "recovery: publish display: the length digits and the signed message show 2, the call executes 3 (hex nibbles consistent)",
+     "recovery: cancel display: the nonce digits and the signed message show auth_nonce + 1",
+     "display-module: issue_grant: the window length 0 with digits 1 (the line shows the word either way; the wallet's signature over the message stands)",
+     "display-module: issue_grant: the window cap 0 with digits 1 (the line shows the word either way; the wallet's signature over the message stands)"
+    ]
+   },
+   {
+    "message": "display: empty decimal",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 73,
+      "helper": "decimal_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "module: issue_grant: grantee slot 0 shown as three spaces, signed over that text: refused by the module's empty-decimal check",
+     "display-module: issue_grant: the window length 0 with no digits (the line shows the word either way; the wallet's signature over the message stands)"
+    ]
+   },
+   {
+    "message": "display: leading zero",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 74,
+      "helper": "decimal_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "readability: forged digits: a leading zero, signed over what they render",
+     "display-module: issue_grant: the window length 0 with digits 00 (the line shows the word either way; the wallet's signature over the message stands)"
+    ]
+   },
+   {
+    "message": "display: leading zero in the site amount label",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 553,
+      "helper": "site_amount_label_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: withdraw_unshielded of 1: the site's amount label \"01 X\" (a leading zero), signed over that text"
+    ]
+   },
+   {
+    "message": "display: month out of range",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 237,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: issue_grant: the UTC expiry line with month 13 (the seconds of 15 December) (\"2026-13-15 00:00:00 UTC\"), signed over that text"
+    ]
+   },
+   {
+    "message": "display: more than 18 decimals",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 551,
+      "helper": "site_amount_label_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: withdraw_unshielded of 1: the site's amount label \"0.0000000000000000001 X\" (19 decimals), signed over that text"
+    ]
+   },
+   {
+    "message": "display: not a UTC date and time",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 236,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: issue_grant: the UTC expiry line with the date separator \"-\" shown as \"/\" (\"2026/11-16 14:51:50 UTC\"), signed over that text"
+    ]
+   },
+   {
+    "message": "display: not a left-aligned base58 text",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 415,
+      "helper": "base58_text_32",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: add_device: a sol_ed25519 target's base58 text with the padding digit moved before the last character, signed over that text",
+     "display-module: add_device: a sol_ed25519 target's base58 text with two digits re-split as 3 and 109 (the same value, a digit above 57), signed over that text"
+    ]
+   },
+   {
+    "message": "display: not a left-aligned decimal",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 72,
+      "helper": "decimal_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "readability: forged digits: a digit after the padding, signed over what they render",
+     "display-module: issue_grant: the window length 0 with a digit after the padding (the line shows the word either way; the wallet's signature over the message stands)"
+    ]
+   },
+   {
+    "message": "display: not a site amount label",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 549,
+      "helper": "site_amount_label_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: withdraw_unshielded of 1: the site's amount label \"1 X Y\" (a character after the padding), signed over that text"
+    ]
+   },
+   {
+    "message": "display: not the words for a time after 9999-12-31 23:59:59 UTC",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 242,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: issue_grant: the UTC expiry line with a time after 9999-12-31 23:59:59 shown with other words (\"later 9999-12-31 23:59:59 UTC\"), signed over that text"
+    ]
+   },
+   {
+    "message": "display: symbol longer than 8",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 552,
+      "helper": "site_amount_label_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: withdraw_unshielded of 1: the site's amount label \"1 ABCDEFGHI\" (a 9-character symbol), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the base58 carry hints do not split the leading digits",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 417,
+      "helper": "base58_text_32",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: add_device: a sol_ed25519 target's base58 text with the 42nd digit changed (the first read-back equation fails), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the base58 digits do not match the value's high bytes",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 421,
+      "helper": "base58_text_32",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: add_device: a sol_ed25519 target's base58 text with the digits of the value plus 2^128 (the low bytes match, the high bytes do not), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the base58 digits do not match the value's low bytes",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 419,
+      "helper": "base58_text_32",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "seam: frame: the frame shows a foreign signing key in base58 (signed over it)",
+     "display-module: add_device: a sol_ed25519 target's base58 text with the digits of the value plus 1 (the high bytes match, the low bytes do not), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the date and time do not match the value",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 241,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "readability: display: the UTC date text of another second (1970-01-01 00:00:01 for an expiry of 0)"
+    ]
+   },
+   {
+    "message": "display: the leading base58 ones do not match the leading zero bytes",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 416,
+      "helper": "base58_text_32",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: add_device: a sol_ed25519 target's base58 text with the leading \"1\" dropped (the same value; hints recomputed), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the site amount label does not match the value",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 554,
+      "helper": "site_amount_label_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: withdraw_unshielded of 1: the site's amount label \"2 X\" (another value), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the symbol does not start with a letter",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 550,
+      "helper": "site_amount_label_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: withdraw_unshielded of 1: the site's amount label \"1 9X\" (a symbol starting with a digit), signed over that text"
+    ]
+   },
+   {
+    "message": "display: the year split is not canonical",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 240,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "readability: display: a non-canonical year split of the UTC date (1969 = 400*4 + 100*3 + 4*16 + 5)",
+     "display-module: issue_grant: the year split 5, 0, 5, 5 with the date one day later (\"2026-11-17 14:51:50 UTC\", the expiry's own seconds), signed over that text: refused only by the split's canonical form"
+    ]
+   },
+   {
+    "message": "display: time of day out of range",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 239,
+      "helper": "utc_datetime_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "display-module: issue_grant: the UTC expiry line with hour 24 of 1 January (the seconds of 2 January) (\"2026-01-01 24:00:00 UTC\"), signed over that text"
+    ]
+   },
+   {
+    "message": "display: unknown recipient kind",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 492,
+      "helper": "recipient_kind_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "module: issue_grant: recipient kind 4 under a valid signature over what the renderer shows past its check: refused by the module's recipient-kind labels"
+    ]
+   },
+   {
+    "message": "display: unknown signing envelope",
+    "sites": [
+     {
+      "file": "WalletArmRendering.compact",
+      "line": 500,
+      "helper": "k256_envelope_text",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "module: add_device: a k256 target with signing envelope 2 under a valid signature over what the renderer shows past its check: refused by the module's envelope labels"
+    ]
+   },
+   {
+    "message": "ed25519: R is the identity",
+    "sites": [
+     {
+      "file": "Ed25519Core.compact",
+      "line": 123,
+      "helper": "ed25519_verify",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "seam: seam: R = O with the verification equation holding (s = k a)",
+     "grantee-scope: withdraw_unshielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
+     "grantee-scope: withdraw_shielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
+     "grantee-scope: withdraw_shielded_to_contract_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
+     "recovery: seam: publish, R = O with the verification equation holding (s = k a)",
+     "recovery: seam: cancel, R = O with the verification equation holding (s = k a)"
+    ]
+   },
+   {
+    "message": "ed25519: the encoding does not match the point's y",
+    "sites": [
+     {
+      "file": "Ed25519Core.compact",
+      "line": 57,
+      "helper": "ed25519_checked_encoding",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "hints: R's encoding with one byte flipped, signed over that encoding",
+     "hints: R's encoding as y + p (x odd, so the sign bit agrees), signed over that encoding",
+     "hints: R = O with R's encoding as y + p (y = 1, below 19), signed over that encoding: R != O and the y check both refuse",
+     "hints: the signing key's bytes forged (an entry planted for them, the message and the signature over them): refused only by the key encoding's y check",
+     "hints: add_device: the Solana target's key bytes with one byte flipped (its descriptor key too; the block shows them, the device signed it): refused only by the y check",
+     "hints: issue_grant: the Solana grantee's key bytes with one byte flipped (its descriptor key too; the grantee block shows them, the device signed it): refused only by the y check",
+     "hints: withdraw_unshielded_with_grant: the grantee's key bytes with one byte flipped (a grant planted for them, the message and the signature over them): refused only by the y check",
+     "hints: activation: the boot key's key bytes with one byte flipped (the boot commitment of those bytes committed): refused only by the y check"
+    ]
+   },
+   {
+    "message": "ed25519: the key is the identity",
+    "sites": [
+     {
+      "file": "Ed25519Core.compact",
+      "line": 120,
+      "helper": "ed25519_verify",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "refusedTogetherWithAnother": [
+     "devices: guards (e): the seam's A != O — a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)"
+    ],
+    "why": "The core's extra safety check: every seam passes the key its derivation has already checked (the descriptor module's ed25519 class refuses the identity first, on the same checked inputs), so the two are refused together; deleting it is an equivalent mutant on the account (m11), with proof-server evidence against that mutant's own keys."
+   },
+   {
+    "message": "ed25519: the sign bit is not x's parity",
+    "sites": [
+     {
+      "file": "Ed25519Core.compact",
+      "line": 64,
+      "helper": "ed25519_checked_encoding",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "hints: R's encoding with the sign bit flipped, signed over that encoding",
+     "hints: the signing key's sign bit flipped (an entry planted for those bytes, the message and the signature over them): refused only by the parity check",
+     "hints: add_device: the Solana target's key bytes with the sign bit flipped (its descriptor key too; the block shows them, the device signed it): refused only by the parity check",
+     "hints: issue_grant: the Solana grantee's key bytes with the sign bit flipped (its descriptor key too; the grantee block shows them, the device signed it): refused only by the parity check",
+     "hints: withdraw_unshielded_with_grant: the grantee's key bytes with the sign bit flipped (a grant planted for them, the message and the signature over them): refused only by the parity check",
+     "hints: activation: the boot key's key bytes with the sign bit flipped (the boot commitment of those bytes committed): refused only by the parity check"
+    ]
+   },
+   {
+    "message": "ed25519: the x bytes do not match the point's x",
+    "sites": [
+     {
+      "file": "Ed25519Core.compact",
+      "line": 63,
+      "helper": "ed25519_checked_encoding",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [
+     "hints: R's x bytes with one byte flipped (the parity kept), under an honest signature",
+     "hints: R's x bytes as x + p (the parity flips), under an honest signature",
+     "hints: the signing key's x bytes with one byte flipped (the parity kept), under an honest signature",
+     "hints: add_device: the Solana target's x bytes with one byte flipped (the parity kept)",
+     "hints: issue_grant: the Solana grantee's x bytes with one byte flipped (the parity kept; the message shows its bytes, unchanged)",
+     "hints: withdraw_unshielded_with_grant: the grantee's x bytes with one byte flipped (the parity kept), under its honest signature",
+     "hints: activation: the boot key's x bytes with one byte flipped (the parity kept; the commitment binds the bytes, unchanged): refused only by the x check"
+    ]
+   }
+  ],
+  "unreachedHelpers": [
+   {
+    "helper": "derive_descriptor_boot_w52",
+    "message": "descriptor: not a 52-byte boot tag"
+   },
+   {
+    "helper": "label_text",
+    "message": "display: not a zero-padded label"
+   },
+   {
+    "helper": "visible_text",
+    "message": "display: not visible ASCII"
+   }
+  ]
+ },
+ "unexplained": [],
+ "verdict": "PASS"
+}

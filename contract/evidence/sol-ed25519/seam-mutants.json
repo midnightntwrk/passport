@@ -1,0 +1,1898 @@
+{
+ "what": "The arm's properties are held by functional tests, not by reading the source. Each mutant is a one-change edit of the arm's sources (contracts/account-sol-ed25519.compact, and the modules its verification, formats and derivations live in: contracts/modules/Ed25519Core.compact, contracts/modules/SolanaFormats.compact, contracts/modules/WalletArmDescriptors.compact), compiled --skip-zk in its own copy (with the probes that include the changed module) and run against the offline layer (every file of npm run test:sol-ed25519-offline, the shared wallet-arms suites and constraint-negative-offline) and the prover suite's JavaScript layer (SOL_ED25519_DRY=1, no proof server, every section), where a mutant that lets a refused forgery through fails that case's simulator half. A mutant is killed when a suite shows its effect: an accepted forgery (a call the unmutated copy refuses goes through), a broken honest call, or a changed output; a suite that only reports another refusal message, and the prover layer stopping because a case's bypassed assert is gone, do not count as a kill. The unmutated copies, compiled and run the same ways, pass every suite (the controls).",
+ "testsAt": "5cd0fd7",
+ "controls": {
+  "B0": "CONTROL PASS",
+  "B0s": "CONTROL PASS"
+ },
+ "seamDeletions": {
+  "what": "each export without its seam call",
+  "mutants": [
+   {
+    "id": "sx-add_device",
+    "mutation": "add_device without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: device entry already present",
+     "accepted forgery: ✗ 4 binding: add_device: the jubjub x coordinate changed at execution (consistent display inputs) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 binding: add_device: the k256 envelope (0 -> 1) changed at execution (consistent display inputs) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-append_inbox",
+    "mutation": "append_inbox without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 1 append_inbox: another entry at execution (consistent display inputs) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 1 append_inbox: another entry at execution with the signed entry's hex nibbles — accepted (expected a refusal)",
+     "accepted forgery: ✗ 1 append_inbox: frame nibbles of another account (the seam owns the frame) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-issue_grant",
+    "mutation": "issue_grant without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: grant already active",
+     "output changed: ✗ 1 issue: sol_ed25519: the grant id equals the sol_ed25519 grant-id recipe; issued_at = the auth_nonce after the issuing call, nonce 0, read_pk_hash = SHA-256(read key) — issued_at 0 (nonce before 0), nonce 0, active true",
+     "output changed: ✗ 1 issue: evm_k256: the grant id equals the evm_k256 grant-id recipe; issued_at = the auth_nonce after the issuing call, nonce 0, read_pk_hash = SHA-256(read key) — issued_at 0 (nonce before 0), nonce 0, active true"
+    ]
+   },
+   {
+    "id": "sx-publish_recovery_session",
+    "mutation": "publish_recovery_session without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "output changed: ✗ auth_nonce +1, round +1, the device entry rolled to counter 1",
+     "accepted forgery: ✗ signed the recovery key changed, executed the original: refused by the signature (NOT refused)",
+     "output changed: ✗ the nonce: the approval shows auth_nonce + 1 — refused by \"failed assert: session nonce reused\", expected invalid signature"
+    ]
+   },
+   {
+    "id": "sx-recover_cancel",
+    "mutation": "recover_cancel without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ the operation: a revoke_all_grants approval presented as the cancel (NOT refused)",
+     "honest flow broken: ✗ 4 binding: the signed message and the executed call differ (display inputs consistent with the executed call): unexpected error — CompactError: failed assert: no recovery pending",
+     "accepted forgery: ✗ a revoke_all_grants approval over the same frame presented as the cancel (NOT refused)"
+    ]
+   },
+   {
+    "id": "sx-remove_device",
+    "mutation": "remove_device without its seam call (the caller entry the self-removal guard compares becomes zero)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: cannot remove last device",
+     "output changed: ✗ 3 remove_device: S13: S removes its own post-roll entry by descriptor — failed assert: unknown device entry",
+     "output changed: ✗ 3 remove_device: S13: S removes its own post-roll entry by the literal form — failed assert: unknown device entry"
+    ]
+   },
+   {
+    "id": "sx-revoke_all_grants",
+    "mutation": "revoke_all_grants without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 4 twins: revoke_all_grants: the wallet signed a message showing a foreign account (its frame nibbles with it): the seam's frame check — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 twins: revoke_all_grants: a key that is no device of this account (its own approval of this call) — accepted (expected a refusal)",
+     "output changed: ✗ 4 twins: revoke_all_grants: generation +1"
+    ]
+   },
+   {
+    "id": "sx-revoke_grant",
+    "mutation": "revoke_grant without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: grant not live",
+     "output changed: ✗ 3 binding: revoke_grant: another slot executed — failed assert: unknown grant",
+     "accepted forgery: ✗ 3 binding: revoke_grant: the wallet signed a message showing a foreign account (its frame nibbles with it): the seam's frame check — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-rotate_enc_key",
+    "mutation": "rotate_enc_key without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "output changed: ✗ 1 positive control: rotate lands: enc_key set, auth_nonce +1, round +1, entry rolled 0 -> 1, one device",
+     "accepted forgery: ✗ 2 binding: another new key at execution (consistent display inputs) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 2 binding: another site label at execution (consistent display inputs) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-withdraw_shielded",
+    "mutation": "withdraw_shielded without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 3 withdraw_shielded: witness coin of value 999 (display inputs consistent with it) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 3 withdraw_shielded: witness coin of value 999 (the signed coin's digits) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 3 withdraw_shielded: witness coin of another nonce (display inputs consistent with it) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-withdraw_shielded_to_contract",
+    "mutation": "withdraw_shielded_to_contract without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 4 withdraw_shielded_to_contract: witness coin of value 999 (display inputs consistent with it) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 withdraw_shielded_to_contract: witness coin of value 999 (the signed coin's digits) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 withdraw_shielded_to_contract: witness coin of another nonce (display inputs consistent with it) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-withdraw_shielded_to_contract_with_grant",
+    "mutation": "withdraw_shielded_to_contract_with_grant without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 4 twins: to-contract twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam's frame check — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 twins: to-contract twin: R = O with the verification equation holding (s = k a): the Ed25519 core's R != O — accepted (expected a refusal)",
+     "output changed: ✗ 4 twins: the to-contract twin in scope: 300 of the 1000 coin to a contract, the change (700) entry appended, the record nonce +1, auth_nonce untouched"
+    ]
+   },
+   {
+    "id": "sx-withdraw_shielded_with_grant",
+    "mutation": "withdraw_shielded_with_grant without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 4 twins: shielded twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam's frame check — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 twins: shielded twin: R = O with the verification equation holding (s = k a): the Ed25519 core's R != O — accepted (expected a refusal)",
+     "accepted forgery: ✗ 4 twins: the operation not in scope: the to-contract grant (slot 2) through the shielded twin — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-withdraw_unshielded",
+    "mutation": "withdraw_unshielded without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: insufficient balance",
+     "output changed: ✗ 2 withdraw_unshielded: another token at execution (consistent display inputs) — failed assert: no balance for color",
+     "accepted forgery: ✗ 2 withdraw_unshielded: another amount at execution (consistent display inputs) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "sx-withdraw_unshielded_with_grant",
+    "mutation": "withdraw_unshielded_with_grant without its seam call",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: insufficient balance",
+     "output changed: ✗ 4 twins: in scope: lands; the record nonce +1; auth_nonce and the device entries untouched",
+     "accepted forgery: ✗ 4 twins: replay of the landed approval verbatim (the spent opening moved) — accepted (expected a refusal)"
+    ]
+   }
+  ]
+ },
+ "seamProperties": {
+  "what": "the seams' and the exports' properties",
+  "mutants": [
+   {
+    "id": "a2-export-verifies-itself",
+    "mutation": "rotate_enc_key also asserts a verification of the same signature over another (all-zero) text: an honest call fails",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: mutant",
+     "honest step broken (uncaught): CompactError: failed assert: mutant",
+     "output changed: ✗ 1 the format flag in the compiled circuits: rotate_enc_key_with_sol_ed25519: not vacuous: the flag selects the head and enters the one SHA-512 — {\"constrain_to_boolean\":1,\"cond_select\":5,\"sha512\":2,\"bytes_into_natives\":2,\"bytes_from_nativ"
+    ]
+   },
+   {
+    "id": "b-unshielded-twin-op-2",
+    "mutation": "the unshielded grantee twin hands its scope operation 2",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: operation not in scope",
+     "honest call broken: [grants] the unshielded grantee twin: 200 under the grant; auth_nonce and the device entries untouched: DRY: execution failed failed assert: operation not in scope",
+     "honest call broken: [grantee-scope] withdraw_unshielded_with_grant: the honest call on the base account (original module): DRY: execution failed failed assert: operation not in scope"
+    ]
+   },
+   {
+    "id": "c-plus-colour-assert-deleted",
+    "mutation": "the shielded grantee twin without its colour assert, the scope handed the rendered colour",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 4 twins: witness substitution: colour B for an approval of colour A — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "c-shielded-twin-scope-colour",
+    "mutation": "the shielded grantee twin hands its scope the rendered colour instead of the coin's (the colour assert kept)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "EQUIVALENT",
+    "equivalence": "The shielded grantee twin hands its scope check the rendered colour (`color`) instead of the spent coin's (`coin.color`). The export asserts coin.color == color before the grant seam runs, and that assert is kept, so every call that reaches the scope check has the two equal: the scope sees the same colour, and the accepted set is unchanged. The one difference the DRY layer reports is in a case that bypasses that colour assert on purpose (`the colour assert on its own`): with the assert bypassed, the mutant's scope check refuses in its place, so the case's patched copy refuses in JavaScript; the circuit, which keeps the assert, refuses the same inputs. #189's 00067 table recorded the same mutant EQUIVALENT (F4S `c-shielded-twin-scope-colour`, R3 `r3m9`).",
+    "evidence": "classified-a1.json: the only failure is that DRY case's patched copy (a harness consequence of bypassing the assert the argument relies on); every other suite passes; no assert is deleted.",
+    "review": "argued by the P6.2 runner; not reviewed (P8, on the owner's request)"
+   },
+   {
+    "id": "d-device-seam-frame-param",
+    "mutation": "the device seam renders auth_nonce + 0 (the same value)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "EQUIVALENT",
+    "equivalence": "The device seam renders (auth_nonce + 0) as Uint<64> instead of auth_nonce. auth_nonce is a Uint<64>, adding 0 never leaves the type's range and the cast is the identity, so every rendered message, every hash and every assert sees the same value for every input; no input distinguishes the two. The ZKIR differs (the addition and the range check are emitted; 12 of 68 circuits), the accepted set does not. #189's 00067 table recorded the same mutant EQUIVALENT (F4S).",
+    "evidence": "classified-a1.json: no suite fails (the offline set, the three wallet-arms suites, constraint-negative-offline, the prover suite's DRY layer); no assert is deleted, so no proof-server evidence is needed (P0.5's rule asks for it where a deleted assert is covered elsewhere).",
+    "review": "argued by the P6.2 runner; not reviewed (P8, on the owner's request)"
+   },
+   {
+    "id": "d2-nonce-off-by-one",
+    "mutation": "the device seam renders auth_nonce + 1",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: digits do not match the value",
+     "honest step broken (uncaught): CompactError: failed assert: display: digits do not match the value",
+     "output changed: ✗ 1 append_inbox: another entry at execution (consistent display inputs) — failed assert: display: digits do not match the value"
+    ]
+   },
+   {
+    "id": "e-grant-seam-other-blind",
+    "mutation": "the grant seam derives the grant id with the label in the blind's place",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: unknown grant",
+     "honest call broken: [grants] the unshielded grantee twin: 200 under the grant; auth_nonce and the device entries untouched: DRY: execution failed failed assert: unknown grant",
+     "honest call broken: [grantee-scope] withdraw_unshielded_with_grant: the honest call on the base account (original module): DRY: execution failed failed assert: unknown grant"
+    ]
+   },
+   {
+    "id": "f-twin-renders-other-amount",
+    "mutation": "the unshielded grantee twin renders max_coin_value as the amount",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: digits do not match the value",
+     "honest call broken: [grants] the unshielded grantee twin: 200 under the grant; auth_nonce and the device entries untouched: DRY: execution failed failed assert: display: digits do not match the value",
+     "honest call broken: [grantee-scope] withdraw_unshielded_with_grant: the honest call on the base account (original module): DRY: execution failed failed assert: display: digits do not match the value"
+    ]
+   },
+   {
+    "id": "m1-to-contract-twin-op-3-to-2",
+    "mutation": "the to-contract grantee twin hands its scope operation 2",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: operation not in scope",
+     "output changed: ✗ 4 twins: to-contract twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam's frame check — failed assert: operation not in scope",
+     "output changed: ✗ 4 twins: to-contract twin: R = O with the verification equation holding (s = k a): the Ed25519 core's R != O — failed assert: operation not in scope"
+    ]
+   },
+   {
+    "id": "p-device-colour-assert-deleted",
+    "mutation": "withdraw_shielded (device) without its colour assert",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: digits do not match the value",
+     "accepted forgery: ✗ 3 withdraw_shielded: witness coin of colour B (same nonce, value, index): only coin.color == color refuses — accepted (expected a refusal)",
+     "output changed: ✗ 3 withdraw_shielded: witness coin of value 999 (display inputs consistent with it) — failed assert: unknown device entry"
+    ]
+   },
+   {
+    "id": "p-device-to-contract-colour-assert-deleted",
+    "mutation": "withdraw_shielded_to_contract (device) without its colour assert",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: digits do not match the value",
+     "accepted forgery: ✗ 4 withdraw_shielded_to_contract: witness coin of colour B (same nonce, value, index): only coin.color == color refuses — accepted (expected a refusal)",
+     "output changed: ✗ 4 withdraw_shielded_to_contract: witness coin of value 999 (display inputs consistent with it) — failed assert: unknown device entry"
+    ]
+   },
+   {
+    "id": "p-grant-epoch-stale-deleted",
+    "mutation": "the grant seam without its stale-epoch check",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery (simulator): [grantee-scope] withdraw_unshielded_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_to_contract_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval"
+    ]
+   },
+   {
+    "id": "p-remove-zero-caller-entry",
+    "mutation": "remove_device hands the self-removal guard a zero caller entry, the seam kept",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 3 remove_device: S13: S removes its own post-roll entry by descriptor — accepted (expected a refusal)",
+     "output changed: ✗ 3 remove_device: S13: S removes its own post-roll entry by the literal form — no live entry",
+     "output changed: ✗ 3 remove_device: an entry that is not in the set (literal form) — no live entry"
+    ]
+   },
+   {
+    "id": "p-shielded-bounds-deleted",
+    "mutation": "withdraw_shielded_with_grant without check_shielded_grant_bounds",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 4 twins: a coin above the max coin value (2000 > 1000) — accepted (expected a refusal)",
+     "output changed: ✗ 4 twins: a stale encryption key — failed assert: spent opening mismatch",
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_with_grant: a coin above the grant's max coin value (1000 > 600, slot 1), honestly signed"
+    ]
+   },
+   {
+    "id": "p-to-contract-bounds-deleted",
+    "mutation": "withdraw_shielded_to_contract_with_grant without check_shielded_grant_bounds",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_to_contract_with_grant: a coin above the grant's max coin value (1000 > 600, slot 1), honestly signed",
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_to_contract_with_grant: a stale encryption key, honestly signed (the change sealed to a key that is no longer live)"
+    ]
+   },
+   {
+    "id": "r3m2-to-contract-cplus",
+    "mutation": "the to-contract grantee twin without its colour assert, the scope handed the rendered colour",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: spent opening mismatch",
+     "accepted forgery: ✗ 4 twins: to-contract twin: witness substitution, colour B for an approval of colour A (the export's own colour assert) — accepted (expected a refusal)",
+     "output changed: ✗ 4 twins: to-contract twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam's frame check — failed assert: spent opening mismatch"
+    ]
+   },
+   {
+    "id": "r3m4-shielded-twin-recipient-is-pin",
+    "mutation": "the shielded grantee twin hands its scope the pin as the recipient",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: spent opening mismatch",
+     "accepted forgery: ✗ 4 twins: shielded twin under a grant pinned to a shielded key: another recipient, honestly signed — accepted (expected a refusal)",
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_with_grant: a recipient other than the pinned one, honestly signed"
+    ]
+   },
+   {
+    "id": "r3m7-to-contract-recipient-is-pin",
+    "mutation": "the to-contract grantee twin hands its scope the pin as the recipient",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: spent opening mismatch",
+     "accepted forgery: ✗ 4 twins: to-contract twin under a grant pinned to a contract: another recipient, honestly signed — accepted (expected a refusal)",
+     "accepted forgery (simulator): [grantee-scope] withdraw_shielded_to_contract_with_grant: a recipient other than the pinned one, honestly signed"
+    ]
+   }
+  ]
+ },
+ "verificationAndKeyInputs": {
+  "what": "the checked encodings and the verification, now in the Ed25519 core, and the checked key inputs",
+  "mutants": [
+   {
+    "id": "m01-y-assert-deleted",
+    "mutation": "the checked encoding without its y check (R's and every key's)",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 verification inputs: R's encoding with one byte flipped, signed over that encoding — accepted (expected a refusal)",
+     "accepted forgery: ✗ 5 verification inputs: R's encoding as y + p, signed over that encoding — accepted (expected a refusal)",
+     "output changed: ✗ 5 verification inputs: the key's bytes with one byte flipped — failed assert: display: the base58 digits do not match the value's high bytes"
+    ]
+   },
+   {
+    "id": "m02-x-assert-deleted",
+    "mutation": "the checked encoding without its x check",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 verification inputs: R's x bytes with one byte flipped — accepted (expected a refusal)",
+     "output changed: ✗ 5 verification inputs: R's x bytes as x + p — failed assert: ed25519: the sign bit is not x's parity",
+     "accepted forgery: ✗ 5 verification inputs: the key's x bytes with one byte flipped — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "m03-sign-assert-deleted",
+    "mutation": "the checked encoding without its sign-bit check",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-seam-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 verification inputs: R's encoding with the sign bit flipped, signed over that encoding — accepted (expected a refusal)",
+     "output changed: ✗ 5 verification inputs: the key's bytes with the sign bit flipped — failed assert: display: the base58 digits do not match the value's low bytes",
+     "honest step broken (uncaught): "
+    ]
+   },
+   {
+    "id": "m04-sign-inverted",
+    "mutation": "the sign-bit check inverted",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity"
+    ]
+   },
+   {
+    "id": "m05-top-not-cleared",
+    "mutation": "y's top byte compared without clearing the sign bit",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y"
+    ]
+   },
+   {
+    "id": "m06-sign-threshold-129",
+    "mutation": "the sign bit read as e[31] >= 129",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-seam-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "output changed: ✗ 5 verification inputs: an honest signature whose R encoding ends in the byte 128 (y's top byte 0, x odd) is accepted — failed assert: ed25519: the encoding does not match the point's y",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y"
+    ]
+   },
+   {
+    "id": "m07-sign-threshold-127",
+    "mutation": "the sign bit read as e[31] >= 127",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: result of subtraction would be negative",
+     "output changed: ✗ 5 verification inputs: an honest signature whose R encoding ends in the byte 127 (y's top byte 127, x even) is accepted — failed assert: result of subtraction would be negative",
+     "output changed: ✗ 2 rules: a jubjub grantee with a non-zero origin (its characters equal its bytes) — failed assert: result of subtraction would be negative"
+    ]
+   },
+   {
+    "id": "m08-zero-key",
+    "mutation": "the verification hashes 32 zero bytes for the key",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "m11-verify-identity-assert-deleted",
+    "mutation": "the verification's own identity-key assert deleted (the extra safety check)",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-fixtures-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 8 the identity key on the circuit path: 369-byte text, raw: the identity key refused by the core — accepted (expected a refusal)",
+     "accepted forgery: ✗ 8 the identity key on the circuit path: 369-byte text, off-chain: the identity key refused by the core — accepted (expected a refusal)",
+     "accepted forgery: ✗ 8 the identity key on the circuit path: 399-byte text, raw: the identity key refused by the core — accepted (expected a refusal)"
+    ],
+    "note": "not killed by the tests before the identity-key case of the fixtures suite was added: the prover suite's JavaScript layer stops when the assert its case bypasses is gone, which is never counted as a kill; that case kills it (the probe accepts a signature made for the identity key)"
+   },
+   {
+    "id": "m12-odd-step-64-dropped",
+    "mutation": "byte_is_odd skips the 64 step",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity"
+    ]
+   },
+   {
+    "id": "m13-odd-last-step-dropped",
+    "mutation": "byte_is_odd skips the 2 step",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "output changed: ✗ 3b cross-arm replay: the arm's own blind request (non-authorising), signed by the same key — failed assert: ed25519: the sign bit is not x's parity"
+    ]
+   },
+   {
+    "id": "m14-parity-from-y",
+    "mutation": "the sign bit compared with the parity of y's first byte",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the sign bit is not x's parity"
+    ]
+   },
+   {
+    "id": "m15-seam-inputs-swapped",
+    "mutation": "the device seam passes R's x bytes as the encoding and the encoding as the x bytes",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "output changed: ✗ 1 append_inbox: another entry at execution (consistent display inputs) — failed assert: ed25519: the encoding does not match the point's y"
+    ]
+   },
+   {
+    "id": "m16-grant-seam-x-as-encoding",
+    "mutation": "the grant seam hashes R's x bytes as R's encoding",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "honest call broken: [grants] the unshielded grantee twin: 200 under the grant; auth_nonce and the device entries untouched: DRY: execution failed failed assert: ed25519: the encoding does not match the point's y",
+     "honest call broken: [grantee-scope] withdraw_unshielded_with_grant: the honest call on the base account (original module): DRY: execution failed failed assert: ed25519: the encoding does not match the point's y"
+    ]
+   },
+   {
+    "id": "n01-unused-key-bytes-assert-deleted",
+    "mutation": "the unused-key bytes assert deleted",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: a jubjub target with the identity point but non-zero key bytes (their base58 inputs supplied; a jubjub block shows no Solana key) — accepted (expected a refusal)",
+     "output changed: ✗ 5 guards: a jubjub target with the identity point but non-zero x bytes — failed assert: device entry already present",
+     "accepted forgery: ✗ 2 rules: a k256 grantee with the identity point but non-zero key bytes (their base58 inputs supplied; a k256 block shows no Solana key) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "n02-unused-key-x-unchecked",
+    "mutation": "the unused-key rule checks the key bytes only, not the x bytes",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: a jubjub target with the identity point but non-zero x bytes — accepted (expected a refusal)",
+     "accepted forgery: ✗ 2 rules: a k256 grantee with the identity point but non-zero x bytes — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "n03-literal-key-bytes-unchecked",
+    "mutation": "the literal removal's assert no longer covers the key bytes",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: the literal form carrying non-zero key bytes — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "n04-device-seam-x-from-r",
+    "mutation": "the device seam hands R's x bytes to the key derivation",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the x bytes do not match the point's x",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the x bytes do not match the point's x",
+     "output changed: ✗ 1 append_inbox: another entry at execution (consistent display inputs) — failed assert: ed25519: the x bytes do not match the point's x"
+    ]
+   },
+   {
+    "id": "n05-target-bytes-swapped",
+    "mutation": "a Solana target's key bytes and x bytes swapped in its entry derivation",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "honest flow broken: ✗ 8 more devices: a second sol device and a JubJub device, and the upstream plant at device_epoch + 1: unexpected error — CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "output changed: ✗ a revoke_all_grants approval over the same frame presented as the cancel — refused by \"failed assert: unknown device entry\", expected invalid signature"
+    ]
+   },
+   {
+    "id": "n06-grant-seam-bytes-from-r",
+    "mutation": "the grant seam hands R's bytes to the grantee key derivation",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the encoding does not match the point's y",
+     "honest call broken: [grants] the unshielded grantee twin: 200 under the grant; auth_nonce and the device entries untouched: DRY: execution failed failed assert: ed25519: the encoding does not match the point's y",
+     "honest call broken: [grantee-scope] withdraw_unshielded_with_grant: the honest call on the base account (original module): DRY: execution failed failed assert: ed25519: the encoding does not match the point's y"
+    ]
+   },
+   {
+    "id": "n07-grantee-x-from-bytes",
+    "mutation": "a Solana grantee's key bytes passed as its x bytes",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the x bytes do not match the point's x",
+     "honest call broken: [grants] issue_grant to a sol_ed25519 grantee (unshielded, recipient pinned): DRY: execution failed failed assert: ed25519: the x bytes do not match the point's x"
+    ]
+   },
+   {
+    "id": "n08-r-x-from-bytes",
+    "mutation": "R's encoding checked with its bytes as its x bytes",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the x bytes do not match the point's x",
+     "honest step broken (uncaught): CompactError: failed assert: ed25519: the x bytes do not match the point's x",
+     "output changed: ✗ 1 append_inbox: another entry at execution (consistent display inputs) — failed assert: ed25519: the x bytes do not match the point's x"
+    ]
+   }
+  ]
+ },
+ "displayAndDescriptorFields": {
+  "what": "the readable texts and the unused descriptor fields",
+  "mutants": [
+   {
+    "id": "f01-seam-shows-r-bytes",
+    "mutation": "the device seam shows R's bytes as the signing key",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: the base58 digits do not match the value's low bytes",
+     "honest step broken (uncaught): CompactError: failed assert: display: the base58 digits do not match the value's low bytes",
+     "output changed: ✗ 1 append_inbox: another entry at execution (consistent display inputs) — failed assert: display: the base58 digits do not match the value's low bytes"
+    ]
+   },
+   {
+    "id": "f02-target-block-zero-key",
+    "mutation": "a target block shows the base58 of zero bytes",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-message-offline",
+     "sol-ed25519-recovery-sim"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes",
+     "honest step broken (uncaught): CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes",
+     "honest flow broken: ✗ 8 more devices: a second sol device and a JubJub device, and the upstream plant at device_epoch + 1: unexpected error — CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes"
+    ]
+   },
+   {
+    "id": "f03-expiry-date-of-next-second",
+    "mutation": "the UTC line shows the date of the expiry plus one second",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-message-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: the date and time do not match the value",
+     "honest step broken (uncaught): CompactError: failed assert: display: the date and time do not match the value"
+    ]
+   },
+   {
+    "id": "f04-window-digits",
+    "mutation": "the window length shown as digits, without the zero word",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-message-offline"
+    ],
+    "killKind": "changed output",
+    "evidence": [
+     "output changed: ✗ 1 circuit == renderer: issue_grant midnight:account:grant:id:evm:v1 — circuit 1690 B vs renderer 1690 B",
+     "output changed: ✗ 1 circuit == renderer: issue_grant midnight:account:grant:id:v1 — circuit 1690 B vs renderer 1690 B",
+     "output changed: ✗ 1 circuit == renderer: issue_grant midnight:account:grant:id:sol:v1 — circuit 1690 B vs renderer 1690 B"
+    ]
+   },
+   {
+    "id": "f05-pure-target-key-any-class",
+    "mutation": "the pure message circuits show a target's `a` in base58 for every class",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-message-offline",
+     "sol-ed25519-recovery-sim"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes",
+     "honest step broken (uncaught): CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes",
+     "honest flow broken: ✗ 8 more devices: a second sol device and a JubJub device, and the upstream plant at device_epoch + 1: unexpected error — CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes"
+    ]
+   },
+   {
+    "id": "g01-device-second-field-unchecked",
+    "mutation": "a target's unused second field no longer checked",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: an evm_k256 target with a non-zero second field (not shown; the wallet signed the contract's bytes) — accepted (expected a refusal)",
+     "accepted forgery (simulator): [arm-asserts] add_device: an evm_k256 target with a non-zero second field, not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "id": "g02-device-rp-hash-unchecked",
+    "mutation": "a target's unused RP hash no longer checked",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: a jubjub target with a non-zero RP hash (not shown; the wallet signed the contract's bytes) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "g03-device-origin-unchecked",
+    "mutation": "a target's unused origin no longer checked",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: a jubjub target with a non-zero origin (its characters equal its bytes) (not shown; the wallet signed the contract's bytes) — accepted (expected a refusal)",
+     "accepted forgery (simulator): [arm-asserts] add_device: a jubjub target with a non-zero origin (its characters equal its bytes), not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "id": "g04-grantee-second-field-unchecked",
+    "mutation": "a grantee's unused second field no longer checked",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 2 rules: an evm_k256 grantee with a non-zero second field — accepted (expected a refusal)",
+     "accepted forgery (simulator): [arm-asserts] issue_grant: an evm_k256 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "id": "g05-grantee-label-unchecked",
+    "mutation": "a non-readable grantee's label no longer checked",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 2 rules: a k256 grantee carrying a label — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "g06-grantee-origin-unchecked",
+    "mutation": "a grantee's unused origin no longer checked",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 2 rules: a jubjub grantee with a non-zero origin (its characters equal its bytes) — accepted (expected a refusal)",
+     "accepted forgery (simulator): [arm-asserts] issue_grant: a jubjub grantee with a non-zero origin (its characters equal its bytes), not shown, under a valid signature over the contract's bytes"
+    ]
+   },
+   {
+    "id": "g07-readable-origin-hash-unchecked",
+    "mutation": "a readable grantee's origin hash argument no longer required zero",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 2 rules: a sol_ed25519 grantee carrying an origin hash (a readable grantee's is derived from its label) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "g08-passkey-origin-hash-unchecked",
+    "mutation": "a passkey grantee's origin hash argument no longer required zero",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 2 rules: a passkey grantee carrying an origin hash (a passkey grantee's is derived from its origin) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "g09-literal-display-unchecked",
+    "mutation": "a literal removal's display inputs no longer bound to an empty target's",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 guards: a literal removal of a removable entry whose use counter digits are not an empty target's (the message unchanged) — accepted (expected a refusal)"
+    ]
+   }
+  ]
+ },
+ "formatsSeamsKinds": {
+  "what": "the Solana formats module (the heads, the flag, the text), the seams' use of the format, and the kinds table",
+  "mutants": [
+   {
+    "id": "K1-kind-dropped",
+    "mutation": "O11 a kind dropped from sol_kinds() (jubjub)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "DOES NOT COMPILE",
+    "note": "refused by the compiler; its nearest compiling edit is listed after it"
+   },
+   {
+    "id": "K1b-kind-and-rows-dropped",
+    "mutation": "O11 a kind dropped from sol_kinds() (jubjub), with its rows in the device and grantee blocks (the nearest compiling edit of K1: SolKinds types every per-kind list, so K1 alone does not compile)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-message-offline",
+     "sol-ed25519-recovery-sim"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a registered device tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a registered device tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a registered grant-id tag"
+    ]
+   },
+   {
+    "id": "K2-two-kinds-one-entry",
+    "mutation": "O11 two kinds sharing one entry (the jubjub entry listed in the k256 place)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-message-offline",
+     "sol-ed25519-recovery-sim"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a registered device tag",
+     "output changed: ✗ 1 circuit == renderer: add_device midnight:account:device:v1 — circuit 685 B vs renderer 685 B",
+     "output changed: ✗ 1 circuit == renderer: remove_device midnight:account:device:v1 — circuit 761 B vs renderer 761 B"
+    ]
+   },
+   {
+    "id": "K3-kind-other-class",
+    "mutation": "O11 a kind mapped to another key class (k256 under w64)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a 64-byte device tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a 64-byte grant-id tag",
+     "honest call broken: [devices] add_device: a k256 target by descriptor; the entry equals the k256 arm's own derivation at (epoch, 0); nothing at epoch + 1: DRY: execution failed failed assert: descriptor: not a 64-byte device tag"
+    ]
+   },
+   {
+    "id": "K4-kind-other-grant-tag",
+    "mutation": "O11 a kind's grant-id tag mapped to another kind's (sol_ed25519 given evm_k256's)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-message-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: the leading base58 ones do not match the leading zero bytes",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a registered grant-id tag"
+    ]
+   },
+   {
+    "id": "SF1-version-00",
+    "mutation": "O4 the off-chain version byte 01 -> 00",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "output changed: ✗ 6 signing formats: off-chain message v1: the call lands (same key, same blind, same entry) — failed assert: invalid signature",
+     "accepted forgery: ✗ 6 signing formats: the off-chain head with version 0, signed by the key, presented as off-chain — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "SF10-raw-head-49",
+    "mutation": "O9 the raw head of 49 bytes (its final line feed dropped; the 50-byte part is fixed by the type, so a zero byte takes its place)",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SF2-signer-constant",
+    "mutation": "O5 the off-chain signer field a constant (32 zero bytes) instead of the key",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "output changed: ✗ 6 signing formats: off-chain message v1: the call lands (same key, same blind, same entry) — failed assert: invalid signature",
+     "output changed: ✗ 2 positives: probe and client: trezor-safe5-approval-rotate_enc_key-s1-a6ca5392: the probe accepts it with the off-chain flag"
+    ]
+   },
+   {
+    "id": "SF3-signer-is-r",
+    "mutation": "O5 the off-chain signer field R's encoding instead of the key (device seam)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "output changed: ✗ 6 signing formats: off-chain message v1: the call lands (same key, same blind, same entry) — failed assert: invalid signature",
+     "honest control broken (patched copy): [formats] rotate_enc_key: the off-chain signature presented as raw (same key, validly enrolled device): DRY: the control fired invalid signature"
+    ]
+   },
+   {
+    "id": "SF4-flag-true",
+    "mutation": "O3 the flag fixed true (every message off-chain)",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SF5-flag-false",
+    "mutation": "O3 the flag fixed false (every message raw)",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "output changed: ✗ 6 signing formats: off-chain message v1: the call lands (same key, same blind, same entry) — failed assert: invalid signature",
+     "accepted forgery: ✗ 6 signing formats: the raw signature presented as off-chain (same key, validly enrolled device) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "SF6-flag-inverted",
+    "mutation": "O2 the flag inverted",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SF7-raw-head-byte",
+    "mutation": "O4 one byte of the raw head (\"P\" -> \"Q\", byte 9)",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SF8-text-not-hashed",
+    "mutation": "O6 the text not hashed (the message is the head and zero bytes)",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SF9-signer-count-02",
+    "mutation": "O4 the off-chain signer count 01 -> 02",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "output changed: ✗ 6 signing formats: off-chain message v1: the call lands (same key, same blind, same entry) — failed assert: invalid signature",
+     "output changed: ✗ 2 positives: probe and client: trezor-safe5-approval-rotate_enc_key-s1-a6ca5392: the probe accepts it with the off-chain flag"
+    ]
+   },
+   {
+    "id": "SM1-flag-disclosed",
+    "mutation": "O10 the flag disclosed through a ledger operation (round bumped once more for an off-chain approval)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "changed output",
+    "evidence": [
+     "output changed: ✗ 6 signing formats: from one state, the two formats leave equal public transcripts, outputs, gas and ledger states — ops 47",
+     "output changed: ✗ 1 the format flag in the compiled circuits: add_device_with_sol_ed25519: the flag (%auth.637) reaches no impact (of 74), no public input guard (of 15) and no output — {\"impactGuard\":8,\"impactInput\":2,\"publicInputGuard\":1,\"output\":0}",
+     "output changed: ✗ 1 the format flag in the compiled circuits: append_inbox_with_sol_ed25519: the flag (%auth.622) reaches no impact (of 66), no public input guard (of 12) and no output — {\"impactGuard\":8,\"impactInput\":2,\"publicInputGuard\":1,\"output\":0}"
+    ]
+   },
+   {
+    "id": "SM2-format-bypassed",
+    "mutation": "O13 the device seam verifies the text alone (the format bypassed)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SM2g-format-bypassed-grant",
+    "mutation": "O13 the grant seam verifies the text alone (the format bypassed)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid grant signature",
+     "output changed: ✗ 1 the format flag in the compiled circuits: withdraw_shielded_to_contract_with_grant_sol_ed25519: not vacuous: the flag selects the head and enters the one SHA-512 — {\"constrain_to_boolean\":1}",
+     "output changed: ✗ 1 the format flag in the compiled circuits: withdraw_shielded_with_grant_sol_ed25519: not vacuous: the flag selects the head and enters the one SHA-512 — {\"constrain_to_boolean\":1}"
+    ]
+   },
+   {
+    "id": "SM3-flag-from-public",
+    "mutation": "O10 the flag taken from a public value (auth_nonce == 0) instead of the private input",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "SM3g-grant-flag-from-public",
+    "mutation": "O10 the grant seam takes the flag from a public value (the record nonce == 0)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid grant signature",
+     "output changed: ✗ 1 the format flag in the compiled circuits: withdraw_shielded_to_contract_with_grant_sol_ed25519: not vacuous: the flag selects the head and enters the one SHA-512 — {\"constrain_to_boolean\":1}",
+     "output changed: ✗ 1 the format flag in the compiled circuits: withdraw_shielded_with_grant_sol_ed25519: not vacuous: the flag selects the head and enters the one SHA-512 — {\"constrain_to_boolean\":1}"
+    ]
+   }
+  ]
+ },
+ "sharedModules": {
+  "what": "the shared modules where this arm reaches them: the Ed25519 core (R != O, R's checked encoding, the hash, the message type, the key derivation from a seed) and the descriptor module's ed25519 class and registry (the tag parameter, the admission, the registry entry)",
+  "mutants": [
+   {
+    "id": "E1-r-identity-deleted",
+    "mutation": "O1 R != O deleted from ed25519_verify",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "output changed: ✗ 4 degenerate signatures: R = O (identity commitment) — failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: spent opening mismatch",
+     "accepted forgery: ✗ 4 twins: unshielded twin: R = O with the verification equation holding (s = k a): the Ed25519 core's R != O — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "E2-r-unchecked-bytes",
+    "mutation": "O7 R's encoding taken from its unchecked bytes (the identity test kept on the x bytes)",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 5 verification inputs: R's encoding with one byte flipped, signed over that encoding — accepted (expected a refusal)",
+     "accepted forgery: ✗ 5 verification inputs: R's encoding with the sign bit flipped, signed over that encoding — accepted (expected a refusal)",
+     "accepted forgery: ✗ 5 verification inputs: R's encoding as y + p, signed over that encoding — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "E3-key-r-swapped",
+    "mutation": "O5 the key and R swapped in the hash",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "E4-message-not-hashed",
+    "mutation": "O6 the message not hashed",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "sol-ed25519-taint-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "E5-core-returns-true",
+    "mutation": "O18 the verification returns true",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "DOES NOT COMPILE",
+    "note": "refused by the compiler; its nearest compiling edit is listed after it"
+   },
+   {
+    "id": "E5b-core-returns-true-compiled",
+    "mutation": "O18 the verification returns true, written as an equation that always holds (the nearest compiling edit of E5: compactc 0.35.0 stops with an internal error on E5)",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: display: digits do not match the value",
+     "accepted forgery: ✗ 2 binding: another new key at execution (consistent display inputs) — accepted (expected a refusal)",
+     "output changed: ✗ 2 binding: another site label at execution (consistent display inputs) — failed assert: unknown device entry"
+    ]
+   },
+   {
+    "id": "E6-message-type-reordered",
+    "mutation": "the message type T's parts reordered (the hash takes the head's 32-byte part first)",
+    "file": "contracts/modules/SolanaFormats.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "E6b-message-type-head-only",
+    "mutation": "the device seam passes the core a message type without the text (the head alone)",
+    "file": "contracts/account-sol-ed25519.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-prover-dry",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature",
+     "honest step broken (uncaught): CompactError: failed assert: invalid signature"
+    ]
+   },
+   {
+    "id": "E7a-clamp-bit254-not-set",
+    "mutation": "O4 the clamp does not set bit 254",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "changed output",
+    "evidence": [
+     "output changed: ✗ 1 seed helper and key encoding: seed 0000000000000000000000000000000000000000000000000000000000000000 — contract 50d398f575210bfef347cca99f6208b22987d530c2de51623fc9ce313a662d9a noble 3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048",
+     "output changed: ✗ 1 seed helper and key encoding: seed ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — contract 50bf22ddfd87cc3b369fe22bc16e2bab819595f7df0677bd0fe57f4a5712fe2e noble 76a1592044a6e4f511265bca73a604d90b0529d1df602be30a19a9",
+     "output changed: ✗ 1 seed helper and key encoding: seed 39b38cd2a24eccae48cf0e470a6446c541c2c57e7e0a790a3c8388a1166f208f — contract 8cd88736dc3e6762f0f47fc4bf5079bf71f694e7f4478a03bb04d5d34c7cd9e4 noble babe907752854861d4f756007a60cf8fa360ef112f11ba40b06851"
+    ]
+   },
+   {
+    "id": "E7b-clamp-low-bits-kept",
+    "mutation": "O4 the clamp keeps bits 0..2",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "changed output",
+    "evidence": [
+     "output changed: ✗ 1 seed helper and key encoding: seed ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — contract 424323bcaa6dbcfcb7456dd665340d0487ea5c68e5b41cc8f416a516e3a9fbf0 noble 76a1592044a6e4f511265bca73a604d90b0529d1df602be30a19a9",
+     "output changed: ✗ 1 seed helper and key encoding: seed 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f — contract 2972bb0e3091bc4be9102d1085e4750aca76d6897276735fbce962bc716ab5ff noble 03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc86",
+     "output changed: ✗ 1 seed helper and key encoding: seed 53665f1499b1c29c3db02c0262c1744eb9227e1bce085495dabb60222c2046ba — contract 33ab0e41fd20dd64cc64181bb643f97a5d2eb6092e7e81dc47f8db182b099572 noble b555b3b26fae548a8bc3f2a6f4b45bd6697bd1ffac8b2b2de26494"
+    ]
+   },
+   {
+    "id": "E7c-clamp-bit255-kept",
+    "mutation": "O4 the clamp keeps bit 255",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "changed output",
+    "evidence": [
+     "output changed: ✗ 1 seed helper and key encoding: seed 0000000000000000000000000000000000000000000000000000000000000000 — contract f6d07f9e316ab601567b48a5b7de1938bb5afb8f109e2369119b66cc30674126 noble 3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048",
+     "output changed: ✗ 1 seed helper and key encoding: seed ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — contract ce8ff8d041bf86177331fdfb9388b5f2a7c5e86b7cacb630674ddbad6ee8fc39 noble 76a1592044a6e4f511265bca73a604d90b0529d1df602be30a19a9",
+     "output changed: ✗ 1 seed helper and key encoding: seed 1bc45b919e7134b88e95f53cf080e70478de2ccccdf60dee7886fa455f6b682d — contract e47a9c2a1c41c854cccd4e12cd703ead6f8a73a9b4ed6d3aeeb4e19b6ca0a706 noble 971442d81581c9aa60b20362bd4b9ea0a73cafcc167c0b78ceb21e"
+    ]
+   },
+   {
+    "id": "E7d-second-half",
+    "mutation": "O9 the scalar taken from the hash's second half",
+    "file": "contracts/modules/Ed25519Core.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "changed output",
+    "evidence": [
+     "output changed: ✗ 1 seed helper and key encoding: seed 0000000000000000000000000000000000000000000000000000000000000000 — contract fc3d2b3f18f0258e7933c951780fcc839936310ea8933d1972f13f7493d97dfd noble 3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048",
+     "output changed: ✗ 1 seed helper and key encoding: seed ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — contract c18aae4e8d28e112675194265d5aa6da62cd651d4c07b02063359bf291af2b2a noble 76a1592044a6e4f511265bca73a604d90b0529d1df602be30a19a9",
+     "output changed: ✗ 1 seed helper and key encoding: seed 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f — contract c7ee4b55e340a4da2837567c8a71b5ab07ea0c7d32ae8cdf0990e47d5cbe5a10 noble 03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc86"
+    ]
+   },
+   {
+    "id": "W10-registry-sol-dropped",
+    "mutation": "O11 a registry entry dropped (sol_ed25519)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-fixtures-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not an Ed25519 device tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a blind tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not a blind tag"
+    ]
+   },
+   {
+    "id": "W11-sol-under-w52",
+    "mutation": "O11 a tag mapped to another class (sol_ed25519 under w52)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-client-offline",
+     "sol-ed25519-custody-offline",
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "sol-ed25519-recovery-sim",
+     "sol-ed25519-seam-offline",
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not an Ed25519 device tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not an Ed25519 boot tag",
+     "honest step broken (uncaught): CompactError: failed assert: descriptor: not an Ed25519 boot tag"
+    ]
+   },
+   {
+    "id": "W12-ed25519-key-identity-deleted",
+    "mutation": "O1 the ed25519 class's A != O deleted (every derivation and the seam's)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "sol-ed25519-devices-offline",
+     "sol-ed25519-grants-offline",
+     "sol-ed25519-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "accepted forgery: ✗ 6 activation (simulator): the identity key's boot commitment: the contract's derivation refuses it — accepted (expected a refusal)",
+     "accepted forgery: ✗ 6 activation (simulator): identity key refused at activation (A != O in the module's ed25519 class) — accepted (expected a refusal)",
+     "accepted forgery: ✗ 5 guards: the identity point as a Solana target under a valid signature (A != O in the derivation) — accepted (expected a refusal)"
+    ]
+   },
+   {
+    "id": "W5-signer-entries-tag-hardcoded",
+    "mutation": "O12 derive_signer_entries_ed25519 ignores its tag parameter (the Solana device tag hard-coded)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "EQUIVALENT",
+    "equivalence": "derive_signer_entries_ed25519 hashes the Solana device tag instead of its tag parameter. It first asserts is_registered_device_tag(tag, ReadableClass.ed25519), and readable_arms() registers exactly one ed25519-class arm, sol_ed25519, so every tag it admits is device_tag_sol_ed25519() and the hashed preimages are equal for every admitted input; a different tag is refused before the hash either way. The tag parameter becomes observable only when a second ed25519 arm is registered (extension point E1), which this lane does not ship.",
+    "evidence": "classified-a1.json and a2: no behavioural failure (the a1 failure of constraint-negative-offline was the --skip-zk harness artefact, see README); mutants/tst-registry/: on a scratch copy of c4c9bd1 with P4.1's dry-run arm `tst` (class ed25519) registered, the mutant is killed by `signer entries (tst seam) = [entry(counter), entry(counter + 1)]` (the tst-tag recipe), while the registration alone passes 32/32.",
+    "review": "argued by the P6.2 runner with the dry-run registry evidence; not reviewed (P8, on the owner's request)"
+   },
+   {
+    "id": "W5b-signer-entries-admission-deleted",
+    "mutation": "O1 derive_signer_entries_ed25519 without its tag admission",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): ",
+     "accepted forgery: AssertionError [ERR_ASSERTION]: Missing expected exception: signer_entries_ed25519 must refuse midnight:account:device:v1"
+    ]
+   },
+   {
+    "id": "W6-entry-tag-hardcoded",
+    "mutation": "O12 derive_descriptor_entry_ed25519 ignores its tag (the Solana device tag hard-coded)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "EQUIVALENT",
+    "equivalence": "derive_descriptor_entry_ed25519 hashes the Solana device tag instead of its tag parameter; as W5, its admission accepts only device_tag_sol_ed25519() in the ed25519 class while one ed25519 arm is registered, so the preimages are equal for every admitted input.",
+    "evidence": "as W5; mutants/tst-registry/: with the dry-run arm `tst` registered the mutant is killed by `entry (ed25519 class, tst device tag) = SHA-256(...)`, the registration alone passing 32/32.",
+    "review": "argued by the P6.2 runner with the dry-run registry evidence; not reviewed (P8, on the owner's request)"
+   },
+   {
+    "id": "W7-blind-tag-hardcoded",
+    "mutation": "O12 derive_blind ignores its tag (the Solana blind tag hard-coded)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "wallet-arms-client-offline",
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): ",
+     "honest step broken (uncaught): "
+    ]
+   },
+   {
+    "id": "W8-salt-tag-hardcoded",
+    "mutation": "O12 derive_grant_scope_salt ignores its tag (the Solana salt tag hard-coded)",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "broken honest behaviour",
+    "evidence": [
+     "honest step broken (uncaught): "
+    ]
+   },
+   {
+    "id": "W9-ed25519-entry-admission-deleted",
+    "mutation": "O1 the ed25519 device recipe without its tag admission",
+    "file": "contracts/modules/WalletArmDescriptors.compact",
+    "verdict": "KILLED",
+    "killedBy": [
+     "wallet-arms-descriptors-offline"
+    ],
+    "killKind": "accepted forgery",
+    "evidence": [
+     "honest step broken (uncaught): ",
+     "accepted forgery: AssertionError [ERR_ASSERTION]: Missing expected exception: entry_ed25519 must refuse midnight:account:device:v1"
+    ]
+   }
+  ]
+ },
+ "killed": 104,
+ "equivalent": 4,
+ "doesNotCompile": 2,
+ "notKilled": [],
+ "total": 110,
+ "verdict": "PASS"
+}

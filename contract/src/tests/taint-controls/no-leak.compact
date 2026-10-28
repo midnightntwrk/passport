@@ -1,0 +1,12 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+// Control for the format flag's privacy: the flag only selects which bytes
+// are hashed under an assert, as a signing format's head does, and the key
+// is disclosed on its own. It compiles, and the ZKIR taint analysis must
+// report no disclosure.
+export ledger accepted: Bytes<32>;
+export circuit leak(offchain: Boolean, key: Bytes<32>): [] {
+  const head = offchain ? key : pad(32, "Midnight Passport");
+  assert(sha512<[Bytes<32>, Bytes<32>]>([head, key]) != pad(64, ""), "the hash is zero");
+  accepted = disclose(key);
+}

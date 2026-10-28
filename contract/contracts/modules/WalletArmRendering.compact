@@ -1,0 +1,557 @@
+// ---------------------------------------------------------------------------
+// Readable rendering — the shared text helpers of every readable
+// authorisation arm (`evm_k256`, `sol_ed25519`).
+//
+// A readable arm's signed bytes show every operand in full, and the circuit
+// recomputes those bytes from exactly the values it executes on. These
+// helpers turn values into the printable ASCII a wallet displays:
+//
+//   decimal   a Uint<8>, <32>, <64>, or <128> in decimal: one or more digits,
+//             no leading zero (except "0"), left-aligned and space-padded to
+//             the type's full width (3, 10, 20, or 39 bytes), so every value of
+//             the type fits and each value has exactly one valid text;
+//   hex       bytes as lowercase hexadecimal, two digits per byte, in full
+//             (no fingerprint, no truncation);
+//   labels    zero-padded ASCII (a registered tag, a grantee's origin label):
+//             visible words separated by single spaces, then zero bytes,
+//             shown with the zero bytes as spaces;
+//   visible   exact visible ASCII (a passkey origin), shown as is;
+//   enums     an enumerated operand (a grant's recipient kind, a k256 key's
+//             signing envelope) as a fixed text label per value;
+//   words     "never" for a grant expiry of 0, "not applicable" for an
+//             all-zero passkey RP hash and "no window" for a zero rate-limit
+//             window: the only values with a fixed word, each with an exact
+//             protocol meaning; amounts and caps stay in base units;
+//   dates     Unix seconds as "yyyy-mm-dd hh:mm:ss UTC";
+//   base58    a 32-byte value as the base58 text Solana wallets show;
+//   amounts   the site's label for a moved amount: its digits with the
+//             site's decimal point and symbol.
+//
+// Compact has no division, so decimal digits, dates and base58 digits are
+// DISPLAY INPUTS: the caller supplies the text (and, where the check needs a
+// quotient, a checked hint) and the circuit CHECKS that it reads back to the
+// value and has the canonical shape. Nothing else is accepted, so the input
+// adds no freedom. Hex digits are computed in-circuit by comparison.
+//
+// The functions are pure and return byte vectors for the arm to place in its
+// message (or to hash). An arm that shows a text MUST obtain it from these
+// helpers with the executed value, never take shown text as a free input.
+//
+// WHAT THIS MODULE IS NOT: a frame. It holds the pieces above and their
+// rules (the canonical decimal, hex and base58 texts, the dates, the fixed
+// words and enumerated labels, and the label-safety rule of label_text:
+// visible words separated by single spaces, no leading or trailing space,
+// so two different labels never show the same text). It holds no line
+// order, no separator, no first line, no field name and no fixed sentence.
+// Each arm owns its frame in its own file and builds it from these pieces;
+// a new arm's frame is a new file, and this module does not change for it.
+// A frame that joins fields with a separator character must also refuse
+// that character inside the labels it shows, in its own file, since the
+// label-safety rule here does not know the frame's separator.
+// ---------------------------------------------------------------------------
+
+module WalletArmRendering {
+  import CompactStandardLibrary;
+
+  // ── Decimal digits ────────────────────────────────────────────────────────
+  //
+  // `text` is `value` in decimal: one or more digits, then spaces only; no
+  // leading zero except the single digit "0". The value is read back over the
+  // field, which is exact while 10^n is below the field modulus (n <= 76):
+  // every instantiation below is at most 39 digits.
+  circuit decimal_text<#n>(value: Field, text: Vector<n, Uint<8>>): Vector<n, Uint<8>> {
+    // [the value read so far, the padding has begun, every byte fits]
+    const r = fold((s: [Field, Boolean, Boolean], c: Uint<8>): [Field, Boolean, Boolean] => {
+      const space = c == 32;
+      const digit = c >= 48 && c <= 57;
+      const padding = s[1] || space;
+      return [padding ? s[0] : s[0] * 10 + ((c as Field) - 48),
+              padding,
+              s[2] && (space || (digit && !s[1]))];
+    }, [0 as Field, false, true], text);
+    assert(r[2], "display: not a left-aligned decimal");
+    assert(text[0] != 32, "display: empty decimal");
+    assert(text[0] != 48 || text[1] == 32, "display: leading zero");
+    assert(r[0] == value, "display: digits do not match the value");
+    return text;
+  }
+
+  export pure circuit uint8_text(value: Uint<8>, text: Vector<3, Uint<8>>): Vector<3, Uint<8>> {
+    return decimal_text<3>(value as Field, text);
+  }
+
+  export pure circuit uint32_text(value: Uint<32>, text: Vector<10, Uint<8>>): Vector<10, Uint<8>> {
+    return decimal_text<10>(value as Field, text);
+  }
+
+  export pure circuit uint64_text(value: Uint<64>, text: Vector<20, Uint<8>>): Vector<20, Uint<8>> {
+    return decimal_text<20>(value as Field, text);
+  }
+
+  // 2^128 - 1 has 39 digits: every amount and cap is shown in full.
+  export pure circuit uint128_text(value: Uint<128>, text: Vector<39, Uint<8>>): Vector<39, Uint<8>> {
+    return decimal_text<39>(value as Field, text);
+  }
+
+  // ── Exact words ───────────────────────────────────────────────────────────
+  //
+  // A word replaces a value ONLY where the value has an exact protocol
+  // meaning, selected by exact equality: a grant expiry of 0 never expires
+  // ("never"); an all-zero passkey RP hash means no passkey is involved
+  // ("not applicable"). Every other value is shown in full; amounts and caps
+  // in base units. The words are space-padded to the field's width; the
+  // client's copies are in src/wallet/rendering.ts.
+
+  // A grant's expiry (block time, seconds): "never" for 0, else its decimal
+  // digits (checked by uint64_text, which also runs for 0: its text is "0").
+  export pure circuit expiry_text(value: Uint<64>, text: Vector<20, Uint<8>>): Vector<20, Uint<8>> {
+    const digits = uint64_text(value, text);
+    const never = value == 0;
+    return map((d: Uint<8>, w: Uint<8>): Uint<8> => (never ? w : d) as Uint<8>,
+               digits, [110, 101, 118, 101, 114, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]);
+  }
+
+  // A grant's rate-limit window length (seconds): "no window" for 0, else its
+  // decimal digits (checked by uint64_text, which also runs for 0). The
+  // scoped-grants MIP reserves the window fields and requires both to be 0,
+  // so no grant has a per-window bound; the word says so.
+  export pure circuit window_text(window_len: Uint<64>, text: Vector<20, Uint<8>>): Vector<20, Uint<8>> {
+    const digits = uint64_text(window_len, text);
+    const none = window_len == 0;
+    return map((d: Uint<8>, w: Uint<8>): Uint<8> => (none ? w : d) as Uint<8>,
+               digits, [110, 111, 32, 119, 105, 110, 100, 111, 119, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]);
+  }
+
+  // A grant's window cap: "no window" when the window length and the cap are
+  // both 0 (a cap without a window bounds nothing), else the cap's decimal
+  // digits (checked by uint128_text in every case).
+  export pure circuit window_cap_text(window_len: Uint<64>, window_cap: Uint<128>, text: Vector<39, Uint<8>>): Vector<39, Uint<8>> {
+    const digits = uint128_text(window_cap, text);
+    const none = window_len == 0 && window_cap == 0;
+    return map((d: Uint<8>, w: Uint<8>): Uint<8> => (none ? w : d) as Uint<8>,
+               digits, [110, 111, 32, 119, 105, 110, 100, 111, 119, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                        32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]);
+  }
+
+  // ── UTC date and time ─────────────────────────────────────────────────────
+  //
+  // Unix seconds as "yyyy-mm-dd hh:mm:ss UTC" in the Gregorian calendar
+  // (a leap year every fourth year, except centuries not divisible by 400),
+  // for 0 (1970-01-01 00:00:00 UTC) to 253402300799 (9999-12-31 23:59:59
+  // UTC). A larger value is shown as the exact words
+  // "after 9999-12-31 23:59:59 UTC". Both texts are 29 bytes wide; the date
+  // is left-aligned and space-padded.
+  //
+  // The text is a display input. Within the range the circuit checks its
+  // shape (digits and separators), the month, the day against the month's
+  // length, and the time of day, then recomputes the seconds from those
+  // fields and requires them to equal the value. The leap rule and the count
+  // of leap days need the year minus one divided by 400, 100 and 4, and
+  // Compact has no division, so `year_split` carries the quotients as
+  // checked hints:
+  //   year - 1 = 400 * s[0] + 100 * s[1] + 4 * s[2] + s[3],
+  //   s[1] <= 3, s[2] <= 24, s[3] <= 3,
+  // a mixed-radix form with exactly one solution. Then the year is a leap
+  // year iff s[3] == 3 and (s[2] != 24 or s[1] == 3), and the leap years in
+  // [1, year - 1] number 97 * s[0] + 24 * s[1] + s[2] (477 of them before
+  // 1970). Above the range the text must be the words and the split all
+  // zero, so every value has exactly one valid input.
+
+  circuit is_digit(c: Uint<8>): Boolean {
+    return c >= 48 && c <= 57;
+  }
+
+  circuit digit_value(c: Uint<8>): Field {
+    return (c as Field) - 48;
+  }
+
+  export pure circuit utc_datetime_text(
+    value:      Uint<64>,
+    text:       Vector<29, Uint<8>>,
+    year_split: Vector<4, Uint<8>>,
+  ): Vector<29, Uint<8>> {
+    const t = text;
+    const s = year_split;
+    const after = value > 253402300799;
+
+    const shape = is_digit(t[0]) && is_digit(t[1]) && is_digit(t[2]) && is_digit(t[3]) && t[4] == 45
+               && is_digit(t[5]) && is_digit(t[6]) && t[7] == 45 && is_digit(t[8]) && is_digit(t[9])
+               && t[10] == 32 && is_digit(t[11]) && is_digit(t[12]) && t[13] == 58
+               && is_digit(t[14]) && is_digit(t[15]) && t[16] == 58 && is_digit(t[17]) && is_digit(t[18])
+               && t[19] == 32 && t[20] == 85 && t[21] == 84 && t[22] == 67
+               && t[23] == 32 && t[24] == 32 && t[25] == 32 && t[26] == 32 && t[27] == 32 && t[28] == 32;
+
+    const year = 1000 * digit_value(t[0]) + 100 * digit_value(t[1]) + 10 * digit_value(t[2]) + digit_value(t[3]);
+    const month = 10 * digit_value(t[5]) + digit_value(t[6]);
+    const day = 10 * digit_value(t[8]) + digit_value(t[9]);
+    const hour = 10 * digit_value(t[11]) + digit_value(t[12]);
+    const minute = 10 * digit_value(t[14]) + digit_value(t[15]);
+    const second = 10 * digit_value(t[17]) + digit_value(t[18]);
+
+    // The month, and the days of the year before it in a common year.
+    const m1  = month == (1 as Field);
+    const m2  = month == (2 as Field);
+    const m3  = month == (3 as Field);
+    const m4  = month == (4 as Field);
+    const m5  = month == (5 as Field);
+    const m6  = month == (6 as Field);
+    const m7  = month == (7 as Field);
+    const m8  = month == (8 as Field);
+    const m9  = month == (9 as Field);
+    const m10 = month == (10 as Field);
+    const m11 = month == (11 as Field);
+    const m12 = month == (12 as Field);
+    const month_ok = m1 || m2 || m3 || m4 || m5 || m6 || m7 || m8 || m9 || m10 || m11 || m12;
+    const before_month = (m1 ? 0 : m2 ? 31 : m3 ? 59 : m4 ? 90 : m5 ? 120 : m6 ? 151 : m7 ? 181
+                        : m8 ? 212 : m9 ? 243 : m10 ? 273 : m11 ? 304 : 334) as Field;
+    const long_month = m1 || m3 || m5 || m7 || m8 || m10 || m12;
+
+    const split_ok = year - 1 == 400 * (s[0] as Field) + 100 * (s[1] as Field) + 4 * (s[2] as Field) + (s[3] as Field)
+                  && s[1] <= 3 && s[2] <= 24 && s[3] <= 3;
+    const split_zero = s[0] == 0 && s[1] == 0 && s[2] == 0 && s[3] == 0;
+    const leap = s[3] == 3 && (s[2] != 24 || s[1] == 3);
+
+    // The day: 01..28 always, 29 except in a common February, 30 except in
+    // February, 31 in a long month.
+    const nonzero = !(t[8] == 48 && t[9] == 48);
+    const upto28 = t[8] <= 49 || (t[8] == 50 && t[9] <= 56);
+    const is29 = t[8] == 50 && t[9] == 57;
+    const is30 = t[8] == 51 && t[9] == 48;
+    const is31 = t[8] == 51 && t[9] == 49;
+    const day_ok = nonzero && (upto28 || (is29 && (!m2 || leap)) || (is30 && !m2) || (is31 && long_month));
+
+    // 00..23, 00..59, 00..59.
+    const time_ok = (t[11] <= 49 || (t[11] == 50 && t[12] <= 51)) && t[14] <= 53 && t[17] <= 53;
+
+    const leap_days = 97 * (s[0] as Field) + 24 * (s[1] as Field) + (s[2] as Field) - 477
+                    + ((leap && !m1 && !m2) ? 1 : 0) as Field;
+    const days = 365 * (year - 1970) + leap_days + before_month + day - 1;
+    const seconds = days * 86400 + hour * 3600 + minute * 60 + second;
+
+    // "after 9999-12-31 23:59:59 UTC"
+    const words = fold((ok: Boolean, c: Uint<8>, w: Uint<8>): Boolean => ok && c == w, true, t,
+                       [97, 102, 116, 101, 114, 32, 57, 57, 57, 57, 45, 49, 50, 45, 51, 49, 32,
+                        50, 51, 58, 53, 57, 58, 53, 57, 32, 85, 84, 67]);
+
+    assert(after || shape, "display: not a UTC date and time");
+    assert(after || month_ok, "display: month out of range");
+    assert(after || day_ok, "display: day out of range");
+    assert(after || time_ok, "display: time of day out of range");
+    assert(after ? split_zero : split_ok, "display: the year split is not canonical");
+    assert(after || seconds == (value as Field), "display: the date and time do not match the value");
+    assert(!after || words, "display: not the words for a time after 9999-12-31 23:59:59 UTC");
+    return text;
+  }
+
+  // A grant's expiry as a date: "never" for 0, else utc_datetime_text (which
+  // also runs for 0: its text is the date of 0, 1970-01-01 00:00:00 UTC).
+  export pure circuit expiry_datetime_text(
+    value:      Uint<64>,
+    text:       Vector<29, Uint<8>>,
+    year_split: Vector<4, Uint<8>>,
+  ): Vector<29, Uint<8>> {
+    const date = utc_datetime_text(value, text, year_split);
+    const never = value == 0;
+    return map((d: Uint<8>, w: Uint<8>): Uint<8> => (never ? w : d) as Uint<8>,
+               date, [110, 101, 118, 101, 114, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                      32, 32, 32, 32, 32, 32, 32, 32, 32]);
+  }
+
+  // ── Hexadecimal ───────────────────────────────────────────────────────────
+
+  circuit hex_digit(n: Uint<8>): Uint<8> {
+    return (n < 10 ? n + 48 : n + 87) as Uint<8>;
+  }
+
+  // One byte as two lowercase hex digits: the high nibble's bits by
+  // comparison, the low nibble as the remainder.
+  circuit hex_pair(b: Uint<8>): [Uint<8>, Uint<8>] {
+    const h8 = b >= 128;
+    const b7 = h8 ? b - 128 : b;
+    const h4 = b7 >= 64;
+    const b6 = h4 ? b7 - 64 : b7;
+    const h2 = b6 >= 32;
+    const b5 = h2 ? b6 - 32 : b6;
+    const h1 = b5 >= 16;
+    const lo = h1 ? b5 - 16 : b5;
+    const hi = (h8 ? 8 : 0) + (h4 ? 4 : 0) + (h2 ? 2 : 0) + (h1 ? 1 : 0);
+    return [hex_digit(hi as Uint<8>), hex_digit(lo as Uint<8>)];
+  }
+
+  export pure circuit hex_text_20(b: Bytes<20>): Vector<40, Uint<8>> {
+    const p = map(hex_pair, b as Vector<20, Uint<8>>);
+    return [...p[0],  ...p[1],  ...p[2],  ...p[3],  ...p[4],  ...p[5],  ...p[6],
+            ...p[7],  ...p[8],  ...p[9],  ...p[10], ...p[11], ...p[12], ...p[13],
+            ...p[14], ...p[15], ...p[16], ...p[17], ...p[18], ...p[19]];
+  }
+
+  export pure circuit hex_text_32(b: Bytes<32>): Vector<64, Uint<8>> {
+    const p = map(hex_pair, b as Vector<32, Uint<8>>);
+    return [...p[0],  ...p[1],  ...p[2],  ...p[3],  ...p[4],  ...p[5],  ...p[6],  ...p[7],
+            ...p[8],  ...p[9],  ...p[10], ...p[11], ...p[12], ...p[13], ...p[14], ...p[15],
+            ...p[16], ...p[17], ...p[18], ...p[19], ...p[20], ...p[21], ...p[22], ...p[23],
+            ...p[24], ...p[25], ...p[26], ...p[27], ...p[28], ...p[29], ...p[30], ...p[31]];
+  }
+
+  export pure circuit hex_text_64(b: Bytes<64>): Vector<128, Uint<8>> {
+    return [...hex_text_32(slice<32>(b, 0)), ...hex_text_32(slice<32>(b, 32))];
+  }
+
+  // The 192-byte inbox ciphertext, in full.
+  export pure circuit hex_text_192(b: Bytes<192>): Vector<384, Uint<8>> {
+    return [...hex_text_32(slice<32>(b, 0)),   ...hex_text_32(slice<32>(b, 32)),
+            ...hex_text_32(slice<32>(b, 64)),  ...hex_text_32(slice<32>(b, 96)),
+            ...hex_text_32(slice<32>(b, 128)), ...hex_text_32(slice<32>(b, 160))];
+  }
+
+  // A grant's passkey RP hash (exact word): "not applicable" (space-padded)
+  // when all 32 bytes are zero, which every non-passkey grant carries; else
+  // the hash in full hex. `hex` MUST be h's own hex text, already checked
+  // against h (hex_text_32, or an arm's own checked renderer): this helper
+  // only selects.
+  export pure circuit rp_hash_text_from_hex(h: Bytes<32>, hex: Vector<64, Uint<8>>): Vector<64, Uint<8>> {
+    const na = h == pad(32, "");
+    return map((x: Uint<8>, w: Uint<8>): Uint<8> => (na ? w : x) as Uint<8>, hex,
+               [110, 111, 116, 32, 97, 112, 112, 108, 105, 99, 97, 98, 108, 101, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]);
+  }
+
+  // The same, with the hex computed here.
+  export pure circuit rp_hash_text(h: Bytes<32>): Vector<64, Uint<8>> {
+    return rp_hash_text_from_hex(h, hex_text_32(h));
+  }
+
+  // The byte order of a little-endian coordinate reversed, so that a k256 or
+  // p256 coordinate the recipes bind little-endian can be shown in the usual
+  // big-endian form. Free in a circuit (wiring only).
+  export pure circuit reverse_32(b: Bytes<32>): Bytes<32> {
+    const v = b as Vector<32, Uint<8>>;
+    return Bytes[v[31], v[30], v[29], v[28], v[27], v[26], v[25], v[24],
+                 v[23], v[22], v[21], v[20], v[19], v[18], v[17], v[16],
+                 v[15], v[14], v[13], v[12], v[11], v[10], v[9],  v[8],
+                 v[7],  v[6],  v[5],  v[4],  v[3],  v[2],  v[1],  v[0]];
+  }
+
+  // ── Base58 ────────────────────────────────────────────────────────────────
+  //
+  // A 32-byte value as the base58 text Solana wallets show (the Bitcoin
+  // alphabet, 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz):
+  // one "1" per leading zero byte, then the value, read big-endian, in base
+  // 58 without leading zeros. The text has 32 to 44 characters (an all-zero
+  // value is 32 "1"s) and is left-aligned and space-padded to 44 bytes. An
+  // arm shows all 44 bytes, trailing spaces included, so each value has one
+  // fixed-length text.
+  //
+  // The digits are display inputs: `digits` holds each character's base58
+  // digit (0..57) and 58 at every padding position, and the circuit computes
+  // the characters from them. It checks that the digits read back to the
+  // value and that the text is canonical: every digit below 58, the padding
+  // only after the last character, and exactly as many leading "1"s as the
+  // value has leading zero bytes. Base 58 with digits 0..57 is unique, so
+  // each value has exactly one valid input.
+  //
+  // Forty-four digits can be worth up to 58^44 > 2^256, beyond the field, so
+  // the read-back runs on two 128-bit limbs. The positions form three groups
+  // (0..20, 21..41, 42..43); v1, v2 and v3 are the groups' values and c2, c3
+  // their digit counts (padding counts nowhere). With checked hints `carry`,
+  // `low` and `top`:
+  //   58^c2 * v1 + v2 = carry * 2^128 + low   (carry < 2^120, low < 2^128)
+  //   58^c3 * low + v3 = top * 2^128 + lo      (top < 2^16)
+  //   hi = 58^c3 * carry + top
+  // where hi and lo are the value's first and last 16 bytes, read
+  // big-endian. Each side stays below 2^248, under the field modulus, so the
+  // equations hold over the integers, each hint has one valid value, and
+  // together they say the digits are worth hi * 2^128 + lo.
+
+  // A base58 digit's character, or a space for the padding digit 58.
+  circuit base58_char(d: Uint<8>): Uint<8> {
+    const off = d >= 33 ? (d >= 44 ? 65 : 64) : d >= 17 ? (d >= 22 ? 58 : 57) : d >= 9 ? 56 : 49;
+    return (d == 58 ? 32 : d + off) as Uint<8>;
+  }
+
+  // [value, 58^(digits)] of a group of positions (the padding adds nothing).
+  circuit base58_group<#n>(g: Vector<n, Uint<8>>): [Field, Field] {
+    return fold((a: [Field, Field], d: Uint<8>): [Field, Field] =>
+                  d == 58 ? a : [a[0] * 58 + (d as Field), a[1] * 58],
+                [0 as Field, 1 as Field], g);
+  }
+
+  // The value of 16 bytes, big-endian.
+  circuit be_value_16(b: Vector<16, Uint<8>>): Field {
+    return fold((a: Field, x: Uint<8>): Field => a * 256 + (x as Field), 0 as Field, b);
+  }
+
+  export pure circuit base58_text_32(
+    b:      Vector<32, Uint<8>>,
+    digits: Vector<44, Uint<8>>,
+    carry:  Uint<120>,
+    low:    Uint<128>,
+    top:    Uint<16>,
+  ): Vector<44, Uint<8>> {
+    const d = digits;
+    // [the padding has begun, every digit fits, leading "1"s, still leading]
+    const r = fold((a: [Boolean, Boolean, Field, Boolean], x: Uint<8>): [Boolean, Boolean, Field, Boolean] => {
+      const space = x == 58;
+      const lead = a[3] && x == 0;
+      return [a[0] || space, a[1] && x <= 58 && (space || !a[0]), lead ? a[2] + 1 : a[2], lead];
+    }, [false, true, 0 as Field, true], d);
+    // [leading zero bytes, still leading]
+    const z = fold((a: [Field, Boolean], x: Uint<8>): [Field, Boolean] => {
+      const lead = a[1] && x == 0;
+      return [lead ? a[0] + 1 : a[0], lead];
+    }, [0 as Field, true], b);
+    const g1 = base58_group<21>([d[0],  d[1],  d[2],  d[3],  d[4],  d[5],  d[6],  d[7],  d[8],  d[9],  d[10],
+                                 d[11], d[12], d[13], d[14], d[15], d[16], d[17], d[18], d[19], d[20]]);
+    const g2 = base58_group<21>([d[21], d[22], d[23], d[24], d[25], d[26], d[27], d[28], d[29], d[30], d[31],
+                                 d[32], d[33], d[34], d[35], d[36], d[37], d[38], d[39], d[40], d[41]]);
+    const g3 = base58_group<2>([d[42], d[43]]);
+    const hi = be_value_16([b[0], b[1], b[2],  b[3],  b[4],  b[5],  b[6],  b[7],
+                            b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]]);
+    const lo = be_value_16([b[16], b[17], b[18], b[19], b[20], b[21], b[22], b[23],
+                            b[24], b[25], b[26], b[27], b[28], b[29], b[30], b[31]]);
+    const limb = 340282366920938463463374607431768211456 as Field;  // 2^128
+    assert(r[1], "display: not a left-aligned base58 text");
+    assert(r[2] == z[0], "display: the leading base58 ones do not match the leading zero bytes");
+    assert(g2[1] * g1[0] + g2[0] == (carry as Field) * limb + (low as Field),
+           "display: the base58 carry hints do not split the leading digits");
+    assert(g3[1] * (low as Field) + g3[0] == (top as Field) * limb + lo,
+           "display: the base58 digits do not match the value's low bytes");
+    assert(hi == g3[1] * (carry as Field) + (top as Field),
+           "display: the base58 digits do not match the value's high bytes");
+    return map(base58_char, d);
+  }
+
+  // ── Labels ────────────────────────────────────────────────────────────────
+  //
+  // A zero-padded label: one or more words of visible characters
+  // (0x21..0x7e) separated by single spaces, then zero bytes only. It starts
+  // with a visible character and its text never ends with a space, so showing
+  // the zero bytes as spaces is one-to-one: two labels with different bytes
+  // never show the same text.
+  export pure circuit label_text<#n>(label: Bytes<n>): Vector<n, Uint<8>> {
+    const v = label as Vector<n, Uint<8>>;
+    // [the previous byte was a space (true before the first byte),
+    //  the padding has begun, every byte fits]
+    const r = fold((s: [Boolean, Boolean, Boolean], c: Uint<8>): [Boolean, Boolean, Boolean] => {
+      const zero = c == 0;
+      const space = c == 32;
+      const shown = c >= 33 && c <= 126;
+      const fits = s[1] ? zero
+                 : zero ? !s[0]
+                 : shown || (space && !s[0]);
+      return [space, s[1] || zero, s[2] && fits];
+    }, [true, false, true], v);
+    assert(r[2] && !r[0], "display: not a zero-padded label");
+    return map((c: Uint<8>): Uint<8> => (c == 0 ? 32 : c) as Uint<8>, v);
+  }
+
+  // A grantee's 32-byte origin label; also renders a registered tag.
+  export pure circuit label_text_32(label: Bytes<32>): Vector<32, Uint<8>> {
+    return label_text<32>(label);
+  }
+
+  // Exact visible ASCII (0x21..0x7e), shown byte for byte.
+  export pure circuit visible_text<#n>(b: Bytes<n>): Vector<n, Uint<8>> {
+    const v = b as Vector<n, Uint<8>>;
+    for (const c of v) {
+      assert(c >= 33 && c <= 126, "display: not visible ASCII");
+    }
+    return v;
+  }
+
+  // A passkey's 21-byte origin (the wa-json134 profile).
+  export pure circuit visible_text_21(b: Bytes<21>): Vector<21, Uint<8>> {
+    return visible_text<21>(b);
+  }
+
+  // ── Enumerated values ─────────────────────────────────────────────────────
+  //
+  // An enumerated operand is shown as a fixed label, selected in-circuit
+  // from the executed value, so the label cannot disagree with it; a value
+  // without a label is refused. Each label is visible words, space-padded to
+  // 24 bytes, and distinct labels show distinct texts. The client's table
+  // (src/wallet/labels.ts) holds the same texts.
+
+  // One of four zero-padded 24-byte labels, chosen by `i`, shown with its
+  // padding as spaces.
+  circuit enum_text_24(i: Uint<8>, l0: Bytes<24>, l1: Bytes<24>, l2: Bytes<24>, l3: Bytes<24>): Vector<24, Uint<8>> {
+    return map((a: Uint<8>, b: Uint<8>, c: Uint<8>, d: Uint<8>): Uint<8> => {
+                 const x = i == 0 ? a : i == 1 ? b : i == 2 ? c : d;
+                 return (x == 0 ? 32 : x) as Uint<8>;
+               },
+               l0 as Vector<24, Uint<8>>, l1 as Vector<24, Uint<8>>,
+               l2 as Vector<24, Uint<8>>, l3 as Vector<24, Uint<8>>);
+  }
+
+  // A grant's recipient kind (scoped-grants MIP): 0 no recipient pin,
+  // 1 a user address (unshielded), 2 a Zswap coin public key (shielded),
+  // 3 a contract address (direct transfer).
+  export pure circuit recipient_kind_text(kind: Uint<8>): Vector<24, Uint<8>> {
+    assert(kind <= 3, "display: unknown recipient kind");
+    return enum_text_24(kind, pad(24, "any recipient"), pad(24, "unshielded user address"),
+                        pad(24, "shielded coin public key"), pad(24, "contract address"));
+  }
+
+  // A k256 key's signing envelope: 0 the key signs SHA-256 of the
+  // challenge, 1 it signs through a dApp connector's signData prefix.
+  export pure circuit k256_envelope_text(envelope: Uint<8>): Vector<24, Uint<8>> {
+    assert(envelope <= 1, "display: unknown signing envelope");
+    return enum_text_24(envelope, pad(24, "SHA-256 of the challenge"), pad(24, "dApp-connector signData"),
+                        pad(24, ""), pad(24, ""));
+  }
+
+  // ── The site's amount label ───────────────────────────────────────────────
+  //
+  // A moved amount is shown in base units, and beside it the site's label
+  // for it: "<number> <symbol>", left-aligned and space-padded in 49 bytes,
+  // marked by the arm as the site's claim. <number> is the value's digits
+  // with the site's decimal point: none, or 1..18 digits after it, at least
+  // one before it, no leading zero (except a lone "0" before the point);
+  // <symbol> is 1..8 visible characters, the first a letter (so the symbol
+  // can never read as more digits of the number, as in "1 000"). The digits
+  // read back to the value, so the site chooses only the point's position
+  // and the symbol. At most 47 digits fit, and 10^47 is below the field
+  // modulus, so the read-back is exact.
+  export pure circuit site_amount_label_text(value: Uint<128>, t: Vector<49, Uint<8>>): Vector<49, Uint<8>> {
+    // [value so far, phase (0 integer part, 1 fraction, 2 symbol, 3 padding),
+    //  digits before the point, digits after it, symbol length, every byte fits,
+    //  the symbol starts with a letter]
+    const r = fold((s: [Field, Uint<8>, Uint<8>, Uint<8>, Uint<8>, Boolean, Boolean], c: Uint<8>):
+                   [Field, Uint<8>, Uint<8>, Uint<8>, Uint<8>, Boolean, Boolean] => {
+      const space = c == 32;
+      const dot = c == 46;
+      const digit = c >= 48 && c <= 57;
+      const shown = c >= 33 && c <= 126;
+      const letter = (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+      const p = s[1];
+      const whole = p == 0;
+      const frac = p == 1;
+      const sym = p == 2;
+      const ok = whole ? digit || ((dot || space) && s[2] != 0)
+               : frac ? digit || (space && s[3] != 0)
+               : sym ? shown || (space && s[4] != 0)
+               : space;
+      const next = whole ? (dot ? 1 : (space ? 2 : 0))
+                 : frac ? (space ? 2 : 1)
+                 : sym ? (space ? 3 : 2)
+                 : 3;
+      const number = (whole || frac) && digit;
+      return [number ? s[0] * 10 + ((c as Field) - 48) : s[0],
+              next as Uint<8>,
+              (whole && digit ? s[2] + 1 : s[2]) as Uint<8>,
+              (frac && digit ? s[3] + 1 : s[3]) as Uint<8>,
+              (sym && shown ? s[4] + 1 : s[4]) as Uint<8>,
+              s[5] && ok,
+              s[6] && (!(sym && s[4] == 0) || letter)];
+    }, [0 as Field, 0 as Uint<8>, 0 as Uint<8>, 0 as Uint<8>, 0 as Uint<8>, true, true], t);
+    assert(r[5] && (r[1] == 3 || (r[1] == 2 && r[4] != 0)), "display: not a site amount label");
+    assert(r[6], "display: the symbol does not start with a letter");
+    assert(r[3] <= 18, "display: more than 18 decimals");
+    assert(r[4] <= 8, "display: symbol longer than 8");
+    assert(t[0] != 48 || t[1] == 46 || t[1] == 32, "display: leading zero in the site amount label");
+    assert(r[0] == (value as Field), "display: the site amount label does not match the value");
+    return t;
+  }
+}

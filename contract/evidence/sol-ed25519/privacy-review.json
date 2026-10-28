@@ -1,0 +1,98 @@
+{
+ "what": "the disclosure review of the arm's contracts and the needle scan of every block of the arm's localnet runs, the current build's included: no Solana key, point, blind, signature or message in the clear, no entry or grant id under a zero or missing blind",
+ "disclosureReview": {
+  "contracts": "c4c9bd1",
+  "sites": [
+   {
+    "line": 198,
+    "expr": "disclose(current)",
+    "public": "the consumed device entry: SHA-256(tag | account | key | blind | epoch | counter)"
+   },
+   {
+    "line": 203,
+    "expr": "disclose(successor)",
+    "public": "the successor device entry: the same preimage at counter + 1"
+   },
+   {
+    "line": 602,
+    "expr": "disclose(gid)",
+    "public": "the grant id: SHA-256(grant-id tag | account | key | grantee blind | origin hash | slot)"
+   },
+   {
+    "line": 622,
+    "expr": "disclose(derive_grant_spent_commit(scope_salt, new_spent))",
+    "public": "the spent commitment: a commitment to the cumulative spend under the scope salt"
+   },
+   {
+    "line": 694,
+    "expr": "disclose(result.is_some)",
+    "public": "the change bit of the grantee's shielded withdrawal"
+   },
+   {
+    "line": 727,
+    "expr": "disclose(change.is_some)",
+    "public": "the change bit of the grantee's direct transfer"
+   }
+  ],
+  "baseModulesDisclose": {
+   "WalletArmRendering": 0,
+   "WalletArmDescriptors": 0,
+   "Ed25519Core": 0,
+   "SolanaFormats": 0
+  },
+  "privateInputsInsideDisclose": 0,
+  "neverDisclosed": [
+   "Curve25519Point (device, target, grantee)",
+   "32-byte key and its x bytes",
+   "blind (device, grantee)",
+   "signature (R, s) and R's bytes",
+   "signed message",
+   "use counter",
+   "display inputs (digits, base58, date, characters, nibbles)",
+   "the signing format flag (auth.offchain; private, it reaches only the hash, as the taint analysis of every verifying circuit shows)"
+  ],
+  "verdict": "PASS"
+ },
+ "needleScan": {
+  "ranAt": "2026-10-25T03:36:59.211Z",
+  "blocks": {
+   "from": 1,
+   "to": 851
+  },
+  "scanned": {
+   "blocks": 851,
+   "transactions": 112,
+   "transactionBytes": 1473114,
+   "contractStates": 123,
+   "stateBytes": 5787219,
+   "laneTransactions": 104,
+   "laneStates": 106
+  },
+  "accounts": 9,
+  "identities": 16,
+  "needles": 844,
+  "weakBlindNeedles": 16080,
+  "randomNeedles": 64,
+  "controls": {
+   "total": 28,
+   "found": 28,
+   "notApplicable": []
+  },
+  "evm": {
+   "identities": 1,
+   "controls": 1,
+   "found": 1,
+   "notApplicable": []
+  },
+  "identityHits": 0,
+  "randomHits": 0,
+  "weakOnChain": {
+   "needles": 16080,
+   "recipeControls": 8,
+   "recipeControlsFound": 8,
+   "findings": 0
+  },
+  "verdict": "PASS"
+ },
+ "verdict": "PASS"
+}

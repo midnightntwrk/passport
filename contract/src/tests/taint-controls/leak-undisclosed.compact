@@ -1,0 +1,9 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+// Control for the format flag's privacy: the flag written to the ledger
+// without disclose(). The compiler's witness-disclosure analysis must refuse
+// it.
+export ledger seen: Boolean;
+export circuit leak(offchain: Boolean): [] {
+  seen = offchain;
+}

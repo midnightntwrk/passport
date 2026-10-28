@@ -1,0 +1,11 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+// Control for the format flag's privacy: a ledger operation taken on one path
+// only, the flag never written. The compiler must refuse the implicit
+// disclosure.
+export ledger count: Counter;
+export circuit leak(offchain: Boolean): [] {
+  if (offchain) {
+    count.increment(1);
+  }
+}

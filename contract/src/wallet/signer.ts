@@ -34,6 +34,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
 export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
+import { solEd25519AuthArgs, solEd25519GrantAuthArgs } from './signer-sol-ed25519.js';
 
 import {
   pureCircuits,
@@ -41,9 +42,6 @@ import {
   type Secp256k1Point,
   type QualifiedCoin,
 } from './contract.js';
-
-/** The authorisation arms the contract exports circuits for. */
-export type Arm = 'jubjub' | 'k256' | 'p256';
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */
@@ -420,19 +418,9 @@ export const k256Challenges = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AnyDevice = JubjubDevice | K256Device | P256Device;
-export type Authorisation = JubjubAuthorisation | K256Authorisation | P256Authorisation;
 
-/** The trailing circuit arguments an Authorisation expands to, in the
- *  order the arm's gated circuits declare them. */
-export function authArgs(a: Authorisation): unknown[] {
-  if (a.arm === 'p256') {
-    const { arm, ...auth } = a;
-    return [auth];
-  }
-  return a.arm === 'jubjub'
-    ? [a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce]
-    : [a.pk, a.use_counter, a.sig, a.envelope];
-}
+// Arm, Authorisation, GrantAuthorisation, ARMS, authArgs and grantAuthArgs:
+// the arm registry at the end of this module.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scoped grants (the scoped-grants MIP): grantee signers, scope, openings
@@ -711,8 +699,6 @@ export interface JubjubGrantAuthorisation {
   grind_nonce: bigint;
 }
 
-export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation;
-
 /**
  * A grantee key on the k256 arm. Unlike a device it has no use counter
  * and no entry: its authority is the record found under
@@ -878,23 +864,120 @@ export const jubjubGrantChallenges = {
       ),
 };
 
-/**
- * The trailing circuit arguments a grant call expands to, in the section
- * 6.1 order of the grantee's arm:
- *   k256:   pk, envelope, origin_hash, slot, scope_salt, recipient_kind,
- *           pinned_recipient, max_coin_value, spent_prev, sig
- *   jubjub: pk, origin_hash, slot, scope_salt, recipient_kind,
- *           pinned_recipient, max_coin_value, spent_prev, sig_r, sig_s,
- *           grind_nonce
- * The identity members come from the opening (see GrantOpening).
- */
-export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[] {
-  const openings = [o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev];
-  if (a.arm === 'p256') {
-    const { arm, ...auth } = a;
-    return [o.originHash, o.slot, ...openings, auth];
+// ─────────────────────────────────────────────────────────────────────────────
+// The arm registry
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// One entry per authorisation arm, keyed by the arm's name (the suffix of its
+// circuits, `<operation>_with_<arm>`): the builders of the trailing circuit
+// arguments of its device-gated calls (`auth`) and of its grantee twins
+// (`grant`). Arm, Authorisation, GrantAuthorisation, ARMS and both
+// dispatches derive from it, so an arm is added as one entry, and a call
+// with an arm that has no entry fails to compile (and is refused at run
+// time, never sent to another arm's argument order). Each entry is checked
+// against its key: its builders must take that arm's authorisations only.
+// The entries' order is ARMS's order, in which the wave plan packs the
+// circuits (wave-deploy.ts), so an entry is added at the end.
+
+/** The grant openings every grantee twin takes, in the circuits' order. */
+const grantOpenings = (o: GrantOpening): unknown[] => [o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev];
+
+/** k256: pk, use_counter, sig, envelope. */
+function k256AuthArgs(a: K256Authorisation): unknown[] {
+  return [a.pk, a.use_counter, a.sig, a.envelope];
+}
+
+/** jubjub: pk, use_counter, sig_r, sig_s, grind_nonce. */
+function jubjubAuthArgs(a: JubjubAuthorisation): unknown[] {
+  return [a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce];
+}
+
+/** p256: the authorisation as one struct, without its arm. */
+function p256AuthArgs(a: P256Authorisation): unknown[] {
+  const { arm, ...auth } = a;
+  return [auth];
+}
+
+/** k256 (section 6.1): pk, envelope, origin_hash, slot, scope_salt,
+ *  recipient_kind, pinned_recipient, max_coin_value, spent_prev, sig. The
+ *  identity members come from the opening (see GrantOpening). */
+function k256GrantAuthArgs(o: GrantOpening, a: K256GrantAuthorisation): unknown[] {
+  return [a.pk, a.envelope, o.originHash, o.slot, ...grantOpenings(o), a.sig];
+}
+
+/** jubjub (section 6.1): pk, origin_hash, slot, scope_salt, recipient_kind,
+ *  pinned_recipient, max_coin_value, spent_prev, sig_r, sig_s, grind_nonce. */
+function jubjubGrantAuthArgs(o: GrantOpening, a: JubjubGrantAuthorisation): unknown[] {
+  return [a.pk, o.originHash, o.slot, ...grantOpenings(o), a.sig_r, a.sig_s, a.grind_nonce];
+}
+
+/** p256: origin_hash, slot, the openings, then the authorisation as one
+ *  struct, without its arm. */
+function p256GrantAuthArgs(o: GrantOpening, a: P256GrantAuthorisation): unknown[] {
+  const { arm, ...auth } = a;
+  return [o.originHash, o.slot, ...grantOpenings(o), auth];
+}
+
+/** One arm's argument builders. */
+interface ArmEntry {
+  readonly auth: (a: any) => unknown[];
+  readonly grant: (o: GrantOpening, a: any) => unknown[];
+}
+
+/** Each entry's builders take the authorisations of the arm it is keyed by:
+ *  an entry under another arm's key becomes `never`, which no builder is. */
+type KeyedByArm<R> = {
+  readonly [K in keyof R]: R[K] extends ArmEntry
+    ? Parameters<R[K]['auth']>[0] extends { arm: K }
+      ? Parameters<R[K]['grant']>[1] extends { arm: K } ? R[K] : never
+      : never
+    : never;
+};
+
+function armRegistry<R extends Readonly<Record<string, ArmEntry>>>(registry: R & KeyedByArm<R>): R {
+  return registry;
+}
+
+export const ARM_REGISTRY = armRegistry({
+  k256: { auth: k256AuthArgs, grant: k256GrantAuthArgs },
+  jubjub: { auth: jubjubAuthArgs, grant: jubjubGrantAuthArgs },
+  p256: { auth: p256AuthArgs, grant: p256GrantAuthArgs },
+  sol_ed25519: { auth: solEd25519AuthArgs, grant: solEd25519GrantAuthArgs },
+  // A further arm: its entry here, its builders imported from its module.
+});
+
+type Registry = typeof ARM_REGISTRY;
+
+/** The authorisation arms the contract exports circuits for. */
+export type Arm = keyof Registry;
+
+/** Every arm in the registry's order (the wave plan's order). */
+export const ARMS: readonly Arm[] = Object.keys(ARM_REGISTRY) as Arm[];
+
+/** The authorising material of a device-gated call, of any arm. */
+export type Authorisation = { [A in Arm]: Parameters<Registry[A]['auth']>[0] }[Arm];
+
+/** The authorising material of a grantee twin, of any arm. */
+export type GrantAuthorisation = { [A in Arm]: Parameters<Registry[A]['grant']>[1] }[Arm];
+
+/** The registry entry of an authorisation's arm; any other value (an
+ *  unregistered arm, an Object.prototype key, none) is refused. */
+function armEntry(a: { arm?: unknown } | undefined, where: string): ArmEntry {
+  const arm = a?.arm;
+  if (typeof arm !== 'string' || !Object.prototype.hasOwnProperty.call(ARM_REGISTRY, arm)) {
+    throw new Error(`${where}: unknown arm ${typeof arm === 'string' ? JSON.stringify(arm.slice(0, 40)) : String(arm)} (registered: ${ARMS.join(', ')})`);
   }
-  return a.arm === 'k256'
-    ? [a.pk, a.envelope, o.originHash, o.slot, ...openings, a.sig]
-    : [a.pk, o.originHash, o.slot, ...openings, a.sig_r, a.sig_s, a.grind_nonce];
+  return ARM_REGISTRY[arm as Arm];
+}
+
+/** The trailing circuit arguments an Authorisation expands to, in the
+ *  order the arm's gated circuits declare them. */
+export function authArgs(a: Authorisation): unknown[] {
+  return armEntry(a, 'authArgs').auth(a);
+}
+
+/** The trailing circuit arguments a grant call expands to, in the order of
+ *  the grantee's arm (section 6.1). */
+export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[] {
+  return armEntry(a, 'grantAuthArgs').grant(o, a);
 }

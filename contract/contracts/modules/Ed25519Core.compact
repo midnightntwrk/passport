@@ -1,0 +1,162 @@
+// ---------------------------------------------------------------------------
+// Ed25519 core: RFC 8032 PureEdDSA over edwards25519 (Ed25519), shared by
+// every arm whose keys are Ed25519 keys. It knows no chain, wallet or signing
+// format: an arm decides which bytes are signed, and this module checks key
+// encodings, verifies signatures over those bytes and derives keys from seeds.
+//
+// POINTS. A key A and a signature's commitment R are Curve25519Points, whose
+// type admits only points of the prime-order subgroup. The identity is the
+// one subgroup point that is neither a usable key nor an accepted R; in that
+// subgroup it is the only point whose x-coordinate is zero.
+//
+// CHECKED ENCODINGS. A point's 32-byte RFC 8032 encoding is a checked input,
+// never computed from the point. Taking bytes out of a coordinate costs the
+// compiler a full decomposition per byte, so the caller passes the encoding
+// itself (`pk_bytes`) and the x-coordinate (`pk_x`, 32 bytes little-endian),
+// each element a Uint<8>, and the circuit checks them against the point's own
+// coordinates: `pk_bytes` with bit 255 cleared is compared byte for byte with
+// the canonical bytes of y, `pk_x` with the canonical bytes of x, and bit 255
+// must be x's low bit. A byte vector rebuilds a value exactly (each limb is
+// below 2^248) and base 256 with digits 0..255 is unique, so for each point
+// exactly one pair of inputs passes: a value at or above p, y + p, or a carry
+// between bytes never matches. A caller that also SHOWS the key (an approval
+// message, its base58 text) shows `pk_bytes` on the same path as the check,
+// so the shown bytes are the checked ones.
+//
+// The circuits read no ledger state, so the module is imported rather than
+// included.
+// ---------------------------------------------------------------------------
+
+module Ed25519Core {
+  import CompactStandardLibrary;
+
+  // Whether a byte is odd (no bitwise operations: the higher bits are
+  // subtracted away one at a time).
+  circuit byte_is_odd(b: Uint<8>): Boolean {
+    const b6 = b  >= 128 ? b  - 128 : b;
+    const b5 = b6 >= 64  ? b6 - 64  : b6;
+    const b4 = b5 >= 32  ? b5 - 32  : b5;
+    const b3 = b4 >= 16  ? b4 - 16  : b4;
+    const b2 = b3 >= 8   ? b3 - 8   : b3;
+    const b1 = b2 >= 4   ? b2 - 4   : b2;
+    return (b1 >= 2 ? b1 - 2 : b1) == 1;
+  }
+
+  // [the encoding, x == 0]. RFC 8032 section 5.1.2: y little-endian (below
+  // p < 2^255, so bit 255 of y is clear), and x's low bit in bit 255. The
+  // second element is true exactly for the identity, so a caller that binds a
+  // key refuses A = O with it on the same checked inputs.
+  export circuit ed25519_checked_encoding(
+    pk:       Curve25519Point,
+    pk_bytes: Vector<32, Uint<8>>,
+    pk_x:     Vector<32, Uint<8>>,
+  ): [Bytes<32>, Boolean] {
+    const e = pk_bytes;
+    const sign = e[31] >= 128;
+    const top = (sign ? e[31] - 128 : e[31]) as Uint<8>;
+    assert(Bytes[e[0],  e[1],  e[2],  e[3],  e[4],  e[5],  e[6],  e[7],
+                 e[8],  e[9],  e[10], e[11], e[12], e[13], e[14], e[15],
+                 e[16], e[17], e[18], e[19], e[20], e[21], e[22], e[23],
+                 e[24], e[25], e[26], e[27], e[28], e[29], e[30], top] == curve25519PointY(pk) as Bytes<32>,
+           "ed25519: the encoding does not match the point's y");
+    const x = Bytes[...pk_x];
+    assert(x == curve25519PointX(pk) as Bytes<32>, "ed25519: the x bytes do not match the point's x");
+    assert(byte_is_odd(pk_x[0]) == sign, "ed25519: the sign bit is not x's parity");
+    return [Bytes[...e], x == pad(32, "")];
+  }
+
+  // The RFC 8032 encoding of a point, from its checked inputs. For a point of
+  // the prime-order subgroup it is the one canonical encoding a strict
+  // decoder accepts, so the map from keys to their 32 bytes is one-to-one.
+  // The one shared encoding: every arm calls it, none keeps a copy.
+  // compact row optimization | checked Ed25519 key encoding | -71% rows
+  export pure circuit encode_public_key_ed25519(
+    pk:       Curve25519Point,
+    pk_bytes: Vector<32, Uint<8>>,
+    pk_x:     Vector<32, Uint<8>>,
+  ): Bytes<32> {
+    return ed25519_checked_encoding(pk, pk_bytes, pk_x)[0];
+  }
+
+  // ── Verification ──────────────────────────────────────────────────────────
+  //
+  // RFC 8032 section 5.1.7 as the standard library's ed25519Verify<#n>
+  // computes it (k = SHA-512(encode(R) || encode(A) || M) mod L; valid iff
+  // [s]B == R + [k]A, cofactorless; the identity key refused), with both
+  // encodings taken from checked values instead of explosions of the points'
+  // coordinates.
+  //
+  // THE MESSAGE M is `msg`, of a type T chosen by the caller: a Bytes<n>, or
+  // a tuple of byte strings (for example a signing format's head, then the
+  // text), which the hash takes as the concatenation of its elements in
+  // order. A format that puts a fixed head before a text of n bytes passes
+  // [head, text] instead of building one Bytes<n + head length>, which a
+  // Compact type cannot express for a generic n. Any other type would be
+  // hashed by its own binary representation, which is not a byte string a
+  // wallet signs, so T is a Bytes<n> or a tuple of them.
+  //
+  // The two encodings:
+  //   - `key` is A's encoding. The caller MUST pass the encoding it derived
+  //     from `pk` through the checked encoding above (an arm's seam does so
+  //     in the same derivation that binds its entry or grant id): this
+  //     circuit hashes `key` and multiplies `pk`, and does not compare the
+  //     two again;
+  //   - R's encoding is `r_bytes`, checked against R with `r_x` by
+  //     ed25519_checked_encoding (the same check as the key's), which also
+  //     returns whether R is the identity.
+  // S below the group order and both points in the prime-order subgroup hold
+  // by type. R = O is refused here: strict verifiers refuse an R of small
+  // order (the identity has order 1), the standard library's ed25519Verify
+  // does not, and the circuit accepts only what a strict verifier accepts.
+  // The test reads R's checked x bytes, which the encoding check has already
+  // tied to R's x-coordinate, so R's x is decomposed into bytes once.
+  // compact row optimization | Ed25519 verify from checked encodings | -15% rows
+  export circuit ed25519_verify<T>(msg: T, sig: Ed25519Signature, pk: Curve25519Point, key: Bytes<32>,
+                                   r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+    // Extra safety check: a caller is expected to refuse the identity key
+    // before calling (an arm's seam does, in the checked encoding that derives
+    // its entry or grant id). It is repeated here so that this verification
+    // never depends on its caller.
+    assert((curve25519PointX(pk) as Bytes<32>) != pad(32, ""), "ed25519: the key is the identity");
+    // compact row optimization | R encoding from checked signature bytes | -71% rows
+    const [r_enc, r_is_identity] = ed25519_checked_encoding(sig.r, r_bytes, r_x);
+    assert(!r_is_identity, "ed25519: R is the identity");
+    // compact row optimization | signing key encoded once, shared with the verify | -48% rows
+    const k = sha512<[Bytes<32>, Bytes<32>, T]>([r_enc, key, msg]) as Curve25519Scalar;
+    return ecMulGenerator(sig.s) == ecAdd(sig.r, ecMul(pk, k));
+  }
+
+  // ── Key derivation from a seed ────────────────────────────────────────────
+  //
+  // RFC 8032 section 5.1.5: h = SHA-512(seed); s = h[0..32] with bits 0, 1, 2
+  // and 255 cleared and bit 254 set ("clamped"), read little-endian; A = [s]B.
+  // Returns A, so a software signer obtains exactly the point an arm's
+  // circuits use; its 32-byte encoding is then checked against it by
+  // encode_public_key_ed25519. Pure: no proving key, nothing on chain. There
+  // is deliberately no raw-scalar helper: an Ed25519 secret key is a seed,
+  // and a seed passed as a scalar gives another key.
+  //
+  // The clamped s lies in [2^254, 2^255), above the group order L; the cast to
+  // Curve25519Scalar reduces it mod L (ZKIR FromBytes32 on a foreign field), and
+  // [s mod L]B = [s]B because B has order L.
+  export pure circuit compute_public_key_ed25519(seed: Bytes<32>): Curve25519Point {
+    const h = slice<32>(sha512<Bytes<32>>(seed), 0) as Vector<32, Uint<8>>;
+    // Clear bits 0..2 of the first byte: subtract its value mod 8.
+    const f = h[0];
+    const f6 = f  >= 128 ? f  - 128 : f;
+    const f5 = f6 >= 64  ? f6 - 64  : f6;
+    const f4 = f5 >= 32  ? f5 - 32  : f5;
+    const f3 = f4 >= 16  ? f4 - 16  : f4;
+    const low = f3 >= 8 ? f3 - 8 : f3;
+    // Clear bit 7 and set bit 6 of the last byte.
+    const t = h[31];
+    const t7 = t >= 128 ? t - 128 : t;
+    const top = t7 >= 64 ? t7 : t7 + 64;
+    const s = Bytes[(f - low) as Uint<8>, h[1],  h[2],  h[3],  h[4],  h[5],  h[6],  h[7],
+                    h[8],  h[9],  h[10], h[11], h[12], h[13], h[14], h[15],
+                    h[16], h[17], h[18], h[19], h[20], h[21], h[22], h[23],
+                    h[24], h[25], h[26], h[27], h[28], h[29], h[30],
+                    top as Uint<8>] as Curve25519Scalar;
+    return ecMulGenerator(s);
+  }
+}

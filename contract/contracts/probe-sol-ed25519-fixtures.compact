@@ -1,0 +1,66 @@
+pragma language_version >= 0.17.0;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// PROBE (not part of the standard, never deployed by the account): the
+// sol_ed25519 arm's verification path over a text given as an input, so that
+// signatures recorded from hardware wallets (emulated Ledger and Trezor
+// devices, public test seeds) are checked on the circuit's own path by the
+// offline suite (src/tests/sol-ed25519-fixtures-offline.ts, vectors in
+// src/tests/vectors/sol-ed25519-emulator-fixtures.json).
+//
+// The recorded texts name another key than the signer's (a corpus key), so
+// they cannot pass an arm circuit, whose seam renders the signer's own key.
+// Each circuit here is the seams' composition without the membership and the
+// rendering: the key's checked encoding (Ed25519Core, as the seams'
+// derivation checks it), the signed message of the format the flag selects
+// (SolanaFormats), and the core's verification (ed25519_verify). One circuit
+// per recorded text length, since a text is a fixed-length Bytes<n>: the
+// approval layouts of 369, 491, 685, 1,230 and 1,690 bytes, and the
+// 399-byte device blind request, which the arm never verifies in a circuit
+// (its signature only derives the blind) but whose off-chain signature the
+// same core verifies.
+//
+// Every circuit is pure: it runs in the generated JavaScript, has no ZKIR and
+// no proving key, and the contract has no ledger state.
+// ---------------------------------------------------------------------------
+
+import "modules/Ed25519Core";
+import "modules/SolanaFormats";
+
+export pure circuit probe_sol_ed25519_verify_369(offchain: Boolean, text: Bytes<369>, sig: Ed25519Signature, pk: Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>, r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  const key = encode_public_key_ed25519(pk, pk_bytes, pk_x);
+  return ed25519_verify<SolanaSignedMessage<369>>(solana_signed_message<369>(offchain, key, text), sig, pk, key, r_bytes, r_x);
+}
+
+export pure circuit probe_sol_ed25519_verify_399(offchain: Boolean, text: Bytes<399>, sig: Ed25519Signature, pk: Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>, r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  const key = encode_public_key_ed25519(pk, pk_bytes, pk_x);
+  return ed25519_verify<SolanaSignedMessage<399>>(solana_signed_message<399>(offchain, key, text), sig, pk, key, r_bytes, r_x);
+}
+
+export pure circuit probe_sol_ed25519_verify_491(offchain: Boolean, text: Bytes<491>, sig: Ed25519Signature, pk: Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>, r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  const key = encode_public_key_ed25519(pk, pk_bytes, pk_x);
+  return ed25519_verify<SolanaSignedMessage<491>>(solana_signed_message<491>(offchain, key, text), sig, pk, key, r_bytes, r_x);
+}
+
+export pure circuit probe_sol_ed25519_verify_685(offchain: Boolean, text: Bytes<685>, sig: Ed25519Signature, pk: Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>, r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  const key = encode_public_key_ed25519(pk, pk_bytes, pk_x);
+  return ed25519_verify<SolanaSignedMessage<685>>(solana_signed_message<685>(offchain, key, text), sig, pk, key, r_bytes, r_x);
+}
+
+export pure circuit probe_sol_ed25519_verify_1230(offchain: Boolean, text: Bytes<1230>, sig: Ed25519Signature, pk: Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>, r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  const key = encode_public_key_ed25519(pk, pk_bytes, pk_x);
+  return ed25519_verify<SolanaSignedMessage<1230>>(solana_signed_message<1230>(offchain, key, text), sig, pk, key, r_bytes, r_x);
+}
+
+export pure circuit probe_sol_ed25519_verify_1690(offchain: Boolean, text: Bytes<1690>, sig: Ed25519Signature, pk: Curve25519Point,
+  pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>, r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  const key = encode_public_key_ed25519(pk, pk_bytes, pk_x);
+  return ed25519_verify<SolanaSignedMessage<1690>>(solana_signed_message<1690>(offchain, key, text), sig, pk, key, r_bytes, r_x);
+}

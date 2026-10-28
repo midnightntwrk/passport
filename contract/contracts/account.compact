@@ -7,6 +7,7 @@ include "webauthn";
 import WebAuthn<21>;
 export { WebAuthnPolicy, webauthn_challenge_base64, webauthn_client_data_hash };
 include "account-p256";
+include "account-sol-ed25519";
 
 // ---------------------------------------------------------------------------
 // Midnight account custody contract — reference implementation.
