@@ -1,631 +1,402 @@
 # Midnight Account Custody — Reference Implementation
 
-The standardised account custody contract: the reference implementation of
+The Account Custody Contract (ACC) combines native-asset custody, multi-key
+account authorisation, scoped grants, and recovery in one deployed account.
+This README describes the implementation, its validation, and known limitations.
+The canonical MIPs define the standards; this repository supplies a reference
+implementation, tests, and dated evidence, including known deviations.
 
-- **MIP-0012 — Contract Custody of Midnight-Native Assets** (the asset
-  surface: unshielded mirror, stateless shielded custody, encrypted inbox,
-  the change rule, payment modes), and
-- **MIP-0013 — Multi-key Account Authorisation for Custody Contracts** (the
-  seam instantiations: rolling single-use device entries (AUTH-9),
-  per-circuit challenge binding with witness-value pinning (AUTH-10),
-  device lifecycle, `auth_nonce` freshness),
+**Reconciled 2026/11/02 against Passport
+[`eb7c51f6aabdf40376085d477f15eb3575eee6ef`](https://github.com/midnightntwrk/passport/tree/eb7c51f6aabdf40376085d477f15eb3575eee6ef).**
+The recorded evidence does not establish production readiness or complete
+conformance. In particular, **individual-device removal can leave another
+entry for the same key live** (erratum 8 below). Validation results retain
+their recorded source revision, toolchain, and execution date.
 
-in one deployment, with the conformance suites both Testing sections
-require. This directory is the standard to build against going forward;
-the `experiments/` directories remain the historical evidence base.
+## Contract structure and scope
 
-## Co-resident authorisation arms
+[`contracts/account.compact`](contracts/account.compact) is the compilation
+root. It imports `CompactStandardLibrary`, includes
+[`webauthn.compact`](contracts/webauthn.compact), imports `WebAuthn<21>`, and
+includes [`account-p256.compact`](contracts/account-p256.compact).
+JubJub and secp256k1 authorisation remain inline in `account.compact`;
+P-256's arm is in the included file. The arms share one ledger and internal
+custody/lifecycle functions. They are not separately deployed contracts.
 
-The MIP-0012 §4 seam is credential-scheme-agnostic, and this contract
-carries it as **co-resident arms**: every gated operation is exported
-once per supported scheme, as `<operation>_with_<arm>`. Each arm's
-entry circuit computes its own challenge, passes its own internal seam
-chip (device-entry roll + in-circuit verification), and calls the same
-internal custody chip — the MIP-0012 custody semantics exist exactly
-once, below every arm.
+The constructor sets **`spec_version = 3`**. The source exports **52 non-pure
+circuits**: four shared circuits (two deposits, `recover_submit`, and
+`recover_finalise`) and sixteen per arm. Each gated device operation has a
+`_with_<arm>` entry point; each of the three withdrawal operations also has
+`_with_grant_<arm>` entry points. Exported pure derivation functions do not
+add on-chain operations. The deployment roster is in
+[`src/wallet/wave-deploy.ts`](src/wallet/wave-deploy.ts).
 
-- **Arm `jubjub`** — Schnorr over JubJub, the **normative MIP-0013
-  scheme**, unchanged in substance from the trunk: §5.1 challenge
-  preimage with signature announcement and grinding nonce, DST families
-  `midnight:account:{device,boot}:v1` and `midnight:account:auth:v1:*`.
-  Gated ABIs are `(…args, pk, use_counter, sig_r, sig_s, grind_nonce)`.
-- **Arm `k256`** — in-circuit **ECDSA over secp256k1**
-  (`secp256k1EcdsaVerify`, ZKIR v3). Draft **MIP-0030** specifies the
-  ECDSA extension and its validation requirements; the base MIP-0013
-  profile remains JubJub. This arm also supports connector-envelope
-  experiments.
-  Its challenges carry no signature announcement (an ECDSA
-  message must not depend on its own signature) and no grinding nonce
-  (the verify reduces the digest mod n natively); keys bind as
-  little-endian affine coordinate bytes; both S forms are accepted (real
-  P-256 authenticators emit high-S; single-use entries make a malleated
-  twin non-replayable). Gated ABIs are
-  `(…args, pk, use_counter, sig, envelope)`.
-  Its signer is software only (`@noble/curves` in TypeScript, `k256` in
-  Rust); the ES256 WebAuthn arm below uses P-256 credentials.
+| Arm | Signature and binding | Implementation boundary |
+|---|---|---|
+| `jubjub` | Schnorr over JubJub; per-operation SHA-256 challenge with grinding; rolling single-use device entries | Normative MIP-0013 profile. Approval supplies a signature, not the device secret, to proving. |
+| `k256` | ECDSA over secp256k1; enrolled envelope selects `SHA-256(challenge)` or `SHA-256("midnight_signed_message:32:" \|\| challenge)` | Envelope 0 is direct software/HSM/MPC-style signing; envelope 1 models the connector prefix. Reference signers are TypeScript and Rust software implementations. |
+| `p256` | P-256 ECDSA over the WebAuthn envelope; RP hash and exact origin bound to the credential | Only the fixed `wa-json134` profile: 134-byte client-data JSON, 21-byte origin, 37-byte authenticator data, UP+UV required. |
 
-  ECDSA signs a 32-byte digest, and signers wrap the challenge
-  differently before hashing it, so the arm carries a per-device
-  **envelope**: an enumerated id fixed at enrolment, with the signature
-  always covering `SHA-256(prefix(envelope) || challenge)` (exported as
-  `envelope_digest`, recomputable in-circuit because `persistentHash` IS
-  SHA-256 and a tuple of `Bytes` hashes as the raw concatenation).
+[WEBAUTHN.md](WEBAUTHN.md) specifies the exact P-256 profile and exclusions.
+One real Safari account encryption-key rotation is recorded in the
+[passkey experiment](../experiments/passkey-account-flow/README.md); that
+is not general browser, authenticator-extension, variable-JSON, or PRF
+coverage. Per-arm circuits avoid paying the other arms' signature constraints
+in each proof. The [1 October measurements](P256-MEASUREMENTS.md) retain their
+original source/key attribution and are not fresh measurements of later fixes.
 
-  | id | envelope | prefix | who signs it |
-  |---|---|---|---|
-  | 0 | none | (empty) | software, HSM, and MPC signers driven directly: ordinary ECDSA-SHA256 over the challenge bytes as the message |
-  | 1 | connector | `midnight_signed_message:32:` | keys behind the dApp-connector `signData` surface (the `ecdsa_secp256k1_sha256` scheme), which never signs caller bytes as-is |
+**State and authority.** Device arms share the rolling-entry set,
+`device_count`, `device_epoch`, and `auth_nonce`. Cross-arm enrolment accepts
+an already-derived entry. A removal must leave its authorising entry intact;
+this protects the surviving caller, but does not make an opaque entry a
+unique device identity. Recovery finalisation clears the complete device set
+before installing the successor; finalisation also advances the epoch.
+The client default without `opts.recovery` discards the generated birth
+secret. Installed recovery circuits therefore do not by themselves mean an
+account has a usable recovery setup; deployers must supply their recovery
+configuration or publish a usable session while a device remains available.
 
-  No envelope signs the challenge itself as a prehash: one rule, one hash
-  per id. The id is an enumeration rather than the prefix bytes because
-  Compact has no variable-length `Bytes`: a `Bytes<N>` parameter hashes
-  at its full width, padding included, so an empty prefix cannot be a
-  shorter value of the same field, and a prefix of another length would
-  be another type and so another ABI. The id selects among fixed hash
-  shapes instead. The id is bound into the device's entry
-  and boot derivations (DST families `midnight:account:device:k1:v2`,
-  `midnight:account:boot:k1:v2`; v2 appends the one-byte id after the
-  key coordinates), so the caller can present only the envelope the
-  device was enrolled with. Unknown ids abort. The challenge preimages
-  (`midnight:account:auth:k1:v1:*`) are unchanged.
+Grantees live in a separate `grants` map. Withdrawal checks bind the grantee,
+operation, object, scope openings, nonce, expiry, and quantitative bounds.
+Grant calls settle their own record without rolling the owner's entries or
+advancing `auth_nonce`; `revoke_all_grants` advances `grant_generation` and
+clears the map. An optional immediate-contract-caller pin is checked through
+`kernel.caller()`, not a caller-supplied address. It does not authenticate a
+browser origin or the calling circuit. See [GRANTS-CALLER.md](GRANTS-CALLER.md).
 
-- **Arm `p256`** — native **P-256 ECDSA with profiled WebAuthn**.
-  Profile `wa-json134` reconstructs the complete 134-byte client-data JSON
-  in-circuit (21-byte origin, `crossOrigin:false`) and hashes it with the
-  37-byte authenticator data. RP and exact origin are bound at enrolment;
-  UP+UV are required. The browser adapter accepts asynchronous assertions
-  without exposing the credential's secret. Device, grant and recovery
-  twins use the same shared mutation chips. See [WEBAUTHN.md](WEBAUTHN.md)
-  for supported shapes, browser use, verification and new measurements.
-  The [live passkey account experiment](../experiments/passkey-account-flow/README.md)
-  records a real Safari approval accepted on-node, with signed assertion
-  evidence and an offline Node/OpenSSL verifier.
+**Security review boundary.** The three Compact files above depend on
+witness, signing/challenge, inbox, recovery, and deployment code. A review
+scope should identify which client paths it includes. The only declared
+contract witness is `held_coin`, implemented in
+[`src/wallet/witnesses.ts`](src/wallet/witnesses.ts). The encrypted inbox and
+recovery wrapping are client-side cryptography, not inspected by the contract.
+Shielded-spend signatures bind the exact qualified `held_coin`, including `mt_index`;
+trying a different coin-position candidate therefore requires a new signature.
+For unshielded recipients, `UserAddress` takes decoded address bytes, not the
+signing public key. Use the conversion in
+[`src/node/wallet.ts`](src/node/wallet.ts); substituting public-key bytes can
+strand funds at an address the intended recipient does not control.
 
-Per-arm circuits instead of one circuit with an in-circuit scheme
-conditional: Compact compiles every exported circuit to its own proof, so
-a proof through a `_with_jubjub` circuit pays only the Schnorr
-constraints, a `_with_k256` proof only its ECDSA constraints and a
-`_with_p256` proof the P-256/WebAuthn constraints. Current same-toolchain
-costs are recorded in [WEBAUTHN.md](WEBAUTHN.md); older tables below retain
-their historical attribution. Later arms are added the same way: one
-seam chip, one challenge family, one thin export per operation; the
-custody chips do not change.
-
-A second authoriser class sits beside the device set at
-`spec_version = 3`: a **grantee**, a key the owner enrols into the `grants`
-register under a scope rather than into the device set, and which can spend
-within that scope without holding a device. Grantees are co-resident the same
-way. Each grantee arm (`jubjub`, `k256`, `p256`) exports three grant twins over the shared custody chips,
-`withdraw_unshielded_with_grant_<arm>`, `withdraw_shielded_with_grant_<arm>`,
-and `withdraw_shielded_to_contract_with_grant_<arm>`; each device arm exports
-the three lifecycle circuits `issue_grant_with_<arm>`,
-`revoke_grant_with_<arm>`, and `revoke_all_grants_with_<arm>`, so an owner on
-any device arm issues to a grantee on any grantee arm. A grant twin
-authenticates against the record found at `grant_id` (a contract-recomputed
-commitment to the account, arm, key, envelope, origin, and slot), asserts the
-whole scope in-circuit before any custody chip runs, verifies the grantee
-signature, and writes back only that record's `nonce` and `spent_commit`:
-`auth_nonce`, the device set, and `enc_key` are never written by a grant call,
-so an owner signature pending across a grant call still verifies. Lifecycle is
-device-gated, and the register is killable in one call, since
-`revoke_all_grants` bumps `grant_generation` and clears the map. The grant
-twins include the scope-opening and signature constraints. Historical
-per-circuit costs are in "Scoped grants" below; the current 52-circuit
-inventory is in `evidence/p256-webauthn/circuit-sizes.json`.
-
-Grants may additionally pin an **immediate calling contract**, enforced
-inside the account with `kernel.caller()`. See [GRANTS-CALLER.md](GRANTS-CALLER.md)
-for the API, schema migration, semantics and conformance run. The cost
-tables below predate that extension.
-
-The arms share one device set (arm-marked entry DSTs keep them
-disjoint), one `device_count`, and one last-device rule. **Cross-arm
-enrolment is first-class**: `add_device_with_<arm>` binds the NEW device
-as its derived ENTRY (computed client-side with the new device's arm's
-exported derivation circuit), so a JubJub device enrols a k256 device
-and vice versa — the migration path between arms.
-
-The contract cannot inspect an entry argument's preimage, and two seam
-rules follow from that (both exercised on-node by `auth-coinless`):
-
-- **AUTH-5 rests on the caller, not the count.** Since entries arrive
-  already derived, `device_count` counts entries rather than demonstrably
-  usable keys, so it cannot by itself guarantee that a removal leaves a
-  usable device behind. `do_remove_device` therefore refuses to remove the
-  entry the caller authorised with: every removal is authorised by a device
-  that has just proved itself and that survives, so a usable device always
-  remains. The count check is kept as a redundant floor. **S13.**
-- **Both seams refuse weak device keys.** Each arm's verification collapses
-  at the curve identity, so an identity "key" authorises with no secret at
-  all. On k256 the verify computes `P = u1·G + u2·pk` and tests `x(P) == r`,
-  so `pk = O` erases the key-dependent term and any `s` yields a passing
-  `r = x((z·s⁻¹)·G)`. On JubJub the seam asserts `s·G == R + c·pk`, so
-  `pk = O` reduces it to `s·G == R`, which anyone satisfies by choosing `s`
-  and setting `R = s·G` — the challenge never enters. Neither identity is
-  marked by its type: k256's carries an `identity` flag whose coordinates
-  are conventionally zero, and JubJub's is the ordinary affine point
-  `(0, 1)`. Both places that admit a key on each arm — the seam and the
-  bootstrap — reject them: k256 by `pk != default<Secp256k1Point>`, JubJub
-  by cofactor clearing (`[8]pk != O`, which also rules out the rest of the
-  8-torsion). The k256 rejection is also why that arm's entry derivation
-  binds only the affine coordinates: every admissible point is uniquely
-  determined by them. **Anyone lifting either derivation must carry the
-  rejection with it.** **S12.**
-
-Clients MUST still derive enrolment entries at the current `device_epoch`
-and use counter 0. A wrong-address or **past**-epoch entry is dead weight; one
-at the current epoch but a non-zero counter is live at that counter; and one
-at a **future** epoch is dormant rather than dead, going live when the epoch
-advances. The recovery seam owns the epoch bump and now clears the device
-set atomically before successor insertion (#183, upstream #385), because
-otherwise a device can pre-plant an entry that survives its own revocation
-(erratum 7). All of them count toward `device_count` until removed, and none
-can strand the account.
-
-Read that rule as an honest-client obligation only. It is **not** a security
-boundary, and the standard currently has no way to make it one: a device that
-enrols a second entry for its own key holds two live entries, and a removal
-retires one element, so the device survives its own revocation. This is
-measured, it is live on both arms, and deriving the entry in-circuit does not
-prevent it. See erratum 8, which is the substantive open defect in this
-implementation and in MIP-0013 §3 and §6.
-
-Toolchain: **Compact 0.35.0** (language 0.27.0), **compact-runtime 0.20.0**,
-compact-js **3.0.0-rc.3**, midnight-js **5.0.0-rc.2**, ledger-v9
-**1.0.0-rc.5**, and wallet-sdk facade **5.0.0-rc.0**. All are published;
-the compiler/runtime are stable releases, while the SDKs remain RCs.
-The k256 arm requires `--feature-zkir-v3`, which now emits **ZKIR 3.1**.
-This targets a ledger-9 localnet; see the
-[compiler release notes](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.35.0).
-The latest ledger-9 standalone images checked on 2026-10-01 are pinned in
-`infra/docker-compose.yml`: **node 2.1.0-rc.4**, **indexer
-4.4.0-rc.6-b5e6c809**, and **proof-server 9.0.0-rc.8**. The indexer is a
-published, commit-pinned rc.6 candidate; the rc.6 release is still pending.
-Its previous numbered release, rc.5, crashes at genesis with the newer node
-([upstream #1516](https://github.com/midnightntwrk/midnight-indexer/issues/1516)),
-reproduced during this upgrade. The candidate indexes the fresh chain.
-All three images have amd64 and arm64 builds. Indexer storage from before rc.5
-requires re-indexing from genesis. See [upgrade verification](TOOLCHAIN-0.35.md)
-for image digests, sources and test results.
-
-Upgrade verification (2026-10-01): full key generation, TypeScript, unit,
-grants-offline (121 checks), recovery-offline, recovery-sim and the independent
-Rust cross-implementation suite pass. `test:toolchain-offline` checks SDK
-deployment construction and wave-maintenance key compatibility. The fresh-localnet
-`test:auth-coinless` suite passes, including both signature arms and maintenance
-retirement; results are recorded in `evidence/compact-0.35/`. Existing on-node
-evidence and cost tables below describe their recorded older stack; they are
-not new measurements on 0.35.0.
-
-## Layout
-
-| Path | Content |
+| Material | Location |
 |---|---|
-| `contracts/account.compact` | The standard contract (both MIPs, one deployment). |
-| `contracts/control.compact` | Public-map control for the observer leak audit (test scaffolding, **not** part of the standard). |
-| `contracts/faucet.compact` | Token origins on localnet (test scaffolding). |
-| `src/wallet/` | Client library: two-arm signers, InboxEntry v1 codec, coin store witness, discovery walk, capture, account wrapper, wave deployment. |
-| `src/tests/` | Conformance suites (see the map below). |
-| `signer-rs/` | Independent Rust signer (conformance test 7): ledger crates only, no TypeScript/WASM/npm. |
-| `infra/` | Localnet compose files (node, indexer, proof server). |
+| Account wrapper, scope construction, discovery, coin capture | [`src/wallet/`](src/wallet/) |
+| Device/grant signing and WebAuthn adapter | [`signer.ts`](src/wallet/signer.ts), [`signer-p256.ts`](src/wallet/signer-p256.ts), [`webauthn.ts`](src/wallet/webauthn.ts) |
+| Inbox encryption and recovery | [`inbox.ts`](src/wallet/inbox.ts), [`recovery.ts`](src/wallet/recovery.ts), [`recovery-gate.ts`](src/wallet/recovery-gate.ts) |
+| Independent Rust signer and recovery vectors | [`signer-rs/`](signer-rs/), [`buss-rs/`](buss-rs/) (BUSS profile over a pinned upstream `arc-pleiades` revision) |
+| Tests and raw receipts | [`src/tests/`](src/tests/), [`evidence/`](evidence/) |
+| Compiler/dependency and localnet pins | [`package.json`](package.json), [`package-lock.json`](package-lock.json), [`infra/`](infra/) |
+| Test scaffolding, excluded from the deployed ACC | `control.compact`, `faucet.compact`, and `probe-*.compact` in [`contracts/`](contracts/) |
+
+As of 2 November 2026, [EVM/EIP-712 #188](https://github.com/midnightntwrk/passport/pull/188)
+and [Solana/Ed25519 #189](https://github.com/midnightntwrk/passport/pull/189)
+are separate open PRs. They are not in this 52-circuit baseline. Neither are
+the isolated BIP-340 and asset-policy experiments. Adding these arms requires validation of the combined revision and its
+complete circuit roster.
+
+## Standards and grant submission
+
+| Standard | Relationship to this implementation |
+|---|---|
+| [MIP-0012 — Contract Custody](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012-native-asset-custody.md) | Native unshielded/shielded custody, encrypted inbox, discovery and payment modes. |
+| [MIP-0013 — Account Authorisation](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013-account-authorisation.md) | JubJub device authorisation, rolling entries, lifecycle and revocation. See the unresolved device-identity issue below. |
+| [MIP-0022 — Account Recovery](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) | Recovery publication, submission, veto/cancel and finalisation. Atomic entry retirement is implemented. |
+| [MIP-0030 — ECDSA Authorisation](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md) | Draft extension for ECDSA/WebAuthn; the fixed implementation profile is not a general WebAuthn baseline. |
+| [Scoped Grants and dApp Connection](../docs/mps-mip/mips/mip-xxxx-scoped-grants.md) | Local Draft covering bounded grants plus the wider connection ceremony. Section 12 specifies combined conformance with MIP-0013. |
+
+The grants Draft completed Passport review in
+[PR #195](https://github.com/midnightntwrk/passport/pull/195), merged on
+23 October 2026.
+It is ready for canonical **Draft submission**: copy it as
+`mips/mip-xxxx.md`, retaining `MIP: xxxx` and `Status: Draft`. Its 26 formerly
+local evidence links (19 distinct targets) now use full Passport URLs pinned
+to `eb7c51f6aabdf40376085d477f15eb3575eee6ef`; existing historical pins are
+preserved. Each target path and section anchor was checked against Git.
+No scoped-grants MIP or submission PR was found in the canonical repository
+on 2 November 2026. The
+[MIP-0001 process](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0001-mip-process.md#draft-phase-clarifications)
+permits incomplete Drafts; the formal Draft-to-Proposed acceptance request
+is a later step. Cryptographic review, MIP-0021 domain compatibility,
+conformance and ceremony work remain explicit in Path to Active. Initial
+publication does not close them. Editor numbering and the MPS-0018 linkage
+belong to upstream submission/numbering, not a locally invented number.
+
+The [draft register](../docs/mps-mip/README.md) tracks canonical links.
+Implementation and evidence are distinct from publication, independent review,
+and Path to Active acceptance. Grant issuance requires schema v3: the client
+rejects a missing or older version before requesting a device signature or
+submitting through its low-level issuance method. V3 adds `caller_commit`
+even to unrestricted scopes; a v2 account needs a fresh deployment, not just
+new verifier keys.
+
+## Validation and provenance
+
+Read [GRANTS-COMPLETION.md](GRANTS-COMPLETION.md) first for the **23 October
+2026** validation. Its base is `3fa1b32585032305f3dbef15476dd5fe7fca8a4b`.
+The three Compact source files in that run match this README's baseline.
+The saved account source SHA-256 is
+`ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae`.
+
+That run freshly generated 52 textual ZKIR files with `--skip-zk`, compared
+them byte for byte with existing artefacts, and used matching cached binary
+ZKIR and proving/verifier keys with integrity checks enabled. **It was not
+a clean regeneration of all keys.** Generated code and keys are ignored by
+Git. All 25 committed input-hash references in the three 23 October records
+match the baseline revision above. The other 45 references concern generated
+artefacts absent from a clean checkout; checking those hashes requires the
+corresponding build outputs.
+
+| Evidence | What passed | Limit of the claim |
+|---|---|---|
+| [23 October build/offline record](GRANTS-COMPLETION.md#reproduction-and-provenance) | TypeScript build, unit, toolchain, grants (127 checks), capability, caller, P-256, recovery simulator and independent Rust cross-implementation checks; ten-wave plans for all three initial arms | Simulator/client checks and saved run results; not an independent audit. |
+| [P-256 grants](evidence/grants-completion-20261023/p256-grants-conformance.json) | Full 52-circuit account; eleven successful funding/lifecycle transactions including three unshielded grant spends; balance 100 → 85; sixteen negative controls | OpenSSL software authenticator. Negatives abort during building against indexed state, with no proving/submission and unchanged serialised state. Successful shielded or forwarded P-256 grant calls are not covered. |
+| [P-256 refusal fixture](evidence/grants-completion-20261023/p256-grant-refusals.json) | Identity-key and fixed-profile authenticator-extension refusals; valid assertion reaches the unfunded custody guard | Restricted three-operation diagnostic deployment, not a full account. Refusals are native argument/profile/build checks. |
+| [Recovery and grant lifecycle](evidence/grants-completion-20261023/rec-1-9-recovery-conformance.json) | Full account; reconstruction/wrap opening, veto, cancel/resubmit, two recoveries; exactly the authorised successor retained each epoch; old grants stay unusable, reissued JubJub/k256 grants spend | Post-reset-fix proof/node evidence. Negative cases compare specified state fields, not a full state/UTXO snapshot. The explicit future-epoch, differing-counter, pending-device and all-scheme retirement matrix remains broader. |
+| [Caller-bound grants](GRANTS-CALLER.md) | Recorded forwarding and fabricated-caller proof admission checks for the earlier JubJub/k256 tranche | Earlier source/roster; not successful P-256 forwarding on the final combined account. |
+| [ECC adversarial tests](evidence/ecc-validation/README.md) and [review](../research/passport-ecc-validation.md) | 197 runtime cases (accepted and rejected expectations), native preprocessing/mutations, nine MockProver checks and two verifying local full proofs | The runtime record hashes account source `c6888fe` (before the reset); the P-256/WebAuthn and recorded client sources match. The native runner later gained archive prevalidation. Findings concern unchanged paths, not a fresh full-account run. Local proofs use test parameters. Not a complete malicious-witness or ECDSA proof audit. |
+
+The 23 October recovery evidence supersedes the older statement that #183
+had only compilation/simulator validation. Earlier receipts retain their
+original compiler, circuit roster and stack attribution; do not combine
+all passing counts into a claim that every current circuit was proved.
+
+## Known issues and remaining validation
+
+1. **Individual-device revocation is incomplete.** `remove_device` removes
+   one rolling entry. A device can enrol another entry for the same key and
+   survive removal; the JubJub probe demonstrates this on-node for both
+   enrolment shapes. The shared lifecycle design affects the account across
+   arms. A contract-maintained device identity is the proposed remedy and
+   changes the ledger schema. The defect remains unresolved in this
+   baseline. See erratum 8 and
+   [`probe-revocation.ts`](src/tests/probe-revocation.ts).
+2. **Key validity at enrolment differs from validity at use.** Opaque device
+   entries/grant IDs can commit unusable keys. The constructor can store an
+   invalid birth recovery key that is refused later. Weak signer-key guards,
+   runtime decoding, and native proof constraints are different layers;
+   the [ECC review](../research/passport-ecc-validation.md) maps them.
+   JubJub's `[8]pk != O` rejects small-order keys but does not itself prove
+   prime-order subgroup membership. K256 checks extracted coordinates,
+   not `pk != default<Secp256k1Point>`; the pinned runtime also validates
+   foreign points. Accepted runtime inputs are not proof-acceptance evidence.
+3. **Encryption/recovery consistency needs review.** Authorised setup or
+   rotation can install unusable X25519 bytes; a recovery wrap may contain
+   a different secret or become stale after rotation. Invalid setup can
+   impair availability or recovery without bypassing authorisation. Client
+   raw-key lengths, hexadecimal parsing, zero secret/nonce handling and
+   signer randomness are also findings in the ECC review, not closed by
+   passing its characterisation tests.
+4. **Recovery coverage is not exhaustive.** The reset is implemented and
+   exercised on-node. Explicit adversarial retirement combinations,
+   guardian transport/interoperability, multi-session review, and the
+   viewing-wrap lifecycle remain review/validation work.
+5. **Grant and browser conformance remain partial.** Full authoriser/dApp
+   ceremony, browser attack matrix, read-capability handover/re-sealing,
+   non-browser carriage, independent implementation/review, the wider
+   rejection matrix, and the real legacy-account installation control
+   remain in the Draft's Path to Active. A profile-specific P-256 run
+   does not close these items.
+6. **Deployment authority is a custody boundary.** Pin the roster and
+   maintenance policy with the reviewed revision. A live authority can change
+   verification logic; retirement prevents later repairs or arm additions
+   through maintenance. See the deployment section below.
+
+A reproducible review baseline needs the commit and included arms,
+known-issue dispositions, compiler/dependency pins, clean build/key-generation
+results, and scoped regression receipts.
+
+## Pinned toolchain and deployment
+
+The checked-in configuration uses Compact **0.35.0**, language **0.27.0**,
+`--feature-zkir-v3` (ZKIR 3.1), compact-runtime **0.20.0**, compact-js
+**3.0.0-rc.3**, midnight-js **5.0.0-rc.2**, ledger-v9 **1.0.0-rc.5**, and
+wallet-sdk facade **5.0.0-rc.0**. Exact npm resolution is in the lockfile;
+Rust crates have their own lockfiles. These are reproduction pins, not a
+claim that they are the latest upstream releases.
+
+[`infra/docker-compose.yml`](infra/docker-compose.yml) pins node
+**2.1.0-rc.4**, indexer **4.4.0-rc.6-b5e6c809**, and proof server
+**9.0.0-rc.8**. [TOOLCHAIN-0.35.md](TOOLCHAIN-0.35.md) records the 1 October
+image digests and pre-P-256 upgrade run. That report's 36-circuit roster
+predates this 52-circuit account.
+
+### Wave deployment and maintenance authority
+
+The [planner](src/wallet/wave-deploy.ts) reads actual verifier-key sizes.
+Its default `VERIFIER_BYTE_BUDGET` is **15,000 bytes** per deploy or maintenance
+wave. The recorded full-account plan is **ten waves** for every initial arm;
+recompute it when keys or the roster change. Activation follows key
+installation. This working budget is not a measurement of an exact node
+limit or of complete transaction size.
+
+### The maintenance authority sits above the seam, so the last wave retires it
+
+By default the last maintenance update retires the authority by setting an
+empty committee with threshold one. With `retireAuthority: false`, its
+holder can replace an existing operation's verifier using a
+**`VerifierKeyRemove` plus `VerifierKeyInsert` in one update**. A bare insert
+over an existing key is refused. The live/retired controls in
+[`auth-coinless`](src/tests/auth-coinless.ts) demonstrate this distinction;
+a live authority must therefore be included in the custody threat model.
+A retired account needs migration to adopt changed verifier logic or new
+arms. Ledger-schema changes require a fresh deployment regardless.
+
+The planner builds maintenance updates through the ledger API. On these
+pins the SDK maintenance helper hardcodes an incompatible operation/key
+version, and its bare-insert replacement path does not perform the required
+remove-plus-insert. See the source and historical controls rather than
+substituting that helper during reproduction.
+
+### Historical deployment and funding observations
+
+- The original 18-key deployment exceeded the measured ledger-9 block
+  budgets (53,076 bytes written versus 50,000; 2.011 s versus 2.000 s).
+  The later 30-circuit v2 roster deployed in three waves on its older stack.
+  [GRANTS-E2.md](GRANTS-E2.md) and [wave-ceiling.json](evidence/wave-ceiling.json)
+  preserve the measurements. Their 25,000-byte planner budget and measured
+  maintenance-key boundary do not describe the current ten-wave plan.
+- [dismiss-cost.json](evidence/dismiss-cost.json) prices a small NIGHT-funded
+  deposit at 16.504 ms against a 16.266 ms dismissal budget. The recorded
+  limitation concerns the funding leg with NIGHT change, not all unshielded
+  calls. Non-native unshielded grants were subsequently included on-node.
+  NIGHT-funded suites have no replacement full-run evidence here; reproduce
+  the funding probe on the selected stack before claiming that gap closed.
+- The client handles observed Dust-state lag with bounded submission retries.
+  Stale localnet state and TTL expiry can still fail a run; capture the actual
+  failure instead of counting it as a contract rejection. Localnet setup and
+  provider behaviour are in [`src/node/`](src/node/).
 
 ## Running
 
-Use Node.js >=22.12. The compile script pins
-`compact compile +0.35.0 --feature-zkir-v3` and builds the account, control,
-faucet and block-time probe, including their proving/verifier keys.
+Run from `contract/`, using Node.js **>=22.12**, the pinned Compact compiler,
+Rust for the cross-implementation checks, and Docker for node-backed suites.
+Generated code and keys under `contracts/managed/` are not committed.
+`npm run compile` builds the account, control, faucet, block-time, P-256 and
+caller probes; the caller probe uses the flag selection in `package.json`.
+`--skip-zk` alone is not a keyed build and is insufficient for proving.
 
 ```sh
 compact update 0.35.0
 npm ci
-npm run compile                      # compact compile → contracts/managed/
-(cd signer-rs && cargo build)        # the independent Rust signer
-printf 'APP__INFRA__SECRET=%s\n' "$(openssl rand -hex 32)" > infra/.env
-(cd infra && docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d)
+npm run compile
+npm run build
+cargo build --locked --manifest-path signer-rs/Cargo.toml
 
-export WALLET_SEED=0000000000000000000000000000000000000000000000000000000000000001
-export WALLET_SEED_SECONDARY=0000000000000000000000000000000000000000000000000000000000000002
-
-# Offline (no localnet needed; both suites run BOTH arms)
-npm run test:unit                    # signer pipelines, codec, domain separation
-npm run test:toolchain-offline       # SDK deployment construction and wave-key compatibility
-npm run test:grants-offline          # scoped grants: lifecycle and the unshielded
-                                     # grant twin on both arms, in the simulator
-npm run test:grants-capability-offline # refuse schema < 3 before grant approval/submission
-npm run test:recovery-offline        # recovery MIP client halves: BUSS split and
-                                     # reconstruct, share derivation, trial
-                                     # assignment, wrap, the gate key, and the
-                                     # challenge vectors
-npm run test:recovery-sim            # recovery MIP circuit matrix in the simulator
-                                     # under explicit wall-clock control: session
-                                     # freshness, the signature gate and its
-                                     # refusals, veto window, cancel, finalisation,
-                                     # epoch-bump revocation
-npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
-npm run verify:p256-browser         # recorded live assertion + account binding (Node/OpenSSL)
-
-# On-node, running on the v9 localnet (shielded flows and coinless calls)
-npm run test:p256-browser           # interactive experiment: real browser passkey approval
-npm run test:p256-grants            # wa-json134 grantee: funded unshielded spends,
-                                     # restrictions, replay, revoke and reissue
-npm run test:p256-grant-refusals     # minimal node fixture: identity and ED/suffix refusal
-npm run test:auth-coinless           # BOTH seams on-node + cross-arm enrolment + tamper aborts
-npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
-npm run test:custody-discovery      # MIP-0012 test 4
-npm run test:custody-payments        # MIP-0012 tests 7, 8
-npm run test:leak-audit              # MIP-0012 test 5
-npm run test:grants-conformance      # scoped grants Testing 1, 2, 3, 6, 9, 10, 11
-npm run test:recovery                # recovery MIP lifecycle end to end: session
-                                     # through the seam, signature gate, a real
-                                     # 60 s veto windows, cancel, two finalisations,
-                                     # old-grant invalidation and successor reissue
-                                     # GRANTS_E2_GROUPS=<group> truncates the
-                                     # scenario after a group (it is one
-                                     # sequence, so a subset is a prefix):
-                                     # deploy, issue, spend, rejections,
-                                     # liveness, direct, kill, keys, expiry,
-                                     # composition, concurrency, proving
-npm run test:grants-unshielded       # scoped grants: the UNSHIELDED grant twins on
-                                     # node, on a non-native color
-                                     # (evidence/grants-e4-*.json).
-                                     # GRANTS_E4_GROUPS=<group> truncates the
-                                     # scenario after a group, as above:
-                                     # funding, issue, spend, rejections, proving
-
-# On-node probes (each deploys its own throwaway accounts; none is a suite)
-npm run probe:wave-ceiling           # the per-maintenance-update verifier-byte
-                                     # ceiling, by bisection (evidence/wave-ceiling.json)
-npm run probe:block-time             # the unit and enforcement point of
-                                     # kernel.blockTimeLessThan (GRANTS-E3.md)
-npm run probe:revocation             # remove_device retires an entry, not a device
-npm run probe:dismiss-cost           # what every unshielded shape of this contract
-                                     # costs against the node's time-to-dismiss
-                                     # budget, priced off-node with the node's own
-                                     # check and WITHOUT submitting
-                                     # (evidence/dismiss-cost.json)
-
-# On-node, currently BLOCKED by the localnet fee limit (see below):
-# a SMALL contract call carrying a NIGHT unshielded input that balancing
-# pairs with a NIGHT change output. Measured by probe:dismiss-cost: the
-# NIGHT deposit prices at 16.504 ms of dismissal against a 16.266 ms budget,
-# while the same call for a NON-NATIVE color and both unshielded grant twins
-# are admitted with milliseconds of headroom. test:grants-unshielded
-# therefore runs the whole unshielded grant arm on a non-native color; the
-# suites below still fund with NIGHT.
-npm run test:auth                    # MIP-0013 tests 1, 2, 5 (funds via deposit_unshielded)
-npm run test:auth-lifecycle          # MIP-0013 tests 6, 9
-npm run test:auth-replay             # MIP-0013 tests 3, 4
-npx tsx src/tests/auth-crossimpl.ts  # MIP-0013 test 7 (signs withdraw_unshielded)
-npm run test:custody-unshielded      # MIP-0012 test 6
+npm run test:unit
+npm run test:toolchain-offline
+npm run test:grants-offline
+npm run test:grants-capability-offline
+npm run test:grants-caller-offline
+npm run test:p256-offline
+npm run test:recovery-offline
+npm run test:recovery-sim
+npm run test:crossimpl-offline
 ```
 
-Each node suite writes a JSON evidence file under `evidence/`.
+For ECC checks, use the separate
+[reproduction instructions](evidence/ecc-validation/README.md), including
+the pinned native backend and test-parameter limitations. The standalone
+Rust BUSS vectors are documented in [`buss-rs/README.md`](buss-rs/README.md).
+A recorded P-256 full-account proof exhausted an approximately 8 GiB Docker
+VM; the successful [measurement run](P256-MEASUREMENTS.md) used 24 GiB.
+That is an observation, not an exact minimum-memory requirement.
 
-## Known ledger-9 limitation: the full deploy exceeds per-block limits
+To start the development localnet (omit the macOS override on Linux):
 
-A deploy carrying all 18 verifier keys prices at bytes_written 53,076
-against the ledger-9 rc parameters' per-block budget of 50,000, and at
-compute_time 2.011 s against 2.000 s — it can never fit a block, and the
-fee computation refuses it up front (`exceeded block limit in transaction
-fee computation`, thrown client-side by `feesWithMargin` before
-submission). This is a parameter-tuning finding to raise upstream, not a
-localnet artefact: the limits come from the chain's ledger parameters
-(readable via the indexer's `{ block { ledgerParameters } }`), so any
-network on these parameters refuses the same deploy, and any contract
-with roughly 17 or more typical entry points is undeployable in one
-transaction.
+```sh
+printf 'APP__INFRA__SECRET=%s\n' "$(openssl rand -hex 32)" > infra/.env
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.macos.yml up -d
 
-**Current planner (Compact 0.35.0 / node 2.1.0-rc.4):** the verifier-byte
-budget defaults to **15,000** for both deploy and maintenance waves. The
-52-circuit roster plans as **ten waves** for any initial arm, with activation
-after all keys are installed. The pre-P-256 36-circuit roster needed seven
-waves. The newer node refuses the old 25,434-byte deployment batch.
-See [upgrade verification](TOOLCHAIN-0.35.md) and [P-256 evidence](WEBAUTHN.md).
+# Public development funding seeds, for this localnet only.
+export WALLET_SEED=0000000000000000000000000000000000000000000000000000000000000001
+export WALLET_SEED_SECONDARY=0000000000000000000000000000000000000000000000000000000000000002
+# Use a fresh output directory so historical receipts are preserved.
+export EVIDENCE_DIR=/tmp/passport-acc-review-evidence
 
-The following measurements are historical (the 30-circuit grant roster on
-node `2.1.0-2e92c4ae642c`). At that time the reference client deployed in waves
-(`src/wallet/wave-deploy.ts`), packed greedily against a per-update
-verifier-byte budget: wave 1 is the deploy itself and carries the deposits
-and the initial device's arm (10 operations, 25,434 verifier bytes, about
-34 KB written, a functional single-arm account); every later wave is one
-batched `MaintenanceUpdate`, hand-built against the ledger API and signed
-with the maintenance authority key the deploy stored locally.
+npm run test:p256-grants
+npm run test:p256-grant-refusals
+npm run test:recovery
+```
 
-At `spec_version = 2` the roster is **thirty circuits and 74,286 verifier
-bytes** (3,474 for the deposits, 18,504 and 21,960 for the two device arms,
-13,878 and 16,470 for the two grant arms).
-
-**The per-update ceiling is measured** (`npm run probe:wave-ceiling`,
-`evidence/wave-ceiling.json`): by bisection over throwaway wave-1 accounts, an
-update of 12 verifier keys (29,484 verifier bytes) is accepted and lands, while
-13 keys (32,229), 14 keys (34,974) and 16 keys (39,600) are each refused by the
-node at submission with `1010: Invalid Transaction: Transaction would exhaust
-the block limits`. The ceiling therefore sits in **(29,484, 32,229] verifier
-bytes**, closed to one key, on node 2.1.0. The refusal is the node's alone: the
-client priced every refused payload without complaint (`cost` returned,
-`normalizeFullness` did not throw, `fees` returned a figure). The client-side
-`exceeded block limit in transaction fee computation` bounds the
-all-operations DEPLOY instead, before a transaction exists. The two are
-different mechanisms at different points, and for a maintenance update nothing
-client-side warns an implementer.
-
-`VERIFIER_BYTE_BUDGET` then defaulted to **25,000** verifier bytes: the
-largest accepted payload less a safety margin of 4,484 bytes, about 15 per
-cent, rounded down, the margin covering the Dust spend balancing adds, block
-fullness, and the per-block fee-price adjustment. At that default the roster
-lands in **three waves**, measured end to end on the localnet:
-
-| Wave | Kind | Circuits | Verifier bytes | Authority counter before | Result |
-|---|---|---|---|---|---|
-| 1 | deploy | 10 | 25,434 | (deploy) | SUCCESS at block 5,888 |
-| 2 | maintenance | 10 | 23,994 | 0 | SUCCESS at block 5,891 |
-| 3 | maintenance | 10 | 24,858 | 1 | SUCCESS at block 5,894, retires the authority |
-
-After the last wave the account reads `committee = 0, threshold = 1,
-counter = 2`, with 30 operations and `spec_version = 2`, which is the count MIP
-section 6.7 predicts, reached by a packing of 10 and 10 rather than the 16 and
-4 its own arithmetic implies. The budget stays overridable through an
-environment variable of the same name. A budget under the ceiling does not by
-itself bring the roster down to three waves: the planner packs greedily over
-one key order, so
-18,504, 20,000, and 24,000 all cost four waves, and the E2 run that predates
-the measurement used 18,504 and took four. Details and evidence in
-`GRANTS-E2.md`.
-
-Not through midnight-js's published circuit maintenance interface, for two
-reasons. Its ledger-9 binding still hardcodes
-`ContractOperationVersion 'v3'`, whose raw keys carry the
-`midnight:verifier-key[v6]:` header, while compactc 0.35.0 with ZKIR v3 emits
-v7-headed keys (tag `'v4'`), so `insertVerifierKey` throws before a
-transaction exists. And it is per-circuit, so it would cost 8 transactions
-where the ledger API takes all 8 inserts in one. **This is the third
-upstream finding on this branch** (recorded under "Ecosystem dependencies
-observed"), alongside the block limit above and the fee-model rejection
-below.
-
-The maintenance waves also demonstrate the arm-migration mechanism: adding an
-arm's circuits to a LIVE account by maintenance update is how the secp256r1 arm
-can reach older accounts with a live authority, and it is how the twelve grant
-circuits reached the account measured above. That mechanism carries a custody
-cost the reference refuses to pay silently, so the last wave ends by retiring
-the authority, as below.
-
-### The maintenance authority sits above the seam, so the last wave retires it
-
-Deploying a contract mints a contract maintenance authority and stores its
-signing key locally. This is inherited from the standard deploy path
-(midnight-js's `deployContract` does the same), not introduced here, but the
-co-resident design makes it load-bearing and therefore worth stating
-plainly: **a `VerifierKeyInsert` replaces an operation's verifier key, and a
-`ContractOperation` carries nothing else**, so whoever holds that key can
-substitute their own relation for `withdraw_shielded_with_k256` and release
-the account's assets with no device signature and no `auth_nonce` advance.
-That is a path around the seam this contract calls the gate on every
-asset-releasing circuit, and a single key holding it contradicts the 1-of-n
-device model MIP-0013 specifies.
-
-This is measured, not argued. `auth-coinless` (S14) builds the update that
-removes the verifier key of `withdraw_shielded_with_k256` and inserts the
-permissionless `deposit_unshielded` key in its place, at the authority
-counter read from chain. Against an account deployed with
-`retireAuthority: false` that update returns `SucceedEntirely`: the gate on
-a shielded withdrawal is replaced by a relation that verifies no signature
-at all, with no device key involved. Replacement needs the remove and the
-insert in one update; a bare insert over an existing key is refused.
-
-The last wave is the last operation that needs the authority, so the same
-update retires it: the batch ends with a `ReplaceAuthority` installing an empty
-committee at threshold 1, which no signature set can satisfy. The identical
-swap then fails against a default-deployed account, whose on-chain state
-shows `committee = 0, threshold = 1`. After deploy, the seam is the only way
-to move the account's assets.
-
-The cost is explicit and is the trade-off a deployer must make: a retired
-account can never receive a future arm's circuits, so pre-P-256 retired
-accounts gain passkey support only by migrating to a new account. `retireAuthority: false`
-keeps that door open for a deployer who has weighed the custody risk.
-
-## Known localnet limitation: the NIGHT funding leg is mempool-rejected
-
-The v9 node's genesis parameters cap a transaction's dismissal cost at
-`max(2 us x size_bytes, 15 ms)`. The failing class is narrower than this
-README first recorded, and `probe:dismiss-cost` prices every shape of this
-contract against that budget with the node's own check
-(`evidence/dismiss-cost.json`): what is refused is the funding leg, a small
-contract call carrying a NIGHT unshielded input that balancing pairs with a
-NIGHT change output, which prices at 16.504 ms of dismissal against a
-16.266 ms budget for its 8,133-byte `est_size`
-(`Malformed(FeeCalculation(OutsideTimeToDismiss))`): a 1.5 % miss on this
-probe's figures, and 16.313 ms against 16.26 ms when the same shape was
-first recorded here. The refusal is invariant under TTL and identical on
-node 2.1.0 and 2.0.0-rc.4. The same call for a NON-NATIVE color is admitted
-with at least 4.975 ms of headroom at the same size, because a NIGHT input
-and a NIGHT change output cost about 3.447 ms and 2.491 ms of dismissal time
-each against about 680 us for a plain input and 0 for a plain output.
-Proof-only calls pass (the coinless suite), plain wallet transfers pass,
-shielded flows pass (zswap proofs make the transaction large enough to buy
-budget), and so do both unshielded grant twins, which are included on node
-by `test:grants-unshielded` at a priced headroom of at least 8.7 and
-9.9 ms. Since `deposit_unshielded` of NIGHT is how the funded
-suites below seed the account, they stay blocked end-to-end; a suite that
-funds with a non-native color is not. The limitation is independent of the
-signature scheme (the JubJub trunk's transactions have the same shape); it
-is upstream ledger issue [#761](https://github.com/midnightntwrk/midnight-ledger/issues/761), the client under-reserving the NIGHT change
-output balancing adds, not an arm defect. The wallet SDK cannot predict the
-rejection: it prices fees against hard-coded default parameters with
-enforcement off, while the chain's actual parameters arrive per block from
-the indexer (`{ block { ledgerParameters } }`), which is what the probe reads.
-
-Two client-side consequences are already handled in `src/node/wallet.ts`:
-the balancing TTL defaults to 60 s (`TX_TTL_MS` to override) because
-longer windows push even deploy transactions over the limit, and an intent
-TTL within ~10 s of build time is rejected as
-`Malformed(TransactionApplication(IntentTtlExpired))`.
-
-## Scoped grants
-
-The current schema is v3, with JubJub, k256 and profiled P-256 grantees.
-The client refuses grant issuance on older schemas before requesting a
-device signature: v3 adds the caller commitment even to unrestricted
-scopes. See [GRANTS-COMPLETION.md](GRANTS-COMPLETION.md) for the current
-validation record and the remaining MIP acceptance work. The measurements
-below retain their original v2 attribution.
-
-The twelve grant circuits of `spec_version = 2`, measured with `zkir-v3
-mock-compile` and the generated `keys/` directory. Six twins (three operations
-on each grantee arm) and six lifecycle circuits (three on each device arm).
-Verifier keys are 2,745 bytes for every k256 circuit and 2,313 for every jubjub
-one, as everywhere else in this contract.
-
-| Circuit | k | Rows | Prover key bytes |
-|---|---|---|---|
-| `withdraw_unshielded_with_grant_jubjub` | 16 | 38,514 | 98,577,378 |
-| `withdraw_shielded_with_grant_jubjub` | 17 | 66,014 | 197,145,788 |
-| `withdraw_shielded_to_contract_with_grant_jubjub` | 17 | 71,717 | 197,146,307 |
-| `issue_grant_with_jubjub` | 16 | 52,227 | 98,579,365 |
-| `revoke_grant_with_jubjub` | 15 | 26,871 | 49,292,097 |
-| `revoke_all_grants_with_jubjub` | 15 | 26,645 | 49,290,943 |
-| `withdraw_unshielded_with_grant_k256` | 17 | 64,355 | 234,896,051 |
-| `withdraw_shielded_with_grant_k256` | 17 | 91,865 | 234,898,319 |
-| `withdraw_shielded_to_contract_with_grant_k256` | 17 | 97,568 | 234,898,837 |
-| `issue_grant_with_k256` | 17 | 78,604 | 234,898,194 |
-| `revoke_grant_with_k256` | 16 | 58,997 | 117,453,434 |
-| `revoke_all_grants_with_k256` | 16 | 58,771 | 117,452,209 |
-
-Against the corresponding device twin, the grant seam costs 3,352 rows on the
-k256 unshielded twin and 17,278 on each k256 shielded twin, and 9,637 and
-15,959 on the jubjub arm; the shielded figures carry the inbox insert for the
-change entry, which no device twin performs. It pushes four of the six twins
-up one k (both jubjub shielded twins, the jubjub unshielded twin, and the k256
-unshielded twin; the k256 shielded twins are already at k=17). Proving times measured on the reference localnet are about 3.4 s at
-k=15, 5.6 to 8.0 s at k=16, and 11.2 to 17.4 s at k=17, with a composed pair of
-two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
+Wait for node/indexer readiness before testing. Run node suites sequentially:
+they share funding-wallet state and proving resources. If changing Compose
+project names, set the container overrides used by the suites, such as
+`MIDNIGHT_PROOF_CONTAINER`. The evidence writer records configured stack
+tags, with defaults matching Compose; set `MIDNIGHT_NODE_TAG`,
+`MIDNIGHT_INDEXER_TAG`, and `MIDNIGHT_PROOF_TAG` when using different images,
+and capture actual service identities as part of the run.
 
 ## Conformance map
 
-| Suite | MIP-0012 Testing | MIP-0013 Testing | Invariants exercised |
-|---|---|---|---|
-| `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3, AUTH-9, AUTH-10 at the hash level; S10 non-vacuity — **both arms** |
-| `auth-coinless` | — | coinless halves of 1, 2(a), 6, 10 | AUTH-1, AUTH-2, AUTH-5 (via S13), AUTH-9 (entry roll under a second key), S12, S13, §3 bootstrap, wave deploy — **both seams on-node, cross-arm enrolment in both directions, per-arm tamper aborts, both seam guards through their real attacks** |
-| `auth-conformance` | — | 1, 2, 5, 10 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, AUTH-9 (wrong-counter fault), INV-7, §3 bootstrap |
-| `auth-lifecycle` | — | 6, 9 | AUTH-4, AUTH-5, AUTH-7, AUTH-9 (entry roll observed) |
-| `auth-replay` | — | 3, 4 | AUTH-3 (address and circuit binding) |
-| `auth-crossimpl` + `crossimpl-offline` | — | 7 | AUTH-4 (approval/proving separation) |
-| `custody-shielded` | 1, 2, 3 | — | INV-1, INV-2, INV-3, INV-4, INV-5 |
-| `custody-discovery` | 4 | — | INV-4, INV-5 |
-| `leak-audit` | 5 | — | INV-2 (with positive control) |
-| `custody-unshielded` | 6 | — | INV-8 |
-| `custody-payments` | 7, 8 | — | INV-6 (one-hop); direct-transfer mode |
-| `grants-offline` | n/a | n/a | MIP-scoped-grants Testing 1 and 2, the off-node halves: lifecycle, the unshielded grant twin, and the rejection matrix on **both grantee arms** in the circuit simulator; GR-1, GR-3, GR-5, GR-6, GR-7, GR-12, GR-13, GR-14 |
-| `grants-conformance` | n/a | n/a | MIP-scoped-grants Testing 1, 3, and 9 green on node; 6, 10, and 11 partial; 2 partial, so the Path to Active checkbox for E2 cannot close (see `GRANTS-E2.md` for what each is missing). Twelve scenario groups, each its own evidence file and each selectable as a `GRANTS_E2_GROUPS` prefix: deploy (the three-wave deploy at the measured 25,000-byte budget), issue, spend, rejections, liveness, direct, kill, keys, expiry, composition, concurrency, proving; GR-1 to GR-9, GR-11 to GR-14, AUTH-5, AUTH-8, AUTH-9, INV-4, INV-5, INV-6 |
-| `recovery-offline` | n/a | n/a | Recovery MIP Testing, the off-node halves: field encoding, three guardian profiles, tagged share derivation, split and reconstruct with `|phi| = n - t`, threshold behaviour and REC-5, trial assignment against the recovery key, the gate key reduced into `r_J`, the artefact-set version reader, the wrap container, cross-implementation vectors (shares against the Rust fork; the recover-gate and cancel challenges), and the challenge bindings of the three recovery operations |
-| `recovery-sim` | n/a | n/a | Recovery MIP Testing in the circuit simulator under explicit wall-clock control: session freshness (reused identifier and commitment, all-zero identifier after a real session), slot gating and the length bound, unauthorised publish, the signature gate's refusals (identity and small-order keys, missing co-signature, wrong secret, every signed binding tampered, reused successor commitment, a forgery against an identity birth key), delegation safety (no scalar among the arguments), pending exclusivity, the veto window, cancel and verbatim replay, finalisation effects (epoch, count, nonce, round, key rotation, vector cleared), epoch-bump revocation, and a post-recovery session; REC-1, REC-4, REC-6, REC-7, REC-8, REC-9, REC-11, AUTH-6 |
-| `recovery-conformance` | n/a | n/a | Recovery MIP lifecycle on node: four-wave deploy with birth artefacts, session publish through the jubjub seam, on-node freshness rejection, reconstruction from chain data and the wrap round-trip, the signature-gate submission proved on the proof server, an early finalisation held by a real 60 s window, cancel, resubmission, finalisation after the window with nonce and round advanced, successor control and the old device dead, a post-recovery session (`evidence/rec-1-9-recovery-conformance.json`) |
-| `grants-unshielded` | 6 (the mirror, under a GRANT rather than a device) | n/a | MIP-scoped-grants: the UNSHIELDED grant twins included on node, which GRANTS-E2 could not run. Five groups, each its own evidence file and each selectable as a `GRANTS_E4_GROUPS` prefix: funding (a non-native color minted and deposited through `deposit_unshielded`, with the NIGHT arm skipped and priced), issue (ten `op_withdraw_unshielded` scopes across both device arms and both grantee arms, `object_commit` recomputed from each opening), spend (`withdraw_unshielded_with_grant_jubjub` and `withdraw_unshielded_with_grant_k256` included on node, the mirror debit, the per-grant nonce settle, the cumulative `spent_commit`, and a recipient pin honoured), rejections (fourteen rows labelled by class: twelve pre-custody, which abort before `do_withdraw_unshielded` is entered, and two in-custody, which reach it and are refused by the mirror gate; neither class emits an unshielded offer, because `debit_unshielded` runs before `sendUnshielded`), proving (the first proving times either unshielded twin has had); GR-2, GR-5, GR-7, GR-12, GR-13, GR-14, INV-8 |
-| `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
+This maps executable suites to review areas, not a blanket PASS certificate.
+The dated evidence above determines which source, stack, arm and proof layer
+was actually exercised. In older reports, “both arms” means JubJub and k256.
 
-Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
-exercise BOTH arms; the remaining on-node suites drive the k256 arm (the
-account they set up is k256-born), with the custody suites scheme-agnostic
-below the seam by construction. The jubjub arm's full funded conformance
-matrix predates the co-residency restructure on the trunk's history; its
-seam is re-proven on-node by `auth-coinless`.
+| Commands (`npm run …`) | Review area and evidence |
+|---|---|
+| `test:unit`, `test:crossimpl-offline` | Client encodings, challenges and independent Rust signer agreement; AUTH-9/10 binding checks. |
+| `test:auth-coinless` | JubJub/k256 authorisation, cross-arm enrolment, self-removal and maintenance controls; [0.35 receipts](evidence/compact-0.35/auth-coinless-arms-auth-coinless.json). |
+| `test:auth`, `test:auth-lifecycle`, `test:auth-replay`, `test:auth-crossimpl` | Funded MIP-0013 suites; historical NIGHT-funding limitation applies. |
+| `test:custody-shielded`, `test:custody-discovery`, `test:custody-payments`, `test:leak-audit` | MIP-0012 Testing 1–5, 7–8; historical receipts in `evidence/cust-*.json`. |
+| `test:custody-unshielded` | MIP-0012 Testing 6; distinguish its NIGHT funding from non-native grant tests. |
+| `test:grants-offline`, `test:grants-conformance`, `test:grants-unshielded` | [E1](GRANTS-E1.md), [E2](GRANTS-E2.md), [E3](GRANTS-E3.md), and `evidence/grants-e4-*.json`; later additions are in [GRANTS-COMPLETION.md](GRANTS-COMPLETION.md). `GRANTS_E2_GROUPS` and `GRANTS_E4_GROUPS` truncate their own scenario sequences; they do not select recovery scenarios. |
+| `test:grants-capability-offline`, `test:grants-caller-offline`, `test:grants-caller` | Schema-v3 client gating and immediate caller checks. Capability fixtures do not replace deploying a real legacy account. |
+| `test:p256-offline`, `test:p256`, `test:p256-browser`, `verify:p256-browser` | Fixed WebAuthn profile, proving samples, interactive real-browser experiment and recorded-assertion verification; [profile and evidence](WEBAUTHN.md). |
+| `test:p256-grants`, `test:p256-grant-refusals` | Full-account spending and separate restricted refusal fixture from 23 October. |
+| `test:recovery-offline`, `test:recovery-sim`, `test:recovery` | Client scheme/codec, simulator and localnet recovery layers respectively; latest node evidence includes two finalisations and grant invalidation/reissue. |
+| `probe:revocation`, `probe:wave-ceiling`, `probe:block-time`, `probe:dismiss-cost` | Diagnostic probes; revocation reports the known defect, not a passing security guarantee. |
 
-Not covered here, by design:
-
-- **FROST threshold signature** (MIP-0013 test 8): committee-side; the
-  ciphersuite specification is an acceptance criterion under Path to
-  Active, and the contract is unchanged under the threshold profile.
-- **Stale-epoch rejection through a device call** (parts of MIP-0013
-  tests 2 and 6, AUTH-6): the only epoch-bump site is the §8 recovery
-  seam, which the recovery-paths MIP instantiates here as
-  `recover_finalise`. The bump and the death of every pre-bump entry are
-  exercised by `recovery-sim` and `recovery-conformance`; a device-call
-  matrix at epoch 1 is not run separately, since the same assertion
-  (`unknown device entry`) is what those suites observe.
-- **Complete revocation** (MIP-0013 §6): removal retires one set element,
-  and a device that enrolled a second entry for its own key survives it.
-  That is a defect in the standard's device-set shape rather than a gap in
-  the suites, so there is no conformance test to pass;
-  `src/tests/probe-revocation.ts` (`npm run probe:revocation`) demonstrates
-  it on-node against both enrolment shapes. See erratum 8. The probe is
-  deliberately outside the suite list: it reports a verdict rather than
-  gating, and it will be inverted into a conformance test once §3 gains a
-  contract-maintained device identity.
+FROST committee signing is outside these account suites. General browser
+connection, private-state service integration and independent cryptographic
+review remain separate deliverables. Preserve the difference between a
+client/build refusal, native preprocessing rejection, unsatisfied proof
+constraints, and node rejection of a submitted transaction.
 
 ## Spec errata found while implementing
 
-To be folded back into the MIP texts:
+Implementation findings and their dispositions. Items 1–3 describe the
+original specification corrections; follow their upstream links for canonical
+text. Item 7 is corrected in this source; item 8 remains an open design defect.
 
-1. **MIP-0013 §5.1 DST derivation.** As first published, §5.1 derived
-   the per-circuit DST as the tag "zero-padded or hashed to 32 bytes":
-   the arm selection, the hash function, and the pre-hash encoding were
-   all unspecified, so two conforming implementations could derive
-   different challenges from the same tag. (Every current tag exceeds
-   32 bytes, but a short circuit name such as `send` would make the
-   ambiguity live.) This implementation derives unconditionally:
-   DST = `persistentHash<[Bytes<64>]>` of the tag zero-padded to
-   64 bytes, regardless of length. Proposed upstream as
-   [midnight-improvement-proposals#249](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/249),
-   which codifies exactly this construction.
-2. **MIP-0013 §3 deploy-time entry is unimplementable.** The initial
-   device entry binds `kernel.self()`, but `kernel.self()` evaluates to
-   the zero address inside a constructor on the current toolchain, so the
-   constructor cannot compute the address-bound entry (verified
-   empirically: the deployed entry matched the zero-address derivation).
-   This implementation bootstraps instead: the constructor stores a
-   salted commitment `persistentHash([DST_BOOT, salt, pk])` and the
-   permissionless `activate_initial_device(pk, salt)` circuit inserts the
-   real entry at use counter 0 and burns the commitment. Deterministic in
-   the committed key (no front-running); the fresh per-account salt keeps
-   pre-activation state free of cross-account-stable device values. The
-   deploy-time entry is unimplementable in principle, not merely on the
-   current toolchain: the contract address is derived from the deploy
-   transaction's content, so no deploy-time code can know it. Proposed
-   upstream as
-   [midnight-improvement-proposals#250](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/250),
-   which makes this bootstrap normative and adds conformance test 10
-   (exercised by the auth-conformance suite).
-3. **MIP-0012 §6.3 direct-transfer return.** The contract-recipient
-   circuit must return the **sent** coin as well as the change: the
-   composing client needs its description (the deterministic nonce
-   evolution) to build the payee's claim in the same transaction. The
-   validated signature is `[ShieldedCoinInfo, Maybe<ShieldedCoinInfo>]`.
-   Proposed upstream as
-   [midnight-improvement-proposals#248](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/248).
-4. **Observation, not erratum — the `as Field` cast as first rejector.**
-   When a signature does not match the call (tampered argument, stale
-   nonce, replay), the recomputed challenge differs from the ground one
-   and the in-circuit `as Field` cast fails its range check for roughly
-   half of such mismatches, aborting before the signature equation is
-   evaluated. Both abort paths conform; error messages differ
-   (`range error` vs `invalid signature`).
-
-5. **Observation on MIP-0012 §5 unmirrored transfers.** The node refuses
-   an unsolicited unshielded output addressed to a contract (invalid
-   transaction, custom error 186) — the same claim-pairing rule shielded
-   outputs have. On the current ledger, unmirrored unshielded holdings
-   cannot arise by direct transfer at all, which is stronger than the
-   lower-bound semantics §5 assumes; the clause remains correct for any
-   future route the ledger may admit.
-6. **MIP-0013 §4 does not require the seam to reject weak device keys.**
-   The seam is specified as a signature verification against the device's
-   public key, with no admissibility condition on that key. Both schemes
-   degenerate at their curve identity: ECDSA's verification equation loses
-   its key-dependent term entirely, and Schnorr's reduces to `s·G == R`, so
-   an identity "key" authorises with no secret. Neither identity is
-   excluded by its type — secp256k1's is a flagged `Secp256k1Point` and
-   JubJub's is the ordinary affine point `(0, 1)` — and MIP-0013's entry
-   construction commits to the key without constraining it, so an entry for
-   an identity key is well-formed. Verified against the runtime's own curve
-   arithmetic on both curves, and exercised on-node by `auth-coinless`
-   (S12): with the entry planted, a forged signature is accepted by the
-   bare verification equation and refused only by the added guard. **§4
-   should require that an implementation reject keys of small order on
-   every arm** (for a cofactor-8 curve such as JubJub, `[8]pk != O`; for a
-   prime-order curve such as secp256k1, `pk != O`). Note that this is a
-   defect in the specification, not only in an implementation of it: the
-   MIP as written admits a conforming implementation with this hole.
+1. **MIP-0013 §5.1 DST derivation.** The original “zero-padded or hashed
+   to 32 bytes” wording left the construction ambiguous. The reference
+   derives operation DSTs with `persistentHash<[Bytes<64>]>` over the tag
+   padded to 64 bytes. The correction is recorded in
+   [upstream #249](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/249).
+   Compatibility with MIP-0021's naming convention remains explicit review
+   work; this documentation does not change deployed challenge bytes.
+2. **MIP-0013 §3 initial-device bootstrap.** An address-bound entry cannot
+   be computed using the eventual contract address in the constructor.
+   The constructor stores a salted boot commitment; the arm-specific
+   `activate_initial_device_with_<arm>` checks its opening, inserts the
+   address-bound entry, and burns the commitment. See
+   [upstream #250](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/250)
+   and the source's per-arm commitment recipes, which include additional
+   envelope/policy fields where required.
+3. **MIP-0012 §6.3 direct-transfer return.** The contract-recipient spend
+   returns `[ShieldedCoinInfo, Maybe<ShieldedCoinInfo>]`: the sent coin as
+   well as change, so the composing client can construct the payee's claim
+   in the same transaction. See
+   [upstream #248](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/248).
+4. **Challenge mismatch rejection.** A tampered JubJub call can fail the
+   ground challenge's `as Field` range check before signature verification.
+   Both that failure and a failed signature equation reject the call; an
+   expected negative is not defined by one error string alone.
+5. **Unmirrored transfers.** The historical unshielded probe observed
+   unsolicited outputs to a contract refused with custom error 186 rather
+   than admitted as unmirrored holdings. That is a ledger observation from
+   the recorded stack, not a claim about every possible funding route or
+   future ledger version. See [`custody-unshielded.ts`](src/tests/custody-unshielded.ts).
+6. **Weak-key rejection and validation layers.** Bare signature equations
+   can degenerate for identity keys. The reference adds key guards, and
+   the pinned runtime/backend impose further point constraints. In the
+   Compact-0.35 `auth-coinless` run, tampered and weak-key negative controls
+   abort during local building; they are not invalid proofs submitted to
+   the node. K256 identity/off-curve cases can be refused during coordinate
+   extraction or runtime validation, rather than only by an explicit
+   contract assertion. The [ECC evidence](evidence/ecc-validation/README.md)
+   separates runtime, native preprocessing, constraint and local-proof
+   checks. A JubJub cofactor guard is not by itself a full subgroup proof,
+   and opaque-key enrolment can still store an unusable commitment.
 7. **MIP-0013 AUTH-6 epoch revocation is defeatable by pre-planting.** AUTH-6
    revokes a device set by advancing `device_epoch`, so that every entry bound
    to the old epoch stops matching — revocation without enumerating the set.
@@ -646,11 +417,14 @@ To be folded back into the MIP texts:
    their installed verifier: adopting this correction requires a verifier
    update where maintenance remains available, or migration to a corrected
    deployment where it has been retired. [Passport #183](https://github.com/midnightntwrk/passport/pull/183)
-   passed Compact 0.35 compilation with keygen skipped and simulation.
-   Regenerated keys, proof/node validation, deployment sizing and the expanded
-   retirement cases remain; earlier on-node receipts predate this correction.
-   Individual device removal remains
-   a separate issue (erratum 8).
+   initially passed compilation with keygen skipped and simulation. The
+   [23 October run](GRANTS-COMPLETION.md#recovery-and-grant-lifecycle-on-node)
+   subsequently proved and exercised the corrected finalisation twice on a
+   fresh full account, retaining exactly the authorised successor each time.
+   This used matching cached keys after textual ZKIR comparison, not a new
+   clean key-generation run. The explicit future-epoch, differing-counter,
+   pending-device-enrolment and all-scheme retirement matrix remains broader
+   than that run. Individual device removal remains separate (erratum 8).
 8. **MIP-0013 §6 removal removes an entry, not a device, so revocation does
    not revoke.** The device set holds single-use entries and carries no
    per-device identity, so nothing constrains a device to exactly one live
@@ -686,122 +460,14 @@ To be folded back into the MIP texts:
    That is a ledger-schema change, so a redeploy rather than a maintenance
    update.
 
-   Two further consequences follow from the same root, and both sharpen the
-   case for fixing it in §3 rather than papering over it in §6. First, the
-   planted entries are **not enumerable by the owner**: an entry sits at a
-   use counter of the planter's choosing, and recovering it means guessing
-   that counter, so anything beyond the client's rescan window (4096 from the
-   last known counter) cannot be found and therefore cannot be removed.
-   Second, every plant increments `device_count`, which is a `Uint<8>`: the
-   generated increment carries a range check that aborts the call once the
-   value would exceed 255 (`cast from Field or Uint value to smaller Uint
-   value failed`). A device that plants repeatedly can therefore push the
-   account to a state where **no further device can ever be enrolled**, and
-   the removals that would relieve it target entries the owner cannot
-   enumerate. The range check is read from the generated code rather than
-   driven to 255 on-node.
-
-## Ecosystem dependencies observed
-
-- **Indexer contract-transaction enumeration** (MIP-0012 Path to Active):
-  the `contractAction(address, offset)` *query* returns a single action
-  (the latest at or before the offset), but the
-  `contractActions(address, offset)` *subscription* replays the complete
-  per-address action history from any block height (verified against a
-  deployed account: deploy through every call, in order, with entry
-  points and transaction hashes). Path-to-Active discovery is therefore
-  fully supported; a discovering wallet uses the subscription, not the
-  point query (`enumerateContractActions` in the client library). The
-  discovery suite exercises this end to end: the owner replays the
-  history from the contract address alone, matches the depositing
-  transaction by its identifiers (the wallet SDK's txId is a transaction
-  identifier, not the hash), and takes candidate mt_index values from
-  the enumerated transaction's own zswap window. The depositor-known
-  txId remains only as a recorded fallback, which downgrades the verdict
-  to PARTIAL.
-- **Multi-output position windows**: on a busy wallet, deposits and spends
-  carry additional commitments (funding change), so single-output
-  `mt_index` inference does not hold; clients must implement candidate
-  retry (§6.5), which INV-5 makes safe. The client library and suites do.
-- **Wallet dust-state lag**: the wallet SDK builds fees from its own dust
-  view, which lags the chain by a sync cycle; transactions built in quick
-  succession are rejected at submission (`DustDoubleSpend`,
-  `NotNormalized`). A rejected submission changes no state, so the client
-  retries with the same authorisation (`submitWithDustRetry`). On an aged
-  local chain the lag grows unboundedly; reset the localnet when suites
-  start failing at submission. A stopped stack ages the same way: dust
-  decays against wall-clock time, and on resume the node rejects the
-  wallet's transactions with `Malformed(BalanceCheckOverspend)` (custom
-  error 138) — same remedy, reset the chain.
-- **Zero-effect calls can hang the wallet SDK**: a circuit call that
-  changes no public state has been observed to never resolve its
-  finalisation watch. Avoid on-chain calls for pure derivations; compute
-  them client-side (`rawTokenType` for token colors).
-- **The published circuit-maintenance interface cannot insert a current
-  ZKIR v3 verifier key**: compact-js 3.0.0-rc.3's ledger-9 binding hardcodes
-  `ContractOperationVersion 'v3'` (v6-headed keys) while compactc
-  0.35.0 with `--feature-zkir-v3` emits v7-headed keys (tag `'v4'`), so
-  `CircuitMaintenanceTxInterface.insertVerifierKey` throws a header-tag
-  mismatch before a transaction exists. A version-matrix gap between two
-  published packages, not a misuse: nothing in the interface takes a
-  version. Wave 2 hand-builds its `MaintenanceUpdate` against the ledger
-  API instead (`src/wallet/wave-deploy.ts`), which also lets all 8 inserts
-  ride one transaction rather than 8. **Upstream-report candidate.**
-- **`addOrReplaceContractOperation` cannot replace**: a bare
-  `VerifierKeyInsert` aimed at an operation that already holds a key is
-  refused by the ledger, measured as `FailFallible` at every authority
-  counter and for both a re-inserted identical key and a foreign one.
-  Replacing a key requires a `VerifierKeyRemove` and a `VerifierKeyInsert`
-  in **one** update (measured `SucceedEntirely`), and a lone
-  `VerifierKeyRemove` is refused as well. compact-js's
-  `addOrReplaceContractOperation` emits the bare insert, so despite its name
-  it can add an operation but never replace one. **Upstream-report
-  candidate**, and a second defect in the same helper as the version
-  hardcode above.
-- **Key generation needs a curve operation on a runtime value, not a
-  point literal**: with compactc 0.33.0-rc.2 and `--feature-zkir-v3`, a
-  circuit whose only JubJub use is writing a point constant to a ledger
-  cell (`default<JubjubPoint>`, or `ecMulGenerator` of a constant, which
-  folds to the same literal) type-checks and passes `--skip-zk`, but key
-  generation panics in the ZK standard library with `ZkStdLibArch must
-  enable jubjub`: the gadget architecture is derived from the operations
-  the IR performs, and a literal registers none. Found on the k256 twin
-  of the recovery cancel, whose seam is secp256k1 and whose only JubJub
-  touch was clearing the pending key slot; the contract now clears it
-  with `ecMul(pending_recovery_pk, 0)`, a real operation with the same
-  value. Two consequences for anyone building on this line: a keyed
-  compile is the only build that proves a contract builds, and when it
-  panics, bisect with single-circuit probes rather than by the emitted
-  IR files, because IR emission and key generation overlap and the
-  emitted set does not identify the failing circuit. **Upstream-report
-  candidate.**
-- **`ContractOperation` does not expose its verifier key's version**: only
-  `verifierKey: Uint8Array`, with the ledger documenting that "only the
-  latest available version is exposed to this API". A caller building a
-  `VerifierKeyInsert` therefore has no way to read the version back from
-  the state it is amending and must pass a literal, which is why the
-  wave-2 tag is pinned in source beside the toolchain pin.
-
-## Client-library notes
-
-- Clients maintain a device roster (public key → use counter) per
-  MIP-0013 S11: the rolling entry consumed by each call is
-  `persistentHash([DST_DEVICE, self, pk, epoch, use_counter])`, and an
-  unknown or stale counter is recovered by probing ledger membership of
-  candidate entries (`CustodyAccount.resolveUseCounter`).
-- For witness-consuming circuits the approver signs over the exact
-  qualified coin the spend will consume (AUTH-10); the client pipeline
-  hands the witness values to the signer, and a candidate `mt_index`
-  retry therefore re-signs per candidate.
-
-- `UserAddress` circuit arguments are the bech32-decoded **address** bytes
-  (the hash the ledger indexes UTXOs by), not the raw signing public key.
-  Sending to public-key bytes strands tokens at an unowned address
-  (`src/node/wallet.ts#userAddressBytes`).
-- The signer needs only the contract's exported pure circuits (or an
-  independent `persistentHash` implementation — see `signer-rs/`); proof
-  generation consumes the signature and never the device key (AUTH-4).
-- `signer-rs` uses the published ledger crates (`midnight-base-crypto`,
-  `midnight-transient-crypto`, `midnight-curves`) for the field-aligned
-  encoding and curve arithmetic; it is self-contained and builds with a
-  plain `cargo build`.
+   Two further consequences follow from the same root. First, the ledger
+   set is enumerable as opaque entries, but the client cannot reliably
+   attribute all entries to a particular device/key. A planted entry can use
+   an arbitrary counter beyond the client's 4096-counter lookup window.
+   An owner can remove a known entry other than the authorising entry;
+   finding every entry for one compromised key remains the problem.
+   Second, every plant increments `device_count`, a `Uint<8>`: the generated
+   increment's range check aborts above 255. Repeated planting can make
+   further enrolment fail until entries are removed or recovery resets the
+   set. The range check was inspected in generated code; saturation was
+   not driven to 255 on-node in the recorded probe.

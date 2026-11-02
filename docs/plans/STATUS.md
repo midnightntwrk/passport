@@ -5,6 +5,27 @@ recovery and integration dependencies. The release/demo/SDK observations in
 the historical audit below retain their 1 October observation date. Standards
 were checked on 17 October; this follow-up records the 19 October merge of #177.
 
+## ACC validation update — 2 November 2026
+
+The [contract README](../../contract/README.md) consolidates the current ACC
+source, review boundaries, known issues and evidence. Its 23 October validation
+record supersedes this page's 19 October recovery caveat: a full account
+with the atomic device-set reset completed two recoveries on-node, and its
+source hashes match the current baseline. That run used matching cached
+keys after textual ZKIR comparison; clean key regeneration and the expanded
+adversarial retirement matrix are not implied. Individual-device revocation
+remains defective and separate from recovery-wide retirement.
+
+The combined account also has 23 October P-256 unshielded-grant evidence;
+successful P-256 forwarded/shielded grant calls remain outside that run.
+The scoped-grants Draft completed Passport review in #195 and is ready for
+upstream Draft submission, with its evidence links now pinned to Passport
+commits. No
+canonical submission was found on 2 November. These updates do not change
+the dated release/demo/SDK observations below or certify production readiness.
+The table below is retained as the 19 October snapshot, not the latest ACC
+validation register.
+
 ## Standards and evidence
 
 | Record | Verified status | Remaining work |

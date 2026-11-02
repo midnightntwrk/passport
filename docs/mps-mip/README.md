@@ -8,7 +8,9 @@ Editor numbers are assigned upstream at merge; files here use `xxxx`
 until then. Once a document is merged upstream, the upstream copy is
 canonical and the copy here is retired to a pointer.
 
-Last reconciled: **17 October 2026**. See [development status](../plans/STATUS.md).
+Standards register reconciled **17 October 2026**; ACC/grants evidence
+follow-up **2 November 2026**. See the [contract reference guide](../../contract/README.md)
+and [development status](../plans/STATUS.md).
 
 ## Published upstream (upstream copy is canonical)
 
@@ -46,8 +48,11 @@ Last reconciled: **17 October 2026**. See [development status](../plans/STATUS.m
   Recovery Paths for Custody Accounts (**Proposed**), merged via #339.
   Authors: Nicolas Di Prima and Raphael Toledo. Upstream #385 now requires
   atomic retirement of all prior entries at finalisation, including pending
-  enrolments. Passport #183 implements the reset; compilation/simulation
-  evidence does not complete proof/node or deployment validation.
+  enrolments. Passport #183 implements the reset. The
+  [23 October full-account run](../../contract/GRANTS-COMPLETION.md)
+  subsequently exercised two corrected recoveries on-node. Matching cached
+  keys were used; clean key regeneration and the broader adversarial
+  retirement matrix remain distinct from that evidence.
 - `mips/mip-xxxx-prover-key-regeneration.md` → [**MIP-0020**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md),
   On-Demand Prover Keys from Bundled ZKIR (**Proposed**), merged via #338.
   Authors: Nicolas Di Prima and Vincent Hanquez. Supported APIs, conformance
@@ -75,12 +80,16 @@ to canonical pointers. The older custody mirror is non-canonical.
   MIP-0030 supplies the ECDSA/WebAuthn requirements. Historical v2,
   caller-bound v3, and profiled P-256 evidence are distinguished in the
   draft. Independent review and uncompleted conformance/ceremony work
-  remain Path to Active items. The first review destination is Passport;
-  publication to the canonical MIP repository is a subsequent step.
+  remain Path to Active items. Passport review completed in
+  [#195](https://github.com/midnightntwrk/passport/pull/195), merged 23 October. Canonical Draft submission is ready
+  with local evidence links now converted to full, commit-pinned Passport URLs;
+  no upstream submission was found on 2 November. Draft publication is separate from
+  the later acceptance request and Active criteria.
 
 - Caller-bound grants are implemented in merged #176 using `kernel.caller()`
   on Compact 0.35, with a fabricated-caller proof refused at node admission.
-  The extension uses schema v3 and retains a separate combined-build/client-ABI/P-256 caller validation obligation;
+  The extension uses schema v3. The 23 October run covers the combined account
+  and P-256 unshielded spending, but not successful P-256 forwarding;
   earlier grant evidence and the unshielded follow-up #163 are merged.
   Calling-circuit identity remains distinct from immediate caller identity.
 ## Process
