@@ -64,6 +64,9 @@ export function generateEncKeyPair(): EncKeyPair {
 }
 
 function x25519(rawSecret: Uint8Array, rawPeerPublic: Uint8Array): Buffer {
+  if (rawSecret.length !== 32 || rawPeerPublic.length !== 32) {
+    throw new Error('X25519 keys must be exactly 32 bytes');
+  }
   const privateKey = createPrivateKey({
     key: Buffer.concat([PKCS8_PREFIX, Buffer.from(rawSecret)]),
     type: 'pkcs8',
@@ -74,7 +77,9 @@ function x25519(rawSecret: Uint8Array, rawPeerPublic: Uint8Array): Buffer {
     type: 'spki',
     format: 'der',
   });
-  return diffieHellman({ privateKey, publicKey });
+  const shared = diffieHellman({ privateKey, publicKey });
+  if (shared.every((byte) => byte === 0)) throw new Error('invalid X25519 agreement');
+  return shared;
 }
 
 function deriveAeadKey(ikm: Buffer): Buffer {
@@ -91,6 +96,12 @@ export interface PlainCoin {
 }
 
 function encodeCoin(coin: PlainCoin): Buffer {
+  if (coin.nonce.length !== 32 || coin.color.length !== 32) {
+    throw new Error('coin nonce and color must be exactly 32 bytes');
+  }
+  if (typeof coin.value !== 'bigint' || coin.value < 0n || coin.value >= (1n << 128n)) {
+    throw new Error('coin value must be an unsigned 128-bit integer');
+  }
   const out = Buffer.alloc(PLAINTEXT_SIZE);
   Buffer.from(coin.nonce).copy(out, 0);
   Buffer.from(coin.color).copy(out, 32);
@@ -115,13 +126,14 @@ function decodeCoin(buf: Buffer): PlainCoin {
 // ── Sealed entry ────────────────────────────────────────────────────────────
 
 export function sealInboxEntry(recipientEncKey: Uint8Array, coin: PlainCoin): Uint8Array {
+  const plaintext = encodeCoin(coin);
   const eph = generateEncKeyPair();
   const key = deriveAeadKey(x25519(eph.secretKey, recipientEncKey));
   const nonce = randomBytes(12);
   const ad = Buffer.from([ENTRY_VERSION, ENTRY_SUITE]);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
   cipher.setAAD(ad);
-  const ct = Buffer.concat([cipher.update(encodeCoin(coin)), cipher.final()]);
+  const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
 
   const entry = Buffer.alloc(ENTRY_SIZE); // trailing padding stays zero

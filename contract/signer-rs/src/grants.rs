@@ -24,7 +24,6 @@
 //! `.planning/grants-e1/verify-rs.md`.
 
 use anyhow::{anyhow, bail, Context, Result};
-use ff::Field as _;
 use group::Group as _;
 use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 use k256::ecdsa::Signature;
@@ -35,8 +34,9 @@ use serde_json::json;
 
 use crate::{
     bytes32_from_hex, circuit_dst, el_bytes, el_point, el_uint, envelope_digest, hash_below_r,
-    jubjub_point_json, jubjub_scalar_from_hex, jubjub_scalar_to_hex, k256_point_json,
-    k256_signing_key_from_hex, persistent_hash, pk_coords_le, Arm, Element,
+    jubjub_point_json, jubjub_scalar_to_hex, jubjub_secret_from_hex, k256_point_json,
+    k256_signing_key_from_hex, persistent_hash, pk_coords_le, random_nonzero_jubjub_scalar, Arm,
+    Element,
 };
 use midnight_base_crypto::fab::{AlignmentAtom, AlignmentSegment, ValueAtom};
 
@@ -749,7 +749,7 @@ fn grind_and_sign(
 /// A fresh nonce scalar and its point, the pair every v1 signature opens
 /// with.
 fn fresh_nonce() -> (JubjubScalar, EmbeddedGroupAffine) {
-    let r = JubjubScalar::random(&mut rand::rngs::OsRng);
+    let r = random_nonzero_jubjub_scalar(&mut rand::rngs::OsRng);
     let sig_r = EmbeddedGroupAffine(JubjubSubgroup::generator() * r);
     (r, sig_r)
 }
@@ -995,7 +995,7 @@ fn sign_grant_jubjub(req: &GrantSignRequest) -> Result<serde_json::Value> {
     if req.envelope != 0 {
         bail!("the v1 grantee arm carries no envelope member; omit the field");
     }
-    let sk = jubjub_scalar_from_hex(&req.sk)?;
+    let sk = jubjub_secret_from_hex(&req.sk)?;
     let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk);
     let self_addr = bytes32_from_hex(&req.contract_address)?;
     let origin = request_origin(&req.client_id, &req.origin_hash)?;
@@ -1178,7 +1178,7 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
             )
         }
         Some("jubjub") => {
-            let sk = jubjub_scalar_from_hex(&req.sk)?;
+            let sk = jubjub_secret_from_hex(&req.sk)?;
             let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk);
             // The identity over the point and over its wire form (x || y,
             // canonical little-endian coordinates) are one recipe; both are
@@ -1258,7 +1258,7 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
                 )?),
             });
         } else {
-            let device_sk = jubjub_scalar_from_hex(&device.sk)?;
+            let device_sk = jubjub_secret_from_hex(&device.sk)?;
             let device_pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * device_sk);
             out["device_pk"] = jubjub_point_json(&device_pk)?;
             out["lifecycle_signatures"] = sign_lifecycle_jubjub(
@@ -2808,7 +2808,7 @@ mod tests {
     fn verify_ground_response(out: &serde_json::Value) {
         let pk = point_from_json(&out["pk"]);
         let sig_r = point_from_json(&out["sig_r"]);
-        let s = jubjub_scalar_from_hex(out["sig_s"].as_str().unwrap()).unwrap();
+        let s = crate::jubjub_scalar_from_hex(out["sig_s"].as_str().unwrap()).unwrap();
         let challenge: [u8; 32] = hex::decode(out["challenge"].as_str().unwrap())
             .unwrap()
             .try_into()
@@ -2855,6 +2855,12 @@ mod tests {
                 mt_index: COIN_MT_INDEX.to_string(),
             }),
         };
+
+        for invalid in ["", "0x", "0", "0x00"] {
+            let mut req = base();
+            req.sk = invalid.into();
+            assert!(sign_grant(&req).is_err(), "signed a grant with {invalid:?}");
+        }
 
         for circuit in GRANT_OPERATIONS {
             let mut req = base();
@@ -2939,7 +2945,7 @@ mod tests {
 
     #[test]
     fn derive_grant_signs_the_three_lifecycle_calls_on_the_v1_arm() {
-        let req = DeriveGrantRequest {
+        let mut req = DeriveGrantRequest {
             arm: Some("jubjub".into()),
             sk: "0x05".into(),
             envelope: 0,
@@ -3024,6 +3030,21 @@ mod tests {
         challenges.sort();
         challenges.dedup();
         assert_eq!(challenges.len(), 3);
+
+        for invalid in ["", "0x", "0", "0x00"] {
+            req.sk = invalid.into();
+            assert!(
+                derive_grant(&req).is_err(),
+                "derived a grant with {invalid:?}"
+            );
+            req.sk = "0x05".into();
+            req.device.as_mut().unwrap().sk = invalid.into();
+            assert!(
+                derive_grant(&req).is_err(),
+                "signed lifecycle with {invalid:?}"
+            );
+            req.device.as_mut().unwrap().sk = "0x07".into();
+        }
 
         // The k256 arm still publishes bare digests and no signature.
         let mut k1 = req;

@@ -226,6 +226,32 @@ fn jubjub_scalar_from_hex(hex_be: &str) -> Result<JubjubScalar> {
     scalar.ok_or_else(|| anyhow!("scalar out of range"))
 }
 
+/// Signing keys must be nonzero; response scalars may legitimately be zero.
+fn jubjub_secret_from_hex(hex_be: &str) -> Result<JubjubScalar> {
+    let clean = hex_be.strip_prefix("0x").unwrap_or(hex_be);
+    anyhow::ensure!(!clean.is_empty(), "empty signing secret");
+    anyhow::ensure!(
+        clean.len() <= 64 && clean.bytes().all(|b| b.is_ascii_hexdigit()),
+        "invalid signing secret hex"
+    );
+    let scalar = jubjub_scalar_from_hex(clean)?;
+    anyhow::ensure!(
+        !bool::from(scalar.is_zero()),
+        "signing secret must be nonzero"
+    );
+    Ok(scalar)
+}
+
+/// A zero key is unusable; a zero Schnorr nonce reveals the signing key.
+fn random_nonzero_jubjub_scalar(rng: &mut (impl rand::RngCore + rand::CryptoRng)) -> JubjubScalar {
+    loop {
+        let scalar = JubjubScalar::random(&mut *rng);
+        if !bool::from(scalar.is_zero()) {
+            return scalar;
+        }
+    }
+}
+
 fn jubjub_scalar_to_hex(s: &JubjubScalar) -> String {
     let mut b = s.to_bytes();
     b.reverse();
@@ -260,7 +286,12 @@ fn pk_coords_le(vk: &VerifyingKey) -> Result<([u8; 32], [u8; 32])> {
 }
 
 fn k256_signing_key_from_hex(hex_be: &str) -> Result<SigningKey> {
-    let clean = hex_be.trim_start_matches("0x");
+    let clean = hex_be.strip_prefix("0x").unwrap_or(hex_be);
+    anyhow::ensure!(!clean.is_empty(), "empty signing secret");
+    anyhow::ensure!(
+        clean.len() <= 64 && clean.bytes().all(|b| b.is_ascii_hexdigit()),
+        "invalid signing secret hex"
+    );
     let bytes = hex::decode(format!("{:0>64}", clean)).context("bad scalar hex")?;
     SigningKey::from_slice(&bytes).map_err(|_| anyhow!("scalar out of range"))
 }
@@ -348,7 +379,7 @@ fn main() -> Result<()> {
 
     let response = match request {
         Request::Keygen { arm: Arm::Jubjub } => {
-            let sk = JubjubScalar::random(&mut rand::rngs::OsRng);
+            let sk = random_nonzero_jubjub_scalar(&mut rand::rngs::OsRng);
             let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk);
             json!({ "sk": jubjub_scalar_to_hex(&sk), "pk": jubjub_point_json(&pk)? })
         }
@@ -393,12 +424,12 @@ fn call_params(req: &SignRequest) -> Result<CallParams> {
 
 fn sign_jubjub(req: &SignRequest) -> Result<serde_json::Value> {
     let p = call_params(req)?;
-    let sk = jubjub_scalar_from_hex(&req.sk)?;
+    let sk = jubjub_secret_from_hex(&req.sk)?;
     let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk);
     let dst = circuit_dst(&Arm::Jubjub, &req.circuit)?;
 
     // §5.3: fresh nonce scalar, R = r·G, then grind the challenge (§5.2).
-    let r = JubjubScalar::random(&mut rand::rngs::OsRng);
+    let r = random_nonzero_jubjub_scalar(&mut rand::rngs::OsRng);
     let sig_r = EmbeddedGroupAffine(JubjubSubgroup::generator() * r);
 
     let mut grind_nonce: u64 = 0;
@@ -509,21 +540,101 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     #[test]
-    fn jubjub_secret_import_currently_accepts_zero_and_empty_strings() {
-        // Characterize the current policy; these are not usable signing keys.
-        for encoded in ["", "0x", "0", "0x00"] {
-            let secret = jubjub_scalar_from_hex(encoded).unwrap();
-            assert_eq!(secret, JubjubScalar::from(0u64));
-            assert_eq!(JubjubSubgroup::generator() * secret, JubjubSubgroup::identity());
+    fn jubjub_secret_import_rejects_empty_zero_and_malformed_inputs() {
+        for encoded in ["", "0x", "0", "0x00", "-1", "zz", "0x0x01", " 1", "1 "] {
+            assert!(
+                jubjub_secret_from_hex(encoded).is_err(),
+                "accepted {encoded:?}"
+            );
         }
+        assert!(jubjub_secret_from_hex(&"1".repeat(65)).is_err());
+        // Signature response scalars use the generic parser, not the key policy.
+        assert_eq!(jubjub_scalar_from_hex("0x00").unwrap(), JubjubScalar::ZERO);
     }
 
     #[test]
     fn jubjub_secret_import_rejects_the_subgroup_order() {
         let mut order = JUBJUB_R_LE;
         order.reverse();
-        assert!(jubjub_scalar_from_hex(&hex::encode(order)).is_err());
-        assert_eq!(jubjub_scalar_from_hex("1").unwrap(), JubjubScalar::from(1u64));
+        assert!(jubjub_secret_from_hex(&hex::encode(order)).is_err());
+        assert_eq!(jubjub_secret_from_hex("1").unwrap(), JubjubScalar::ONE);
+        assert_eq!(jubjub_secret_from_hex("0x01").unwrap(), JubjubScalar::ONE);
+        let largest = -JubjubScalar::ONE;
+        assert_eq!(
+            jubjub_secret_from_hex(&jubjub_scalar_to_hex(&largest)).unwrap(),
+            largest
+        );
+    }
+
+    #[test]
+    fn k256_secret_import_rejects_empty_zero_and_malformed_inputs() {
+        for encoded in ["", "0x", "0", "0x00", "-1", "zz", "0x0x01", " 1", "1 "] {
+            assert!(
+                k256_signing_key_from_hex(encoded).is_err(),
+                "accepted {encoded:?}"
+            );
+        }
+        assert!(k256_signing_key_from_hex(&"1".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn k256_secret_import_rejects_the_subgroup_order() {
+        let order = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+        assert!(k256_signing_key_from_hex(order).is_err());
+        assert!(k256_signing_key_from_hex(&"f".repeat(64)).is_err());
+        let mut one = [0u8; 32];
+        one[31] = 1;
+        for encoded in ["1", "0x01"] {
+            let actual: [u8; 32] = k256_signing_key_from_hex(encoded).unwrap().to_bytes().into();
+            assert_eq!(actual, one);
+        }
+        let largest = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140";
+        assert_eq!(
+            hex::encode(k256_signing_key_from_hex(largest).unwrap().to_bytes()),
+            largest
+        );
+    }
+
+    #[test]
+    fn jubjub_sampling_retries_zero_before_returning_a_nonzero_scalar() {
+        // Test-only RNG: the pinned field sampler reads one 64-byte buffer.
+        // Return zero for its first sample and one for its second sample.
+        struct ZeroThenOneRng {
+            fills: usize,
+        }
+        impl rand::RngCore for ZeroThenOneRng {
+            fn next_u32(&mut self) -> u32 {
+                let mut bytes = [0; 4];
+                self.fill_bytes(&mut bytes);
+                u32::from_le_bytes(bytes)
+            }
+            fn next_u64(&mut self) -> u64 {
+                let mut bytes = [0; 8];
+                self.fill_bytes(&mut bytes);
+                u64::from_le_bytes(bytes)
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                dest.fill(0);
+                if self.fills > 0 && !dest.is_empty() {
+                    dest[0] = 1;
+                }
+                self.fills += 1;
+            }
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+                self.fill_bytes(dest);
+                Ok(())
+            }
+        }
+        impl rand::CryptoRng for ZeroThenOneRng {}
+
+        let mut rng = ZeroThenOneRng { fills: 0 };
+        let scalar = random_nonzero_jubjub_scalar(&mut rng);
+        assert_eq!(rng.fills, 2);
+        assert_eq!(scalar, JubjubScalar::ONE);
+        assert_ne!(
+            JubjubSubgroup::generator() * scalar,
+            JubjubSubgroup::identity()
+        );
     }
 
     const GX_BE: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -719,7 +830,7 @@ mod tests {
         // End-to-end sanity of the jubjub signing flow with a fixed sk;
         // challenge bit-exactness against the compiled contract is
         // crossimpl-offline's job.
-        let req = SignRequest {
+        let mut req = SignRequest {
             arm: Arm::Jubjub,
             circuit: "withdraw_unshielded".into(),
             sk: "0x05".into(),
@@ -742,6 +853,10 @@ mod tests {
         for _ in 0..64 {
             let signed = sign_jubjub(&req).unwrap();
             assert!(announcements.insert(signed["sig_r"].to_string()), "repeated nonce announcement");
+        }
+        for invalid in ["", "0x", "0", "0x00"] {
+            req.sk = invalid.into();
+            assert!(sign_jubjub(&req).is_err(), "signed with {invalid:?}");
         }
     }
 }

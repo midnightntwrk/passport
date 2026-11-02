@@ -3,7 +3,8 @@
 
 export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.replace(/^0x/, '');
-  if (clean.length % 2 !== 0) throw new Error(`odd-length hex: ${hex}`);
+  if (clean.length % 2 !== 0) throw new Error('odd-length hex');
+  if (/[^0-9a-fA-F]/.test(clean)) throw new Error('invalid hex encoding');
   const out = new Uint8Array(clean.length / 2);
   for (let i = 0; i < out.length; i++) {
     out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
