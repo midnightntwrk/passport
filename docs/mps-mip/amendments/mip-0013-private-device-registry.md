@@ -3,7 +3,7 @@
 **Status: working amendment draft; not submitted, accepted, or implemented by
 the reference account.** This document proposes a replacement device-registry
 profile for MIP-0013. It does not change the status or requirements of a
-published MIP. The associated [adversarial prototype](../../../experiments/private-device-registry/README.md)
+published MIP. The associated [adversarial prototype](https://github.com/midnightntwrk/passport/blob/ff1c3b2a20ab86bdea02ddc9f3e8db77f9d37543/experiments/private-device-registry/README.md)
 is a separate compiled Compact experiment, not a conforming account or a
 production implementation. Its validation scope is recorded below.
 
@@ -23,7 +23,7 @@ That Draft has not been assigned a number in this baseline.
 The current registry contains rolling entries rather than unique credentials.
 An authorised device can install another entry for its own key; removal of one
 entry leaves the other usable. The
-[reference account's erratum 8](../../../contract/README.md#spec-errata-found-while-implementing)
+[reference account's erratum 8](https://github.com/midnightntwrk/passport/blob/fc19e471536febb2133f20e817847251622dcdf5/contract/README.md#spec-errata-found-while-implementing)
 records the defect. A client rule forbidding duplicate enrolment does not
 constrain a malicious authorised device.
 
@@ -423,10 +423,10 @@ conformance. Those remain separately specified work.
 
 ## Validation and open construction decisions
 
-The [prototype](../../../experiments/private-device-registry/README.md) implements
-an eight-slot roster in [Compact source](../../../experiments/private-device-registry/contracts/registry.compact),
+The [prototype](https://github.com/midnightntwrk/passport/blob/ff1c3b2a20ab86bdea02ddc9f3e8db77f9d37543/experiments/private-device-registry/README.md) implements
+an eight-slot roster in [Compact source](https://github.com/midnightntwrk/passport/blob/ff1c3b2a20ab86bdea02ddc9f3e8db77f9d37543/experiments/private-device-registry/contracts/registry.compact),
 with JubJub signatures and an authenticated opaque policy label. The recorded
-[execution evidence](../../../experiments/private-device-registry/evidence/offline.json)
+[execution evidence](https://github.com/midnightntwrk/passport/blob/ff1c3b2a20ab86bdea02ddc9f3e8db77f9d37543/experiments/private-device-registry/evidence/offline.json)
 contains 32 passing checks against the generated Compact simulator. Public-VM
 transcripts for all five exported state-changing circuits were replayed; two different
 authorising credentials produced identical ordinary-authorisation public
@@ -434,7 +434,7 @@ transcripts and final states from the same initial state. Private-value fixture
 scans included positive controls. These are targeted disclosure regressions,
 not a proof of zero-knowledge or a complete transaction privacy audit.
 
-The separate [circuit-shape evidence](../../../experiments/private-device-registry/evidence/measurements.json)
+The separate [circuit-shape evidence](https://github.com/midnightntwrk/passport/blob/ff1c3b2a20ab86bdea02ddc9f3e8db77f9d37543/experiments/private-device-registry/evidence/measurements.json)
 records successful native `zkir-v3 mock-compile` for all five circuits under
 Compact 0.35.0. Both evidence files identify the Compact source by SHA-256
 `46dd29c217057473c6664f8f9fd2b65dfad3e0cc5e1b0406a5a591f09b054022`.
