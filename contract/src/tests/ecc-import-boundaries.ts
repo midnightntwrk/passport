@@ -1,11 +1,14 @@
 // Characterize current client import behavior. No contract changes, network,
-// proofs or signature-forgery claims; acceptance includes known validation gaps.
+// proofs or signature-forgery claims; malformed input rejection is explicit.
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { generateEncKeyPair, sealInboxEntry, openInboxEntry } from '../wallet/inbox.js';
 import { hexToBytes } from '../wallet/hex.js';
 import { K256Device, K256Grantee } from '../wallet/signer.js';
+import { pureCircuits } from '../wallet/contract.js';
 
 type Row = { boundary: string; input: string; accepted: boolean; expectedAccepted: boolean; detail: string };
 const rows: Row[] = [];
@@ -36,16 +39,13 @@ const normal = accepts('X25519 sealing', '32-byte generated recipient',
   entry => assert.deepEqual(openInboxEntry(pair.secretKey, entry), coin),
   'Generated recipient and original secret round-trip the complete coin.');
 rejects('X25519 sealing', '31-byte truncated recipient',
-  () => sealInboxEntry(pair.publicKey.slice(0, 31), coin), /Failed to read asymmetric key|asn1|decode|header|length/i);
-accepts('X25519 sealing', '33-byte recipient with trailing 0x63',
-  () => sealInboxEntry(new Uint8Array([...pair.publicKey, 99]), coin),
-  entry => assert.deepEqual(openInboxEntry(pair.secretKey, entry), coin),
-  'Trailing byte is ignored by DER import; original 32-byte secret decrypts.');
-accepts('X25519 opening', '33-byte secret with trailing 0x63',
-  () => openInboxEntry(new Uint8Array([...pair.secretKey, 99]), normal),
-  decoded => assert.deepEqual(decoded, coin),
-  'Trailing secret byte is ignored by DER import.');
+  () => sealInboxEntry(pair.publicKey.slice(0, 31), coin), /X25519 keys must be exactly 32 bytes/);
+rejects('X25519 sealing', '33-byte recipient with trailing 0x63',
+  () => sealInboxEntry(new Uint8Array([...pair.publicKey, 99]), coin), /X25519 keys must be exactly 32 bytes/);
 // Opening is a total reader: malformed material returns null instead of throwing.
+accepts('X25519 opening', '33-byte secret with trailing 0x63 returns null',
+  () => openInboxEntry(new Uint8Array([...pair.secretKey, 99]), normal),
+  decoded => assert.equal(decoded, null), 'Overlong secret is skipped.');
 accepts('X25519 opening', '31-byte truncated secret returns null',
   () => openInboxEntry(pair.secretKey.slice(0, 31), normal),
   decoded => assert.equal(decoded, null), 'Invalid secret is skipped.');
@@ -55,23 +55,30 @@ accepts('X25519 opening', 'unrelated generated secret returns null',
 
 for (const [input, expected] of [
   ['00a1ff', [0, 161, 255]], ['0x00a1ff', [0, 161, 255]],
-  ['zz', [0]], ['1z', [1]], ['z1', [0]],
 ] as const) {
   accepts('hex import', input, () => hexToBytes(input),
     decoded => assert.deepEqual([...decoded], [...expected]),
-    `Current decoded bytes: ${JSON.stringify(expected)}; malformed cases characterize permissive parsing.`);
+    `Valid hex decodes to the expected bytes: ${JSON.stringify(expected)}.`);
+}
+for (const input of ['zz', '1z', 'z1']) {
+  rejects('hex import', input, () => hexToBytes(input), /invalid hex encoding/);
 }
 rejects('hex import', 'odd-length abc', () => hexToBytes('abc'), /odd-length hex/);
 
 const address = new Uint8Array(32).fill(31);
 for (const Signer of [K256Device, K256Grantee]) {
-  const zero = accepts('secp256k1 secret import', `${Signer.name}: zero`,
-    () => new Signer(0n), signer => assert.deepEqual(signer.pk, { x: 0n, y: 0n, identity: true }),
-    'Constructor accepts zero and produces flagged identity.');
+  rejects('secp256k1 secret import', `${Signer.name}: zero`,
+    () => new Signer(0n), /signing secret must be greater than zero and less than the curve order/);
   const entry = (signer: K256Device | K256Grantee) => signer instanceof K256Device
     ? signer.entryAt(address, 0n, 0n) : signer.grantId(address, new Uint8Array(32), 0n);
+  // Raw malformed points keep the pure-circuit check independent of the
+  // client constructor's validation of secret imports.
+  const identity = { x: 0n, y: 0n, identity: true };
   rejects('secp256k1 commitment derivation', `${Signer.name}: identity`,
-    () => entry(zero), /cannot extract|identity/i);
+    () => Signer === K256Device
+      ? pureCircuits.derive_device_entry_with_k256({ bytes: address }, identity, 0n, 0n, 0n)
+      : pureCircuits.derive_grant_id_with_k256({ bytes: address }, identity, 0n, new Uint8Array(32), 0n),
+    /cannot extract|identity/i);
   accepts('secp256k1 commitment derivation', `${Signer.name}: valid scalar 5`,
     () => entry(new Signer(5n)), bytes => assert.equal(bytes.length, 32),
     'Valid nonzero-secret commitment control succeeds.');
@@ -79,9 +86,11 @@ for (const Signer of [K256Device, K256Grantee]) {
 
 const root = new URL('../../', import.meta.url);
 const sha = (path: string) => createHash('sha256').update(readFileSync(new URL(path, root))).digest('hex');
-const evidence = new URL('evidence/ecc-validation/', root);
+const evidence = process.env.EVIDENCE_DIR
+  ? resolve(process.env.EVIDENCE_DIR)
+  : fileURLToPath(new URL('evidence/ecc-validation/', root));
 mkdirSync(evidence, { recursive: true });
-writeFileSync(new URL('import-boundaries.json', evidence), JSON.stringify({
+writeFileSync(join(evidence, 'import-boundaries.json'), JSON.stringify({
   completed: true, runAt: new Date().toISOString(), node: process.version,
   scope: 'Current reference client import characterization with valid controls. No contract changes, proofs, live node, browser-wallet or authorization-bypass claims. Reader null results are marked as accepted API calls, not accepted malformed credentials.',
   sourceSha256: Object.fromEntries([

@@ -11,11 +11,12 @@ import { randomBytes } from 'node:crypto';
 
 import { runScenario, step } from './runner.js';
 import { AccountSim } from './sim.js';
-import type { JubjubPoint } from '../wallet/contract.js';
+import { pureCircuits, type JubjubPoint } from '../wallet/contract.js';
 import {
   JubjubDevice, jubjubChallenges, JUBJUB_R,
   JubjubGrantee, K256Grantee, jubjubGrantChallenges, k256GrantChallenges,
   grantAuthArgs, openingOf, originHash, scopeArgs, scopeDigest, spendScope,
+  bytesToBigIntLE,
 } from '../wallet/signer.js';
 import {
   recoveryKey,
@@ -24,6 +25,7 @@ import {
   readArtefactSet,
   JUBJUB_IDENTITY,
   JUBJUB_ORDER_TWO,
+  recoverSubmitChallenge,
 } from '../wallet/recovery-gate.js';
 import {
   deriveShare,
@@ -311,13 +313,26 @@ await runScenario('recovery-sim', async () => {
         initialWrap: new Uint8Array(64),
       });
       // The forgery against P = O: pick k, present R = k·G and s = k; the
-      // verification s·G == R + c·O holds for every challenge. A "device"
-      // whose scalar is zero produces exactly that pair, with a genuine
-      // co-signature from the successor.
-      const forger = new JubjubDevice(0n);
-      assert(eqPoint(forger.pk, JUBJUB_IDENTITY), 'the forger presents the identity as its key');
+      // verification s·G == R + c·O holds for every challenge. Build raw
+      // arguments so the client constructor's zero-secret check cannot
+      // prevent this test from reaching the contract's recovery-key guard.
+      const successor = JubjubDevice.generate();
+      const nextRecoveryPk = recoveryKey(newRecoverySecret().field).pk;
+      const state = weak.ledger();
+      const now = BigInt(weak.now);
+      const rRecovery = 7n, rSuccessor = 11n;
+      const sigRRecovery = pureCircuits.compute_public_point_with_jubjub(rRecovery);
+      const sigRSuccessor = pureCircuits.compute_public_point_with_jubjub(rSuccessor);
+      const build = recoverSubmitChallenge(
+        weak.callContext(), JUBJUB_IDENTITY, successor.pk, nextRecoveryPk, state.device_epoch + 1n, now,
+      );
+      let grind = 0n;
+      let challenge: bigint;
+      while ((challenge = bytesToBigIntLE(build(sigRRecovery, sigRSuccessor, grind))) >= JUBJUB_R) grind++;
+      const sigSSuccessor = (rSuccessor + challenge * successor.sk) % JUBJUB_R;
       await rejects(
-        () => weak.recoverSubmit(forger, JubjubDevice.generate(), recoveryKey(newRecoverySecret().field).pk, BigInt(weak.now)),
+        () => weak.call('recover_submit', successor.pk, nextRecoveryPk, state.device_epoch, state.auth_nonce, now,
+          sigRRecovery, rRecovery, sigRSuccessor, sigSSuccessor, grind),
         'recovery key is the identity',
         'the forgery is refused at the gate: the stored key is checked before any signature is examined',
       );

@@ -9,6 +9,7 @@
     "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
+    "test:input-validation": "tsx --test src/tests/input-validation.ts src/tests/signer-input-validation.ts",
     "test:ecc": "node --import tsx src/tests/ecc-validation.ts",
     "test:ecc-wallet": "node --import tsx src/tests/ecc-wallet.ts",
     "test:ecc-nonces": "node --import tsx src/tests/ecc-followups.ts nonces",

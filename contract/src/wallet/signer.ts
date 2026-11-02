@@ -54,6 +54,14 @@ export interface CallContext {
 
 const addr = (ctx: CallContext) => ({ bytes: ctx.contractAddress });
 
+/** Reject malformed imported signing secrets before deriving a public key. */
+function assertSigningSecret(sk: bigint, order: bigint, curve: string): void {
+  if (typeof sk !== 'bigint') throw new TypeError(`${curve} signing secret must be a bigint`);
+  if (sk <= 0n || sk >= order) {
+    throw new RangeError(`${curve} signing secret must be greater than zero and less than the curve order`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Arm jubjub (MIP-0013 §5)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,6 +110,7 @@ export class JubjubDevice {
   readonly pk: JubjubPoint;
 
   constructor(readonly sk: bigint) {
+    assertSigningSecret(sk, JUBJUB_R, 'JubJub');
     this.pk = pureCircuits.compute_public_point_with_jubjub(sk);
   }
 
@@ -303,6 +312,7 @@ export class K256Device {
   readonly pk: Secp256k1Point;
 
   constructor(readonly sk: bigint, readonly envelope: K256Envelope = K256_ENVELOPE_NONE) {
+    assertSigningSecret(sk, SECP256K1_N, 'secp256k1');
     this.pk = pureCircuits.compute_public_point_with_k256(sk);
   }
 
@@ -719,15 +729,15 @@ export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisati
  * `derive_grant_id_with_k256(self, pk, envelope, origin_hash, slot)`. The
  * envelope enters the identity, so an envelope-1 key is a different
  * grantee from the same key at envelope 0, and the seam refuses a spend
- * from envelope 1 in-circuit. Neither identity encoding of the point is
- * rejected here: the circuit's step-1 guard is the check, and a
- * construction-time guard would only duplicate it.
+ * from envelope 1 in-circuit. Construction requires a canonical nonzero
+ * signing scalar. The circuit independently validates the supplied point.
  */
 export class K256Grantee {
   readonly arm = 'k256' as const;
   readonly pk: Secp256k1Point;
 
   constructor(readonly sk: bigint, readonly envelope: K256Envelope = K256_ENVELOPE_NONE) {
+    assertSigningSecret(sk, SECP256K1_N, 'secp256k1');
     this.pk = pureCircuits.compute_public_point_with_k256(sk);
   }
 
@@ -784,17 +794,17 @@ function schnorrSignGrinding(sk: bigint, challenge: ChallengeBuilder): {
 /**
  * A grantee key on the jubjub arm (the v1 scheme). Its authority is the
  * record under `derive_grant_id_with_jubjub(self, pk, origin_hash, slot)`;
- * there is no envelope. The small-order guard (`[8]pk != O`, section 3.3)
- * is asserted by the circuit's step 1, not at construction: a key sampled
- * by `generate` is in the prime-order subgroup by construction, and a
- * caller-supplied scalar that lands on a small-order point is refused at
- * the seam, which is the check the MIP makes normative.
+ * there is no envelope. Construction requires a canonical nonzero signing
+ * scalar, yielding a nonidentity prime-subgroup point. The circuit's
+ * small-order guard (`[8]pk != O`, section 3.3) remains independent of the
+ * client check.
  */
 export class JubjubGrantee {
   readonly arm = 'jubjub' as const;
   readonly pk: JubjubPoint;
 
   constructor(readonly sk: bigint) {
+    assertSigningSecret(sk, JUBJUB_R, 'JubJub');
     this.pk = pureCircuits.compute_public_point_with_jubjub(sk);
   }
 

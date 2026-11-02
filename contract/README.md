@@ -152,12 +152,32 @@ corresponding build outputs.
 | [P-256 refusal fixture](evidence/grants-completion-20261023/p256-grant-refusals.json) | Identity-key and fixed-profile authenticator-extension refusals; valid assertion reaches the unfunded custody guard | Restricted three-operation diagnostic deployment, not a full account. Refusals are native argument/profile/build checks. |
 | [Recovery and grant lifecycle](evidence/grants-completion-20261023/rec-1-9-recovery-conformance.json) | Full account; reconstruction/wrap opening, veto, cancel/resubmit, two recoveries; exactly the authorised successor retained each epoch; old grants stay unusable, reissued JubJub/k256 grants spend | Post-reset-fix proof/node evidence. Negative cases compare specified state fields, not a full state/UTXO snapshot. The explicit future-epoch, differing-counter, pending-device and all-scheme retirement matrix remains broader. |
 | [Caller-bound grants](GRANTS-CALLER.md) | Recorded forwarding and fabricated-caller proof admission checks for the earlier JubJub/k256 tranche | Earlier source/roster; not successful P-256 forwarding on the final combined account. |
-| [ECC adversarial tests](evidence/ecc-validation/README.md) and [review](../research/passport-ecc-validation.md) | 197 runtime cases (accepted and rejected expectations), native preprocessing/mutations, nine MockProver checks and two verifying local full proofs | The runtime record hashes account source `c6888fe` (before the reset); the P-256/WebAuthn and recorded client sources match. The native runner later gained archive prevalidation. Findings concern unchanged paths, not a fresh full-account run. Local proofs use test parameters. Not a complete malicious-witness or ECDSA proof audit. |
+| [ECC adversarial tests](evidence/ecc-validation/README.md) and [review](../research/passport-ecc-validation.md) | 197 runtime cases (accepted and rejected expectations), native preprocessing/mutations, nine MockProver checks and two verifying local full proofs | The runtime record hashes account source `c6888fe` (before the reset); the P-256/WebAuthn and recorded client sources match the pinned baseline above. Client input checks have since changed as described below. The native runner later gained archive prevalidation. Local proofs use test parameters. Not a fresh full-account run or a complete malicious-witness or ECDSA proof audit. |
 
 The 23 October recovery evidence supersedes the older statement that #183
 had only compilation/simulator validation. Earlier receipts retain their
 original compiler, circuit roster and stack attribution; do not combine
 all passing counts into a claim that every current circuit was proved.
+
+### Client input checks
+
+TypeScript JubJub and secp256k1 device and grantee signers require a `bigint`
+secret strictly between zero and the curve order. Rust secret imports reject
+empty, malformed, zero and out-of-range values; JubJub key generation and
+signing retry a zero random sample. The JubJub signature response parser
+still permits zero.
+Hexadecimal byte decoding rejects malformed characters. Inbox sealing
+requires exactly 32-byte X25519 keys and coin identifiers, and an unsigned
+128-bit coin value, preventing silent truncation or wrapping. Invalid inbox
+records still return `null` when opened.
+
+`npm run test:input-validation` covers rejection cases, valid boundary
+signatures and inbox round trips;
+`cargo test --locked --manifest-path signer-rs/Cargo.toml` covers Rust imports
+and zero-sample retry. These checks change the reference clients, not the
+Compact circuits or schema. Historical
+ECC receipts retain their original observations; they are not rerun results
+for these input checks.
 
 ## Known issues and remaining validation
 
@@ -181,10 +201,10 @@ all passing counts into a claim that every current circuit was proved.
 3. **Encryption/recovery consistency needs review.** Authorised setup or
    rotation can install unusable X25519 bytes; a recovery wrap may contain
    a different secret or become stale after rotation. Invalid setup can
-   impair availability or recovery without bypassing authorisation. Client
-   raw-key lengths, hexadecimal parsing, zero secret/nonce handling and
-   signer randomness are also findings in the ECC review, not closed by
-   passing its characterisation tests.
+   impair availability or recovery without bypassing authorisation. The
+   client input checks above do not validate installed encryption keys or
+   prove recovery-wrap consistency. Broader signer-randomness and
+   cryptographic review remain open.
 4. **Recovery coverage is not exhaustive.** The reset is implemented and
    exercised on-node. Explicit adversarial retirement combinations,
    guardian transport/interoperability, multi-session review, and the
@@ -280,8 +300,10 @@ npm ci
 npm run compile
 npm run build
 cargo build --locked --manifest-path signer-rs/Cargo.toml
+cargo test --locked --manifest-path signer-rs/Cargo.toml
 
 npm run test:unit
+npm run test:input-validation
 npm run test:toolchain-offline
 npm run test:grants-offline
 npm run test:grants-capability-offline
@@ -334,6 +356,7 @@ was actually exercised. In older reports, “both arms” means JubJub and k256.
 | Commands (`npm run …`) | Review area and evidence |
 |---|---|
 | `test:unit`, `test:crossimpl-offline` | Client encodings, challenges and independent Rust signer agreement; AUTH-9/10 binding checks. |
+| `test:input-validation` | Client secret-scalar, hexadecimal, X25519 key-length and inbox coin-encoding boundaries; valid signatures and inbox round trips. |
 | `test:auth-coinless` | JubJub/k256 authorisation, cross-arm enrolment, self-removal and maintenance controls; [0.35 receipts](evidence/compact-0.35/auth-coinless-arms-auth-coinless.json). |
 | `test:auth`, `test:auth-lifecycle`, `test:auth-replay`, `test:auth-crossimpl` | Funded MIP-0013 suites; historical NIGHT-funding limitation applies. |
 | `test:custody-shielded`, `test:custody-discovery`, `test:custody-payments`, `test:leak-audit` | MIP-0012 Testing 1–5, 7–8; historical receipts in `evidence/cust-*.json`. |
