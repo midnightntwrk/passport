@@ -105,7 +105,7 @@ complete circuit roster.
 
 The grants Draft completed Passport review in
 [PR #195](https://github.com/midnightntwrk/passport/pull/195), merged on
-23 October 2026 with commit `d4b9ec3`.
+23 October 2026.
 It is ready for canonical **Draft submission**: copy it as
 `mips/mip-xxxx.md`, retaining `MIP: xxxx` and `Status: Draft`. Its 26 formerly
 local evidence links (19 distinct targets) now use full Passport URLs pinned
