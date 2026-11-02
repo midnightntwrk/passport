@@ -1,0 +1,179 @@
+{
+  "completed": true,
+  "runAt": "2026-11-02T11:23:04.941Z",
+  "node": "v22.22.2",
+  "scope": "Compiled Compact simulator and public-VM transcript replay; no proof generation, proof verification or node submission. Disclosure fixture scans and paired transcripts are regression checks, not a proof of zero-knowledge.",
+  "capacity": 8,
+  "curve": "JubJub only",
+  "checks": [
+    {
+      "name": "dormant account refuses authorization",
+      "passed": true
+    },
+    {
+      "name": "bootstrap binds key, policy and initial private opening",
+      "passed": true
+    },
+    {
+      "name": "activation installs one account-bound private credential",
+      "passed": true
+    },
+    {
+      "name": "bootstrap cannot be reused",
+      "passed": true
+    },
+    {
+      "name": "last credential cannot be removed",
+      "passed": true
+    },
+    {
+      "name": "enrolment adds precisely one independent key",
+      "passed": true
+    },
+    {
+      "name": "after device use, different salt, policy and slot cannot re-register its key",
+      "passed": true
+    },
+    {
+      "name": "unregistered key cannot authorize with a valid signature",
+      "passed": true
+    },
+    {
+      "name": "policy label is authenticated by the committed record",
+      "passed": true
+    },
+    {
+      "name": "invalid signature is refused",
+      "passed": true
+    },
+    {
+      "name": "wrong root opening and altered roster cannot authorize",
+      "passed": true
+    },
+    {
+      "name": "inactive slots have a single canonical representation",
+      "passed": true
+    },
+    {
+      "name": "malformed duplicate rows are rejected independently of their commitment",
+      "passed": true
+    },
+    {
+      "name": "two signers in different slots have identical public authorization transcripts",
+      "passed": true
+    },
+    {
+      "name": "authorization is single-use despite an unchanged registry root",
+      "passed": true
+    },
+    {
+      "name": "enrolment cannot alter another credential or insert two keys",
+      "passed": true
+    },
+    {
+      "name": "enrolment signature binds the proposed commitment and blinding",
+      "passed": true
+    },
+    {
+      "name": "identity key cannot be enrolled",
+      "passed": true
+    },
+    {
+      "name": "authorising credential survives every selective removal",
+      "passed": true
+    },
+    {
+      "name": "unknown removal target is refused",
+      "passed": true
+    },
+    {
+      "name": "removal cannot mutate the surviving record",
+      "passed": true
+    },
+    {
+      "name": "removal signature binds its target and next commitment",
+      "passed": true
+    },
+    {
+      "name": "selective removal works after repeated target use without a counter",
+      "passed": true
+    },
+    {
+      "name": "old roster cannot resurrect a revoked credential",
+      "passed": true
+    },
+    {
+      "name": "remaining device needs refreshed private data after a registry change",
+      "passed": true
+    },
+    {
+      "name": "fresh authorised re-enrolment is explicit and does not replay old approvals",
+      "passed": true
+    },
+    {
+      "name": "account binding rejects a roster transplanted from another account",
+      "passed": true
+    },
+    {
+      "name": "fresh root blinding changes the commitment for identical private records",
+      "passed": true
+    },
+    {
+      "name": "diagnostic recovery requires its separate recovery signature",
+      "passed": true
+    },
+    {
+      "name": "diagnostic recovery replaces the whole registry without its old opening",
+      "passed": true
+    },
+    {
+      "name": "pre-recovery roster cannot authorize at the new epoch",
+      "passed": true
+    },
+    {
+      "name": "capacity is bounded and overflow cannot overwrite a live record",
+      "passed": true
+    }
+  ],
+  "transcripts": [
+    {
+      "operation": "activate",
+      "operations": 30,
+      "sha256": "029c4d949b6076e86b98324460b30a831c2fae8f2c46005148dd0ea7ee4c0199"
+    },
+    {
+      "operation": "add_device",
+      "operations": 54,
+      "sha256": "9cde633682713525264c642fbd570b515e5190ad7d164c36682a2add52a59b1b"
+    },
+    {
+      "operation": "authorise",
+      "operations": 36,
+      "sha256": "cb822662ee1b2ac7bbb0e5905e2a55d17604c0b49d34df7849a980595742abe8"
+    },
+    {
+      "operation": "authorise",
+      "operations": 36,
+      "sha256": "cb822662ee1b2ac7bbb0e5905e2a55d17604c0b49d34df7849a980595742abe8"
+    },
+    {
+      "operation": "remove_device",
+      "operations": 57,
+      "sha256": "88e00c59a4fba03a301ac8ebbb731e94fdfe909e5ebcd3a0a6e8bfaf082b4feb"
+    },
+    {
+      "operation": "recover",
+      "operations": 42,
+      "sha256": "9e73986d5b9a7303a556344a5043223a17575d71ae5e9fc5567116dd46172706"
+    }
+  ],
+  "sourceSha256": {
+    "contracts/registry.compact": "46dd29c217057473c6664f8f9fd2b65dfad3e0cc5e1b0406a5a591f09b054022",
+    "src/signing.ts": "c88afd6b250904995f036c3901080f8ef6d8b562e8751009ae6fc97f7a5d1ee5",
+    "src/simulator.ts": "73d325c20b34d14d1712549eba4101f35079c776043499f675e6d0c34d3dd1ae",
+    "src/offline.ts": "1370d253372c2265d7cd626cbadaf727aa46f354502ca1ae398a83ba27c45f23",
+    "package.json": "2e41af2ab22195d8c791a3c8603afa16bd63699608fc3a5ff20ec16074a1e34f",
+    "package-lock.json": "43b6631c1d4af6985cbd0de9195033dd519d37e32e7458aba53b43b5b6aaa992",
+    "contracts/managed/registry/contract/index.js": "e459362a2542e78f855388190d64a34b170c5a643b699894add38966ee6664f7"
+  }
+}

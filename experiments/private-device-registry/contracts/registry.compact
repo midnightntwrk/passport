@@ -1,0 +1,327 @@
+// Isolated research prototype. Eight-slot private roster, JubJub only.
+// Not a production replacement: no assets, BUSS, veto window, or private-state
+// delivery protocol. The recovery key is public and remains unchanged.
+// Fresh high-entropy root blinds and reliable private-roster distribution are
+// client obligations; a circuit cannot prove unpredictable sampling or delivery.
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+
+export struct DeviceRow {
+  active: Boolean;
+  identity: Bytes<32>;
+  // Authenticated opaque metadata in this probe; no policy interpreter.
+  policy: Bytes<32>;
+}
+
+export struct DeviceAuth {
+  pk: JubjubPoint;
+  policy: Bytes<32>;
+  sig_r: JubjubPoint;
+  sig_s: Field;
+  grind_nonce: Uint<64>;
+}
+
+export ledger root: Bytes<32>;
+export ledger count: Uint<8>;
+export ledger epoch: Uint<32>;
+export ledger auth_nonce: Uint<64>;
+export ledger booted: Boolean;
+export ledger boot: Bytes<32>;
+export ledger recovery_pk: JubjubPoint;
+
+constructor(initial_boot: Bytes<32>, initial_recovery_pk: JubjubPoint) {
+  root = pad(32, "");
+  count = 0 as Uint<8>;
+  epoch = 0 as Uint<32>;
+  auth_nonce = 0 as Uint<64>;
+  booted = false;
+  boot = disclose(initial_boot);
+  recovery_pk = disclose(initial_recovery_pk);
+}
+
+// Identity is independent of policy, slot, epoch, counter, and blinding.
+// The curve-specific tag identifies the sole supported curve.
+export pure circuit derive_identity(self_addr: ContractAddress, pk: JubjubPoint): Bytes<32> {
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint]>(
+    [pad(32, "private-registry:identity:jj:v1"), self_addr, pk]);
+}
+
+export pure circuit derive_root(
+  self_addr: ContractAddress, epoch_value: Uint<32>,
+  rows: Vector<8, DeviceRow>, blind: Bytes<32>
+): Bytes<32> {
+  return persistentCommit<[Bytes<32>, ContractAddress, Uint<32>, Vector<8, DeviceRow>]>(
+    [pad(32, "private-registry:root:v1"), self_addr, epoch_value, rows], blind);
+}
+
+// Bind the initial root blind as well as key and policy. An opener cannot
+// activate the promised key under a different, unavailable private opening.
+// Account-address binding is performed only at activation, after deployment.
+export pure circuit derive_boot(
+  pk: JubjubPoint, policy: Bytes<32>, initial_blind: Bytes<32>, boot_salt: Bytes<32>
+): Bytes<32> {
+  // Compact 0.35.0 emits an invalid point-encode index for a JubjubPoint
+  // directly inside persistentCommit's tuple. Hash the typed payload first;
+  // the commitment then takes only a Bytes<32> payload and the private salt.
+  const payload = persistentHash<[Bytes<32>, JubjubPoint, Bytes<32>, Bytes<32>]>(
+    [pad(32, "private-registry:boot:jj:v1"), pk, policy, initial_blind]);
+  return persistentCommit<Bytes<32>>(payload, boot_salt);
+}
+
+export pure circuit compute_public_point(scalar: Field): JubjubPoint {
+  // Off-chain signing helper only; not an exported provable circuit.
+  return ecMulGenerator(scalar as JubjubScalar);
+}
+
+export pure circuit empty_row(): DeviceRow {
+  return DeviceRow { active: false, identity: pad(32, ""), policy: pad(32, "") };
+}
+
+export pure circuit singleton_rows(
+  self_addr: ContractAddress, pk: JubjubPoint, policy: Bytes<32>
+): Vector<8, DeviceRow> {
+  return [DeviceRow { active: true, identity: derive_identity(self_addr, pk), policy: policy },
+          empty_row(), empty_row(), empty_row(), empty_row(), empty_row(), empty_row(), empty_row()];
+}
+
+pure circuit same_row(a: DeviceRow, b: DeviceRow): Boolean {
+  return a.active == b.active && a.identity == b.identity && a.policy == b.policy;
+}
+
+pure circuit require_distinct(a: DeviceRow, b: DeviceRow): [] {
+  assert(!a.active || !b.active || a.identity != b.identity, "duplicate device identity");
+}
+
+pure circuit validate_rows(rows: Vector<8, DeviceRow>): Uint<8> {
+  for (const row of rows) {
+    assert(row.active || same_row(row, empty_row()), "noncanonical inactive row");
+  }
+  require_distinct(rows[0], rows[1]);
+  require_distinct(rows[0], rows[2]);
+  require_distinct(rows[0], rows[3]);
+  require_distinct(rows[0], rows[4]);
+  require_distinct(rows[0], rows[5]);
+  require_distinct(rows[0], rows[6]);
+  require_distinct(rows[0], rows[7]);
+  require_distinct(rows[1], rows[2]);
+  require_distinct(rows[1], rows[3]);
+  require_distinct(rows[1], rows[4]);
+  require_distinct(rows[1], rows[5]);
+  require_distinct(rows[1], rows[6]);
+  require_distinct(rows[1], rows[7]);
+  require_distinct(rows[2], rows[3]);
+  require_distinct(rows[2], rows[4]);
+  require_distinct(rows[2], rows[5]);
+  require_distinct(rows[2], rows[6]);
+  require_distinct(rows[2], rows[7]);
+  require_distinct(rows[3], rows[4]);
+  require_distinct(rows[3], rows[5]);
+  require_distinct(rows[3], rows[6]);
+  require_distinct(rows[3], rows[7]);
+  require_distinct(rows[4], rows[5]);
+  require_distinct(rows[4], rows[6]);
+  require_distinct(rows[4], rows[7]);
+  require_distinct(rows[5], rows[6]);
+  require_distinct(rows[5], rows[7]);
+  require_distinct(rows[6], rows[7]);
+  return ((rows[0].active ? 1 : 0) + (rows[1].active ? 1 : 0) + (rows[2].active ? 1 : 0) + (rows[3].active ? 1 : 0) + (rows[4].active ? 1 : 0) + (rows[5].active ? 1 : 0) + (rows[6].active ? 1 : 0) + (rows[7].active ? 1 : 0)) as Uint<8>;
+}
+
+pure circuit contains_identity(rows: Vector<8, DeviceRow>, identity: Bytes<32>): Boolean {
+  return (rows[0].active && rows[0].identity == identity)
+       || (rows[1].active && rows[1].identity == identity)
+       || (rows[2].active && rows[2].identity == identity)
+       || (rows[3].active && rows[3].identity == identity)
+       || (rows[4].active && rows[4].identity == identity)
+       || (rows[5].active && rows[5].identity == identity)
+       || (rows[6].active && rows[6].identity == identity)
+       || (rows[7].active && rows[7].identity == identity);
+}
+
+pure circuit contains_device(
+  rows: Vector<8, DeviceRow>, identity: Bytes<32>, policy: Bytes<32>
+): Boolean {
+  return (rows[0].active && rows[0].identity == identity && rows[0].policy == policy)
+       || (rows[1].active && rows[1].identity == identity && rows[1].policy == policy)
+       || (rows[2].active && rows[2].identity == identity && rows[2].policy == policy)
+       || (rows[3].active && rows[3].identity == identity && rows[3].policy == policy)
+       || (rows[4].active && rows[4].identity == identity && rows[4].policy == policy)
+       || (rows[5].active && rows[5].identity == identity && rows[5].policy == policy)
+       || (rows[6].active && rows[6].identity == identity && rows[6].policy == policy)
+       || (rows[7].active && rows[7].identity == identity && rows[7].policy == policy);
+}
+
+circuit require_live_key(pk: JubjubPoint): [] {
+  // Mirrors the production small-order gate. Native decoding/proof constraints
+  // are separate layers; this is not a new full-subgroup validation claim.
+  assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
+         "device key has small order");
+}
+
+circuit verify_signature(
+  pk: JubjubPoint, sig_r: JubjubPoint, sig_s: Field, challenge: Bytes<32>
+): [] {
+  require_live_key(pk);
+  // The signer grinds SHA-256 below the JubJub subgroup order, exactly as in
+  // the account's current Schnorr profile. Provable circuits take no signing secret.
+  const c = challenge as Field;
+  assert(ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(pk, c as JubjubScalar)),
+         "invalid signature");
+}
+
+circuit require_open_roster(rows: Vector<8, DeviceRow>, blind: Bytes<32>): [] {
+  assert(booted, "not activated");
+  assert(validate_rows(rows) == count, "device count mismatch");
+  assert(derive_root(kernel.self(), epoch, rows, blind) == root, "root opening mismatch");
+}
+
+circuit require_caller(rows: Vector<8, DeviceRow>, auth: DeviceAuth, challenge: Bytes<32>): [] {
+  assert(contains_device(rows, derive_identity(kernel.self(), auth.pk), auth.policy),
+         "unknown device");
+  verify_signature(auth.pk, auth.sig_r, auth.sig_s, challenge);
+}
+
+export pure circuit challenge_authorise(
+  self_addr: ContractAddress, pk: JubjubPoint, sig_r: JubjubPoint, policy: Bytes<32>,
+  current_root: Bytes<32>, epoch_value: Uint<32>, nonce_value: Uint<64>, grind_nonce: Uint<64>
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>([pad(64, "private-registry:auth:jj:v1:authorise")]);
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>,
+                         Bytes<32>, Uint<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, policy, current_root, epoch_value, nonce_value, grind_nonce]);
+}
+
+export pure circuit challenge_add_device(
+  self_addr: ContractAddress, pk: JubjubPoint, sig_r: JubjubPoint, policy: Bytes<32>,
+  current_root: Bytes<32>, next_root: Bytes<32>, new_pk: JubjubPoint, new_policy: Bytes<32>,
+  epoch_value: Uint<32>, nonce_value: Uint<64>, grind_nonce: Uint<64>
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>([pad(64, "private-registry:auth:jj:v1:add")]);
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>,
+                         Bytes<32>, Bytes<32>, JubjubPoint, Bytes<32>, Uint<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, policy, current_root, next_root, new_pk, new_policy,
+     epoch_value, nonce_value, grind_nonce]);
+}
+
+export pure circuit challenge_remove_device(
+  self_addr: ContractAddress, pk: JubjubPoint, sig_r: JubjubPoint, policy: Bytes<32>,
+  current_root: Bytes<32>, next_root: Bytes<32>, target_identity: Bytes<32>,
+  epoch_value: Uint<32>, nonce_value: Uint<64>, grind_nonce: Uint<64>
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>([pad(64, "private-registry:auth:jj:v1:remove")]);
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>,
+                         Bytes<32>, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, policy, current_root, next_root, target_identity,
+     epoch_value, nonce_value, grind_nonce]);
+}
+
+export pure circuit challenge_recover(
+  self_addr: ContractAddress, recovery_key: JubjubPoint, sig_r: JubjubPoint,
+  current_root: Bytes<32>, next_root: Bytes<32>, successor_pk: JubjubPoint,
+  successor_policy: Bytes<32>, post_epoch: Uint<32>, nonce_value: Uint<64>, grind_nonce: Uint<64>
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>([pad(64, "private-registry:recovery:jj:v1:replace")]);
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>,
+                         Bytes<32>, JubjubPoint, Bytes<32>, Uint<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, recovery_key, current_root, next_root, successor_pk,
+     successor_policy, post_epoch, nonce_value, grind_nonce]);
+}
+
+export circuit activate(
+  pk: JubjubPoint, policy: Bytes<32>, boot_salt: Bytes<32>, initial_blind: Bytes<32>
+): [] {
+  assert(!booted, "already activated");
+  require_live_key(pk);
+  require_live_key(recovery_pk);
+  assert(derive_boot(pk, policy, initial_blind, boot_salt) == boot, "boot commitment mismatch");
+  root = derive_root(kernel.self(), epoch, singleton_rows(kernel.self(), pk, policy), initial_blind);
+  count = 1 as Uint<8>;
+  booted = true;
+  boot = pad(32, "");
+}
+
+export circuit authorise(rows: Vector<8, DeviceRow>, blind: Bytes<32>, auth: DeviceAuth): [] {
+  require_open_roster(rows, blind);
+  require_caller(rows, auth, challenge_authorise(
+    kernel.self(), auth.pk, auth.sig_r, auth.policy, root, epoch, auth_nonce, auth.grind_nonce));
+  // Ordinary authorization leaves the registry root unchanged.
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+}
+
+export circuit add_device(
+  rows: Vector<8, DeviceRow>, blind: Bytes<32>,
+  new_rows: Vector<8, DeviceRow>, new_blind: Bytes<32>,
+  new_pk: JubjubPoint, new_policy: Bytes<32>, auth: DeviceAuth
+): [] {
+  require_open_roster(rows, blind);
+  require_live_key(new_pk);
+  const new_identity = derive_identity(kernel.self(), new_pk);
+  assert(!contains_identity(rows, new_identity), "device already enrolled");
+  const new_count = validate_rows(new_rows);
+  assert(new_count == count + 1, "insert exactly one device");
+  const addition = DeviceRow { active: true, identity: new_identity, policy: new_policy };
+  assert(same_row(new_rows[0], rows[0]) || (!rows[0].active && same_row(new_rows[0], addition)), "invalid insertion");
+  assert(same_row(new_rows[1], rows[1]) || (!rows[1].active && same_row(new_rows[1], addition)), "invalid insertion");
+  assert(same_row(new_rows[2], rows[2]) || (!rows[2].active && same_row(new_rows[2], addition)), "invalid insertion");
+  assert(same_row(new_rows[3], rows[3]) || (!rows[3].active && same_row(new_rows[3], addition)), "invalid insertion");
+  assert(same_row(new_rows[4], rows[4]) || (!rows[4].active && same_row(new_rows[4], addition)), "invalid insertion");
+  assert(same_row(new_rows[5], rows[5]) || (!rows[5].active && same_row(new_rows[5], addition)), "invalid insertion");
+  assert(same_row(new_rows[6], rows[6]) || (!rows[6].active && same_row(new_rows[6], addition)), "invalid insertion");
+  assert(same_row(new_rows[7], rows[7]) || (!rows[7].active && same_row(new_rows[7], addition)), "invalid insertion");
+  const next_root = derive_root(kernel.self(), epoch, new_rows, new_blind);
+  require_caller(rows, auth, challenge_add_device(
+    kernel.self(), auth.pk, auth.sig_r, auth.policy, root, next_root, new_pk, new_policy,
+    epoch, auth_nonce, auth.grind_nonce));
+  root = next_root;
+  count = disclose(new_count);
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+}
+
+export circuit remove_device(
+  rows: Vector<8, DeviceRow>, blind: Bytes<32>,
+  new_rows: Vector<8, DeviceRow>, new_blind: Bytes<32>,
+  target_identity: Bytes<32>, auth: DeviceAuth
+): [] {
+  require_open_roster(rows, blind);
+  assert(count > 1, "cannot remove last device");
+  assert(target_identity != derive_identity(kernel.self(), auth.pk), "cannot remove authorising device");
+  assert(contains_identity(rows, target_identity), "unknown removal target");
+  const new_count = validate_rows(new_rows);
+  assert(new_count + 1 == count, "remove exactly one device");
+  assert(same_row(new_rows[0], rows[0].active && rows[0].identity == target_identity ? empty_row() : rows[0]), "invalid deletion");
+  assert(same_row(new_rows[1], rows[1].active && rows[1].identity == target_identity ? empty_row() : rows[1]), "invalid deletion");
+  assert(same_row(new_rows[2], rows[2].active && rows[2].identity == target_identity ? empty_row() : rows[2]), "invalid deletion");
+  assert(same_row(new_rows[3], rows[3].active && rows[3].identity == target_identity ? empty_row() : rows[3]), "invalid deletion");
+  assert(same_row(new_rows[4], rows[4].active && rows[4].identity == target_identity ? empty_row() : rows[4]), "invalid deletion");
+  assert(same_row(new_rows[5], rows[5].active && rows[5].identity == target_identity ? empty_row() : rows[5]), "invalid deletion");
+  assert(same_row(new_rows[6], rows[6].active && rows[6].identity == target_identity ? empty_row() : rows[6]), "invalid deletion");
+  assert(same_row(new_rows[7], rows[7].active && rows[7].identity == target_identity ? empty_row() : rows[7]), "invalid deletion");
+  const next_root = derive_root(kernel.self(), epoch, new_rows, new_blind);
+  require_caller(rows, auth, challenge_remove_device(
+    kernel.self(), auth.pk, auth.sig_r, auth.policy, root, next_root, target_identity,
+    epoch, auth_nonce, auth.grind_nonce));
+  root = next_root;
+  count = disclose(new_count);
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+}
+
+// Diagnostic gate only: one public recovery key directly authorizes replacement.
+// No old roster/opening is required. This does not implement MIP-0022's
+// publication, reconstruction, successor co-signature, cancellation or veto.
+export circuit recover(
+  successor_pk: JubjubPoint, successor_policy: Bytes<32>, new_blind: Bytes<32>,
+  sig_r: JubjubPoint, sig_s: Field, grind_nonce: Uint<64>
+): [] {
+  assert(booted, "not activated");
+  require_live_key(successor_pk);
+  const post_epoch = (epoch + 1) as Uint<32>;
+  const next_rows = singleton_rows(kernel.self(), successor_pk, successor_policy);
+  const next_root = derive_root(kernel.self(), post_epoch, next_rows, new_blind);
+  verify_signature(recovery_pk, sig_r, sig_s, challenge_recover(
+    kernel.self(), recovery_pk, sig_r, root, next_root, successor_pk, successor_policy,
+    post_epoch, auth_nonce, grind_nonce));
+  root = next_root;
+  count = 1 as Uint<8>;
+  epoch = post_epoch;
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+}

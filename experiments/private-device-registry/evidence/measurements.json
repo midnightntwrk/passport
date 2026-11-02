@@ -1,0 +1,210 @@
+{
+  "completed": true,
+  "startedAt": "2026-11-02T11:23:05.140Z",
+  "completedAt": "2026-11-02T11:23:11.516Z",
+  "elapsedMilliseconds": 6375.18925,
+  "scope": "Circuit shape from zkir-v3 mock-compile. Instruction counts are IR counts, not constraint rows. Timings measure mock compilation, not proving. No key generation, proof size, proof timing, proof verification or node acceptance is measured.",
+  "tool": {
+    "version": "midnight-zkir 3.1.0-rc.1",
+    "selectedBy": "Compact 0.35.0 toolchain discovery"
+  },
+  "compiler": {
+    "version": "0.35.0",
+    "commit": "debb05f9414b9d1e176741c2be289bb32233f0fc",
+    "languageVersion": "0.27.0",
+    "runtimeVersion": "0.20.0",
+    "infoFile": {
+      "bytes": 25166,
+      "sha256": "e6ef9a1c2091b8c86888e577e0ecea40dcffc5d502b5ff96cae85865504e9484"
+    }
+  },
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4 Max",
+    "memoryBytes": 68719476736
+  },
+  "node": "v22.22.2",
+  "sources": {
+    "contracts/registry.compact": {
+      "bytes": 16401,
+      "sha256": "46dd29c217057473c6664f8f9fd2b65dfad3e0cc5e1b0406a5a591f09b054022"
+    },
+    "src/measure.ts": {
+      "bytes": 7849,
+      "sha256": "e1bd52bfd6ad23c8a7c13fdd063d4c1ae88ae2cad0d061333664647abda9724a"
+    }
+  },
+  "packageLock": {
+    "bytes": 19478,
+    "sha256": "43b6631c1d4af6985cbd0de9195033dd519d37e32e7458aba53b43b5b6aaa992"
+  },
+  "circuits": [
+    {
+      "name": "activate",
+      "k": 16,
+      "rows": 36766,
+      "mockCompileMilliseconds": 825.034833,
+      "ir": {
+        "file": "contracts/managed/registry/zkir/activate.zkir",
+        "bytes": 9714,
+        "sha256": "5f74a2b91742719637d728719116f3935fef63a10bf92be9a363f1052e6b1d0e",
+        "version": {
+          "major": 3,
+          "minor": 1
+        }
+      },
+      "instructionCount": 74,
+      "opcodeCounts": {
+        "assert": 4,
+        "bytes_into_natives": 4,
+        "cond_select": 4,
+        "constrain_bits": 6,
+        "ec_mul": 2,
+        "ec_mul_generator": 2,
+        "encode": 3,
+        "impact": 30,
+        "jubjub_scalar_from_native": 2,
+        "persistent_hash": 4,
+        "public_input": 9,
+        "test_eq": 4
+      }
+    },
+    {
+      "name": "add_device",
+      "k": 17,
+      "rows": 75587,
+      "mockCompileMilliseconds": 1825.802459,
+      "ir": {
+        "file": "contracts/managed/registry/zkir/add_device.zkir",
+        "bytes": 103078,
+        "sha256": "dc9080d7067e789768f83caf0f6a61b22541a2dcf15700a20b6e7e26a7c43b87",
+        "version": {
+          "major": 3,
+          "minor": 1
+        }
+      },
+      "instructionCount": 1092,
+      "opcodeCounts": {
+        "add": 17,
+        "assert": 89,
+        "bytes_into_natives": 6,
+        "cond_select": 464,
+        "constrain_bits": 74,
+        "constrain_to_boolean": 16,
+        "copy": 1,
+        "ec_mul": 3,
+        "ec_mul_generator": 3,
+        "encode": 5,
+        "impact": 54,
+        "jubjub_scalar_from_native": 4,
+        "persistent_hash": 6,
+        "public_input": 22,
+        "reconstitute_field": 1,
+        "test_eq": 327
+      }
+    },
+    {
+      "name": "authorise",
+      "k": 16,
+      "rows": 43631,
+      "mockCompileMilliseconds": 995.6222079999998,
+      "ir": {
+        "file": "contracts/managed/registry/zkir/authorise.zkir",
+        "bytes": 47255,
+        "sha256": "6c6c034b82dc04c596d73a90b8abdbcdb4c38ce1a3d20da73faecb6ece101737",
+        "version": {
+          "major": 3,
+          "minor": 1
+        }
+      },
+      "instructionCount": 503,
+      "opcodeCounts": {
+        "add": 9,
+        "assert": 42,
+        "bytes_into_natives": 4,
+        "cond_select": 200,
+        "constrain_bits": 38,
+        "constrain_to_boolean": 8,
+        "copy": 1,
+        "ec_mul": 2,
+        "ec_mul_generator": 2,
+        "encode": 3,
+        "impact": 36,
+        "jubjub_scalar_from_native": 4,
+        "persistent_hash": 4,
+        "public_input": 16,
+        "reconstitute_field": 1,
+        "test_eq": 133
+      }
+    },
+    {
+      "name": "recover",
+      "k": 16,
+      "rows": 44329,
+      "mockCompileMilliseconds": 1078.3649580000001,
+      "ir": {
+        "file": "contracts/managed/registry/zkir/recover.zkir",
+        "bytes": 12815,
+        "sha256": "7c4aa103a51360019db848301e54a09e50a17bd58e9fe614543ad8d773f3c5e4",
+        "version": {
+          "major": 3,
+          "minor": 1
+        }
+      },
+      "instructionCount": 102,
+      "opcodeCounts": {
+        "add": 3,
+        "assert": 4,
+        "bytes_into_natives": 4,
+        "cond_select": 2,
+        "constrain_bits": 7,
+        "copy": 2,
+        "ec_mul": 3,
+        "ec_mul_generator": 3,
+        "encode": 6,
+        "impact": 42,
+        "jubjub_scalar_from_native": 4,
+        "persistent_hash": 4,
+        "public_input": 14,
+        "reconstitute_field": 1,
+        "test_eq": 3
+      }
+    },
+    {
+      "name": "remove_device",
+      "k": 17,
+      "rows": 72751,
+      "mockCompileMilliseconds": 1630.0412500000002,
+      "ir": {
+        "file": "contracts/managed/registry/zkir/remove_device.zkir",
+        "bytes": 98970,
+        "sha256": "1f3cdb9d89b8317abe4aee6f9490b24f97635a4a86b0b25c6dbf0e6017519ae0",
+        "version": {
+          "major": 3,
+          "minor": 1
+        }
+      },
+      "instructionCount": 1048,
+      "opcodeCounts": {
+        "add": 17,
+        "assert": 90,
+        "bytes_into_natives": 6,
+        "cond_select": 456,
+        "constrain_bits": 74,
+        "constrain_to_boolean": 16,
+        "copy": 1,
+        "ec_mul": 2,
+        "ec_mul_generator": 2,
+        "encode": 4,
+        "impact": 57,
+        "jubjub_scalar_from_native": 4,
+        "less_than": 1,
+        "persistent_hash": 6,
+        "public_input": 23,
+        "reconstitute_field": 1,
+        "test_eq": 288
+      }
+    }
+  ]
+}
