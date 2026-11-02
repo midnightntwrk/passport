@@ -12,8 +12,9 @@ This repository holds the plan, the research that backs it, the reference materi
 | If you are… | Read |
 |---|---|
 | A stakeholder wanting the plan | https://midnightntwrk.github.io/passport |
-| Looking for current development status | [`docs/plans/STATUS.md`](docs/plans/STATUS.md) — standards refreshed 17 October 2026 |
+| Looking for current development status | [`docs/plans/STATUS.md`](docs/plans/STATUS.md) |
 | Reviewing or auditing the account contract | [`contract/README.md`](contract/README.md) — scope, known issues, evidence, and reproduction |
+| Reviewing private device revocation | [Amendment draft](docs/mps-mip/amendments/mip-0013-private-device-registry.md) and [isolated prototype](experiments/private-device-registry/README.md) — proposed design; ACC revocation remains unresolved |
 | A developer joining the team | [`research/README.md`](research/README.md) |
 | A partner evaluating the proposal | [`docs/plans/README.md`](docs/plans/README.md) |
 | Looking for the design vision | [`docs/secure-onboarding-design.pdf`](docs/secure-onboarding-design.pdf) |
@@ -22,6 +23,7 @@ This repository holds the plan, the research that backs it, the reference materi
 
 ```
 passport/
+├── contract/                    ACC reference implementation, tests and evidence
 ├── demo/                        Client-facing runnable demos
 │   └── mn-passport-foundations/ End-to-end MN Passport foundations demo
 ├── site/                        Static web artefacts deployed to GitHub Pages
@@ -32,6 +34,7 @@ passport/
 │   └── archive/                 Earlier artefacts kept for historical reference
 ├── docs/
 │   ├── plans/                   v1.0 promises, components, MIPs
+│   ├── mps-mip/                 Standards register, drafts and proposed amendments
 │   ├── PRINCIPLES.md            Inherited secure-onboarding principles
 │   ├── KNOWLEDGE_BASE.md        Working knowledge base
 │   ├── RESEARCH.md              Accumulated research notes
@@ -41,6 +44,7 @@ passport/
 │   ├── stack.md · architecture.md · features.md · pitfalls.md · summary.md
 ├── experiments/                 Cryptographic experiments and prototypes
 │   ├── account-custody-prototype/ Account-custody prototype and localnet tests
+│   ├── private-device-registry/ Private roster and selective-revocation experiment
 │   ├── redjubjub-wallet/        Schnorr-in-Compact-circuit validation (TypeScript)
 │   ├── redjubjub-wallet-rs/     Schnorr-in-Compact-circuit validation (Rust)
 │   └── nearfall-evaluation/     Subtree — Midnight-related evaluation archive

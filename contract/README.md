@@ -185,9 +185,11 @@ for these input checks.
    one rolling entry. A device can enrol another entry for the same key and
    survive removal; the JubJub probe demonstrates this on-node for both
    enrolment shapes. The shared lifecycle design affects the account across
-   arms. A contract-maintained device identity is the proposed remedy and
-   changes the ledger schema. The defect remains unresolved in this
-   baseline. See erratum 8 and
+   arms. A [private-registry amendment](../docs/mps-mip/amendments/mip-0013-private-device-registry.md)
+   and [isolated prototype](../experiments/private-device-registry/README.md)
+   explore contract-enforced credential uniqueness without a public device
+   identifier. They change the ledger model; the defect remains unresolved
+   in this baseline. See erratum 8 and
    [`probe-revocation.ts`](src/tests/probe-revocation.ts).
 2. **Key validity at enrolment differs from validity at use.** Opaque device
    entries/grant IDs can commit unusable keys. The constructor can store an
@@ -474,14 +476,15 @@ text. Item 7 is corrected in this source; item 8 remains an open design defect.
    enrolled" is not decidable over the current ledger shape. Stating it as a
    client obligation, as the §6 note and S11 do, does not hold either, because
    the party such a rule binds is the adversary in this threat model. **§3
-   needs a per-device identity that the contract maintains**: a stable
-   arm-marked commitment to the address and key, kept in its own set, with the
-   rolling entry derived in-circuit from that commitment, the current epoch,
-   and the counter. Enrolment can then reject a key that is already live, and
-   removal retires the device rather than one of its entries, while cross-arm
-   enrolment survives because the commitment stays opaque to the contract.
-   That is a ledger-schema change, so a redeploy rather than a maintenance
-   update.
+   needs credential uniqueness and complete selective revocation enforced
+   by the contract**. A public stable key hash would expose a device
+   pseudonym and permit known-key matching. The proposed
+   [private-registry profile](../docs/mps-mip/amendments/mip-0013-private-device-registry.md)
+   instead keeps the canonical identity private and authenticates the whole
+   roster with a blinded commitment. Its isolated prototype evaluates
+   uniqueness and removal; private-state availability, mixed-arm integration,
+   complete recovery and cryptographic validation remain open. This requires
+   a ledger-schema change and migration, not a client or verifier-only update.
 
    Two further consequences follow from the same root. First, the ledger
    set is enumerable as opaque entries, but the client cannot reliably
