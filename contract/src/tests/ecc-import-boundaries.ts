@@ -2,9 +2,9 @@
 // proofs or signature-forgery claims; malformed input rejection is explicit.
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { generateEncKeyPair, sealInboxEntry, openInboxEntry } from '../wallet/inbox.js';
 import { hexToBytes } from '../wallet/hex.js';
 import { K256Device, K256Grantee } from '../wallet/signer.js';
@@ -88,9 +88,10 @@ const root = new URL('../../', import.meta.url);
 const sha = (path: string) => createHash('sha256').update(readFileSync(new URL(path, root))).digest('hex');
 const evidence = process.env.EVIDENCE_DIR
   ? resolve(process.env.EVIDENCE_DIR)
-  : fileURLToPath(new URL('evidence/ecc-validation/', root));
+  : mkdtempSync(join(tmpdir(), 'passport-ecc-import-boundaries-'));
 mkdirSync(evidence, { recursive: true });
-writeFileSync(join(evidence, 'import-boundaries.json'), JSON.stringify({
+const output = join(evidence, 'import-boundaries.json');
+writeFileSync(output, JSON.stringify({
   completed: true, runAt: new Date().toISOString(), node: process.version,
   scope: 'Current reference client import characterization with valid controls. No contract changes, proofs, live node, browser-wallet or authorization-bypass claims. Reader null results are marked as accepted API calls, not accepted malformed credentials.',
   sourceSha256: Object.fromEntries([
@@ -102,3 +103,4 @@ writeFileSync(join(evidence, 'import-boundaries.json'), JSON.stringify({
   lockfileSha256: sha('package-lock.json'), rows,
 }, null, 2) + '\n');
 console.log(`Import boundary checks complete: ${rows.length}/${rows.length} expectations matched.`);
+console.log(`Receipt: ${output}`);
