@@ -1,0 +1,75 @@
+{
+  "reference": "contracts/reference/account.compact",
+  "sha256": "1064b1998a71b5ade418f136428d82721e6021d6d939ff2f12797383bb3f8d50",
+  "upstream": {
+    "path": "contract/contracts/account.compact",
+    "revision": "f519ff078ad461783baaacd513c1ad7eb6b4555a"
+  },
+  "compiler": "0.35.0",
+  "runtime": "0.20.0",
+  "variants": {
+    "Baseline": {
+      "sha256": "791481e2af0f5b64e82d95625af84afb2f4c8e3f6513d2de442c356beb7f7276",
+      "source": "contracts/generated/Baseline.compact",
+      "releaseGuards": 0
+    },
+    "Inline": {
+      "sha256": "5dfa4e9b09d6be9fe9290fb25ca6a2a237365424ef22c5620815bb54c2abbfc9",
+      "source": "contracts/generated/Inline.compact",
+      "releaseGuards": 3
+    },
+    "ExternalRaw": {
+      "sha256": "9c9de20d35fd3f02a031e2498b46d647ffd4138b6743b75fd4f58a8562036ae2",
+      "source": "contracts/generated/ExternalRaw.compact",
+      "releaseGuards": 3
+    },
+    "ExternalTagged": {
+      "sha256": "a2a17252c8bee6a5fcd2cdddf6c73677a0ffb5762c240967582a992e7cbc916b",
+      "source": "contracts/generated/ExternalTagged.compact",
+      "releaseGuards": 3
+    }
+  },
+  "contracts": {
+    "Policy": {
+      "source": "contracts/policy.compact",
+      "sha256": "3d14220e9a51b0df6da3296c02c37379e65cf714710d8762d734f6bbc017a442",
+      "keyed": true
+    },
+    "PolicyAlternate": {
+      "source": "contracts/policy-alternate.compact",
+      "sha256": "bbb09e28a68f90bf86d008c20657dcae4b4e4bab288e2db5940068a54e64d46f",
+      "keyed": true
+    },
+    "Registry": {
+      "source": "contracts/registry.compact",
+      "sha256": "d9e3022eafb1b13f496bdb88d64efeb998ee683459c8a5f87417a7de44e00600",
+      "keyed": true
+    },
+    "Dispatch": {
+      "source": "contracts/policy-dispatch.compact",
+      "sha256": "be3b28d0ca4afba903f50519ad141bd18bba2068a6cebbecab7ef5628cf23a5b",
+      "keyed": true
+    },
+    "Baseline": {
+      "source": "contracts/generated/Baseline.compact",
+      "sha256": "791481e2af0f5b64e82d95625af84afb2f4c8e3f6513d2de442c356beb7f7276",
+      "keyed": false
+    },
+    "Inline": {
+      "source": "contracts/generated/Inline.compact",
+      "sha256": "5dfa4e9b09d6be9fe9290fb25ca6a2a237365424ef22c5620815bb54c2abbfc9",
+      "keyed": false
+    },
+    "ExternalRaw": {
+      "source": "contracts/generated/ExternalRaw.compact",
+      "sha256": "9c9de20d35fd3f02a031e2498b46d647ffd4138b6743b75fd4f58a8562036ae2",
+      "keyed": false
+    },
+    "ExternalTagged": {
+      "source": "contracts/generated/ExternalTagged.compact",
+      "sha256": "a2a17252c8bee6a5fcd2cdddf6c73677a0ffb5762c240967582a992e7cbc916b",
+      "keyed": false
+    }
+  },
+  "compilerIdentity": "0.35.0 (debb05f94 2026-09-29)"
+}

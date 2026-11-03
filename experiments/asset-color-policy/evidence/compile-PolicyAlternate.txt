@@ -1,0 +1,2 @@
+compact compile +0.35.0 --feature-zkir-v3 contracts/policy-alternate.compact contracts/managed/PolicyAlternate
+Completed successfully.

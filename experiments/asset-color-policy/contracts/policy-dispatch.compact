@@ -1,0 +1,24 @@
+pragma language_version 0.27;
+import CompactStandardLibrary;
+
+contract Policy {
+  circuit check(key: Bytes<32>): [];
+}
+
+contract Registry {
+  circuit resolve(key: Bytes<32>): Policy;
+}
+
+// Coinless dispatch probe, deliberately separate from the four full ACC variants.
+// Tests the proposed registry -> returned policy call without claiming an ACC
+// integration or a native asset movement.
+export ledger registry: Registry;
+
+constructor(reference: Registry) {
+  registry = disclose(reference);
+}
+
+export circuit check(key: Bytes<32>): [] {
+  const policy = registry.resolve(disclose(key));
+  policy.check(disclose(key));
+}
