@@ -226,14 +226,19 @@ fn jubjub_scalar_from_hex(hex_be: &str) -> Result<JubjubScalar> {
     scalar.ok_or_else(|| anyhow!("scalar out of range"))
 }
 
-/// Signing keys must be nonzero; response scalars may legitimately be zero.
-fn jubjub_secret_from_hex(hex_be: &str) -> Result<JubjubScalar> {
+fn validated_secret_hex(hex_be: &str) -> Result<&str> {
     let clean = hex_be.strip_prefix("0x").unwrap_or(hex_be);
     anyhow::ensure!(!clean.is_empty(), "empty signing secret");
     anyhow::ensure!(
         clean.len() <= 64 && clean.bytes().all(|b| b.is_ascii_hexdigit()),
         "invalid signing secret hex"
     );
+    Ok(clean)
+}
+
+/// Signing keys must be nonzero; response scalars may legitimately be zero.
+fn jubjub_secret_from_hex(hex_be: &str) -> Result<JubjubScalar> {
+    let clean = validated_secret_hex(hex_be)?;
     let scalar = jubjub_scalar_from_hex(clean)?;
     anyhow::ensure!(
         !bool::from(scalar.is_zero()),
@@ -286,12 +291,7 @@ fn pk_coords_le(vk: &VerifyingKey) -> Result<([u8; 32], [u8; 32])> {
 }
 
 fn k256_signing_key_from_hex(hex_be: &str) -> Result<SigningKey> {
-    let clean = hex_be.strip_prefix("0x").unwrap_or(hex_be);
-    anyhow::ensure!(!clean.is_empty(), "empty signing secret");
-    anyhow::ensure!(
-        clean.len() <= 64 && clean.bytes().all(|b| b.is_ascii_hexdigit()),
-        "invalid signing secret hex"
-    );
+    let clean = validated_secret_hex(hex_be)?;
     let bytes = hex::decode(format!("{:0>64}", clean)).context("bad scalar hex")?;
     SigningKey::from_slice(&bytes).map_err(|_| anyhow!("scalar out of range"))
 }
@@ -597,39 +597,40 @@ mod tests {
 
     #[test]
     fn jubjub_sampling_retries_zero_before_returning_a_nonzero_scalar() {
-        // Test-only RNG: the pinned field sampler reads one 64-byte buffer.
-        // Return zero for its first sample and one for its second sample.
-        struct ZeroThenOneRng {
-            fills: usize,
+        // The pinned field sampler consumes complete 64-byte buffers. Script
+        // both samples explicitly and fail if its RNG access pattern changes.
+        struct ScriptedRng {
+            buffers: std::array::IntoIter<[u8; 64], 2>,
         }
-        impl rand::RngCore for ZeroThenOneRng {
+        impl rand::RngCore for ScriptedRng {
             fn next_u32(&mut self) -> u32 {
-                let mut bytes = [0; 4];
-                self.fill_bytes(&mut bytes);
-                u32::from_le_bytes(bytes)
+                panic!("unexpected next_u32: field sampler must request a complete buffer");
             }
             fn next_u64(&mut self) -> u64 {
-                let mut bytes = [0; 8];
-                self.fill_bytes(&mut bytes);
-                u64::from_le_bytes(bytes)
+                panic!("unexpected next_u64: field sampler must request a complete buffer");
             }
             fn fill_bytes(&mut self, dest: &mut [u8]) {
-                dest.fill(0);
-                if self.fills > 0 && !dest.is_empty() {
-                    dest[0] = 1;
-                }
-                self.fills += 1;
+                assert_eq!(dest.len(), 64, "unexpected field-sampler buffer size");
+                let buffer = self.buffers.next().expect("scripted RNG buffers exhausted");
+                dest.copy_from_slice(&buffer);
             }
             fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
                 self.fill_bytes(dest);
                 Ok(())
             }
         }
-        impl rand::CryptoRng for ZeroThenOneRng {}
+        impl rand::CryptoRng for ScriptedRng {}
 
-        let mut rng = ZeroThenOneRng { fills: 0 };
+        let mut one = [0; 64];
+        one[0] = 1;
+        let mut rng = ScriptedRng {
+            buffers: [[0; 64], one].into_iter(),
+        };
         let scalar = random_nonzero_jubjub_scalar(&mut rng);
-        assert_eq!(rng.fills, 2);
+        assert_eq!(
+            rng.buffers.len(), 0,
+            "nonzero retry did not consume both samples"
+        );
         assert_eq!(scalar, JubjubScalar::ONE);
         assert_ne!(
             JubjubSubgroup::generator() * scalar,

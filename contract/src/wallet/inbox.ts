@@ -63,10 +63,15 @@ export function generateEncKeyPair(): EncKeyPair {
   };
 }
 
-function x25519(rawSecret: Uint8Array, rawPeerPublic: Uint8Array): Buffer {
-  if (rawSecret.length !== 32 || rawPeerPublic.length !== 32) {
+function requireX25519KeyLength(key: Uint8Array): void {
+  if (key.length !== 32) {
     throw new Error('X25519 keys must be exactly 32 bytes');
   }
+}
+
+function x25519(rawSecret: Uint8Array, rawPeerPublic: Uint8Array): Buffer {
+  requireX25519KeyLength(rawSecret);
+  requireX25519KeyLength(rawPeerPublic);
   const privateKey = createPrivateKey({
     key: Buffer.concat([PKCS8_PREFIX, Buffer.from(rawSecret)]),
     type: 'pkcs8',
@@ -78,6 +83,7 @@ function x25519(rawSecret: Uint8Array, rawPeerPublic: Uint8Array): Buffer {
     format: 'der',
   });
   const shared = diffieHellman({ privateKey, publicKey });
+  // Retain this guard independently of the backend's low-order-peer checks.
   if (shared.every((byte) => byte === 0)) throw new Error('invalid X25519 agreement');
   return shared;
 }
@@ -126,6 +132,7 @@ function decodeCoin(buf: Buffer): PlainCoin {
 // ── Sealed entry ────────────────────────────────────────────────────────────
 
 export function sealInboxEntry(recipientEncKey: Uint8Array, coin: PlainCoin): Uint8Array {
+  requireX25519KeyLength(recipientEncKey);
   const plaintext = encodeCoin(coin);
   const eph = generateEncKeyPair();
   const key = deriveAeadKey(x25519(eph.secretKey, recipientEncKey));
