@@ -10,8 +10,9 @@ The implementation and requirements below were checked against that tree;
 this document is a subsequent documentation revision, not content present in
 that commit. The canonical standards were separately fetched at
 [`02fce36cfa44541305310dc25fd38f399dbe8d92`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/02fce36cfa44541305310dc25fd38f399dbe8d92).
-Evidence retains its own source hashes, toolchain, and run date. See the
-[review record](documentation-review.md) for verification limits.
+Evidence retains its own source hashes, toolchain, and run date.
+[Quality requirements](#10-quality-requirements) and the
+[reference contract guide](../contract/README.md) record verification limits.
 
 The [official arc42 template](https://arc42.org/overview/) supplies the twelve
 sections. Linked detail is intentional; source-backed reference views and

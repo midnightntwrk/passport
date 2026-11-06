@@ -37,8 +37,8 @@ or site summary cannot override the protocol or establish implementation.
 - `research/`, `docs/PRINCIPLES.md`, and `docs/RESEARCH.md` retain the reasoning
   behind earlier designs. In particular, early threshold-service, DeRec, and
   single-seed designs are not the current account-contract architecture.
-  `RESEARCH.md` explicitly reserves edits to humans; conflicts are recorded in
-  the [documentation review](documentation-review.md).
+  `RESEARCH.md` explicitly reserves edits to humans. Consult current
+  requirements and architecture when historical designs differ.
 - Local standards files are either historical copies, canonical pointers, or
   working drafts, as labelled in the local standards index. Historical copies
   are not synchronised mirrors; use upstream for normative interpretation.
@@ -61,5 +61,5 @@ and a reference implementation is not an audit or a production deployment.
 
 Before completing an update, check relative links and anchors, compare changed
 claims with source/evidence, and run `node site/check.js` if site data or pages
-changed. The [2026/11/06 review](documentation-review.md) records the current
-reconciliation and remaining limits.
+changed. Record validation results in the pull request; keep lasting evidence
+limits in the architecture reference and the relevant source documents.
