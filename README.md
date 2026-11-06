@@ -12,9 +12,11 @@ This repository holds the plan, the research that backs it, the reference materi
 | If you are… | Read |
 |---|---|
 | A stakeholder wanting the plan | https://midnightntwrk.github.io/passport |
-| Looking for current development status | [`docs/plans/STATUS.md`](docs/plans/STATUS.md) — standards refreshed 17 October 2026 |
+| Looking for current development status | [`docs/plans/STATUS.md`](docs/plans/STATUS.md) — dated observations, including the 2 November ACC update |
 | Reviewing or auditing the account contract | [`contract/README.md`](contract/README.md) — scope, known issues, evidence, and reproduction |
-| A developer joining the team | [`research/README.md`](research/README.md) |
+| A developer joining the team | [`docs/arc42.md`](docs/arc42.md) — architecture and implementation boundaries |
+| Looking for documentation ownership | [`docs/README.md`](docs/README.md) — source map and maintenance rules |
+| Reviewing MIPs and MPSs | [`docs/plans/MIPS.md`](docs/plans/MIPS.md) — standards register |
 | A partner evaluating the proposal | [`docs/plans/README.md`](docs/plans/README.md) |
 | Looking for the design vision | [`docs/secure-onboarding-design.pdf`](docs/secure-onboarding-design.pdf) |
 
@@ -31,6 +33,8 @@ passport/
 │   ├── plan.html                Working surface — promises, canvases, dependencies
 │   └── archive/                 Earlier artefacts kept for historical reference
 ├── docs/
+│   ├── README.md                Documentation map and ownership
+│   ├── arc42.md                 Architecture reference
 │   ├── plans/                   v1.0 promises, components, MIPs
 │   ├── PRINCIPLES.md            Inherited secure-onboarding principles
 │   ├── KNOWLEDGE_BASE.md        Working knowledge base

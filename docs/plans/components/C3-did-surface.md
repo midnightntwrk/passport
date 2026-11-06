@@ -48,7 +48,7 @@ This canvas frames the decision space, not the answer.
   design; the current version is substantially different from it. So the
   **method-name registration remains with IAMX, but the current spec is
   in our hands**. The local DID survey at
-  [`docs/reference/.../credentials/did-investigation/did-midnight.md`](../../reference/machine-investigation/key-flows/credentials/did-investigation/did-midnight.md)
+  [`docs/reference/.../credentials/did-investigation/did-midnight.md`](../../reference/machine-investigation/credentials/did-investigation/did-midnight.md)
   evaluates IAMX's *original* design; that evaluation does not describe
   the current spec.
 - **External — active `midnight-did` effort.** The current spec and a

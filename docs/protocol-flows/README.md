@@ -5,11 +5,11 @@ interaction at a time. Each flow names the participants, the messages
 between them, and the security properties the exchange establishes. The
 diagrams are written in Mermaid so they render directly on GitHub.
 
-These are explanatory: they describe the protocol as the standards
-(MIP-0012, contract custody, and MIP-0013, account authorisation)
-specify it, grounded in the reference implementation (`contract/`).
-Where the earlier account-custody prototype simplified the eventual
-protocol, the flow notes it.
+These are explanatory and must name the implementation they describe.
+The [first-account flow](01-first-account-creation.md) describes the reference
+bootstrap and labels the separate passkey UX dependency. Published standards
+may be ahead of this checkout: use the [standards register](../plans/MIPS.md)
+and [architecture reference](../arc42.md) to distinguish the two.
 
 ## Flows
 

@@ -8,7 +8,7 @@ The flow by which a user recovers their account when all authorised
 devices are lost. Implements P5 (recover-from-zero). Mirrors I-5.1
 through I-5.4.
 
-**Status 2026/10/17:** [MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is **Proposed**, published
+**Status 2026/11/06:** [MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is **Proposed**, published
 through #339. [Upstream #385](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/385) amends it and MIP-0013: finalisation
 must atomically retire all prior entries, including pending-phase enrolments,
 and leave only the authorised successor active. Opaque entries with unchecked
@@ -16,9 +16,11 @@ epochs must be cleared or protected by equivalent contract-assigned registration
 epochs; future epoch changes must not reactivate retained entries.
 
 The signature-based two-phase reference (#165) and reset (#183) are merged.
-The reset has Compact 0.35 compilation (keygen skipped) and simulator evidence;
-regenerated keys, proof/node validation, deployment sizing and the expanded
-retirement matrix remain. Older on-node receipts predate the correction.
+The [23 October combined-account record](../../../contract/GRANTS-COMPLETION.md)
+proves two recoveries with the corrected reset and source matching main `fc19e47`.
+The ten-wave build reused matching cached keys after textual ZKIR comparison.
+Clean regeneration and expanded future-epoch/counter/pending-enrolment/all-scheme
+retirement cases remain. An epoch bump alone is insufficient (erratum 7/I-5.4).
 Existing deployments need verifier maintenance or migration, with separate
 handling of any already-finalised state. Multi-session review, transport,
 interoperability and viewing-wrap lifecycle remain. See [status](../STATUS.md).

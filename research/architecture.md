@@ -1,5 +1,10 @@
 # Architecture Research — Threshold / MPC Signing Networks
 
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 **Domain:** Threshold / MPC signing networks fronted by account providers, feeding a ZK-proof pipeline and an on-chain registry
 **Researched:** 2026/04/16
 **Confidence:** MEDIUM–HIGH (specific committee sizes and protocol choices corroborated by official docs and source code; ops detail on some vendors thin)

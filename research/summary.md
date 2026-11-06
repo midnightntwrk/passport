@@ -1,5 +1,10 @@
 # Research Summary — ARC Passport
 
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 **Project:** ARC Passport (Midnight-native seedless wallet)
 **Domain:** Threshold MPC signing + passkey onboarding + on-chain naming + privacy-preserving credentials on Midnight / BLS12-381 / JubJub
 **Researched:** 2026/04/16

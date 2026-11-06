@@ -1,8 +1,14 @@
 # Midnight Passport — Design Principles
 
+> **Historical design lineage.** These inherited principles describe the
+> original onboarding design, including single-seed and DeRec choices. Current
+> requirements are in [PROMISES.md](plans/PROMISES.md), and current mechanisms
+> and implementation boundaries are in [arc42](arc42.md). Do not use this
+> summary as a specification of the reference contract.
+
 The six design principles that the Midnight Passport onboarding model is
 built on. Source of truth: section 2 of
-[`docs/reference/machine-investigation/key-flows/secure-onboarding-design.md`](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md).
+[`docs/reference/machine-investigation/key-flows/secure-onboarding-design.md`](reference/machine-investigation/key-flows/secure-onboarding-design.md).
 
 This file is a summary. The detail, rationale, and threat-model context for
 each principle live in the source document.
@@ -15,12 +21,12 @@ Last updated: 2026/04/27.
 
 | Principle | Source section |
 |-----------|----------------|
-| Keys never leave TEEs; authorisation via ZK witnesses | [§ 2.1](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md#21-keys-never-leave-tees-authorization-via-zk-witnesses) |
-| Single seed, three wallets | [§ 2.2](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md#22-single-seed-three-wallets) |
-| Chain abstraction via intent model | [§ 2.3](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md#23-chain-abstraction-via-intent-model) |
-| One key per device | [§ 2.4](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md#24-one-key-per-device) |
-| Privacy-by-design identity | [§ 2.5](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md#25-privacy-by-design-identity) |
-| Seedless user experience | [§ 2.6](docs/reference/machine-investigation/key-flows/secure-onboarding-design.md#26-seedless-user-experience) |
+| Keys never leave TEEs; authorisation via ZK witnesses | [§ 2.1](reference/machine-investigation/key-flows/secure-onboarding-design.md#21-keys-never-leave-tees-authorization-via-zk-witnesses) |
+| Single seed, three wallets | [§ 2.2](reference/machine-investigation/key-flows/secure-onboarding-design.md#22-single-seed-three-wallets) |
+| Chain abstraction via intent model | [§ 2.3](reference/machine-investigation/key-flows/secure-onboarding-design.md#23-chain-abstraction-via-intent-model) |
+| One key per device | [§ 2.4](reference/machine-investigation/key-flows/secure-onboarding-design.md#24-one-key-per-device) |
+| Privacy-by-design identity | [§ 2.5](reference/machine-investigation/key-flows/secure-onboarding-design.md#25-privacy-by-design-identity) |
+| Seedless user experience | [§ 2.6](reference/machine-investigation/key-flows/secure-onboarding-design.md#26-seedless-user-experience) |
 
 ---
 

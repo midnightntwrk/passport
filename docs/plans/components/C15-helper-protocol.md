@@ -2,9 +2,11 @@
 
 **Serves:** P5 · P8.
 
-**Status 2026/10/17:** [MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is published as **Proposed**;
+**Status 2026/11/06:** [MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is published as **Proposed**;
 #165's signature gate is merged. The MIP-0013/0022 retirement amendment #385
-and reference reset #183 are merged, with proof/node validation still pending.
+and reference reset #183 are merged. The [23 October record](../../../contract/GRANTS-COMPLETION.md)
+covers two corrected recoveries on-node using matching cached keys; clean
+regeneration and expanded retirement cases remain.
 Transport/liveness, roster handling, interoperability vectors and multi-session
 cryptographic review remain. The prototype formats below are historical evidence;
 use the canonical MIP for current protocol requirements.

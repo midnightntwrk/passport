@@ -1,10 +1,14 @@
 # Midnight Passport — Plans
 
-The plan for **feature-complete v1.0** of Midnight Passport — what v1.0
-promises, the components that deliver it, and how the October MVP
-consumes those deliverables early.
+> **Reading status (2026/11/06).** This plan defines the v1.0 target.
+> October 2026 references record the original MVP milestone, not verified
+> delivery. For implemented scope, use [arc42](../arc42.md); for current
+> publication observations, use the [standards register](MIPS.md).
 
-**Current development status:** [17 October 2026 standards reconciliation](STATUS.md)
+The plan for **feature-complete v1.0** of Midnight Passport — what v1.0
+promises, the components that deliver it, and how the original October MVP plan consumed those deliverables early.
+
+**Current development status:** [development status and 2 November ACC update](STATUS.md)
 of merged implementation, open feature PRs, upstream proposals, demo releases,
 SDK work and formal-spec tickets.
 
@@ -32,18 +36,18 @@ delivery question, recorded separately. Every promise on
 
 Feature-complete v1.0 is a body of deliverables — specs, MIPs,
 formal-methods sign-off on critical components, and cryptographer reviews
-on the cross-cutting registry. The October 2026 demo is an MVP that
-consumes those deliverables early, built with partners.
+on the cross-cutting registry. The original October 2026 plan called for an MVP built with partners to
+consume those deliverables early. It remains historical delivery framing;
+this index does not establish that the milestone shipped.
 
 - **The v1.0 deliverables.** Continuous; not bounded by the demo date.
   Each deliverable carries the principled mechanism for its component —
   the "feature-complete v1.0" target — and is informed by what the MVP
   surfaces in implementation.
-- **The October MVP.** Hard date October 2026. A runnable, end-to-end
-  demonstration that consumes deliverables as they firm up. Where a
-  deliverable is not yet mature, the MVP picks the simplest workable
-  mechanism (the "make it run by October" path) and records a migration
-  plan back to the principled spec.
+- **The original October MVP target.** A runnable, end-to-end demonstration
+  was planned for October 2026. The plan allowed provisional mechanisms
+  with a migration path to the principled specification. Delivery evidence
+  and current work belong in the status record, not an expired deadline.
 
 Where a component admits more than one mechanism, the per-component canvas
 in [`components/`](components/) records both readings — the **MVP pick**
@@ -52,8 +56,8 @@ and the **v1.0 deliverable target**.
 ## What lives here
 
 - [`README.md`](README.md) — this index.
-- [`PROMISES.md`](PROMISES.md) — the ten v1.0 user-facing promises
-  (P1 – P10) and their testable invariants (I-N.M).
+- [`PROMISES.md`](PROMISES.md) — the v1.0 promises
+  (P1–P10, P5′ and P11–P16 security properties) and testable invariants (I-N.M).
 - [`components/`](components/) — per-component canvases (C1 – C26). Each
   component carries its outcome, dependencies, open questions, failure
   modes, and alternatives, plus its track readings where they apply.

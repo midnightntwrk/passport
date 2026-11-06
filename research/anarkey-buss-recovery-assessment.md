@@ -1,5 +1,10 @@
 # ANARKey (BUSS) for Passport Account Recovery: Assessment
 
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 Status: research note, first draft 2026/07/04.
 Inputs: the ANARKey paper ([EPRINT 2025/551](https://eprint.iacr.org/2025/551), to appear at EuroS&P 2026) read in full; the Pleiades implementation (`tmp/Pleiades`, IOG, work in progress); the current recovery surface (account-custody prototype, C13/C14/C15 canvases, and the account-custody MIP recovery seam).
 

@@ -14,7 +14,10 @@ For someone new to the project, the shortest path is:
 
 ## What this is *not*
 
-- **Not the plan.** The plan is in [`../site/delivery-plan.html`](../site/delivery-plan.html). If research and plan conflict, the plan is authoritative.
+- **Not the plan.** Start with [arc42](../docs/arc42.md) and the
+  [documentation map](../docs/README.md); current requirements live in
+  [the plan](../docs/plans/README.md). These dated surveys are historical
+  evidence, not implementation instructions.
 - **Not a specification.** Protocol, API, and data-format specifications are published as Midnight Improvement Proposals (MIPs) when the team drafts them.
 - **Not a living document.** Each file is dated. When the context changes materially, the document is updated with a dated correction note rather than silent rewriting — so that earlier decisions remain readable against the evidence available at the time.
 

@@ -23,17 +23,20 @@ message the specification names, no transaction, and a byte-identical
 ledger snapshot either side; nine grantee-key rows are refused on both
 arms (`contract/GRANTS-E2.md`).
 
-**Update 2026/10/17:** unshielded follow-up #163 is merged. Merged
+**Update 2026/11/06:** unshielded follow-up #163 is merged. Merged
 [#176](https://github.com/midnightntwrk/passport/pull/176) adds optional
 immediate-contract pins using `kernel.caller()`. Forwarded calls were
 accepted and a fabricated-caller proof refused at node admission. Schema
-v3 still needs fresh combined-build/client-ABI/P-256 caller evidence; audit/formal work
+v3 has [23 October combined-account evidence](../../../contract/GRANTS-COMPLETION.md),
+including P-256 unshielded grants. Successful P-256 forwarded/shielded grants
+and broader client-ABI validation remain outside that run; audit/formal work
 (#67) remains. See [status](../STATUS.md).
 
 MIP-0030 (Draft) now records the ECDSA policy/enforcement obligations.
 The MIP-0013/0022 recovery amendment #385 and reference reset #183 require
-atomic prior-entry retirement; compilation/simulation is not proof/node or
-formal assurance. Track corrected-verifier validation in #73 and audit in #67.
+atomic prior-entry retirement. Two corrected recoveries passed on-node in the
+23 October record, using matching cached keys. Clean regeneration and the
+expanded retirement matrix remain; node evidence is not formal assurance.
 
 ## Dependencies
 

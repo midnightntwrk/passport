@@ -1,11 +1,13 @@
 # C6 · Proof generation
 
-**Status 2026/10/17:** native regeneration evidence #170 and draft #173
+**Status 2026/11/06:** native regeneration evidence #170 and draft #173
 are merged; [MIP-0020](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md) is published as **Proposed** through #338,
 authored by Nicolas Di Prima and Vincent Hanquez. Supported SDK/WASM APIs,
 validation vectors and integration remain. Browser measurements below belong
-to the earlier prototype. Recovery reset #183 still needs regenerated keys,
-proof/node validation and deployment-wave sizing. See [status](../STATUS.md).
+to the earlier prototype. The [23 October account run](../../../contract/GRANTS-COMPLETION.md)
+proved corrected recovery in ten deployment waves using matching cached keys
+after textual ZKIR comparison; this does not demonstrate clean regeneration
+of all 52 keys. See [status](../STATUS.md).
 
 
 **Serves:** P6 · P8.

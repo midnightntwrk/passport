@@ -4,20 +4,20 @@ You are an AGENT working for the Advanced Research and Creativity (ARC) departme
 
 ## Project
 
-**Midnight Passport — Planning Workspace**
+**Midnight Passport — Architecture, Standards, and Reference Implementation**
 
-This repository is the planning and knowledge-gathering workspace for Midnight Passport, the user-facing identity and wallet layer for the Midnight network (`alice.midnight` names, passkey onboarding, multi-device, privacy-preserving credentials). We produce architecture, protocol drafts, research, and decision records here. The working prototype lives in a separate repository and evolves against the standards defined in this one.
+This repository contains architecture, protocol drafts, research, decision records, the reference implementation (`contract/`), demos (`demo/`), and experiments for Midnight Passport. Start with `docs/arc42.md`; `docs/README.md` defines documentation ownership, and `docs/plans/MIPS.md` is the standards register. Published upstream standards are canonical; local code and dated evidence establish this checkout's implemented scope.
 
 **Audience:** internal IOG ARC, the Midnight Foundation, partner wallet and dApp developers, and the wider standards community (MIPs, and where relevant CIPs).
 
-**Core value:** produce a coordinated plan — scope, parallelisation map, delegation, decision records — that identifies what can be built simultaneously across teams (or sequenced by a single team), drives toward a public demo in October 2026, and ultimately produces a set of MIPs and CIPs the wider ecosystem can adopt.
+**Core value:** produce a coordinated plan — scope, parallelisation map, delegation, decision records — that identifies what can be built simultaneously across teams (or sequenced by a single team), records evidence against the original October 2026 demo target, and ultimately produces a set of MIPs and CIPs the wider ecosystem can adopt.
 
 ## Constraints
 
-- **Timeline:** there is no fixed MVP deadline. We are aiming at a public demo in October 2026, but the plan's job is to map the work — not to enforce a critical path. Identify what can run in parallel across different teams (or be sequenced by the same team) so progress is bounded by capacity, not by one ordered chain of dependencies.
+- **Timeline:** October 2026 was the recorded public-demo target; this checkout does not establish its delivery outcome. Feature-complete v1.0 has no release date recorded here.
 - **Weekly cadence:** demonstrable progress every week remains the preferred rhythm but is no longer a hard contract. If a week's intended deliverable slips, show the next thing that works rather than a broken thing.
 - **Ecosystem dependency:** protocols we draft must be adoptable by the Midnight Foundation and partner wallets. Unilateral design produces shelfware.
-- **Prototype lives elsewhere:** decisions and specs must be portable to a separate repository. Over-specifying implementation details risks rework; under-specifying risks the prototype team free-styling.
+- **Implementation boundaries:** distinguish the reference contract, prototype, and demo. Do not infer conformance or delivery from a proposal, canvas, or past milestone.
 - **Research vs. specification balance:** every standard we draft is backed by evidence — an experiment, an upstream extraction, or a cryptographer review. Speculative specs do not compel adoption.
 
 ## Repository layout
@@ -42,7 +42,7 @@ Build artefacts (`node_modules/`, `target/`) are gitignored.
 ## Key conventions
 
 - British English. Oxford comma. Date format `YYYY/MM/DD`.
-- Prefer "colour" not "color", "centre" not "center".
+- Prefer "colour" not "color", "centre" not "center" in prose; retain exact protocol terms such as `color`.
 - See `.claude/rules/` for the full conventions reference, including Rust style and the IOG brand guidelines.
 
 ## What not to do

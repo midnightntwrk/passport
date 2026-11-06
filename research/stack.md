@@ -1,5 +1,17 @@
 # Stack Research — Seedless Wallet with MPC/Threshold Signing on Midnight
 
+> **Technical correction (2026/11/06).** References below to
+> `persistentHash` as Poseidon are incorrect for the custody/authorisation
+> implementation: it uses SHA-256; `transientHash` is the Poseidon-family
+> primitive. See [C8](../docs/plans/components/C8-domain-separation-registry.md).
+> The dated NEAR library survey and its later corrections need a pinned
+> revision before reuse; they are not a current dependency recommendation.
+
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 **Domain:** Seedless wallet + threshold (FROST) signing + passkey onboarding, targeting Midnight's BLS12-381 / JubJub ZK stack
 **Researched:** 2026/04/16
 **Researcher:** GSD project researcher

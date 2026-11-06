@@ -1,37 +1,28 @@
 # First-time account creation
 
-A new bearer creates their Passport for the first time: a passkey becomes
-the first device of a fresh on-chain account contract. This is the entry
-point to every other flow.
+This flow describes the **JubJub reference bootstrap** at Passport main
+`fc19e47`, reviewed 2026/11/06. A PRF-capable authenticator can supply material
+for a client-derived device key; the WebAuthn UI is a client responsibility,
+demonstrated separately in the prototype. Direct P-256 WebAuthn is another
+arm with different key custody and bounded profile requirements.
 
-**Preconditions.** The bearer has a device with a platform authenticator
-(Touch ID, Windows Hello, Android) or a PRF-capable security key. They
-hold no funds and no existing account.
+**Preconditions.** A PRF-capable authenticator for this client path, a client
+able to derive the JubJub key, a proving path, and transaction fee funding or
+sponsorship. Usable birth recovery additionally requires a retained recovery
+configuration; alternatively, publish a guardian session after activation.
 
-**Postcondition.** An account-custody contract exists on the ledger,
-holding no assets yet, whose sole active device is the passkey just
-created and whose recovery commitment is set. The bearer can now
-receive funds, add devices, issue grants, and enrol guardians.
-
-Account creation is a two-step ceremony by construction: the deploy
-plants a salted commitment to the first device, and a follow-up
-activation call installs the device entry. The split is not an
-implementation convenience — a contract's address is derived from the
-content of its deploy transaction, so no deploy-time code can compute
-a value bound to its own address. MIP-0013 section 3 makes this
-bootstrap normative.
+**Postcondition.** The custody account has one active epoch-zero device,
+an inbox encryption public key, and recovery state. It can receive assets and
+authorise operations. Recovery is usable only if the corresponding recovery
+authority and viewing capability can actually be reconstructed.
 
 ## Participants
 
 - **Bearer** — the person creating the account.
-- **Passkey authenticator** — the platform authenticator that holds the
-  passkey and gates it behind a biometric or PIN. It exposes a WebAuthn
-  PRF that returns a stable per-credential secret.
-- **Passport client** — the wallet application (browser or native) that
-  drives the ceremony and builds transactions.
-- **ZK prover** — generates the zero-knowledge proof the deploy requires;
-  in-browser (WASM) or a remote prover.
-- **Midnight ledger** — the node and chain that instantiate the contract.
+- **Authenticator** — protects the credential and gates PRF evaluation.
+- **Client** — derives the device key, holds viewing material and builds calls.
+- **Prover** — proves prepared operations locally or remotely.
+- **Ledger** — checks deployment/activation and applies accepted state changes.
 
 ## Diagram
 
@@ -39,141 +30,78 @@ bootstrap normative.
 sequenceDiagram
     autonumber
     actor Bearer
-    participant Auth as Passkey authenticator
-    participant Client as Passport client
-    participant Prover as ZK prover
-    participant Ledger as Midnight ledger
+    participant Auth as Authenticator
+    participant Client
+    participant Prover
+    participant Ledger
 
-    Bearer->>Client: Create a passport
-    Client->>Auth: WebAuthn create credential (PRF extension)
-    Auth-->>Bearer: Biometric / PIN prompt
+    Bearer->>Client: Create a Passport
+    Client->>Auth: Create PRF-capable credential and evaluate PRF
+    Auth-->>Bearer: User verification
     Bearer-->>Auth: Approve
-    Auth-->>Client: Credential (public key, credential id)
-
-    Client->>Auth: WebAuthn assertion, evaluate PRF(salt)
-    Auth-->>Bearer: Biometric / PIN prompt
-    Bearer-->>Auth: Approve
-    Auth-->>Client: PRF output (32 bytes)
-
-    Note over Client: device key ← derived from the PRF output<br/>(the device public key pk registers on-chain;<br/>the private half is re-derived from the passkey on each use, never stored)
-    Note over Client: recovery_secret ← fresh random<br/>recovery_commitment = commit(recovery_secret)<br/>No guardians yet. Enrolment is a later flow.
-    Note over Client: salt ← fresh random<br/>boot_commitment = persistentHash([DST_BOOT, salt, pk])
-
-    Client->>Prover: Build deploy tx from constructor(boot_commitment, recovery_commitment), then prove
-    Prover-->>Client: Deploy proof
-
-    Note over Client,Ledger: A brand-new account holds no Dust.<br/>Both transactions are submitted through a fee sponsor (C24).
-    Client->>Ledger: Submit contract deploy
-    Ledger->>Ledger: Instantiate account contract<br/>round = 0, device_epoch = 0,<br/>devices = {} (empty), boot = boot_commitment,<br/>recovery = recovery_commitment
-    Ledger-->>Client: Contract address
-
-    Client->>Prover: Build activate_initial_device(pk, salt), then prove
+    Auth-->>Client: Credential metadata and PRF output
+    Note over Client: Derive JubJub device keypair<br/>Create inbox encryption keypair and fresh boot salt<br/>Prepare retained recovery configuration and veto window
+    Client->>Client: Derive salted boot commitment
+    Client->>Prover: Prepare deployment with five constructor arguments
+    Prover-->>Client: Prepared deployment
+    Client->>Ledger: Fund and submit deployment, install verifier-key waves
+    Ledger-->>Client: Account address
+    Note over Ledger: spec_version = 3, device_epoch = 0<br/>device_count = 0, booted = false<br/>Inbox key, recovery public key, wrap and veto window installed
+    Client->>Prover: activate_initial_device_with_jubjub(pk, salt)
     Prover-->>Client: Activation proof
-    Client->>Ledger: Submit activation call
-    Ledger->>Ledger: Check persistentHash([DST_BOOT, salt, pk]) == boot<br/>Insert device entry for pk at epoch 0, use counter 0<br/>Burn the boot commitment
-
-    Note over Client: Persist: contract address + credential id.<br/>The device private key and the recovery secret never reach the ledger.
-    Client-->>Bearer: Passport ready (account address)
+    Client->>Ledger: Fund and submit activation
+    Ledger->>Ledger: Check key and boot commitment<br/>Install address-bound epoch-0 entry<br/>Set booted, burn boot commitment, advance round
+    Ledger-->>Client: Confirmed activation
+    Note over Client: Persist protected viewing material and derivation metadata<br/>Retain recovery authority or publish a guardian session
+    Client-->>Bearer: Account active, report actual recovery readiness
 ```
 
-## Narrative
+## Narrative and security boundary
 
-1. The bearer asks the client to create a passport.
-2-5. The client creates a WebAuthn credential with the PRF extension. The
-   authenticator gates it behind a biometric or PIN, and returns the
-   credential (its public key and credential id).
-6-9. The client evaluates the credential's PRF at a fixed salt, again
-   behind a biometric or PIN, and receives a 32-byte PRF output. (Some
-   platforms return the PRF output at creation time, folding these steps
-   into the previous ones.)
-10. The client derives the **device key** from the PRF output. The
-    private half is never written to disk: it is re-derived from the
-    passkey whenever a later flow needs to authorise a call.
-11. The client generates a fresh **recovery secret** and its commitment.
-    No guardians are enrolled at this point; guardian enrolment is a
-    separate ceremony. Setting the commitment now means recovery is
-    anchored from the account's birth.
-12. The client draws a fresh **salt** and computes the **boot
-    commitment**, a domain-separated hash binding the salt and the
-    device public key. The salt keeps pre-activation ledger state free
-    of values that would be stable for the same key across accounts.
-13-14. The client builds the deploy transaction, whose constructor
-    takes the boot commitment and the recovery commitment, and asks the
-    prover to produce the deploy proof.
-15. Because a brand-new account holds no Dust, the deploy is submitted
-    through a fee sponsor rather than paid by the bearer (the sponsored
-    zero-token onboarding of C24, confirmed to cover contract
-    deployment).
-16-17. The ledger instantiates the account contract at a fresh address:
-    round and device epoch at zero, an **empty** device set, the boot
-    commitment, and the recovery commitment. The constructor cannot
-    register the device entry itself — the entry is bound to the
-    contract's own address, which no deploy-time code can know.
-18-21. The client calls the permissionless **`activate_initial_device`**
-    circuit with the device public key and the salt. The contract checks
-    the pair against the boot commitment, inserts the device entry at
-    epoch zero and use counter zero, and burns the commitment. The call
-    is deterministic in the committed key, so it cannot be front-run to
-    a different device.
-22. The client persists the contract address and the credential id. The
-    device private key and the recovery secret stay on the bearer's
-    device.
-23. The passport is ready; the client reports the account address.
+The [constructor](../../contract/contracts/account.compact) takes
+`(initial_device_boot, encryption_key, initial_recovery_pk,
+initial_recovery_wrap, veto_window_seconds)`. It cannot bind an initial entry
+to its own eventual address, so it stores a salted boot commitment.
+Permissionless activation checks the committed key and salt, rejects
+small-order keys, installs the address-bound entry, and burns the commitment.
+Repeated activation is rejected. This two-stage design was authorisation
+erratum 2; upstream PR #250 incorporated it into MIP-0013 §3. It is no longer
+an outstanding deviation at the [reviewed standards revision](../plans/MIPS.md).
 
-## Properties this flow establishes
+The k256 and p256 arms use their own boot derivations and envelopes/policy.
+The direct P-256 arm verifies authenticator assertions under
+[`wa-json134`](../../contract/WEBAUTHN.md). In this PRF/JubJub path, by contrast,
+the derived signing key exists in client memory. Later authorisation passes
+signatures to the prover, not that private key.
 
-- **The ledger only ever sees commitments.** The device private key is a
-  witness to future proofs, never a ledger value. An observer of the
-  deploy learns a salted boot commitment and a recovery commitment;
-  after activation, a device entry that is itself a domain-separated
-  hash. None of them reveals the underlying key material, and the salt
-  keeps pre-activation state unlinkable across accounts using the same
-  key.
-- **The authenticator holds the root of authority.** Control of the
-  account reduces to the ability to evaluate the passkey PRF, which the
-  authenticator gates behind user verification. Nothing the client stores
-  is sufficient to authorise on its own.
-- **Recovery is anchored at birth.** The recovery commitment is set in the
-  constructor, so an account is never in a state where it cannot later be
-  recovered; only the guardian set is added later.
-- **The authentication scheme is a seam.** The contract checks device
-  authority through one internal seam. The standard instantiates it with
-  in-circuit JubJub Schnorr (C5, MIP-0013); the earlier prototype's
-  hash-preimage check satisfied the same seam, which is why the
-  replacement changed no other circuit and does not change this flow.
-- **Onboarding needs no pre-funding.** Fee sponsorship removes the
-  bootstrap paradox of needing funds to create the account that will hold
-  funds.
+Viewing material is distinct from device authority. Losing it can prevent
+shielded inbox discovery even if account control survives; an account address
+and credential id are not a sufficient backup. The contract stores the recovery
+wrap but cannot verify its plaintext or freshness.
 
-## Prototype and reference-implementation note
+**Client default caveat:** [CustodyAccount](../../contract/src/wallet/account.ts)
+without `opts.recovery` generates and discards a birth secret. This establishes
+valid recovery state, not usable recovery. Supply the retained configuration
+or publish a guardian session while an active device remains. The interface
+must not describe an account as recoverable merely because its circuits exist.
 
-The reference implementation (`contract/`) realises this flow exactly
-as drawn: the MIP-0013 section 3 bootstrap (boot commitment in the
-constructor, `activate_initial_device` installing the epoch-0 entry) is
-exercised by its conformance suite, and device authority is the
-in-circuit JubJub Schnorr seam of MIP-0013 rather than a preimage
-check.
+Bootstrap does not create a human-readable name or complete guardian transport.
+Sponsorship removes the need for bearer pre-funding only when an actual funding
+path is available. An incomplete verifier roster is not a ready account.
 
-The earlier account-custody prototype predates the bootstrap: its
-constructor registered a device commitment directly
-(`constructor(initial_device_commitment, recovery_commitment)`) and its
-seam checked hash-preimage knowledge — both expressly shaped for the
-standard to replace, as it since has. The prototype also used
-`transientHash` (Poseidon) for commitments where the standard uses
-domain-separated `persistentHash` (a recorded prototype caveat). In the
-prototype's demo onboarding script a random 32-byte device secret saved
-to `owner-identity.json` stands in for the passkey PRF derivation,
-whereas the demo app performs the real WebAuthn PRF ceremony shown
-above.
+## Implementation and evidence
 
-## References
+- [Reference guide](../../contract/README.md),
+  [authorisation suite](../../contract/src/tests/auth-conformance.ts), and
+  [23 October combined-account record](../../contract/GRANTS-COMPLETION.md):
+  current source and dated deployment/recovery evidence. A test source is not
+  itself a fresh execution result; the recorded run used matching cached keys.
+- [Account-custody prototype](../../experiments/account-custody-prototype/README.md):
+  separate passkey/recovery UX evidence with earlier contract semantics.
+- [Foundations demo](../../demo/mn-passport-foundations/README.md): separate
+  contracts and recovery placeholders, not this reference account.
+- [Standards register](../plans/MIPS.md) and [arc42](../arc42.md): canonical
+  MIP-0012/0013/0022 links, implementation boundaries and remaining review gates.
 
-- Standards: MIP-0012 (contract custody), MIP-0013 (account
-  authorisation; section 3 fixes the bootstrap this flow draws).
-- Components: C1 (account-custody contract), C5 (signing primitive / the
-  authentication seam), C9 (device-bound authentication), C14 (total-loss
-  recovery), C24 (fee sponsorship / zero-token onboarding).
-- Reference implementation: `contract/` (`contracts/account.compact`,
-  `src/tests/auth-conformance.ts` for the bootstrap test).
-- Prototype: `experiments/account-custody-prototype/` (historical
-  evidence base).
+Uncommitted deployment/device-secret probes from the old documentation branch
+are not evidence for this sequence and are not dependencies of this document.

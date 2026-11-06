@@ -2,15 +2,16 @@
 
 **Serves:** P1 · P3 · P4 · P5 · P8.
 
-**Status 2026/10/17:** recovery #165, Compact 0.35 #174, P-256 #175,
-caller-bound grants #176 and recovery entry reset #183 are merged. MIP-0030
-is Draft; [upstream #385](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/385) amends MIP-0013 and MIP-0022 to
-require atomic retirement of all prior device entries at finalisation.
-The reset has compilation/simulation evidence; regenerated keys, proof/node
-validation, expanded retirement cases and deployment sizing remain. Preserve
-the 15,000-verifier-byte budget per wave. Fresh combined-build/client-ABI/P-256
-caller validation, key-admissibility mapping and individual-device revocation
-remain separate. See [current evidence](../STATUS.md).
+**Status 2026/11/06:** main `fc19e47` includes recovery, P-256, caller-bound
+grants and the atomic recovery reset: schema v3, 52 circuits, three arms.
+The [23 October record](../../../contract/GRANTS-COMPLETION.md) covers two
+corrected recoveries and P-256 unshielded grants with matching source hashes.
+The ten-wave build retained the 15,000-verifier-byte budget and reused matching
+cached keys after textual ZKIR comparison. Clean regeneration, expanded
+retirement cases, successful P-256 forwarded/shielded grant calls, key-admissibility
+mapping and individual-device revocation remain separate. See the
+[standards register](../MIPS.md) and [reference guide](../../../contract/README.md).
+The dated August/September observations below describe earlier stages.
 
 
 ## Outcome
@@ -80,8 +81,8 @@ and two gaps in the published standard are measured.
 - **Gap: removal retires an entry, not a device (erratum 8).** A device
   that enrols a second entry for its own key survives `remove_device`;
   deriving the entry in-circuit does not prevent it. Recovery must atomically retire all prior entries with the epoch change. The remedy is a contract-maintained
-  device identity in §3, a schema change proposed to ride the
-  `spec_version = 2` redeploy; ruling pending upstream.
+  device identity in §3. The former suggestion to bundle it with a grant
+  redeploy did not land; schema v3 does not resolve this gap.
 
 ## Dependencies
 
@@ -115,9 +116,9 @@ across schema or ledger generations remains implementation work.
 
 **Device identity (erratum 8).** Complete revocation needs a
 contract-maintained device identity in MIP-0013 §3. That is a
-state-schema change and so a redeploy; the question is whether it
-rides the scoped-grants `spec_version = 2` redeploy, as that draft
-proposes, or a separate one. Decision pending upstream.
+state-schema change requiring a separately reviewed migration/deployment
+plan. Neither v2 grants nor v3 caller binding implements this remedy;
+it is MIP-0013 review work, not a granted property of the grant draft.
 
 ## Failure modes
 

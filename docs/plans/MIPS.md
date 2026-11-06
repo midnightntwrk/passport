@@ -1,311 +1,149 @@
-# Midnight Passport — MIPs Pipeline
+# Midnight Passport — Standards register
 
-The Midnight Improvement Proposals (MIPs) that Midnight Passport
-produces or adopts. Midnight's improvement-proposal process is live:
-problem statements (MPS) and proposals (MIP) move through the
-MIP-0001 lifecycle in the
-[midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals)
-repository, with editor-assigned numbers and weekly review sessions.
-Passport works through that process: problems are framed as MPSs,
-standards land as MIPs, and every normative claim is backed by
-evidence in this workspace (an experiment, a reference
-implementation, or a cryptographer review).
+This is the single local register of standards Passport authors, adopts, or
+depends on. Upstream owns normative text and lifecycle; [arc42](../arc42.md)
+owns the architectural overview. [Local file roles](../mps-mip/README.md)
+distinguish pointers, historical copies, and working drafts.
 
-The MIPs are the central body of v1.0 deliverables. The October MVP
-consumes them as they firm up — the account keystone is already
-published upstream and implemented; the remaining MIPs continue toward
-feature-complete v1.0.
+**Verified 2026/11/06:** canonical headers were read from a fresh checkout of
+[midnight-improvement-proposals at `02fce36`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/02fce36cfa44541305310dc25fd38f399dbe8d92).
+The links below follow upstream `main`; the pinned revision records this
+observation. Passport implementation statements refer to fetched `origin/main`
+[`fc19e47`](https://github.com/midnightntwrk/passport/tree/fc19e471536febb2133f20e817847251622dcdf5).
+Publication, acceptance, implementation, and deployment are distinct.
 
-Each MIP names an external co-author or committed external reviewer —
-unilateral drafts become shelfware. The adoption narrative tracks who
-that counterpart is for each MIP.
+## Published standards and problem statements
 
-Last updated: 2026/10/17. See the [development-status reconciliation](STATUS.md)
-for implementation, ticket and release evidence.
+| Canonical document | Status at reviewed revision | Passport role |
+|---|---|---|
+| [MPS-0018 — Multi-key Account Custody](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0018-asset-custody-model.md) | Proposed | C1, C4, C14; custody problem addressed by MIP-0012/0013/0022. |
+| [MPS-0027 — Domain Separation](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0027-domain-separation.md) | Proposed | C8; problem statement for MIP-0021. |
+| [MPS-0039 — Calling a Contract Requires Its Full Compiled Artifacts](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0039-lightweight-contract-interaction.md) | Proposed | C6; heavy artefact distribution, including the prover-key problem addressed by MIP-0020. |
+| [MPS-0040 — Cross-Contract Call Provenance](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0040-cross-contract-call-provenance.md) | Proposed | C1, C2, C12; callee-side authority and immediate caller identity. |
+| [MIP-0012 — Contract Custody of Midnight-Native Assets](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012-native-asset-custody.md) | Proposed | C4, C1; custody and abstract authorisation seam. |
+| [MIP-0013 — Multi-key Account Authorisation](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013-account-authorisation.md) | Proposed | C1, C5; bootstrap, device authority and lifecycle, mandatory recovery gate. |
+| [MIP-0020 — On-Demand Prover Keys from Bundled ZKIR](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md) | Proposed | C6; deterministic regeneration and toolchain compatibility. |
+| [MIP-0021 — Domain-Separation Convention](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0021-domain-separation.md) | Proposed | C8; decentralised convention, explicitly not a central registry. |
+| [MIP-0022 — Recovery Paths for Custody Accounts](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) | Proposed | C13, C14, C15; recovery authorisation, control and viewing capability. |
+| [MIP-0030 — ECDSA Authorisation for Custody Accounts](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md) | Draft | C5, C9; k1 signing envelopes and r1 bounded WebAuthn verification. Replaces the former local general scheme-registry draft; no k1 sunset policy. |
 
----
+## Adopted standards and adjacent dependencies
 
-## Published upstream (Passport-authored; upstream copy is canonical)
+| Canonical document | Status at reviewed revision | Boundary |
+|---|---|---|
+| [MIP-0003 — ECDSA signature support](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0003-ecdsa-support.md) | Accepted | Ledger-level secp256k1 support, distinct from in-circuit authorisation and wallet derivation. |
+| [MIP-0007 — Name Service Registry and Resolver](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0007-name-service-registry-and-resolver.md) | Proposed | Passport adopts this naming direction; `passport.night` issuance and contract-owned-name integration remain dependencies. |
+| [MIP-0008 — CAIP-2 Network Identifiers](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0008-caip-2-network-identifiers.md) | Draft | Network identifier framing; examples are not a ratified registry. |
+| [MIP-0025 — Capsule Runtime](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0025-capsule-runtime.md) | Draft | Adjacent managed-state/client architecture proposal; not an implemented Passport runtime or an adoption decision. |
 
-| Upstream ID | Title | Status | Component |
-|---|---|---|---|
-| **MPS-0018** | Multi-key Account Custody for Midnight-Native Assets | Proposed | C1 · C4 |
-| **MPS-0027** | Domain Separation for Midnight Hash Constructions | Proposed | C8 |
-| **MIP-0012** | Contract Custody of Midnight-Native Assets | Proposed | C4 · C1 |
-| **MIP-0013** | Multi-key Account Authorisation for Custody Contracts | Proposed | C1 · C5 |
-| **MPS-0039** | Calling a Contract Requires Its Full Compiled Artifacts | Proposed | C6 |
-| **MIP-0020** | On-Demand Prover Keys from Bundled ZKIR | Proposed | C6 |
-| **MIP-0022** | Recovery Paths for Custody Accounts | Proposed | C14 · C15 · C13 |
-| **MIP-0030** | ECDSA Authorisation for Custody Accounts | Draft | C5 · C9 |
-| **MPS-0040** | Cross-Contract Call Provenance in Compact Circuits | Proposed | C1 · C12 |
+## Implementation and conformance boundary
 
-MIP-0012 and MIP-0013 are the two building blocks of the multi-key
-account keystone MPS-0018 recommends. Implementing them surfaced three
-errata — the direct-transfer return signature, the unconditional DST
-derivation, and the post-deploy bootstrap — all proposed and merged
-upstream, so the published texts match what the reference
-implementation (`contract/`) exercises. The direct
-contract-to-contract validation also restated the payment-mode section
-upstream: one-hop counterparty-private routing and linking-accepted
-direct transfer are both normative.
+The [reference contract](../../contract/README.md) at the reviewed Passport
+revision has **schema v3, 52 non-pure circuits, and JubJub, k256 and p256 arms**.
+It includes signature-gated two-phase recovery and caller-bound grants.
+P-256 uses the bounded `wa-json134` profile; Compact 0.35 already supplies
+native P-256. Browser coverage, general WebAuthn interoperability and a
+complete product remain separate claims.
 
-Earlier implementation runs measured two gaps in MIP-0013 that the errata
-did not cover, both live on the JubJub arm as published and reproduced
-on the interim secp256k1 arm. First, the curve identity passes as a
-device key: each arm's verification equation collapses at the identity,
-so an identity "key" authorises with no secret at all. The reference
-contract rejects it at the seam and the bootstrap (cofactor clearing on
-JubJub, a non-default check on secp256k1); §4 does not yet require the
-rejection. Second, removal retires one set element rather than a
-device: a device that enrols a second entry for its own key survives
-`remove_device`, and deriving the entry in-circuit does not prevent it
-(erratum 8, demonstrated on node against both enrolment shapes). Only
-recovery with atomic entry retirement provides total revocation; an epoch
-bump alone is insufficient for unchecked opaque entries. The remedy is a
-contract-maintained device identity in §3, a state-schema change and so
-a redeploy; the scoped-grants draft proposes carrying it in its
-`spec_version = 2` redeploy. The ruling is pending upstream. Two
-further facts bear on the pair: the account composes as a callee of
-other contracts with the seam verifying through the call boundary, so
-its circuit signatures and verifier keys are now a public ABI and the
-gap fixes should land before dependents accumulate; and the seam is
-carried as co-resident arms in the reference contract, which is the
-shape the MIP-0030 ECDSA extension documents.
+- **Bootstrap:** the boot commitment plus post-deploy activation addresses
+  authorisation erratum 2. Upstream #250 incorporated that design into
+  MIP-0013 §3; it is no longer an outstanding deviation at the reviewed
+  standards revision.
+- **Recovery:** the old branch's absent entry point was a gap against
+  MIP-0013 §8's MUST. Main implements the entry points and #183's atomic
+  device-set reset. [23 October evidence](../../contract/GRANTS-COMPLETION.md)
+  covers two on-node recoveries with source matching this baseline. Matching
+  cached keys were used after textual ZKIR comparison; this is not clean
+  key regeneration or the expanded adversarial retirement matrix. Erratum 7
+  and I-5.4 require retirement even for pre-planted future-epoch entries or
+  entries added while recovery is pending.
+- **Individual removal:** erratum 8 remains open. A device can have enrolled
+  more than one entry; removing an entry is not identity-wide revocation.
+  The device-identity remedy belongs to MIP-0013's design/review work, not a
+  delivered scoped-grants feature. Neither the v2 grant schema nor v3
+  caller binding implements that remedy. Removing a device also leaves its
+  grants valid; the grant draft §7.3 requires the client to call
+  `revoke_all_grants` in the same transaction or immediately afterwards when
+  compromise is suspected.
+- **Scheme naming:** code `k256` maps to MIP-0030 `k1`, and `p256` to `r1`.
+  Canonical boot/device tags are `k1:v2` / `r1:v2`; operation tags use v1.
+  The former local v1 boot/device registry is superseded, not an alternative
+  interoperable encoding.
+- **Domain separation:** MIP-0021 is verified Proposed. Its `midnight:`
+  convention, version syntax and no-trailing-zero rule require explicit
+  compatibility work for existing Passport domain bytes. The old central
+  registry design in C8 is not adopted upstream. See
+  [ADR-0001](../adrs/0001-domain-separation-registry.md); do not silently
+  change cryptographic constants to make prose appear conformant.
+- **Provenance:** the current account reads immediate caller identity through
+  the Compact kernel. A successful call does not establish the calling
+  circuit, and a caller contract can lend its identity through permissive
+  entry points. Naming integration still needs its own validation.
 
-**1 October qualification:** Compact 0.35 adds compiler/runtime checks;
-the older weak-key observations above are not a current accepted-proof
-admissibility map. That mapping and the normative correction remain open.
-Caller-bound grants in merged #176 use schema v3; coordinate the outstanding
-device-identity remedy with grants/recovery migration rather than assuming
-the earlier proposed schema-v2 remedy has shipped.
+The [contract README](../../contract/README.md) owns detailed limitations;
+publication and a passing reference test do not establish full conformance,
+cryptographic review, or safety of an existing deployment.
 
-**Path to Active for the keystone pair.** Cryptographer review of the
-signature scheme (an explicit acceptance criterion), the FROST
-ciphersuite specification with a t-of-n committee demonstration, a
-second independent implementation, ecosystem review in the upstream
-discussion venues, and the two gap remedies above.
+## Local drafts and evidence
 
-## Adopted upstream (not Passport-authored)
+### Scoped grants and dApp connection
 
-### Key derivation & address format — MIP-0003 (Accepted)
+The [grant draft](../mps-mip/mips/mip-xxxx-scoped-grants.md) covers C10–C12 and
+C23: bounded spend authority, lifecycle, redirect consent, sign-in and viewing
+capability hand-off. Read scope is not ledger-enforced. Request proofs sign
+transmitted bytes, without JSON canonicalisation. Sections 11.1 and 11.2
+already define CAIP-25 `scopedProperties` and Open Wallet Standard policy
+mapping; these are not undrafted scopes. Transport/discovery integration,
+interoperability and acceptance remain work. Passport review completed in
+#195; this review did not re-audit unmerged upstream submissions.
 
-The HD derivation tree (`m / 44' / 2400' / account' / role / index`,
-the role table, and coin type **2400**) and the `mn_addr` Bech32m
-address format are specified in Midnight's WalletEngine Specification,
-extended by **MIP-0003 (ECDSA support)**, now Accepted upstream.
-Passport **adopts** these rather than drafting parallel standards; the
-ARC review that strengthened MIP-0003 concluded when the proposal was
-accepted. The one derivation concern *not* covered upstream — deriving
-the device key from a WebAuthn passkey (PRF → JubJub scalar) — lives
-in [C9](components/C9-device-bound-authentication.md) and is a
-candidate MIP of its own (below).
+[E1](../../contract/GRANTS-E1.md), [E2/E4](../../contract/GRANTS-E2.md),
+[E3](../../contract/GRANTS-E3.md), and the
+[combined-account record](../../contract/GRANTS-COMPLETION.md) retain their
+run-specific coverage. The E4 addendum records funded unshielded grant spends
+on node for JubJub/k256; the 23 October run adds P-256 unshielded grants.
+Successful P-256 forwarded/shielded grant spends are outside that combined run.
+The E2 missing pre-grants deployment control remains a limitation of that
+specific evidence group; later runs must not silently erase it.
 
-### Name service — MIP-0007 (Proposed; adopted, with our amendment merged)
+### Circuit artefact identity, provenance, and reproducibility
 
-Passport adopts the deployed upstream name service (MIP-0007,
-addressing the Accepted MPS-0012 on human-readable aliasing) rather
-than authoring a parallel standard. The fit assessment's number-one
-condition is satisfied: MIP-0007 now carries normative
-**forward-looking authorisation arms** — contract-owned names via
-cross-contract authorisation (the arm a multi-key account contract
-needs) and ECDSA owners, both availability-gated. The contract-owned
-arm's mechanism is no longer hypothetical:
-`experiments/cross-contract-calls` validated seam-gated account
-circuits driven through the call boundary and atomic value transfer
-across it on the ledger-9 toolchain (2026/09/03); the remaining gate
-is a public network on that ledger. What remains
-Passport-side is the `passport.night` sub-domain layer: issuance
-mechanics, squat resistance, and Foundation policy. See
-[C2](components/C2-name-service.md).
+The broader [circuit-artefact MPS draft (PR #172)](https://github.com/midnightntwrk/passport/pull/172)
+is reviewed separately. This documentation change links to that review and
+does not include or absorb the draft. Its unnumbered Proposed header does not
+establish upstream submission.
+MPS-0039 and MIP-0020 cover the published footprint/regeneration work; producer
+identity and broader provenance questions remain distinct. The
+[proving-key experiment](../../experiments/proving-key-regeneration/README.md)
+is present on main. Its historical 30-circuit measurements are not measurements
+of today's 52-circuit account.
 
-### Chain identifiers — MIP-0008 (Draft)
+## Remaining proposal and review scopes
 
-CAIP-2 network identifiers of the `midnight:mainnet` style. Passport
-surfaces that need a chain identifier follow it.
+- Connection transport/discovery and privacy-preserving sign-in integration
+  (C23), extending the grant draft's existing carriage/mapping work.
+- Credentials (C18–C21): attestation trees, selective disclosure and nullifiers.
+- PRF-to-device-key portability (C9), separate from direct P-256 WebAuthn.
+- MIP-0030 typed recipes/vectors, UV policy across accepting verifiers,
+  key/scalar enforcement mapping and cryptographic review.
+- Recovery multi-session cryptography, guardian transport/liveness,
+  interoperability and viewing-wrap freshness/rotation.
+- Supported SDK/WASM key-regeneration APIs, compatible profiles and vectors.
 
-### Domain separation — MIP-0021 (Proposed), compatibility follow-up
+Recovery, domain separation, ECDSA authorisation, provenance and on-demand
+prover keys are no longer unclaimed publication slots. Acceptance and
+integration gates remain even after a proposal receives a number.
 
-**Scope.** MIP-0021 rejects a central registry; reconcile that with the earlier
-ADR-0001 choice and MIP-0030 compatibility before changing any committed bytes.
-The earlier registry work MPS-0027 motivates: every `persistentHash` use
-site gets a domain prefix, recorded centrally (ADR-0001: central
-registry, compile-time enforcement deferred). The custody and
-account-authorisation MIPs already name their tags against the future
-registry (`midnight:custody:inbox:v1`, `midnight:account:device:v1`,
-`midnight:account:auth:v1:*`, `midnight:account:boot:v1`).
-Cryptographer review gates ratification. Evidence:
-`experiments/domain-separation-inventory/`. The case has sharpened:
-upstream code now ships an untagged JubJub Schnorr challenge, and the
-unpublished `persistentHash` byte framing has been raised as a gap by
-others in the upstream venues.
+## Process and maintenance
 
-[Upstream convention #331](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/331)
-merged as **MIP-0021 (Proposed)**, with feedback on encoding, catalogue/source of truth and
-Passport compatibility. Transient-hash scope and benchmark corrections
-also remain review points; C8 is not complete.
+Follow [MIP-0001](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0001-mip-process.md)
+and the upstream templates. Keep lifecycle observations here with a date and
+pinned source. Historical snapshots retain their body and section anchors;
+canonical pointers should point directly upstream. New normative changes
+belong upstream, with local differences recorded in arc42 and the contract
+reference. Local `xxxx` filenames do not assign numbers.
 
-**Maps to component.** [C8](components/C8-domain-separation-registry.md).
-
----
-
-## Published extensions and implementation follow-up
-
-### On-demand prover keys — MIP-0020 (Proposed)
-
-[Upstream #338](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/338) merged; [MIP-0020](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md) is canonical.
-Authors remain **Nicolas Di Prima and Vincent Hanquez**. Native regeneration
-is evidenced in Passport #170/#173. Supported SDK/WASM APIs, compatible keygen
-profiles, validation vectors and integration remain under #168.
-
-### Recovery paths — MIP-0022 (Proposed)
-
-[MIP-0022](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md) is published through [#339](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/339), authored by
-**Nicolas Di Prima and Raphael Toledo**. The reference's two-phase gate uses
-recovery/successor signatures with a veto window; reconstructed secrets never
-enter the proof. The BUSS construction also preserves the viewing capability.
-
-[Upstream #385](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/385) merged on 15 October, amending MIP-0013 §8/AUTH-6
-and MIP-0022 finalisation/REC-8. Finalisation must atomically retire every prior
-device entry, including pending-phase enrolments, and install the authorised
-successor alone. Unchecked opaque entries must be cleared or protected by an
-equivalent contract-assigned registration epoch; later epoch changes must not
-reactivate retained entries. This resolves the normative recovery requirement
-from erratum 7, not individual-device removal (erratum 8).
-
-[Passport #183](https://github.com/midnightntwrk/passport/pull/183) implements the reset. Compilation (key generation
-skipped) and simulation passed; regenerated keys, proof/node validation,
-deployment-wave sizing and the expanded retirement matrix remain. Existing
-accounts need a corrected verifier where maintenance is available, or migration
-where it is retired. Publication changes no deployed state.
-
-Multi-session cryptographic review, guardian transport/liveness, interoperability,
-successor-key validation and viewing-wrap freshness/rotation remain under #62.
-
-**Components:** [C14](components/C14-total-loss-recovery-flow.md),
-[C15](components/C15-helper-protocol.md), [C13](components/C13-lost-device-flow.md).
-
-### ECDSA authorisation — MIP-0030 (Draft)
-
-[MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md) merged on 16 October through [#374](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/374).
-The upstream text is canonical; the [former draft](../mps-mip/mips/mip-xxxx-signature-schemes.md)
-is now a pointer. It extends the MIP-0013 signing boundary with k1 envelope
-hashes and v2 commitments, r1 WebAuthn policy binding, bounded profiles, and
-separate device/grant replay state. It preserves existing bytes and sets no k1
-sunset policy. BIP-340 is separate experimental work, not a MIP-0030 scheme.
-
-Compact 0.35 supplies native P-256; merged Passport #175 records `wa-json134`
-and one live Safari account-key rotation. Remaining under #51: complete typed
-recipes/vectors, a common UV policy and enforcement across all accepting
-verifiers, key/scalar admissibility mapping, cryptographic review, and MIP-0021
-compatibility. Publication does not establish Active status or general browser
-interoperability, and creates no new SDK/adopter prerequisite.
-
-**Components:** [C5](components/C5-signing-primitive.md),
-[C9](components/C9-device-bound-authentication.md).
-
-## Local drafts awaiting upstream submission
-
-### Scoped grants and dApp connection (successor extension)
-
-**Scope.** A separate Draft, co-authored with the Midnight Foundation,
-for bounded grant authority and the dApp connection ceremony. Grants
-are distinct from device entries and are enforced inside the custody
-account: operation, colour, per-call/cumulative bounds, recipient,
-expiry and optional immediate-contract caller. Issuance and revocation
-remain device-authorised. Section 12 explicitly defines the combined
-MIP-0013 profile for grant calls without requiring a separately merged
-parent amendment. Device-handle privacy remains unchanged; grant calls
-are linkable by id and retain custody-operation disclosures.
-
-The reference schema is `spec_version = 3`. Historical v2 evidence,
-caller restriction evidence and profiled P-256 evidence are identified
-separately; native secp256r1 is available and MIP-0030 specifies the
-ECDSA/WebAuthn requirements. The draft distinguishes normative rules
-from verified coverage and keeps independent review and incomplete
-conformance/ceremony work in Path to Active. The first review destination
-is the Passport repository. Local copy:
-`docs/mps-mip/mips/mip-xxxx-scoped-grants.md`.
-
-**Maps to components.** [C10](components/C10-scoped-grant-primitive.md) ·
-[C11](components/C11-grant-lifecycle.md) ·
-[C12](components/C12-chain-side-enforcement.md) ·
-[C23](components/C23-dapp-connection-protocol.md) (issuance half).
-
-### MIP-0025 — Managed Private State and Capsule Runtime (Draft)
-
-[MIP-0025](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0025-capsule-runtime.md)
-is published through #334 with **Draft** status. Track its proposed private-state
-boundary in C16 and the SDK review; it is not a shipped storage or backup service.
-Discussion: https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/355.
-Custom spend logic remains open as
-https://github.com/midnightntwrk/midnight-improvement-proposals/pull/335;
-**MIP-0028 is reserved, not published**.
-
-### dApp ↔ Wallet Connection Protocol
-
-**Scope.** The connection surface third-party dApps build against —
-Open Wallet Standard is the chosen direction, with CAIP-25, EIP-6963,
-and WalletConnect v2 as underlying transport and discovery layers, and
-privacy scopes plus an asynchronous proof lifecycle on top. The
-grant-issuance ceremony is now specified in the scoped-grants draft
-above; what this proposal still owns is the OWS handshake flag, the
-scope mapping table, and the discovery and transport layering. A
-related finding: every Midnight wallet key already signs an account
-challenge (BIP-340) on every shipped surface, so a plain wallet can
-operate a Passport account once the seam grows that arm.
-
-**Maps to component.** [C23](components/C23-dapp-connection-protocol.md).
-
-### DecentralisedAuth (sign-in)
-
-**Scope.** Privacy-preserving dApp sign-in — the "sign-in-with-Passport"
-primitive that does not leak the user's address or identity to the dApp
-by default. Sister protocol to the connection MIP: connection covers
-capability grants, this covers authentication.
-
-**Maps to component.** [C23](components/C23-dapp-connection-protocol.md).
-
-### Privacy-preserving credentials
-
-**Scope.** Attestation-tree domain separators, nullifier construction,
-and multi-issuer support for privacy-preserving verifiable
-credentials.
-
-**Maps to component.** [C20](components/C20-selective-disclosure-proof.md)
-(with C18 · C19 · C21).
-
-### Candidate MIPs
-
-- **Passkey-derived device keys** — the PRF → JubJub scalar
-  derivation, domain-separated under the registry; graduates from C9
-  if it needs to become a standard for cross-wallet portability.
-- **Viewing-key sharing** — merged experiment [#177](https://github.com/midnightntwrk/passport/pull/177)
-  demonstrates 192-byte inbox reader envelopes and fresh-client restoration
-  with software credentials and synthetic PRF. Protocol, bootstrap, roster
-  trust and recovery decisions remain before proposing a standard.
-
-**Dependencies now available:** Compact 0.35 exposes P-256 verification and
-immediate caller identity. Call provenance is already published as
-MPS-0040; #176 covers immediate-contract pins, not calling-circuit identity
-or all broader provenance requirements. BIP-340 still needs secp256k1
-point operations.
-
----
-
-## Process notes
-
-- Problems are filed as MPSs, standards as MIPs, per the upstream
-  MIP-0001 lifecycle: Draft status on entry, editor-assigned numbers,
-  and the MPS header's Proposed Solutions field linking the MIPs that
-  address it.
-- Local working copies live in [`docs/mps-mip/`](../mps-mip/); once a
-  document merges upstream, the upstream copy is canonical.
-- Each MIP names its external co-author or committed reviewer at
-  draft time. If none can be named, the MIP is not yet ready to
-  start.
-- Earlier internal pipeline labels map to the upstream register as
-  follows: MIP-3A → MIP-0012, MIP-3B → MIP-0013, STD-03 → the
-  domain-separation registry (MPS-0027 lineage), MIP-4 → MIP-0022 recovery
-  paths, MIP-5 / MIP-7 → connection and sign-in, MIP-6 → credentials,
-  MIP-8 / STD-06 → superseded by the MIP-0007 adoption, MIP-9 →
-  MIP-0030 ECDSA authorisation, MIP-10 → scoped grants and dApp connection.
+Earlier internal labels map as follows: MIP-3A → MIP-0012; MIP-3B → MIP-0013;
+MIP-4 → MIP-0022; STD-03 → MPS-0027 / MIP-0021; MIP-8 / STD-06 → MIP-0007
+adoption; MIP-9 → MIP-0030. MIP-5, MIP-6, MIP-7 and MIP-10 are old internal
+connection, credentials, sign-in and grants labels, not those upstream numbers.

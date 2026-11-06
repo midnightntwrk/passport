@@ -1,5 +1,10 @@
 # Pitfalls Research — Midnight Passport
 
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 **Domain:** Threshold-signing seedless wallets + on-chain naming + privacy-preserving credentials
 **Researched:** 2026/04/16
 **Confidence:** HIGH (cryptographic and protocol pitfalls backed by disclosed CVEs / eprint papers); MEDIUM (regulatory interpretation, which is evolving); HIGH (operational and UX patterns extracted from this codebase and adjacent ecosystems).

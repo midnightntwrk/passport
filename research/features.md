@@ -1,5 +1,10 @@
 # Feature Research — ARC Passport
 
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 **Domain:** Seedless, privacy-preserving Web3 wallet with threshold signing, named accounts, and privacy-preserving credentials
 **Researched:** 2026/04/16
 **Confidence:** MEDIUM–HIGH (each product anchored to current official documentation; some ecosystem items rely on a single authoritative source and are flagged LOW where relevant)

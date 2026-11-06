@@ -12,6 +12,13 @@ Requires: none
 Replaces: none
 ---
 
+> **Historical local snapshot — not synchronised.** The canonical text is
+> [MIP-0012](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012-native-asset-custody.md). The original header and body below
+> are retained for provenance and existing section links. For publication
+> status and local implementation differences, see the
+> [standards register](../../plans/MIPS.md). Reviewed 2026/11/06.
+
+
 <!--
  Copyright 2026 Midnight Foundation
 

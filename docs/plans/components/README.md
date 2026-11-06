@@ -1,5 +1,10 @@
 # Midnight Passport — Components
 
+> **Scope.** These canvases describe the v1.0 target, choices, and dated
+> evidence. They are not a feature-completion checklist. The current
+> implementation boundary is in [arc42](../../arc42.md); publication status
+> is maintained in the [standards register](../MIPS.md).
+
 The functional surfaces feature-complete v1.0 needs to provide. A
 *component* is named at the level where alternative mechanisms exist for
 the same surface — not abstract enough to be a promise (those live in
@@ -10,7 +15,8 @@ dependencies, open questions, failure modes, alternatives.
 ## CAKE-vocabulary anchor
 
 The component inventory below maps to **CAKE's four-layer reference model**
-(Chain Abstraction Key Encapsulation), the framework adopted as reference
+([Chain Abstraction Key Elements](https://frontier.tech/the-cake-framework)),
+the framework adopted as reference
 for v1.0. CAKE is a vocabulary, not a protocol or library — adopting it is
 a matter of architectural shape and intent primitive, not infrastructure.
 
@@ -64,7 +70,7 @@ ecosystem; Passport integrates against that architecture via C25.
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
 | [**C13**](C13-lost-device-flow.md) | Lost-device flow | Decided: any surviving device revokes via the account-authorisation MIP's `remove_device` (1-of-n, last-device guard), with corrected atomic recovery retirement as the stronger fallback. Implemented in the prototype. | P3 · P4 |
-| [**C14**](C14-total-loss-recovery-flow.md) | Total-loss recovery flow | Decided: BUSS / ANARKey stateless guardians plus paper keys (EPRINT 2025/551), implemented in the prototype behind the recovery seam. Published as MIP-0022 (Proposed); retirement amendment #385 is merged, with proof/node validation of #183 outstanding. | P1 · P5 · P6 |
+| [**C14**](C14-total-loss-recovery-flow.md) | Total-loss recovery flow | Decided: BUSS / ANARKey stateless guardians plus paper keys (EPRINT 2025/551), implemented in the prototype behind the recovery seam. Published as MIP-0022 (Proposed); retirement amendment #385 is merged; two corrected recoveries passed on-node on 23 October with matching cached keys. Expanded retirement cases and clean regeneration remain. | P1 · P5 · P6 |
 | [**C15**](C15-helper-protocol.md) | Helper protocol | The protocol recovery helpers run. The working candidate is the prototype's stateless-guardian BUSS wire format (shared across CLI and app); specified by MIP-0022 (Proposed); transport and interoperability remain. Substitutable per P8. | P5 · P8 |
 
 ### Wallet state and storage
