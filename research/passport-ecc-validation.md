@@ -14,6 +14,32 @@ The reference account rejects weak signer keys at use, but key enrolment and
 encryption-key updates have validation gaps. Documentation also conflates
 historical runtime behavior with current guarantees.
 
+**Resolution update — 3 November 2026.** [PR #197](https://github.com/midnightntwrk/passport/pull/197),
+implemented in commit
+[`ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1`](https://github.com/midnightntwrk/passport/commit/ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1),
+resolved the client input and zero-scalar findings described below:
+
+- [TypeScript device/grantee constructors](https://github.com/midnightntwrk/passport/blob/ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1/contract/src/wallet/signer.ts)
+  reject noncanonical or zero JubJub/secp256k1 signing secrets.
+- [Rust signing-secret imports and key/nonce sampling](https://github.com/midnightntwrk/passport/blob/ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1/contract/signer-rs/src/main.rs)
+  reject malformed/empty/zero secrets and retry zero JubJub key/nonce samples;
+  [grant signing](https://github.com/midnightntwrk/passport/blob/ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1/contract/signer-rs/src/grants.rs)
+  uses the same nonzero sampler. Legitimate zero Schnorr response scalars remain
+  permitted; they are distinct from zero signing keys or nonces.
+- [Hex decoding](https://github.com/midnightntwrk/passport/blob/ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1/contract/src/wallet/hex.ts)
+  rejects malformed hexadecimal syntax, and
+  [inbox key import](https://github.com/midnightntwrk/passport/blob/ffa5f299b6ad81c6824d0b7c92c51178cf2e05c1/contract/src/wallet/inbox.ts)
+  enforces exactly 32 raw bytes for X25519 public and secret keys before DER
+  construction.
+
+The October observations, case counts and JSON receipts remain historical
+characterisation of the reviewed baseline; they are not current expectations
+for the corrected import paths. These fixes do not close opaque key-installation
+validation, inbox/recovery-wrap consistency, or the proof/backend and live-node
+scope limits below. Nonzero sampling also does not establish RNG quality or
+prevent repeated nonzero nonces from a faulty RNG. No contract verifier or
+ledger schema was changed by #197.
+
 ## 1. Protections present
 
 | Boundary | Observed protection and remaining dependency |
@@ -41,8 +67,9 @@ This misses the issuance obligation in [mip-xxxx-scoped-grants.md, §3.3](../doc
 
 Device enrolment similarly accepts an opaque derived entry. The
 `JubjubDevice`, `JubjubGrantee`, `K256Device` and `K256Grantee` constructors
-(source: [contract/src/wallet/signer.ts](../contract/src/wallet/signer.ts)) accept
-secret scalar zero, although their normal generators exclude it. K256's
+(source at the reviewed baseline: [contract/src/wallet/signer.ts](https://github.com/midnightntwrk/passport/blob/2b60da77a00de69d04456c291fd213f827966cde/contract/src/wallet/signer.ts)) accepted
+secret scalar zero, although their normal generators excluded it. Those client
+imports were corrected by #197; opaque on-chain enrolment remains separate. K256's
 resulting identity key is rejected when deriving its commitment or using it.
 The constructor in [contract/contracts/account.compact](../contract/contracts/account.compact) also accepts
 an identity birth recovery key; the recovery gate subsequently refuses it.
@@ -56,7 +83,8 @@ so adding a dead entry alone does not establish account lockout. These cases
 require an authorised enrolment or deployment input, not a permissionless call.
 
 **Action:** validate keys before deriving and approving enrolment commitments;
-reject zero imported signing secrets and invalid birth recovery keys. If validity
+reject invalid birth recovery keys. Zero imported signing secrets are now
+rejected by #197. If validity
 at issuance must be enforced on-chain, accept the key or a proof about its
 committed preimage. An opaque hash alone cannot establish key validity.
 
@@ -96,11 +124,12 @@ Do not require generic Edwards-point validation for X25519's Montgomery inputs.
 This is distinct from the upstream Jubjub encryption leak: the tested Node path
 fails agreement instead of deriving a publicly known masking key.
 
-### C. Rust Jubjub signing permits zero secrets/nonces — negligible sampling probability, serious consequence
+### C. Rust Jubjub signing permitted zero secrets/nonces — historical finding, corrected by #197
 
-The Rust functions `jubjub_scalar_from_hex` and `sign_jubjub` (source: [contract/signer-rs/src/main.rs](../contract/signer-rs/src/main.rs)) accept
-secret zero, including empty/`0x` input, and sample nonce scalars without retrying zero; the
-grant signer's `fresh_nonce` (source: [contract/signer-rs/src/grants.rs](../contract/signer-rs/src/grants.rs)) does the same.
+At the pre-#197 baseline, the Rust functions `jubjub_scalar_from_hex` and
+`sign_jubjub` (source: [contract/signer-rs/src/main.rs](https://github.com/midnightntwrk/passport/blob/2b60da77a00de69d04456c291fd213f827966cde/contract/signer-rs/src/main.rs)) accepted
+secret zero, including empty/`0x` input, and sampled nonce scalars without retrying zero; the
+grant signer's `fresh_nonce` (source: [contract/signer-rs/src/grants.rs](https://github.com/midnightntwrk/passport/blob/2b60da77a00de69d04456c291fd213f827966cde/contract/signer-rs/src/grants.rs)) did the same.
 Passport's custom Schnorr equations contain no explicit identity-announcement
 rejection, including `require_authorised_with_jubjub`, `authenticate_grant_with_jubjub`
 and `recover_submit` (source: [contract/contracts/account.compact](../contract/contracts/account.compact)).
@@ -110,38 +139,41 @@ reveals `sk = s/c mod r` to anyone who receives the response and challenge,
 including a delegated prover. Direct reference calls keep signatures as private
 proof inputs, so this does not establish public-chain key leakage. Cross-contract
 argument disclosure is a separate boundary; see §6. With a healthy uniform RNG,
-the zero-nonce probability is approximately `1/r` per sample. Runtime tests now
-accept identity `R` at device, grant, and recovery gates, including either or
-both recovery announcements. A damaged-response recovery control is rejected.
-All these announcement variants pass compiled-circuit constraints. Device
-signatures with normal and identity announcements also produce verifying full
-proofs using local test-only KZG parameters; damaged proofs fail verification.
+the zero-nonce probability is approximately `1/r` per sample. The recorded runtime
+tests accepted identity `R` at device, grant, and recovery gates, including either or
+both recovery announcements. A damaged-response recovery control was rejected.
+All these announcement variants passed compiled-circuit constraints. Device
+signatures with normal and identity announcements also produced verifying full
+proofs using local test-only KZG parameters; damaged proofs failed verification.
 Rejection would not undo disclosure of an emitted signature.
 
-**Action:** retry zero in Rust key/nonce generation, reject zero secret imports,
-and make the verifier's announcement policy explicit. Passport uses its own
+**Resolution and remaining scope:** #197 implemented nonzero Rust key/nonce
+sampling and rejected zero secret imports. The verifier's announcement policy
+was not changed; rejecting an announcement would not repair a signature already
+emitted by a faulty signer. Passport uses its own
 SHA-256/grinding challenge; the platform's Poseidon/native signature comparison
 in [ecc-validation.md, §4.2](ecc-validation.md#42-schnorr-with-poseidon-challenge-on-jubjub)
 does not itself test Passport signature interoperability.
 
-### D. Client imports are permissive — low, input consistency
+### D. Client imports were permissive — historical finding, corrected by #197
 
-The [18-case import-boundaries.json](../contract/evidence/ecc-validation/import-boundaries.json),
-produced by [contract/src/tests/ecc-import-boundaries.ts](../contract/src/tests/ecc-import-boundaries.ts),
-confirms two additional current-client issues:
+The historical [18-case import-boundaries.json](https://github.com/midnightntwrk/passport/blob/690a2685a8ded4f0a1f649bba227fa7e251fb4b2/contract/evidence/ecc-validation/import-boundaries.json),
+produced by the [pre-#197 import-boundary harness](https://github.com/midnightntwrk/passport/blob/690a2685a8ded4f0a1f649bba227fa7e251fb4b2/contract/src/tests/ecc-import-boundaries.ts),
+records two additional pre-#197 client issues:
 
-- `x25519` in [contract/src/wallet/inbox.ts](../contract/src/wallet/inbox.ts)
-  accepts a 33-byte recipient key and ignores its trailing byte through DER
-  parsing. `openInboxEntry` similarly accepts a 33-byte secret. Normal controls
-  decrypt; 31-byte recipients reject and unrelated/short secrets fail cleanly.
+- `x25519` in [contract/src/wallet/inbox.ts](https://github.com/midnightntwrk/passport/blob/2b60da77a00de69d04456c291fd213f827966cde/contract/src/wallet/inbox.ts)
+  accepted a 33-byte recipient key and ignored its trailing byte through DER
+  parsing. `openInboxEntry` similarly accepted a 33-byte secret. Normal controls
+  decrypted; 31-byte recipients rejected and unrelated/short secrets failed cleanly.
   The contract's `Bytes<32>` prevents installing a 33-byte on-chain key, so this
   is an import-boundary discrepancy, not a demonstrated contract bypass.
-- `hexToBytes` in [contract/src/wallet/hex.ts](../contract/src/wallet/hex.ts)
-  accepts malformed hex: `zz` becomes byte `00` and `1z` becomes `01`.
+- `hexToBytes` in [contract/src/wallet/hex.ts](https://github.com/midnightntwrk/passport/blob/2b60da77a00de69d04456c291fd213f827966cde/contract/src/wallet/hex.ts)
+  accepted malformed hex: `zz` became byte `00` and `1z` became `01`.
   Even-length validation does not establish valid encoding.
 
-**Action:** enforce exact raw key lengths and strict hexadecimal syntax before
-key derivation or commitment calculation. Retain backend curve/agreement checks.
+**Resolution:** #197 enforced exact raw key lengths and strict hexadecimal
+syntax before key derivation or commitment calculation. Backend curve/agreement
+checks remain necessary; raw length checks do not validate installed keypairs.
 
 ### E. Security documentation is stale or too broad
 

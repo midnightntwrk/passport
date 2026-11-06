@@ -8,17 +8,32 @@ import { hexToBytes, bytesToHex } from '../src/wallet/hex.js';
 
 describe('hexToBytes strict digit validation', () => {
   it('rejects non-hex characters instead of coercing them to zero', () => {
-    expect(() => hexToBytes('zz11')).toThrow(/invalid hex character/);
+    expect(() => hexToBytes('zz11')).toThrow(/invalid hex encoding/);
   });
 
   it('rejects a single mistyped character anywhere in the string', () => {
-    expect(() => hexToBytes('aabbccdg')).toThrow(/invalid hex character/);
-    expect(() => hexToBytes('g0aabbcc')).toThrow(/invalid hex character/);
+    expect(() => hexToBytes('aabbccdg')).toThrow(/invalid hex encoding/);
+    expect(() => hexToBytes('g0aabbcc')).toThrow(/invalid hex encoding/);
   });
 
   it('rejects whitespace and separators', () => {
-    expect(() => hexToBytes('aa  bb')).toThrow(/invalid hex character/);
-    expect(() => hexToBytes('aa:bb1')).toThrow(/invalid hex character/);
+    expect(() => hexToBytes('aa  bb')).toThrow(/invalid hex encoding/);
+    expect(() => hexToBytes('aa:bb1')).toThrow(/invalid hex encoding/);
+  });
+
+  it('rejects trailing newlines, including a pair that parseInt would partially decode', () => {
+    for (const value of ['0\n', '\n\n', '00\n\n']) {
+      expect(() => hexToBytes(value)).toThrow(/invalid hex encoding/);
+    }
+  });
+
+  it('does not include malformed secret input in errors', () => {
+    for (const value of ['ab'.repeat(31) + 'zz', 'ab'.repeat(31) + 'a']) {
+      let caught: unknown;
+      try { hexToBytes(value); } catch (error) { caught = error; }
+      expect(caught).toBeInstanceOf(Error);
+      expect(String(caught)).not.toContain(value);
+    }
   });
 
   it('still rejects odd-length input', () => {

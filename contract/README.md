@@ -163,21 +163,29 @@ all passing counts into a claim that every current circuit was proved.
 
 TypeScript JubJub and secp256k1 device and grantee signers require a `bigint`
 secret strictly between zero and the curve order. Rust secret imports reject
-empty, malformed, zero and out-of-range values; JubJub key generation and
+empty, malformed, zero, and out-of-range values; JubJub key generation and
 signing retry a zero random sample. The JubJub signature response parser
 still permits zero.
-Hexadecimal byte decoding rejects malformed characters. Inbox sealing
+Hexadecimal byte decoding rejects malformed characters. `hexToBytes32` rejects
+values longer than 32 bytes; shorter values retain the documented right-zero
+padding. Inbox sealing
 requires exactly 32-byte X25519 keys and coin identifiers, and an unsigned
 128-bit coin value, preventing silent truncation or wrapping. Invalid inbox
-records still return `null` when opened.
+records still return `null` when opened. Node/OpenSSL rejects the tested
+low-order X25519 peers; an independent inbox guard rejects an all-zero shared
+secret if the backend returns one. This is an agreement-result check, not a
+ban on all-zero raw X25519 private-key bytes, which undergo scalar clamping.
 
 `npm run test:input-validation` covers rejection cases, valid boundary
-signatures and inbox round trips;
+signatures, and inbox round trips;
 `cargo test --locked --manifest-path signer-rs/Cargo.toml` covers Rust imports
 and zero-sample retry. These checks change the reference clients, not the
 Compact circuits or schema. Historical
 ECC receipts retain their original observations; they are not rerun results
 for these input checks.
+`node --import tsx src/tests/ecc-import-boundaries.ts` writes its receipt to a
+fresh temporary directory by default and prints the path. Set `EVIDENCE_DIR`
+to choose a destination explicitly; historical receipts are not the default.
 
 ## Known issues and remaining validation
 
@@ -356,7 +364,7 @@ was actually exercised. In older reports, “both arms” means JubJub and k256.
 | Commands (`npm run …`) | Review area and evidence |
 |---|---|
 | `test:unit`, `test:crossimpl-offline` | Client encodings, challenges and independent Rust signer agreement; AUTH-9/10 binding checks. |
-| `test:input-validation` | Client secret-scalar, hexadecimal, X25519 key-length and inbox coin-encoding boundaries; valid signatures and inbox round trips. |
+| `test:input-validation` | Client secret-scalar, hexadecimal, X25519 key-length, and inbox coin-encoding boundaries; backend and all-zero agreement refusals, valid signatures, and inbox round trips. |
 | `test:auth-coinless` | JubJub/k256 authorisation, cross-arm enrolment, self-removal and maintenance controls; [0.35 receipts](evidence/compact-0.35/auth-coinless-arms-auth-coinless.json). |
 | `test:auth`, `test:auth-lifecycle`, `test:auth-replay`, `test:auth-crossimpl` | Funded MIP-0013 suites; historical NIGHT-funding limitation applies. |
 | `test:custody-shielded`, `test:custody-discovery`, `test:custody-payments`, `test:leak-audit` | MIP-0012 Testing 1–5, 7–8; historical receipts in `evidence/cust-*.json`. |

@@ -1,5 +1,7 @@
 import { deepEqual, equal, throws } from 'node:assert/strict';
 import { test } from 'node:test';
+import crypto from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
 import { hexToBytes, hexToBytes32 } from '../wallet/hex.js';
 import {
   ENTRY_SIZE, generateEncKeyPair, openInboxEntry, sealInboxEntry,
@@ -23,12 +25,48 @@ test('hex decoding accepts complete byte pairs and rejects malformed pairs', () 
   for (const value of ['a', 'abc', '0xabc']) throws(() => hexToBytes(value), /odd-length hex/);
 });
 
-test('hexToBytes32 preserves its documented padding and truncation', () => {
+test('hexToBytes32 pads short values and rejects oversized values', () => {
   const padded = new Uint8Array(32);
   padded[0] = 0xa1;
   deepEqual(hexToBytes32('a1'), padded);
-  deepEqual(hexToBytes32('ab'.repeat(33)), new Uint8Array(32).fill(0xab));
+  deepEqual(hexToBytes32('ab'.repeat(32)), new Uint8Array(32).fill(0xab));
+  for (const length of [33, 64]) {
+    throws(() => hexToBytes32('ab'.repeat(length)), /longer than 32 bytes/);
+  }
   throws(() => hexToBytes32('00'.repeat(32) + 'zz'), /invalid hex encoding/);
+});
+
+test('invalid recipient length is refused before ephemeral key generation', (t) => {
+  const keygen = t.mock.method(crypto, 'generateKeyPairSync', () => {
+    throw new Error('ephemeral key generation reached');
+  });
+  syncBuiltinESMExports();
+  try {
+    for (const length of [0, 31, 33, 64]) {
+      throws(() => sealInboxEntry(new Uint8Array(length), coin), /exactly 32 bytes/);
+    }
+    equal(keygen.mock.callCount(), 0);
+    throws(() => sealInboxEntry(new Uint8Array(32), coin), /ephemeral key generation reached/);
+  } finally {
+    keygen.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
+
+test('an all-zero backend agreement is refused by the inbox guard', (t) => {
+  const keys = generateEncKeyPair();
+  const sealed = sealInboxEntry(keys.publicKey, coin);
+  const agreement = t.mock.method(crypto, 'diffieHellman', () => Buffer.alloc(32));
+  syncBuiltinESMExports();
+  try {
+    throws(() => sealInboxEntry(keys.publicKey, coin), /^Error: invalid X25519 agreement$/);
+    equal(openInboxEntry(keys.secretKey, sealed), null);
+    equal(agreement.mock.callCount(), 2);
+  } finally {
+    agreement.mock.restore();
+    syncBuiltinESMExports();
+  }
+  deepEqual(openInboxEntry(keys.secretKey, sealed), coin);
 });
 
 test('inbox preserves the v1 layout and exact uint128 boundary values', () => {
@@ -61,7 +99,7 @@ test('inbox rejects low-order recipients and skips unauthenticated records', () 
   for (const firstByte of [0, 1]) {
     const lowOrder = new Uint8Array(32);
     lowOrder[0] = firstByte;
-    throws(() => sealInboxEntry(lowOrder, coin));
+    throws(() => sealInboxEntry(lowOrder, coin), { code: 'ERR_OSSL_FAILED_DURING_DERIVATION' });
   }
   const keys = generateEncKeyPair();
   const sealed = sealInboxEntry(keys.publicKey, coin);
