@@ -1,5 +1,10 @@
 # Passport in the wild
 
+> **Dated research, not the current architecture.** Preserve this analysis
+> in its original context. For current mechanisms, standards, and implemented
+> behaviour, start with [arc42](../docs/arc42.md) and the
+> [standards register](../docs/plans/MIPS.md).
+
 External talks, livestreams, podcasts, and articles where Midnight
 Passport surfaces — primary-source context for stakeholder framing,
 positioning, and the *why* behind project decisions. Useful when

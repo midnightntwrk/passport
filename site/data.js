@@ -1,12 +1,13 @@
 // Midnight Passport — site data
-// Single source of truth for the prose sections and the dependency graph.
+// Presentation data for this site; docs/arc42.md owns the architecture,
+// docs/plans/PROMISES.md owns requirements and docs/plans/MIPS.md the register.
 // Derived from the working planning document (passes 1–4); internal
 // sequencing framing is intentionally omitted from this public surface.
 
 window.PASSPORT_DATA = {
   meta: {
     drafted: '2026/05/01',
-    updated: '2026/10/19',
+    updated: '2026/11/06',
     version: 'draft-4',
   },
 
@@ -174,7 +175,7 @@ window.PASSPORT_DATA = {
       status: 'specified',
       status_note: 'MIP-0012/0013 are Proposed; MIP-0030 is Draft. Recovery, native P-256 and schema-v3 caller-bound grants are merged. Recovery reset #183 implements upstream #385 with compilation/simulation evidence; regenerated keys, proof/node validation, expanded retirement cases and deployment sizing remain. Key admissibility, individual-device revocation and combined-build/client-ABI/P-256 caller validation remain separate.',
       serves: ['P1', 'P3', 'P4', 'P5', 'P8'],
-      outcome: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, active scoped grants, and — per C4\'s resolved custody choice — the user\'s Midnight-native assets. Specified by two standards published upstream: MIP-0012 (the asset surface plus an abstract authorisation seam) and MIP-0013 (rolling single-use device entries, revocation epochs, the post-deploy bootstrap, in-circuit Schnorr seam instantiation). The reference implementation realises both in one deployment, with conformance suites passing and an independent bit-exact Rust signer; the errata the implementation surfaced are folded back into the upstream texts. Since then the reference contract has grown: the seam is carried as co-resident arms (JubJub Schnorr as the trunk, interim ECDSA-secp256k1 with a per-device signing envelope that admits dApp-connector signers), the account composes as a callee of other contracts with the seam verifying through the call boundary, and spec_version = 2 adds the scoped-grant records and their per-arm spend twins. Per-account instances are chosen over a registry.',
+      outcome: "The per-account Compact custody contract is the control point for devices, grants and Midnight-native assets; naming integration remains separate. Main fc19e47 has schema v3, 52 circuits and JubJub, k256 and bounded p256 authorisation arms. It includes caller-bound grants and signature-gated recovery with atomic retirement of every prior device entry. The 23 October combined-account record covers corrected recovery and P-256 unshielded grants using matching cached keys; individual-device revocation, broader adversarial validation and full standards conformance remain open.",
       hard_deps: ['C2', 'C4', 'C9', 'C10'],
       associations: ['C11', 'C12'],
       alternatives: [
@@ -187,7 +188,7 @@ window.PASSPORT_DATA = {
         'Deploy cost at user-base scale — onboarding-cost projections still to gather for the chosen per-account shape.',
         'Who deploys — self-deployed at onboarding, or a deployment service?',
         'Fleet migration — circuits are evolvable in place via the contract maintenance authority, but the ledger state schema is fixed at deploy and upstream ships no state migration across ledger generations; the MIPs version via a spec_version cell and a Replaces chain, and migration tooling remains implementation work.',
-        'Device identity (erratum 8): complete revocation needs a contract-maintained device identity in MIP-0013 §3, which is a state-schema change and so a redeploy; the scoped-grants draft proposes carrying the remedy in its spec_version = 2 redeploy. Decision pending upstream.',
+        'Device identity (erratum 8): complete revocation needs a reviewed MIP-0013 identity design and deployment/migration plan. Neither v2 grants nor v3 caller binding implements the remedy.',
       ],
       failure_modes: [
         'Deploy cost prohibitive at user-base scale.',
@@ -429,7 +430,7 @@ window.PASSPORT_DATA = {
     {
       id: 'C10', name: 'Scoped grant primitive', category: 'authz',
       status: 'specified',
-      status_note: 'Specified 2026/09 by the scoped-grants and dApp-connection MIP (drafted, co-authored with the Midnight Foundation). Implemented on the reference contract at spec_version = 2 and exercised on node; editors\' rulings and the companion MIP-0013 erratum are outstanding.',
+      status_note: 'Specified 2026/09 by the scoped-grants and dApp-connection MIP (drafted, co-authored with the Midnight Foundation). Implemented on the reference contract, now schema v3 with caller pins. Individual-device revocation remains a separate MIP-0013 issue; local grant review completed in #195, with upstream submission and acceptance separate.',
       serves: ['P7', 'P10'],
       outcome: 'The authorisation primitive — operation type × object × quantitative bounds. Used for both intra-user (device-to-device) and dApp grants. Specified: a grant is a contract-maintained record admitting one grantee key of a registered signature scheme to a bounded subset of the asset-facing circuits (three spend operations, one token color, a per-call and a cumulative cap, a bound on any coin touched, an optional recipient pin, and an explicit expiry). The record is keyed by a contract-recomputable identity; color, recipient, coin bound, relying-party host, and the running spent total are salted commitments, so the custody invariants of MIP-0012 hold and observers learn neither which dApps an account uses nor what it spends.',
       hard_deps: ['C1', 'C25'],
@@ -1092,7 +1093,7 @@ window.PASSPORT_DATA = {
     {
       when: '2026/09', kind: 'validated',
       title: 'Two MIP-0013 gaps measured: weak keys and revocation',
-      detail: 'The curve identity passes as a device key on both arms, authorising with no secret; the reference contract rejects it at the seam and the bootstrap, and the text must follow. Removal retires one set element, so a device that enrolled a second entry for its own key survives its own revocation (erratum 8), measured on node against both enrolment shapes. The remedy is a contract-maintained device identity, a schema change proposed to ride the spec_version = 2 redeploy.',
+      detail: 'The curve identity passes as a device key on both arms, authorising with no secret; the reference contract rejects it at the seam and the bootstrap, and the text must follow. Removal retires one set element, so a device that enrolled a second entry for its own key survives its own revocation (erratum 8), measured on node against both enrolment shapes. The proposed remedy is a contract-maintained device identity; neither the later v2 grant schema nor v3 caller binding implements it.',
       components: ['C1', 'C13'],
       evidence: ['account-custody-reference'],
     },
@@ -1148,7 +1149,7 @@ window.PASSPORT_DATA = {
     {
       lane: 'Standards',
       title: 'Shepherd MIP-0012 / MIP-0013 through upstream review',
-      detail: 'Both are published upstream as Proposed with three implementation errata merged. Two measured gaps in MIP-0013 need a ruling: a weak-key rejection in §4, and a contract-maintained device identity in §3 and §6 so that removal revokes a device (erratum 8), proposed to ride the scoped-grants spec_version = 2 redeploy. Then ecosystem review toward acceptance.',
+      detail: 'Both are Proposed. Complete key-admissibility review, individual-device identity/revocation (erratum 8), domain compatibility and ecosystem acceptance work. The device-identity remedy has not shipped in either grant schema version.',
       components: ['C4', 'C1', 'C5'],
     },
     {
@@ -1160,7 +1161,7 @@ window.PASSPORT_DATA = {
     {
       lane: 'Standards',
       title: 'Signature-schemes and scoped-grants MIPs to submission',
-      detail: 'MIP-0030 is published as Draft; scoped grants remain a local draft. Native P-256 and caller identity are implemented by merged #175/#176. Remaining: recipes/policy mapping, cryptographic review, grant amendments, tag compatibility and combined-build/client-ABI/P-256 caller validation.',
+      detail: 'MIP-0030 is published as Draft; scoped grants remain a local draft. Native P-256 and caller identity are implemented by merged #175/#176. Remaining: typed recipes/vectors, all-verifier policy review, cryptographic review, tag compatibility, broader client-ABI validation and successful P-256 forwarded/shielded grant calls. The grant draft already specifies CAIP-25/OWS mapping; combined-account recovery and P-256 unshielded grants have 23 October evidence.',
       components: ['C5', 'C10', 'C11', 'C12', 'C23'],
     },
     {
@@ -1365,7 +1366,7 @@ window.PASSPORT_DATA = {
     {
       id: 'MIP-0022', kind: 'mip',
       title: 'Recovery paths for custody accounts',
-      detail: 'BUSS/ANARKey recovery through a two-phase signature gate and viewing-key wrap. Published through #339; #385 amends finalisation and REC-8 to retire all prior device entries atomically. Reference reset #183 has compilation/simulation evidence; regenerated keys, proof/node validation, deployment sizing and expanded retirement cases remain.',
+      detail: "BUSS/ANARKey recovery through a two-phase signature gate and viewing-key wrap. Proposed upstream; #385 requires atomic prior-entry retirement. Two corrected recoveries passed on-node in the 23 October combined-account run, with source matching main fc19e47 and cached keys reused after textual ZKIR comparison. Clean regeneration, expanded adversarial retirement cases, transport and cryptographic review remain.",
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md',
       upstream_label: 'MIP-0022 — published upstream',
       discussion: 'https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/349',
@@ -1379,11 +1380,11 @@ window.PASSPORT_DATA = {
     {
       id: 'MIP-5', kind: 'mip',
       title: 'dApp ↔ wallet connection protocol',
-      detail: 'Open Wallet Standard is the chosen direction, with CAIP-25, EIP-6963, and WalletConnect v2 as underlying transport and discovery layers. The grant-issuance ceremony is now specified in MIP-10; what this label still owns is the OWS handshake flag, the scope mapping table, and the discovery and transport layering.',
+      detail: "Open Wallet Standard is the chosen direction. The scoped-grants draft already defines the issuance ceremony, CAIP-25 scopedProperties and OWS policy mapping in sections 9–11. Remaining work concerns transport/discovery integration, interoperability and acceptance; the old MIP-5 label is internal, not an upstream number.",
       component: 'C23',
       co_author: 'Partner wallets + Midnight Foundation',
       lifecycle: 'Not yet filed',
-      status: 'Issuance half drafted in MIP-10; OWS mapping in outline',
+      status: "CAIP-25/OWS mapping drafted; transport/discovery integration and interoperability remain",
       promises: ['P7', 'P8'],
     },
     {
@@ -1402,12 +1403,12 @@ window.PASSPORT_DATA = {
     {
       id: 'MIP-10', kind: 'mip',
       title: 'Scoped grants and dApp connection',
-      detail: 'The successor extension MIP-0013 reserves behind require_authorised(): a grant is a contract-maintained record admitting one grantee key of a registered scheme to a bounded subset of the asset-facing circuits (operations, one color, per-call and cumulative caps, coin bound, recipient pin, expiry), enforced in-circuit and revocable from chain state; the connection ceremony is a redirect to an authoriser carrying a GrantRequest and a browser-attested possession proof, passkey consent, one device-gated issue_grant, and verification against chain state. Read access is the MIP-0012 viewing capability sealed to a dApp key. Requires a spec_version = 2 redeploy, which is also proposed to carry the MIP-0013 erratum 8 remedy.',
+      detail: "Scoped grants admit a grantee key to bounded asset operations, with on-chain spend enforcement, expiry, revocation and optional immediate-caller pin. Read access uses a separately sealed viewing capability. The redirect ceremony and CAIP-25/OWS mapping are specified. Current reference schema v3 adds caller binding; it does not implement the separate MIP-0013 device-identity remedy. Compromise-driven device removal requires the client to revoke all grants as specified in section 7.3.",
       components: ['C10', 'C11', 'C12', 'C23'],
       evidence: ['account-custody-reference'],
       co_author: 'Midnight Foundation (named co-author)',
       lifecycle: 'Not yet filed',
-      status: 'Draft merged locally; #163 evidence merged, caller extension #176 open (schema v3); editor rulings, authorisation amendments and upstream submission remain',
+      status: "Local review completed in #195; #163/#176 merged. Current schema v3 has bounded combined-account evidence; upstream submission and acceptance remain separate, not re-audited here.",
       promises: ['P4', 'P7', 'P10'],
     },
     {
@@ -1668,9 +1669,9 @@ window.PASSPORT_DATA = {
       id: 'account-custody-reference',
       url: 'https://github.com/midnightntwrk/passport/tree/main/contract',
       name: 'Account custody reference implementation',
-      summary: 'The standard to build against: MIP-0012 and MIP-0013 realised in one deployment at contract/, with every conformance suite the standards require passing on a live stack, an independent bit-exact Rust signer on the published ledger crates, a byte-level leak audit, and the discovery walk exercised end to end from the contract address alone.',
+      summary: "Reference implementation of custody and authorisation with three arms, recovery and caller-bound grants. Main fc19e47 has 52 circuits and schema v3. Dated evidence records specific source/toolchain and test scopes; the 23 October run used matching cached keys and covers corrected recovery and P-256 unshielded grants. The aggregate leak-audit control does not establish detection on every surface/value encoding. Rust/TypeScript offline cases cover JubJub/k256; the dedicated node cross-implementation suite is k256-only and its raw receipt is not committed.",
       validates: ['C1', 'C4', 'C5', 'C17', 'C10', 'C11', 'C12', 'C13'],
-      status: 'Complete — suites passing on both arms; grants at spec_version = 2 exercised on node; erratum 8 open',
+      status: "Bounded reference evidence; individual-device revocation, expanded recovery matrix and broader P-256 grant coverage remain open",
     },
     {
       id: 'p256-in-circuit',

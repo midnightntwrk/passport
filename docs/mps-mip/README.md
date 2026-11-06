@@ -1,105 +1,37 @@
-# MPS and MIP working drafts
+# Local MPS and MIP documents
 
-This folder holds Midnight Problem Statements (MPS) and Midnight
-Improvement Proposals (MIP) authored by this workspace, in the state they
-are in before or after submission to the canonical repository,
-[midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals).
-Editor numbers are assigned upstream at merge; files here use `xxxx`
-until then. Once a document is merged upstream, the upstream copy is
-canonical and the copy here is retired to a pointer.
+The [standards register](../plans/MIPS.md) owns the publication/status inventory
+and canonical links. This directory preserves working drafts, pointers and
+historical copies; it does not maintain a second lifecycle register.
 
-Standards register reconciled **17 October 2026**; ACC/grants evidence
-follow-up **2 November 2026**. See the [contract reference guide](../../contract/README.md)
-and [development status](../plans/STATUS.md).
+## File roles
 
-## Published upstream (upstream copy is canonical)
+| Local file | Role and canonical destination |
+|---|---|
+| [Asset custody MPS](mps/mps-asset-custody-model.md) | Historical copy; upstream MPS-0018. |
+| [Domain separation MPS](mps/mps-domain-separation.md) | Historical copy; upstream MPS-0027 / MIP-0021. |
+| [Call provenance MPS](mps/mps-call-provenance.md) | Canonical pointer; upstream MPS-0040. |
+| [Native asset custody MIP](mips/mip-xxxx-native-asset-custody.md) | Historical copy; upstream MIP-0012. |
+| [Account authorisation](mips/mip-xxxx-account-authorisation.md) | Canonical pointer; upstream MIP-0013. |
+| [Account recovery](mips/mip-xxxx-account-recovery.md) | Canonical pointer; upstream MIP-0022. |
+| [Signature schemes](mips/mip-xxxx-signature-schemes.md) | Canonical pointer; upstream MIP-0030 supersedes the former general registry draft. |
+| [Prover-key regeneration](mips/mip-xxxx-prover-key-regeneration.md) | Canonical pointer; upstream MIP-0020 under MPS-0039. |
+| [Scoped grants](mips/mip-xxxx-scoped-grants.md) | Local draft; spend scope, lifecycle, connection ceremony and CAIP-25/OWS mapping. |
 
-- `mps/mps-asset-custody-model.md` → upstream **MPS-0018**,
-  Multi-key Account Custody for Midnight-Native Assets.
-- `mps/mps-domain-separation.md` → upstream **MPS-0027**,
-  Domain Separation for Midnight Hash Constructions.
-- `mips/mip-xxxx-native-asset-custody.md` → upstream **MIP-0012**,
-  Contract Custody of Midnight-Native Assets (Proposed). Building
-  block one of the MPS-0018 keystone: how a contract holds and
-  releases unshielded values (Night and any other unshielded color)
-  and shielded values; authorisation abstracted to a single seam. The
-  return-signature erratum and the two-payment-mode restatement are
-  merged upstream.
-- `mips/mip-xxxx-account-authorisation.md` → upstream **MIP-0013**,
-  Multi-key Account Authorisation for Custody Contracts (Proposed).
-  Building block two: rolling single-use device entries, lifecycle,
-  and revocation epochs, with the seam instantiated by in-circuit
-  Schnorr verification over JubJub (FROST-compatible, separating
-  approval from proving). The DST-derivation and bootstrap errata are
-  merged upstream. The local [ECDSA signing-boundary extension](mips/mip-xxxx-signature-schemes.md)
-  is published as MIP-0030 (Draft). Recovery retirement is amended by upstream #385.
-  Scoped grants are a separate successor extension.
-- `mps/mps-call-provenance.md` → upstream **MPS-0040**, Cross-Contract
-  Call Provenance in Compact Circuits (Proposed). Compact 0.35 now exposes
-  immediate caller identity; merged Passport #176 validates a consumer.
-- **MPS-0039**, Calling a Contract Requires Its Full Compiled Artifacts, is published
-  upstream (Proposed); the regeneration proposal below addresses it.
+The broader [circuit-artefact reproducibility draft (PR #172)](https://github.com/midnightntwrk/passport/pull/172)
+is reviewed separately and is not included here. It extends beyond published
+MIP-0020; historical measurements retain their original scope.
 
-- `mips/mip-xxxx-signature-schemes.md` → [**MIP-0030**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md),
-  ECDSA Authorisation for Custody Accounts (**Draft**), merged via #374.
-  Complete recipes, policy/enforcement mapping, cryptographic review and
-  MIP-0021 compatibility remain; no k1 sunset policy is adopted.
-- `mips/mip-xxxx-account-recovery.md` → [**MIP-0022**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0022-account-recovery.md),
-  Recovery Paths for Custody Accounts (**Proposed**), merged via #339.
-  Authors: Nicolas Di Prima and Raphael Toledo. Upstream #385 now requires
-  atomic retirement of all prior entries at finalisation, including pending
-  enrolments. Passport #183 implements the reset. The
-  [23 October full-account run](../../contract/GRANTS-COMPLETION.md)
-  subsequently exercised two corrected recoveries on-node. Matching cached
-  keys were used; clean key regeneration and the broader adversarial
-  retirement matrix remain distinct from that evidence.
-- `mips/mip-xxxx-prover-key-regeneration.md` → [**MIP-0020**](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0020-prover-key-regeneration.md),
-  On-Demand Prover Keys from Bundled ZKIR (**Proposed**), merged via #338.
-  Authors: Nicolas Di Prima and Vincent Hanquez. Supported APIs, conformance
-  and integration remain.
+## Working rules
 
-The authorisation, ECDSA, recovery and regeneration paths above are retired
-to canonical pointers. The older custody mirror is non-canonical.
+Numbered upstream documents are canonical even where a historical local copy
+has an unnumbered Draft header. Preserve those copies and anchors for
+provenance; use the visible upstream pointer for normative interpretation.
+Pointers retain former filenames to keep incoming links valid. They are not
+full snapshots and must not be cited for sections they no longer contain.
 
-- **[MIP-0025 — Managed Private State and Capsule Runtime](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0025-capsule-runtime.md)**
-  (Draft), merged through upstream #334. This is a proposed runtime design,
-  not a shipped private-state service. Discussion:
-  https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/355.
-- **MIP-0028 — Custom spend logic** remains a reserved number in open
-  https://github.com/midnightntwrk/midnight-improvement-proposals/pull/335.
-
-## Working draft and evidence notes
-
-- `mips/mip-xxxx-scoped-grants.md` — **Scoped Grants and dApp Connection
-  for Custody Accounts (C10, C11, C12, C23)**: a self-contained Draft
-  for bounded grant authority and its connection ceremony. Section 12
-  defines combined conformance with MIP-0013, preserving device rules
-  and explicitly adapting AUTH-1/2 for grant calls. It does not require
-  a separately merged parent amendment. The reference schema is
-  `spec_version = 3`, including optional immediate-caller restrictions;
-  MIP-0030 supplies the ECDSA/WebAuthn requirements. Historical v2,
-  caller-bound v3, and profiled P-256 evidence are distinguished in the
-  draft. Independent review and uncompleted conformance/ceremony work
-  remain Path to Active items. Passport review completed in
-  [#195](https://github.com/midnightntwrk/passport/pull/195), merged 23 October. Canonical Draft submission is ready
-  with local evidence links now converted to full, commit-pinned Passport URLs;
-  no upstream submission was found on 2 November. Draft publication is separate from
-  the later acceptance request and Active criteria.
-
-- Caller-bound grants are implemented in merged #176 using `kernel.caller()`
-  on Compact 0.35, with a fabricated-caller proof refused at node admission.
-  The extension uses schema v3. The 23 October run covers the combined account
-  and P-256 unshielded spending, but not successful P-256 forwarding;
-  earlier grant evidence and the unshielded follow-up #163 are merged.
-  Calling-circuit identity remains distinct from immediate caller identity.
-## Process
-
-Submissions follow the upstream MIP-0001 lifecycle: Draft status on
-entry and editor-assigned numbers. A separate acceptance-request issue
-belongs to the later Draft-to-Proposed transition, not initial Draft
-submission. A MIP
-addressing an MPS is listed in that MPS's header `MIP` field rather
-than in the MIP's `Requires` line, which is reserved for MIP-on-MIP
-dependencies. Upstream draft PRs use the literal filename
-`mip-xxxx.md`; the descriptive filenames in this folder are local
-conveniences and are renamed on submission.
+Unnumbered drafts remain editable. Preserve explicit open questions and
+evidence limits. A draft header does not establish publication, acceptance,
+implementation or deployment. New normative changes to numbered standards
+belong upstream; record local implementation differences in the reference
+README and arc42. Consult the standards register and MIP-0001 before submission.

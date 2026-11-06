@@ -28,11 +28,19 @@ authorisation arms; deriving the entry in-circuit does not prevent it
 implementation). Total recovery revocation now requires atomic entry retirement as well as
 the epoch bump (MIP-0013 §8/AUTH-6, upstream #385).
 The remedy is a contract-maintained device identity in MIP-0013 §3, a
-state-schema change and so a redeploy, proposed to ride the
-scoped-grants `spec_version = 2` redeploy. The decision of substance
+state-schema change requiring its own reviewed deployment/migration. Neither
+the v2 grant schema nor v3 caller binding implements it. The decision of substance
 here is therefore upstream's, not this canvas's: until it lands, the
 lost-device flow must use the corrected recovery retirement path when the lost
 device's entry count is unknown.
+
+**Current compromise response (2026/11/06).** Removal does not revoke grants
+issued by the device. The [grant draft](../../mps-mip/mips/mip-xxxx-scoped-grants.md)
+§7.3 requires the client to call `revoke_all_grants` in the same transaction or
+immediately afterwards when compromise is suspected. Recovery-wide retirement
+has bounded [23 October node evidence](../../../contract/GRANTS-COMPLETION.md),
+but the expanded adversarial matrix and individual-device identity fix remain.
+The July statement that only client polish remained was superseded by erratum 8.
 
 ## Dependencies
 
