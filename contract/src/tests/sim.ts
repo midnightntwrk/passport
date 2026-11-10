@@ -48,6 +48,7 @@ export class AccountSim {
   readonly address: Uint8Array;
   readonly coinPk = { bytes: new Uint8Array(randomBytes(32)) };
   readonly device: JubjubDevice;
+  readonly initialDeviceSalt = new Uint8Array(randomBytes(32));
   state: any;
   privateState: CoinStorePrivateState;
   now: number;
@@ -64,9 +65,17 @@ export class AccountSim {
 
   /** Deploy (constructor + wave-free) and activate the initial device. */
   static async create(opts: SimOptions): Promise<AccountSim> {
+    const sim = await AccountSim.createDormant(opts);
+    await sim.call('activate_initial_device_with_jubjub', sim.device.pk, sim.initialDeviceSalt);
+    sim.counters.set(sim.device, 0n);
+    return sim;
+  }
+
+  /** Deploy without activation. A supplied commitment can select any arm;
+   *  the caller retains the matching device and salt for later activation. */
+  static async createDormant(opts: SimOptions, initialDeviceBoot?: Uint8Array): Promise<AccountSim> {
     const sim = new AccountSim(opts);
-    const salt = new Uint8Array(randomBytes(32));
-    const boot = sim.device.bootCommitment(salt);
+    const boot = initialDeviceBoot ?? sim.device.bootCommitment(sim.initialDeviceSalt);
     const init = await sim.contract.initialState(
       createConstructorContext(sim.privateState, sim.coinPk),
       boot,
@@ -76,8 +85,6 @@ export class AccountSim {
       opts.vetoWindowSeconds,
     );
     sim.state = init.currentContractState.data;
-    await sim.call('activate_initial_device_with_jubjub', sim.device.pk, salt);
-    sim.counters.set(sim.device, 0n);
     return sim;
   }
 

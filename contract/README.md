@@ -13,6 +13,11 @@ conformance. In particular, **individual-device removal can leave another
 entry for the same key live** (erratum 8 below). Validation results retain
 their recorded source revision, toolchain, and execution date.
 
+**2026/11/10 source correction:** recovery finalisation now consumes any
+outstanding initial-device bootstrap commitment, including recovery before
+first activation. See [dormant recovery](DORMANT-RECOVERY.md) for the scope,
+validation status, and required handling of existing deployments.
+
 ## Contract structure and scope
 
 [`contracts/account.compact`](contracts/account.compact) is the compilation
@@ -132,7 +137,10 @@ new verifier keys.
 
 Read [GRANTS-COMPLETION.md](GRANTS-COMPLETION.md) first for the **23 October
 2026** validation. Its base is `3fa1b32585032305f3dbef15476dd5fe7fca8a4b`.
-The three Compact source files in that run match this README's baseline.
+The three Compact source files in that run match the historical baseline
+above. The current `account.compact` additionally includes the
+[dormant-bootstrap correction](DORMANT-RECOVERY.md); that correction is not
+covered by the 23 October proof/node evidence.
 The saved account source SHA-256 is
 `ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae`.
 
@@ -370,7 +378,11 @@ runtime evidence, with no new proof, real-browser, or node admission run.
 4. **Recovery coverage is not exhaustive.** The reset is implemented and
    exercised on-node. Explicit adversarial retirement combinations,
    guardian transport/interoperability, multi-session review, and the
-   viewing-wrap lifecycle remain review/validation work.
+   viewing-wrap lifecycle remain review/validation work. The
+   [dormant-bootstrap correction](DORMANT-RECOVERY.md) consumes the initial
+   commitment during finalisation; its validation and deployment requirements
+   are separate from the earlier reset evidence. Previously finalised dormant
+   accounts need state inspection and an explicit repair or migration plan.
 5. **Grant and browser conformance remain partial.** Full authoriser/dApp
    ceremony, browser attack matrix, read-capability handover/re-sealing,
    non-browser carriage, independent implementation/review, the wider
