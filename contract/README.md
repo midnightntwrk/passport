@@ -179,6 +179,77 @@ Compact circuits or schema. Historical
 ECC receipts retain their original observations; they are not rerun results
 for these input checks.
 
+### Device reconnection and counter discovery
+
+The high-level client's counter hints are scoped to the account, device epoch,
+authorisation arm, public key, and signing profile. The k256 envelope and both
+P-256 policy fields are part of that profile. Every hint is checked against
+current ledger membership before use. Successful calls advance the matching
+hint; recovery observed locally or through the ledger invalidates old epochs.
+
+`resolveUseCounter(device)` retains its `Promise<bigint>` API. Each call performs
+at most 4096 membership probes. If no entry is found, it throws
+`DeviceCounterSearchExhaustedError`, whose `result.cursor` resumes the search.
+An exhausted page means that this search did not find the entry. It does not
+establish that the device is unregistered or that its authority is lost.
+
+For explicit progress and caller-controlled continuation:
+
+```ts
+const page = await account.discoverUseCounter(device, {
+  maxProbes: 512,
+  // Supply either a previously saved cursor or a saved hint, when available.
+  cursor: savedCursor,
+});
+if (page.status === 'found') {
+  await saveCounterHint(JSON.stringify(page.hint));
+  // The high-level account instance now has a checked hint for this device.
+} else {
+  showSearchProgress(page.fromCounter, page.toCounter, page.probes);
+  if (page.cursor !== null) {
+    await saveSearchCursor(JSON.stringify(page.cursor));
+    // Let the caller decide whether to request the next bounded page.
+  } else {
+    // No further range remains in this scan. Stop or deliberately restart.
+    showSearchEnded();
+  }
+}
+```
+
+Cursors and hints are JSON-safe, caller-owned data. Restore a position hint with
+`resolveUseCounter(device, { hint })`; export the latest advanced position with
+`deviceCounterHint(device)` after a successful operation. A hint contains no
+private key, but it identifies a credential and its activity, so keep it in
+wallet-local storage. Persisted hints are optional optimisation data: discovery
+also works without them. Wrong-account or wrong-profile inputs are rejected;
+old-epoch hints are ignored, and old-epoch cursors require a fresh search.
+
+A stale hint first checks counter zero, then uses at most half the remaining
+probe budget for forward resynchronisation, and uses the rest for lower
+counters. Every membership check counts towards `maxProbes`, including hint
+checks. Explicit continuation cursors resume the contiguous scan without
+repeating that hint phase. The cursor stops at the Uint64 boundary; `null`
+means there is no further range in that scan. Queries use a fresh ledger
+snapshot per page. Peer operations can continue between pages. Membership can
+also move behind the cursor, for example after same-epoch re-enrolment; restart
+from zero in that case. No multi-page search proves permanent absence.
+
+`removeDevice(owner, target, { cursor })` supports the same bounded continuation
+for a lost device's target entry. On a fresh client, discover or restore the
+owner's counter first: owner authorisation can also exhaust a page, and that
+error carries an owner-scoped cursor which cannot be used as the target cursor.
+The method still removes one located entry; it does
+not establish complete retirement of every parallel entry for a credential.
+`registerDevice(device)` records the full profile where the epoch is known.
+The legacy `registerDevice(publicKey)` form remains supported by invalidating
+only matching public-key hints, allowing a fresh counter-zero lookup without
+guessing the signing profile.
+
+`npm run test:device-reconnection` covers page boundaries, serialised state,
+profile isolation, stale hints, recovery, and removal. It uses generated entry
+derivations, a snapshot membership fixture, and real generated-runtime account
+calls. It does not establish fresh proof or node admission.
+
 ## Known issues and remaining validation
 
 1. **Individual-device revocation is incomplete.** `remove_device` removes
@@ -304,6 +375,7 @@ cargo test --locked --manifest-path signer-rs/Cargo.toml
 
 npm run test:unit
 npm run test:input-validation
+npm run test:device-reconnection
 npm run test:toolchain-offline
 npm run test:grants-offline
 npm run test:grants-capability-offline
@@ -357,6 +429,7 @@ was actually exercised. In older reports, “both arms” means JubJub and k256.
 |---|---|
 | `test:unit`, `test:crossimpl-offline` | Client encodings, challenges and independent Rust signer agreement; AUTH-9/10 binding checks. |
 | `test:input-validation` | Client secret-scalar, hexadecimal, X25519 key-length and inbox coin-encoding boundaries; valid signatures and inbox round trips. |
+| `test:device-reconnection` | Bounded resumable counter discovery, signing-profile isolation, persisted hints, and generated-runtime authorisation after reconnect, removal, and recovery. |
 | `test:auth-coinless` | JubJub/k256 authorisation, cross-arm enrolment, self-removal and maintenance controls; [0.35 receipts](evidence/compact-0.35/auth-coinless-arms-auth-coinless.json). |
 | `test:auth`, `test:auth-lifecycle`, `test:auth-replay`, `test:auth-crossimpl` | Funded MIP-0013 suites; historical NIGHT-funding limitation applies. |
 | `test:custody-shielded`, `test:custody-discovery`, `test:custody-payments`, `test:leak-audit` | MIP-0012 Testing 1–5, 7–8; historical receipts in `evidence/cust-*.json`. |
@@ -486,7 +559,9 @@ text. Item 7 is corrected in this source; item 8 remains an open design defect.
    Two further consequences follow from the same root. First, the ledger
    set is enumerable as opaque entries, but the client cannot reliably
    attribute all entries to a particular device/key. A planted entry can use
-   an arbitrary counter beyond the client's 4096-counter lookup window.
+   an arbitrary counter beyond the client's first bounded discovery page.
+   Resumable lookup can locate a specific live entry, but cannot establish
+   that every parallel entry for that key has been discovered.
    An owner can remove a known entry other than the authorising entry;
    finding every entry for one compromised key remains the problem.
    Second, every plant increments `device_count`, a `Uint<8>`: the generated
