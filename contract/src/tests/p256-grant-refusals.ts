@@ -93,7 +93,7 @@ await runScenario('P-256 grant identity and extension refusals', async () => {
   const delegate = softwarePasskey(), origin = originHash(TEST_ORIGIN), scopeSalt = rnd();
   const color = rnd(), recipient = userAddressBytes(ctx.walletCtx);
   const id = delegate.grantee.grantId(addressBytes, origin, 0n);
-  const scope = spendScope({ withdrawUnshielded: true, color, cap: 10n, rpIdHash: delegate.policy.rp_id_hash });
+  const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 10n, rpIdHash: delegate.policy.rp_id_hash });
   const ownerContext = { contractAddress: addressBytes, authNonce: (await readLedger()).auth_nonce };
   const ownerAuth = owner.sign(jubjubChallenges.issueGrant(ownerContext, owner.pk, id, scopeDigest(scopeSalt, scope)), 0n);
   const issued = await call('issue_grant_with_jubjub', [id, ...scopeArgs(scope), scopeSalt, ...authArgs(ownerAuth)]);

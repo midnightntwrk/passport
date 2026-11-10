@@ -34,7 +34,7 @@ async function invoke(caller: PublicAddress | undefined, circuit: string, args: 
 
 const color = rnd(), recipient = rnd(), origin = originHash('https://bank.example');
 await sim.call('deposit_unshielded', color, 100n);
-const base = { withdrawUnshielded: true, color, cap: 20n, perCallCap: 10n };
+const base = { expiresAt: 0n, withdrawUnshielded: true, color, cap: 20n, perCallCap: 10n };
 const scope = spendScope({ ...base, caller: pinned });
 const salt = rnd();
 const noCaller = { is_some: false, value: { bytes: new Uint8Array(32) } };
@@ -42,7 +42,7 @@ assert.deepEqual(pureCircuits.derive_grant_caller_commit(salt, noCaller), new Ui
 assert.throws(() => pureCircuits.derive_grant_caller_commit(salt, { ...noCaller, value: { bytes: pinned } }), /noncanonical/);
 assert.notDeepEqual(scopeDigest(salt, scope), scopeDigest(salt, spendScope(base)));
 assert.notDeepEqual(scopeDigest(salt, scope), scopeDigest(salt, spendScope({ ...base, caller: wrong })));
-assert.throws(() => assertIssueRules({ ...readOnlyScope({ readPkHash: rnd() }), caller: pinned }), /read-only/);
+assert.throws(() => assertIssueRules({ ...readOnlyScope({ expiresAt: 0n, readPkHash: rnd() }), caller: pinned }), /read-only/);
 assert.throws(() => spendScope({ ...base, caller: rnd(31) }), /32-byte/);
 
 for (const grantee of [JubjubGrantee.generate(), K256Grantee.generate()]) {
@@ -53,7 +53,7 @@ for (const grantee of [JubjubGrantee.generate(), K256Grantee.generate()]) {
   const tampered = sim.device.sign(jubjubChallenges.issueGrant(sim.callContext(), sim.device.pk, id,
     scopeDigest(salt, spendScope(base))), sim.ledger().auth_nonce);
   await assert.rejects(() => sim.call('issue_grant_with_jubjub', id, ...scopeArgs(scope), salt, ...authArgs(tampered)));
-  await assert.rejects(() => issue({ ...readOnlyScope({ readPkHash: rnd() }), caller: pinned }), /read-only/);
+  await assert.rejects(() => issue({ ...readOnlyScope({ expiresAt: 0n, readPkHash: rnd() }), caller: pinned }), /read-only/);
   await issue();
   assert.deepEqual(sim.ledger().grants.lookup(id).scope.caller_commit,
     pureCircuits.derive_grant_caller_commit(salt, { is_some: true, value: { bytes: pinned } }));

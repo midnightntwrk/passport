@@ -136,7 +136,7 @@ export async function fundedSuite(h: any) {
         await memo(`grant-${device.arm}`, async () => {
             const signer = grantees[i], origin = originHash(signer.arm === 'p256' ? TEST_ORIGIN : 'https://localnet.invalid');
             const salt = rnd(), id = signer.grantId(account.addressBytes, origin, 0n);
-            const scope = spendScope({ withdrawUnshielded: true, withdrawShielded: true, withdrawShieldedToContract: true, color, cap: 500n, perCallCap: 100n, maxCoinValue: 100n, readPkHash: sha256(generateEncKeyPair().publicKey), rpIdHash: signer.arm === 'p256' ? signer.policy.rp_id_hash : undefined });
+            const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, withdrawShielded: true, withdrawShieldedToContract: true, color, cap: 500n, perCallCap: 100n, maxCoinValue: 100n, readPkHash: sha256(generateEncKeyPair().publicKey), rpIdHash: signer.arm === 'p256' ? signer.policy.rp_id_hash : undefined });
             const opening = openingOf(scope, salt, origin, 0n);
             await pointAt(account);
             await record(`issue_grant_with_${device.arm}`, await account.issueGrant(device, id, scope, salt));
@@ -175,7 +175,7 @@ async function callerSuite(h: any, color: Uint8Array, recipient: Uint8Array) {
     }
     const [a, b] = proxies, signer = JubjubGrantee.generate(), origin = originHash('https://caller.localnet.invalid'), salt = rnd();
     const id = signer.grantId(account.addressBytes, origin, 0n);
-    const scope = spendScope({ withdrawUnshielded: true, color, cap: 30n, perCallCap: 10n, caller: new Uint8Array(Buffer.from(b.address, 'hex')) });
+    const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 30n, perCallCap: 10n, caller: new Uint8Array(Buffer.from(b.address, 'hex')) });
     const opening = openingOf(scope, salt, origin, 0n);
     await pointAt(account);
     await record('issue caller-bound grant', await account.issueGrant(devices[0], id, scope, salt));

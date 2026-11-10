@@ -81,7 +81,7 @@ import { rawTokenType, encodeRawTokenType } from '@midnightntwrk/ledger-v9';
 
 import { runScenario, step, waitForLedger, sleep } from './runner.js';
 import { writeEvidence, serialiseError, type Verdict } from './evidence.js';
-import { mintToUser, userCoinPublicKey, expectAbort, type MintedCoin } from './flow.js';
+import { mintToUser, userCoinPublicKey, expectAbort, issueGrantForCircuitTest, type MintedCoin } from './flow.js';
 import {
   setupWallet,
   deployFaucet,
@@ -91,7 +91,7 @@ import {
   type FaucetHandle,
 } from '../node/setup.js';
 import { CONFIG } from '../node/wallet.js';
-import { CustodyAccount } from '../wallet/account.js';
+import { CustodyAccount, type SpendOutcome } from '../wallet/account.js';
 import {
   JubjubDevice,
   K256Device,
@@ -1140,7 +1140,9 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     const before = await account.ledgerState();
     const signer = issuer === 'k256' ? device : jDevice;
     const tx = await timed(`issue_grant_with_${issuer} (grant ${name})`, () =>
-      account.issueGrant(signer, id, scope, salt));
+      scope.expiresAt === 0n
+        ? account.issueGrant(signer, id, scope, salt)
+        : issueGrantForCircuitTest(account, signer, id, scope, salt));
     const after = await waitForLedger(
       () => account.ledgerState(),
       `grant ${name} recorded`,
@@ -1196,6 +1198,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   const grantA = await issue('A', 'k256', jGrantee, SLOT_A, scopeA);
 
   const scopeB = spendScope({
+    expiresAt: 0n,
     withdrawShielded: true,
     color: colorMain,
     cap: 100n,
@@ -1205,10 +1208,11 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   });
   const grantB = await issue('B', 'jubjub', kGrantee, SLOT_B, scopeB);
 
-  const scopeC = readOnlyScope({ readPkHash });
+  const scopeC = readOnlyScope({ expiresAt: 0n, readPkHash });
   const grantC = await issue('C', 'k256', kGranteeConnector, SLOT_C, scopeC);
 
   const scopeD = spendScope({
+    expiresAt: 0n,
     withdrawShielded: true,
     color: colorMain,
     cap: 500n,
@@ -1236,6 +1240,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   // (both need cap headroom that A does not have once its cap is
   // exhausted), and G carries the recipient pin.
   const scopeL = spendScope({
+    expiresAt: 0n,
     withdrawShielded: true,
     color: colorMain,
     cap: 300n,
@@ -1247,6 +1252,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
   const pinnedCpk = rnd32();
   const scopeG = spendScope({
+    expiresAt: 0n,
     withdrawShielded: true,
     color: colorMain,
     cap: 200n,
@@ -1328,9 +1334,11 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       await account.putCoin({ ...held.coin, mtIndex: idx });
       try {
         const r = await timed(opts.label, () =>
-          account.withdrawShieldedWithGrant(
-            grant.grantee, grant.opening, recipient, held.coin.color, amount, changeEntry,
-          ));
+          grant.scope.expiresAt === 0n
+            ? account.withdrawShieldedWithGrant(
+                grant.grantee, grant.opening, recipient, held.coin.color, amount, changeEntry,
+              )
+            : rawGrantSpend({ grant, recipient, amount, changeEntry }));
         attempts.push({ mtIndex: idx.toString(), outcome: `accepted: ${r.txId}` });
         grant.opening.spentPrev += amount;
         const matched = !!r.change
@@ -1509,8 +1517,8 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     return message;
   }
 
-  /** Sign and submit a grant spend at the low level, with no retry: used by
-   *  the rejection items, which must abort before any transaction exists. */
+  /** Sign and submit through the raw path so circuit and admission-time
+   *  expiry controls remain distinct from the high-level preflight tests. */
   async function rawGrantSpend(o: {
     grant: GrantHandle;
     recipient: Uint8Array;
@@ -1518,9 +1526,10 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     spentPrevOverride?: bigint;
     encPkOverride?: Uint8Array;
     sealTo?: Uint8Array;
+    changeEntry?: Uint8Array;
     context?: GrantContext;
     opening?: GrantOpening;
-  }): Promise<unknown> {
+  }): Promise<SpendOutcome> {
     const grant = o.grant;
     const opening = { ...(o.opening ?? grant.opening) };
     if (o.spentPrevOverride !== undefined) opening.spentPrev = o.spentPrevOverride;
@@ -1528,7 +1537,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     const enc = o.encPkOverride ?? (await account.encKey());
     const coin = await account.heldCoin(held.coin.color);
     const predicted = predictChangeCoin(held.coin, o.amount);
-    const changeEntry = sealInboxEntry(o.sealTo ?? enc, predicted);
+    const changeEntry = o.changeEntry ?? sealInboxEntry(o.sealTo ?? enc, predicted);
     const auth = grant.grantee.arm === 'jubjub'
       ? (grant.grantee as JubjubGrantee).sign(
           jubjubGrantChallenges.withdrawShielded(g, (grant.grantee as JubjubGrantee).pk, o.recipient, held.coin.color, o.amount, changeEntry, enc, coin))
@@ -1854,6 +1863,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     console.log(`  account B @ ${accountB.address}`);
 
     const scopeF = spendScope({
+      expiresAt: 0n,
       withdrawShieldedToContract: true,
       color: colorMain,
       cap: 200n,
@@ -2051,6 +2061,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   }
 
   const scopeAReissued = spendScope({
+    expiresAt: 0n,
     withdrawShielded: true,
     color: colorMain,
     cap: 100n,
@@ -2323,6 +2334,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     keyDetails.coinAbandonedAfterS9 = { value: abandoned.value.toString(), nonce: bytesToHex(abandoned.nonce) };
 
     const WIDE = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true,
       color: colorMain,
       cap: 100n,
@@ -2620,6 +2632,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     const devGranteeId = account.grantIdOf(deviceAsGrantee, oh, 28n);
     const devSalt = rnd32();
     const devScope = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true, color: colorMain, cap: 40n, perCallCap: 20n,
       maxCoinValue: 5000n, readPkHash,
     });
@@ -2728,7 +2741,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     });
     const farId = account.grantIdOf(jGrantee, oh, 31n);
     const farIssue = await timed('issue_grant_with_jubjub (expires_at = head + 3600)', () =>
-      account.issueGrant(jDevice, farId, farScope, farSalt));
+      issueGrantForCircuitTest(account, jDevice, farId, farScope, farSalt));
     await waitForLedger(() => account.ledgerState(), 'the forward-dated record is present',
       (l) => l.grants.member(farId));
     const farGrant: GrantHandle = {
@@ -2808,7 +2821,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     });
     const marginId = account.grantIdOf(jGrantee, oh, 32n);
     const marginIssue = await timed('issue_grant_with_jubjub (expires_at inside the admission margin)', () =>
-      account.issueGrant(jDevice, marginId, marginScope, marginSalt));
+      issueGrantForCircuitTest(account, jDevice, marginId, marginScope, marginSalt));
     await waitForLedger(() => account.ledgerState(), 'the short-dated record is present',
       (l) => l.grants.member(marginId));
     const marginOpening = openingOf(marginScope, marginSalt, oh, 32n);
@@ -2933,6 +2946,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
     const rSalt = rnd32();
     const rScope = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true, color: colorMain, cap: 40n, perCallCap: 20n,
       maxCoinValue: 5000n, readPkHash,
     });
@@ -2946,6 +2960,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
     const reSalt = rnd32();
     const reScope = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true, color: colorMain, cap: 30n, perCallCap: 15n,
       maxCoinValue: 5000n, readPkHash,
     });
@@ -3015,8 +3030,8 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       const l = await account.ledgerState();
       const saltP = rnd32();
       const saltQ = rnd32();
-      const scopeP = spendScope({ withdrawShielded: true, color: colorMain, cap: 20n, perCallCap: 10n, maxCoinValue: 5000n, readPkHash });
-      const scopeQ = readOnlyScope({ readPkHash });
+      const scopeP = spendScope({ expiresAt: 0n, withdrawShielded: true, color: colorMain, cap: 20n, perCallCap: 10n, maxCoinValue: 5000n, readPkHash });
+      const scopeQ = readOnlyScope({ expiresAt: 0n, readPkHash });
       const idP = account.grantIdOf(jGrantee, oh, 35n);
       const idQ = account.grantIdOf(kGrantee, oh, 36n);
       let segments: number[] = [];
@@ -3074,6 +3089,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
     const ySalt = rnd32();
     const yScope = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true, color: colorMain, cap: 100n, perCallCap: 50n,
       maxCoinValue: 5000n, readPkHash,
     });
@@ -3338,6 +3354,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
     const raceSalt = rnd32();
     const raceScope = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true, color: colorMain, cap: 60n, perCallCap: 30n,
       maxCoinValue: 5000n, readPkHash,
     });
@@ -3541,6 +3558,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
     const preSalt = rnd32();
     const preScope = spendScope({
+      expiresAt: 0n,
       withdrawShielded: true, color: colorMain, cap: 60n, perCallCap: 30n,
       maxCoinValue: 5000n, readPkHash,
     });

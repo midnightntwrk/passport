@@ -31,6 +31,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { assertExplicitGrantExpiry } from './grant-preflight.js';
 import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
 export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
@@ -564,6 +565,7 @@ export function isSpendScope(s: PlainScope): boolean {
  * with the rule number; the circuit asserts the same predicates.
  */
 export function assertIssueRules(s: PlainScope): void {
+  assertExplicitGrantExpiry(s.expiresAt);
   const spend = isSpendScope(s);
   const shielded = s.opWithdrawShielded || s.opWithdrawShieldedToContract;
   if (!spend && !s.read) throw new Error('issue rule 1: empty scope (no operation flag and no read)');
@@ -592,14 +594,14 @@ export function assertIssueRules(s: PlainScope): void {
  *  object field zero so `object_commit` depends on the salt only (rule 7). */
 export function readOnlyScope(opts: {
   readPkHash: Uint8Array;
-  expiresAt?: bigint;
+  expiresAt: bigint;
   rpIdHash?: Uint8Array;
 }): PlainScope {
   const s: PlainScope = {
     opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false,
     read: true,
     color: ZERO32, recipientKind: RECIPIENT_ANY, recipient: ZERO32, maxCoinValue: 0n,
-    perCallCap: 0n, cap: 0n, expiresAt: opts.expiresAt ?? 0n,
+    perCallCap: 0n, cap: 0n, expiresAt: opts.expiresAt,
     rpIdHash: opts.rpIdHash ?? ZERO32, readPkHash: opts.readPkHash,
     windowLen: 0n, windowCap: 0n,
   };
@@ -624,7 +626,7 @@ export function spendScope(opts: {
   maxCoinValue?: bigint;
   recipientKind?: bigint;
   recipient?: Uint8Array;
-  expiresAt?: bigint;
+  expiresAt: bigint;
   readPkHash?: Uint8Array;
   rpIdHash?: Uint8Array;
   caller?: Uint8Array;
@@ -641,7 +643,7 @@ export function spendScope(opts: {
     maxCoinValue: opts.maxCoinValue ?? opts.cap,
     perCallCap: opts.perCallCap ?? opts.cap,
     cap: opts.cap,
-    expiresAt: opts.expiresAt ?? 0n,
+    expiresAt: opts.expiresAt,
     rpIdHash: opts.rpIdHash ?? ZERO32,
     caller: opts.caller,
     readPkHash: opts.readPkHash ?? ZERO32,

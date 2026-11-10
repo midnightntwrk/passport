@@ -65,6 +65,8 @@ import {
   type PlainScope,
 } from './signer.js';
 import type { EncKeyPair } from './inbox.js';
+import { checkGrantExpiry, GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
+export { GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 
 /** The recovery artefacts an account is born with (recovery MIP section 8):
  *  the recovery public key P = s·G, the wrap, and the veto window. */
@@ -872,6 +874,41 @@ export class CustodyAccount {
     return { contractAddress: this.addressBytes, grantId, issuedAt: g.issued_at, grantNonce: g.nonce };
   }
 
+  /** Keep liveness and signing inputs on one ledger snapshot. The raw
+   * grantContext remains available for deliberate conformance faults. */
+  private async checkedGrant(grantId: Uint8Array, options?: GrantPreflightOptions): Promise<{
+    context: GrantContext; encKey: Uint8Array; epoch: bigint; generation: bigint;
+  }> {
+    const l = await this.ledgerState();
+    if (!l.grants.member(grantId)) throw new GrantPreflightError('missing', 'unknown grant');
+    const g = l.grants.lookup(grantId);
+    if (!g.active) throw new GrantPreflightError('inactive', 'grant revoked');
+    if (g.epoch !== l.device_epoch) throw new GrantPreflightError('stale_epoch', 'grant epoch stale');
+    if (g.gen !== l.grant_generation) throw new GrantPreflightError('stale_generation', 'grant generation stale');
+    await checkGrantExpiry(g.scope.expires_at, options);
+    return {
+      context: { contractAddress: this.addressBytes, grantId, issuedAt: g.issued_at, grantNonce: g.nonce },
+      encKey: l.enc_key, epoch: l.device_epoch, generation: l.grant_generation,
+    };
+  }
+
+  /** A slow authenticator can outlive the checked horizon. Refuse changed
+   * state before dispatch; never silently request a replacement signature. */
+  private async recheckGrant(
+    before: Awaited<ReturnType<CustodyAccount['checkedGrant']>>,
+    options?: GrantPreflightOptions,
+    encKey?: Uint8Array,
+  ): Promise<void> {
+    const after = await this.checkedGrant(before.context.grantId, options);
+    if (after.context.issuedAt !== before.context.issuedAt || after.context.grantNonce !== before.context.grantNonce
+      || after.epoch !== before.epoch || after.generation !== before.generation) {
+      throw new GrantPreflightError('state_changed', 'grant signing state changed; read current state before a new authorisation');
+    }
+    if (encKey && bytesToHex(after.encKey) !== bytesToHex(encKey)) {
+      throw new GrantPreflightError('encryption_key_changed', 'account encryption key changed before grant submission');
+    }
+  }
+
   /** The `grant_generation` cell, bumped only by `revoke_all_grants`. */
   async grantGeneration(): Promise<bigint> {
     const l = await this.ledgerState();
@@ -897,18 +934,21 @@ export class CustodyAccount {
    * rules are checked client-side first so a refused scope never reaches a
    * device signature.
    */
-  async issueGrant(device: AnyDevice, grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array): Promise<TxResult> {
+  async issueGrant(device: AnyDevice, grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array, options?: GrantPreflightOptions): Promise<TxResult> {
     await this.requireGrantCapability();
     assertIssueRules(scope);
     const digest = scopeDigest(scopeSalt, scope);
     const ctx = await this.callContext();
     const { counter, epoch } = await this.requireUseCounter(device);
+    await checkGrantExpiry(scope.expiresAt, options);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.issueGrant(ctx, device.pk, grantId, digest), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).issueGrant(ctx, device.pk, grantId, digest), counter);
-    const r = await this.issueGrantWithAuth(grantId, scope, scopeSalt, auth);
+    await checkGrantExpiry(scope.expiresAt, options);
+    const name = `issue_grant_with_${auth.arm}`;
+    const submitted = await this.handle.callTx[name](grantId, ...scopeArgs(scope), scopeSalt, ...authArgs(auth));
     this.advanceCounter(device, counter, epoch);
-    return r;
+    return { txId: txId(submitted) };
   }
 
   /** Revoke one grant: the record becomes a tombstone (`active == false`)
@@ -984,12 +1024,19 @@ export class CustodyAccount {
     color: Uint8Array,
     amount: bigint,
     recipient: Uint8Array,
+    options?: GrantPreflightOptions,
   ): Promise<TxResult> {
-    const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
+    const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), options);
+    const g = checked.context;
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient))
       : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawUnshielded(g, grantee.pk, color, amount, recipient));
-    return this.withdrawUnshieldedWithGrantAuth(color, amount, recipient, opening, auth);
+    await this.recheckGrant(checked, options);
+    // One dispatch only. A refused attempt must re-enter this method, reread
+    // state and head time, and request a fresh authorisation if still usable.
+    const name = `withdraw_unshielded_with_grant_${auth.arm}`;
+    const r = await this.handle.callTx[name](color, amount, { bytes: recipient }, ...grantAuthArgs(opening, auth));
+    return { txId: txId(r) };
   }
 
   async withdrawShieldedWithGrant(
@@ -1000,14 +1047,24 @@ export class CustodyAccount {
     amount: bigint,
     changeEntry: Uint8Array,
     encPk?: Uint8Array,
+    options?: GrantPreflightOptions,
   ): Promise<SpendOutcome> {
-    const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
-    const enc = encPk ?? await this.encKey();
     const coin = await this.heldCoin(color);
+    const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), options);
+    const g = checked.context;
+    const enc = encPk ?? checked.encKey;
+    if (bytesToHex(enc) !== bytesToHex(checked.encKey)) {
+      throw new GrantPreflightError('encryption_key_changed', 'supplied change encryption key is not current');
+    }
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
       : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
-    return this.withdrawShieldedWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
+    await this.recheckGrant(checked, options, enc);
+    const name = `withdraw_shielded_with_grant_${auth.arm}`;
+    const r = await this.handle.callTx[name](
+      { bytes: recipient }, color, amount, changeEntry, enc, ...grantAuthArgs(opening, auth),
+    );
+    return { txId: txId(r), change: changeOf(r) };
   }
 
   async withdrawShieldedToContractWithGrant(
@@ -1018,14 +1075,24 @@ export class CustodyAccount {
     amount: bigint,
     changeEntry: Uint8Array,
     encPk?: Uint8Array,
+    options?: GrantPreflightOptions,
   ): Promise<DirectSpendOutcome> {
-    const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
-    const enc = encPk ?? await this.encKey();
     const coin = await this.heldCoin(color);
+    const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), options);
+    const g = checked.context;
+    const enc = encPk ?? checked.encKey;
+    if (bytesToHex(enc) !== bytesToHex(checked.encKey)) {
+      throw new GrantPreflightError('encryption_key_changed', 'supplied change encryption key is not current');
+    }
     const auth = grantee.arm === 'jubjub'
       ? grantee.sign(jubjubGrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
       : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
-    return this.withdrawShieldedToContractWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
+    await this.recheckGrant(checked, options, enc);
+    const name = `withdraw_shielded_to_contract_with_grant_${auth.arm}`;
+    const r = await this.handle.callTx[name](
+      { bytes: recipient }, color, amount, changeEntry, enc, ...grantAuthArgs(opening, auth),
+    );
+    return { txId: txId(r), ...directOutcomeOf(r, name) };
   }
 
   /** The live `enc_key` cell: what a grantee seals change entries to. */

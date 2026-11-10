@@ -10,6 +10,7 @@ pin as well; the evidence below does not exercise that arm.
 
 ```ts
 const scope = spendScope({
+  expiresAt: 0n, // Explicitly choose no expiry for this example.
   withdrawUnshielded: true,
   color,
   cap: 100n,
@@ -18,6 +19,9 @@ const scope = spendScope({
 });
 await account.issueGrant(owner, grantId, scope, freshScopeSalt);
 ```
+
+For a finite expiry, supply the fresh node-head reader and timing budgets
+described in [grant preflight](README.md#grant-preflight-and-explicit-expiry).
 
 The grantee signs the same operation challenge as before. A pinned grant
 must be invoked through the pinned contract; direct wallet invocation

@@ -82,7 +82,7 @@ import { ContractState } from '@midnightntwrk/ledger-v9';
 
 import { runScenario, step, waitForLedger, sleep } from './runner.js';
 import { writeEvidence, serialiseError, type Verdict } from './evidence.js';
-import { expectAbort } from './flow.js';
+import { expectAbort, issueGrantForCircuitTest } from './flow.js';
 import {
   setupWallet,
   deployFaucet,
@@ -1015,7 +1015,9 @@ await runScenario('grants-unshielded (GRANTS-E4: the unshielded grant twins on n
     const before = await account.ledgerState();
     const signer = issuer === 'k256' ? device : jDevice;
     const tx = await call(`issue_grant_with_${issuer} (grant ${name})`, `issue_grant_with_${issuer}`,
-      () => account.issueGrant(signer, id, scope, salt));
+      () => scope.expiresAt === 0n
+        ? account.issueGrant(signer, id, scope, salt)
+        : issueGrantForCircuitTest(account, signer, id, scope, salt));
     const after = await waitForLedger(
       () => account.ledgerState(),
       `grant ${name} recorded`,
@@ -1075,23 +1077,27 @@ await runScenario('grants-unshielded (GRANTS-E4: the unshielded grant twins on n
 
   // U1: the working jubjub grant — cap 500, per-call 200, no pin.
   const u1 = await issue('U1', 'k256', jGrantee, SLOT_U1, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color, cap: 500n, perCallCap: 200n, readPkHash,
   }), 'the jubjub twin\'s working grant: three spends, consecutive nonces, cap accounting');
 
   // U2: the k256 grant, pinned to the funding wallet's own UserAddress.
   const u2 = await issue('U2', 'jubjub', kGrantee, SLOT_U2, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color, cap: 300n, perCallCap: 150n,
     recipientKind: RECIPIENT_USER_ADDRESS, recipient, readPkHash,
   }), 'the k256 twin\'s working grant, with the recipient PINNED to the address it pays');
 
   // U3: pinned to an address nobody controls — the pin's negative control.
   const u3 = await issue('U3', 'k256', jGrantee, SLOT_U3, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color, cap: 100n, perCallCap: 100n,
     recipientKind: RECIPIENT_USER_ADDRESS, recipient: otherUserAddress, readPkHash,
   }), 'row A10: a pin to another UserAddress, so paying the funding wallet is out of pin');
 
   // U4: shielded only — exercised through the UNSHIELDED twin.
   const u4 = await issue('U4', 'jubjub', jGrantee, SLOT_U4, spendScope({
+    expiresAt: 0n,
     withdrawShielded: true, color, cap: 100n, perCallCap: 100n, readPkHash,
   }), 'row A5: a shielded-only scope, called through the unshielded twin');
 
@@ -1105,25 +1111,29 @@ await runScenario('grants-unshielded (GRANTS-E4: the unshielded grant twins on n
 
   // U6: to be revoked before it is called.
   const u6 = await issue('U6', 'jubjub', kGrantee, SLOT_U6, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color, cap: 100n, perCallCap: 100n, readPkHash,
   }), 'row A3: revoked before it is called');
 
   // U7: cap 100 / per-call 100 — one admitted spend exhausts it.
   const u7 = await issue('U7', 'k256', jGrantee, SLOT_U7, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color, cap: 100n, perCallCap: 100n, readPkHash,
   }), 'row A9: the cap is driven to its ceiling by an admitted spend, then breached');
 
   // U8: a color the mirror has never held.
   const u8 = await issue('U8', 'k256', jGrantee, SLOT_U8, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color: colorOther, cap: 100n, perCallCap: 100n, readPkHash,
   }), 'row B1: a color with no mirror entry at all');
 
   // U9: a read-only grant held by the connector-envelope k256 grantee.
-  const u9 = await issue('U9', 'k256', kGranteeConnector, SLOT_U9, readOnlyScope({ readPkHash }),
+  const u9 = await issue('U9', 'k256', kGranteeConnector, SLOT_U9, readOnlyScope({ expiresAt: 0n, readPkHash }),
     'row A1: an envelope-1 (connector) grantee presented at a spend twin');
 
   // U10: a cap above the whole mirror.
   const u10 = await issue('U10', 'jubjub', jGrantee, SLOT_U10, spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true, color, cap: 4_000n, perCallCap: 4_000n, readPkHash,
   }), 'row B2: a per-call cap above the mirror balance, so the mirror gate is the only refusal left');
 

@@ -94,7 +94,7 @@ await runScenario('P-256/WebAuthn on-node', async () => {
   const grantId = second.grantee.grantId(account.addressBytes, originHash(TEST_ORIGIN), 0n);
   label = 'issue_grant_with_p256';
   await record(label, await account.issueGrant(f.device, grantId,
-    readOnlyScope({ readPkHash: rnd(), rpIdHash: second.policy.rp_id_hash }), rnd()));
+    readOnlyScope({ expiresAt: 0n, readPkHash: rnd(), rpIdHash: second.policy.rp_id_hash }), rnd()));
   label = 'revoke_grant_with_p256'; await record(label, await account.revokeGrant(f.device, grantId));
 
   step('native P-256 and complete WebAuthn verifier probes: captured real high-S assertion');

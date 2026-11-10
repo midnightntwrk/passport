@@ -8,7 +8,7 @@ import { runScenario, step } from './runner.js';
 void runScenario('grants-capability-offline', async () => {
   const device = JubjubDevice.generate();
   const bytes = new Uint8Array(32);
-  const scope = readOnlyScope({ readPkHash: Uint8Array.from({ length: 32 }, () => 1) });
+  const scope = readOnlyScope({ expiresAt: 0n, readPkHash: Uint8Array.from({ length: 32 }, () => 1) });
   const auth: Authorisation = device.sign(() => bytes, 0n);
   let signingContexts = 0, submissions = 0;
   const account = Object.create(CustodyAccount.prototype) as CustodyAccount;

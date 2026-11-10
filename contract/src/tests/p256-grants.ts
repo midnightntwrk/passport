@@ -96,7 +96,7 @@ await runScenario('P-256 scoped-grant spends on node', async () => {
 
   const origin = originHash(TEST_ORIGIN);
   const id = delegate.grantee.grantId(account.addressBytes, origin, 0n);
-  const scope = spendScope({ withdrawUnshielded: true, color, cap: 12n, perCallCap: 10n,
+  const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 12n, perCallCap: 10n,
     recipientKind: RECIPIENT_USER_ADDRESS, recipient, rpIdHash: delegate.policy.rp_id_hash });
   let salt = rnd(), opening = openingOf(scope, salt, origin, 0n);
   await record('P-256 owner issues P-256 spend grant', await account.issueGrant(owner.device, id, scope, salt));
@@ -189,7 +189,7 @@ await runScenario('P-256 scoped-grant spends on node', async () => {
     await reject(label, () => spend(material.auth, restrictedOpening), expected);
     assert.equal((await account.grantRecord(restrictedId))!.nonce, 0n);
   };
-  await restricted(1n, readOnlyScope({ readPkHash: rnd(), rpIdHash: delegate.policy.rp_id_hash }),
+  await restricted(1n, readOnlyScope({ expiresAt: 0n, readPkHash: rnd(), rpIdHash: delegate.policy.rp_id_hash }),
     'read-only grant cannot spend', /operation not in scope/);
   await restricted(2n, { ...scope, caller: rnd() }, 'caller-restricted grant rejects root call', /grant requires a contract caller/);
 
