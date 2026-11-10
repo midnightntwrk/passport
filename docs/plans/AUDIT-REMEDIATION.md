@@ -9,12 +9,13 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: priority 1, reliable reconnection.** Implementation and independent
-agent review are complete on `codex/reliable-reconnection`. The change is ready
-for pull-request review and is not yet merged.
+**Current: priority 2, grant preflight.** Implementation and independent agent
+review are complete on `codex/grant-preflight`, ready for pull-request review.
+Priority 1 merged in [#201](https://github.com/midnightntwrk/passport/pull/201)
+on 2026/11/10 as `f7342f297d945198fcfd7300307b63220a3dfdd9`.
 
-**Immediately after priority 1 merges: start priority 2, grant preflight.**
-Verify the merge commit on `origin/main`, mark priority 1 as merged with its
+**Immediately after priority 2 merges: start priority 3, dormant recovery bootstrap.**
+Verify the merge commit on `origin/main`, mark priority 2 as merged with its
 pull request and validation evidence, and create the next branch from that
 updated baseline. Do not treat an open or merely approved pull request as a
 merge. Continue in the order below, carrying the next item into each hand-off.
@@ -24,8 +25,8 @@ background merge watcher or establish that any later task has started.
 
 | Order | Work | Audit identifiers | State | Start condition |
 |---|---|---|---|---|
-| 1 | Reliable device reconnection | `DEV-003`, `DEV-004`; `TASK-DEV-003`, `TASK-DEV-004` | Implemented; awaiting merge | Authorised on 2026/11/10 |
-| 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Next | Start immediately after priority 1 merges |
+| 1 | Reliable device reconnection | `DEV-003`, `DEV-004`; `TASK-DEV-003`, `TASK-DEV-004` | Merged in #201 | Merge `f7342f2`, 2026/11/10 |
+| 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Implemented; awaiting merge | Based on merged priority 1 |
 | 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Queued | Priority 2 merged |
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Queued | Priority 3 merged |
 
@@ -50,7 +51,7 @@ outside this change.
 - [x] Targeted regressions and relevant existing checks pass, with execution
   layers and limitations recorded in the pull request.
 - [x] Independent implementation review is complete.
-- [ ] The pull request is merged, with its merge commit recorded here.
+- [x] The pull request is merged: #201, commit `f7342f297d945198fcfd7300307b63220a3dfdd9`.
 
 Validation on 2026/11/10: fresh Compact 0.35.0 generated-runtime compilation
 with key generation skipped, TypeScript build, ten reconnection tests,
@@ -65,12 +66,26 @@ browser ceremony, or node admission is claimed.
 Scope: reject unusable grants before requesting a signature. Existing circuit
 enforcement remains authoritative; preflight is not an admission guarantee.
 
-- [ ] Inactive, stale-epoch, stale-generation, expired, and insufficient-horizon
+- [x] Inactive, stale-epoch, stale-generation, expired, and insufficient-horizon
   grants cause zero signer calls.
-- [ ] Explicit non-expiry, clock skew, and admission margins have deliberate
+- [x] Explicit non-expiry, clock skew, and admission margins have deliberate
   behaviour and regression coverage.
-- [ ] Valid grants continue to reach signing and submission.
-- [ ] Independent review is complete, and the pull request is merged.
+- [x] Valid grants continue to reach signing and submission.
+- [x] Independent implementation review is complete.
+- [ ] The pull request is merged, with its merge commit recorded here.
+
+Validation on 2026/11/10: all 30 preflight tests and the TypeScript build
+passed. The matrix covers all three signing arms and spending twins, zero-sign
+refusals, separate wall-clock/head-time and timing-budget checks, post-sign
+changes, single-attempt dispatch, and a generated-runtime finite grant journey.
+Existing grant, caller, capability, P-256, and recovery simulator checks passed.
+Circuit-negative fixtures retain raw authorisation paths. No fresh proof,
+browser ceremony, or node admission is claimed.
+
+Callers must choose `expiresAt` explicitly. Finite high-level operations need a
+fresh node-head reader and measured timing budgets; high-level issuance and
+spending make one submission attempt. The [reference guide](../../contract/README.md#grant-preflight-and-explicit-expiry)
+describes the migration and the raw API's remaining retry behaviour.
 
 ## 3. Dormant recovery bootstrap
 

@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import { runScenario, step, sleep, waitForLedger } from './runner.js';
 import { writeEvidence, serialiseError } from './evidence.js';
-import { expectAbort } from './flow.js';
+import { expectAbort, issueGrantForCircuitTest } from './flow.js';
 import { setupWallet, compiledAccountContract, deployFaucet } from '../node/setup.js';
 import { userAddressBytes } from '../node/wallet.js';
 import { CustodyAccount } from '../wallet/account.js';
@@ -105,7 +105,7 @@ await runScenario('recovery-conformance', async () => {
   await waitForLedger(() => account.ledgerState(), 'grant mirror funded',
     led => led.unshielded_balances.member(color) && led.unshielded_balances.lookup(color) === 100n);
   const origin = originHash('https://recovery-grants.example');
-  const scope = spendScope({ withdrawUnshielded: true, color, cap: 100n, perCallCap: 10n });
+  const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 100n, perCallCap: 10n });
   const delegates = [JubjubGrantee.generate(), K256Grantee.generate()];
   const grants = delegates.map((grantee, index) => ({
     grantee, id: grantee.grantId(account.addressBytes, origin, BigInt(index)),
@@ -185,9 +185,15 @@ await runScenario('recovery-conformance', async () => {
     await waitForLedger(() => account.ledgerState(), `${grantee.arm} slot 64 revoked`,
       led => !led.grants.lookup(entries[0].id).active);
     const beforeRefusal = await snapshot();
+    // This row establishes circuit refusal, so retain the raw signed path.
+    // Client preflight rejection is exercised separately by its own suite.
+    const revokedContext = await account.grantContext(entries[0].id);
+    const revokedAuth = grantee.arm === 'jubjub'
+      ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(revokedContext, grantee.pk, color, 5n, recipient))
+      : grantee.sign(k256GrantChallenges.withdrawUnshielded(revokedContext, grantee.pk, color, 5n, recipient));
     const refusal = await expectAbort(`${grantee.arm} revoked slot 64`, () =>
-      account.withdrawUnshieldedWithGrant(grantee,
-        openingOf(scope, entries[0].salt, origin, entries[0].slot), color, 5n, recipient));
+      account.withdrawUnshieldedWithGrantAuth(color, 5n, recipient,
+        openingOf(scope, entries[0].salt, origin, entries[0].slot), revokedAuth));
     assert(refusal.includes('grant revoked'), 'revoked slot fails its lifecycle check');
     const afterRefusal = await snapshot();
     assert(afterRefusal === beforeRefusal, 'revoked-slot refusal changes no tracked state');
@@ -215,7 +221,7 @@ await runScenario('recovery-conformance', async () => {
   const expiredId = delegates[0].grantId(account.addressBytes, origin, 250n);
   const expiredSalt = new Uint8Array(randomBytes(32));
   const expiredScope = { ...scope, expiresAt: BigInt(Math.floor(Date.now() / 1000) - 60) };
-  const expiredIssue = await account.issueGrant(device, expiredId, expiredScope, expiredSalt);
+  const expiredIssue = await issueGrantForCircuitTest(account, device, expiredId, expiredScope, expiredSalt);
   await waitForLedger(() => account.ledgerState(), 'expired record issued and active',
     led => led.grants.member(expiredId) && led.grants.lookup(expiredId).active);
   const beforeExpired = await snapshot();

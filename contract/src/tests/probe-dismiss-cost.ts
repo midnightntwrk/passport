@@ -606,6 +606,7 @@ await runScenario('probe: the time-to-dismiss cost of every unshielded shape', a
     ['k256', kGrantee, SLOT_K256],
   ] as const) {
     const scope = spendScope({
+      expiresAt: 0n,
       withdrawUnshielded: true,
       color,
       cap: 2_000n,

@@ -475,7 +475,7 @@ await runScenario('recovery-sim', async () => {
     const color = new Uint8Array(randomBytes(32));
     const recipient = new Uint8Array(randomBytes(32));
     const origin = originHash('https://recovery-grants.example');
-    const scope = spendScope({ withdrawUnshielded: true, color, cap: 100n, perCallCap: 10n });
+    const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 100n, perCallCap: 10n });
     const delegates = [JubjubGrantee.generate(), K256Grantee.generate()];
     const grants = delegates.map((grantee, i) => ({
       grantee,
@@ -575,7 +575,7 @@ await runScenario('recovery-sim', async () => {
     const maxU128 = (1n << 128n) - 1n;
     for (const grantee of delegates) {
       const wrapColor = new Uint8Array(randomBytes(32));
-      const wrapScope = spendScope({ withdrawUnshielded: true, color: wrapColor, cap: maxU128 });
+      const wrapScope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color: wrapColor, cap: maxU128 });
       const wrapSalt = new Uint8Array(randomBytes(32));
       const wrapSlot = 245n;
       const wrapId = grantee.grantId(gs.address, origin, wrapSlot);
@@ -611,6 +611,7 @@ await runScenario('recovery-sim', async () => {
         value: 10n, mt_index: 0n,
       };
       const foreignScope = spendScope({
+        expiresAt: 0n,
         withdrawShielded: true, withdrawShieldedToContract: true,
         color: admittedColor, cap: 100n, readPkHash: new Uint8Array(randomBytes(32)),
       });

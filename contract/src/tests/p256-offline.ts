@@ -160,7 +160,7 @@ for (const [base, build] of [
   await assert.rejects(() => sim.call(`${base}_with_p256`, { bytes: rnd() }, coin.color, 5n, ...authArgs(a)), /signature/);
 }
 const id = delegate.grantee.grantId(sim.address, origin, 0n);
-const scope = spendScope({ withdrawUnshielded: true, color, cap: 20n, perCallCap: 10n, rpIdHash: delegate.policy.rp_id_hash });
+const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 20n, perCallCap: 10n, rpIdHash: delegate.policy.rp_id_hash });
 await call('issue_grant', p256Challenges.issueGrant(sim.callContext(), f.pk, id, scopeDigest(salt, scope)), [id, ...scopeArgs(scope), salt]);
 const opening = openingOf(scope, salt, origin, 0n);
 const record = sim.ledger().grants.lookup(id);

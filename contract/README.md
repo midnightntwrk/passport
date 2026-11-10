@@ -250,6 +250,97 @@ profile isolation, stale hints, recovery, and removal. It uses generated entry
 derivations, a snapshot membership fixture, and real generated-runtime account
 calls. It does not establish fresh proof or node admission.
 
+### Grant preflight and explicit expiry
+
+`readOnlyScope` and `spendScope` now require an explicit `expiresAt` Uint64
+`bigint`, measured in whole UNIX seconds. Use `expiresAt: 0n` deliberately for
+never-expiring grants. Omission, numbers, negative values, and overflow are
+rejected; the helpers no longer silently choose unlimited lifetime. Existing
+callers must add their intended expiry decision.
+
+`issueGrant` and the three high-level `withdraw*WithGrant` methods accept an
+optional final `GrantPreflightOptions` argument, exported from
+`src/wallet/account.ts`. Finite grants require that argument. It supplies:
+
+- `readNodeHeadTimeSeconds`: an asynchronous callback that freshly reads the
+  supported node's current head timestamp and returns whole UNIX seconds as
+  a `bigint`. Do not return an indexer's latest-block timestamp or reuse a
+  previously cached timestamp. The current `PublicDataProvider.queryBlock`
+  exposes hash and height only, so the caller must supply its node adapter.
+- `admissionMarginSeconds`: the supported network's block interval plus
+  admission tolerance, as a non-negative Uint64 `bigint`.
+- `proveAndBalanceSeconds`: the measured proving and balancing budget for
+  this operation, hardware, and stack, in the same representation.
+- `nowSeconds`: an optional wall-clock callback, normally omitted. The default
+  samples the host clock after awaiting the fresh head read. Tests inject it.
+
+The following wrapper makes the application's node reader and measured timing
+inputs explicit, without prescribing an unverified RPC decoder or historical
+network constants:
+
+```ts
+import type { CustodyAccount, GrantPreflightOptions } from './wallet/account.js';
+import type { AnyGrantee, GrantOpening } from './wallet/signer.js';
+
+async function spendGrant(
+  account: CustodyAccount,
+  grantee: AnyGrantee,
+  opening: GrantOpening,
+  color: Uint8Array,
+  amount: bigint,
+  recipient: Uint8Array,
+  readNodeHeadTimeSeconds: () => Promise<bigint>,
+  admissionMarginSeconds: bigint,
+  proveAndBalanceSeconds: bigint,
+) {
+  const timing: GrantPreflightOptions = {
+    readNodeHeadTimeSeconds, admissionMarginSeconds, proveAndBalanceSeconds,
+  };
+  return account.withdrawUnshieldedWithGrant(
+    grantee, opening, color, amount, recipient, timing,
+  );
+}
+```
+
+For a shielded twin, pass timing after the optional `encPk` argument, using
+`undefined` to select the encryption key from the checked ledger snapshot.
+For issuance, pass timing after `scopeSalt`. Missing node data or timing
+configuration refuses finite-expiry operations before a signer is invoked.
+There is no guessed timing default. Explicit zero skips both wall-clock and
+head-time reads while retaining all grant-liveness checks.
+
+Before requesting a grantee signature, the client reads the grant record,
+current device epoch, grant generation, and encryption key from one ledger
+snapshot. Missing, revoked, stale-epoch, and stale-generation records are
+refused. Coin selection is awaited before the snapshot and timing check.
+Finite expiry must exceed both clocks and
+`max(wall clock, node head) + admission margin + prove/balance budget`.
+Equality is refused. The check uses `bigint` throughout without Uint64 wrapping.
+
+After signing, the client checks current liveness, expiry, grant incarnation,
+and grant nonce again. Shielded calls also check the encryption key. A slow
+WebAuthn prompt or intervening state change can therefore cause a refusal
+before dispatch. It does not silently ask for another signature. These checks
+reduce avoidable prompts and known-unusable submissions; they cannot guarantee
+admission while ledger state and network conditions continue changing.
+
+High-level grant issuance and spending make one submission attempt. After a
+refusal, a caller may invoke the high-level method again; it will read current
+state and head time, reassess the horizon, and sign only if still usable. The
+raw `grantContext`, `issueGrantWithAuth`, and `withdraw*WithGrantAuth` surfaces
+remain available for explicit caller-controlled authorisations and negative
+conformance tests. Their existing automatic dust retries are retained and do not perform these
+preflight checks; callers using the raw surface must account for that behaviour. Circuit predicates remain
+authoritative; no ledger schema or signature recipe changed.
+
+`npm run test:grant-preflight` checks all three spending twins and signing arms,
+clock skew, timing boundaries, serialisation types, no-sign refusals, slow
+signing, state changes, and single-attempt dispatch. A generated-runtime
+journey issues a finite grant, spends through it, and rejects use after
+revocation. Fixture migrations retain deliberate circuit and admission
+negative controls through raw authorisations. This is client and generated-
+runtime evidence, with no new proof, real-browser, or node admission run.
+
 ## Known issues and remaining validation
 
 1. **Individual-device revocation is incomplete.** `remove_device` removes
@@ -376,6 +467,7 @@ cargo test --locked --manifest-path signer-rs/Cargo.toml
 npm run test:unit
 npm run test:input-validation
 npm run test:device-reconnection
+npm run test:grant-preflight
 npm run test:toolchain-offline
 npm run test:grants-offline
 npm run test:grants-capability-offline
@@ -430,6 +522,7 @@ was actually exercised. In older reports, “both arms” means JubJub and k256.
 | `test:unit`, `test:crossimpl-offline` | Client encodings, challenges and independent Rust signer agreement; AUTH-9/10 binding checks. |
 | `test:input-validation` | Client secret-scalar, hexadecimal, X25519 key-length and inbox coin-encoding boundaries; valid signatures and inbox round trips. |
 | `test:device-reconnection` | Bounded resumable counter discovery, signing-profile isolation, persisted hints, and generated-runtime authorisation after reconnect, removal, and recovery. |
+| `test:grant-preflight` | Pre-sign liveness and expiry checks, explicit timing policy, post-sign state checks, and single-attempt high-level grant submission. |
 | `test:auth-coinless` | JubJub/k256 authorisation, cross-arm enrolment, self-removal and maintenance controls; [0.35 receipts](evidence/compact-0.35/auth-coinless-arms-auth-coinless.json). |
 | `test:auth`, `test:auth-lifecycle`, `test:auth-replay`, `test:auth-crossimpl` | Funded MIP-0013 suites; historical NIGHT-funding limitation applies. |
 | `test:custody-shielded`, `test:custody-discovery`, `test:custody-payments`, `test:leak-audit` | MIP-0012 Testing 1–5, 7–8; historical receipts in `evidence/cust-*.json`. |

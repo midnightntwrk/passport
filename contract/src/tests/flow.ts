@@ -16,7 +16,10 @@ import {
 } from '../node/setup.js';
 import { coinPublicKeyBytes } from '../node/wallet.js';
 import { CustodyAccount } from '../wallet/account.js';
-import { K256Device } from '../wallet/signer.js';
+import {
+  K256Device, jubjubChallenges, k256Challenges, p256Challenges, scopeDigest,
+  type AnyDevice, type PlainScope,
+} from '../wallet/signer.js';
 import {
   generateEncKeyPair,
   sealInboxEntry,
@@ -30,6 +33,26 @@ export interface MintedCoin extends PlainCoin {
   mintTx: string;
   faucetAddress: string;
   colorSeedHex: string;
+}
+
+/** Issue through the raw contract path for circuit conformance, including
+ *  deliberately expired scopes that the high-level client must refuse.
+ *  Each call resolves the current owner counter and challenge again. */
+export async function issueGrantForCircuitTest(
+  account: CustodyAccount,
+  device: AnyDevice,
+  grantId: Uint8Array,
+  scope: PlainScope,
+  salt: Uint8Array,
+) {
+  const context = await account.callContext();
+  const counter = await account.resolveUseCounter(device);
+  const digest = scopeDigest(salt, scope);
+  const auth = device.arm === 'jubjub'
+    ? device.sign(jubjubChallenges.issueGrant(context, device.pk, grantId, digest), counter)
+    : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges)
+      .issueGrant(context, device.pk, grantId, digest), counter);
+  return account.issueGrantWithAuth(grantId, scope, salt, auth);
 }
 
 export async function userCoinPublicKey(ctx: TestContext): Promise<Uint8Array> {

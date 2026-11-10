@@ -217,7 +217,7 @@ async function main() {
   for (const v of jubjub.filter(v => v.name !== 'noncanonical x=FQ')) {
     const s = await Sim.create(); await s.activate();
     const origin = new Uint8Array(32).fill(3);
-    const scope = spendScope({ withdrawUnshielded: true, color: zero(), cap: 10n });
+    const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color: zero(), cap: 10n });
     const id = c.derive_grant_id_with_jubjub({ bytes: s.address }, v.pk, origin, 0n);
     await check('grant/issue committed jubjub key', v.name, async () => {
       await s.authorised('issue_grant', [id, ...scopeArgs(scope), salt],
@@ -321,7 +321,7 @@ async function extendedChecks() {
   // gates, with correctly formed responses and explicit damaged controls.
   for (const nonce of [7n, 0n]) {
     const s = await Sim.create(); await s.activate();
-    const origin = zero(), scope = spendScope({ withdrawUnshielded: true, color: zero(), cap: 10n });
+    const origin = zero(), scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color: zero(), cap: 10n });
     const id = c.derive_grant_id_with_jubjub({ bytes: s.address }, owner.pk, origin, 0n);
     const g = await issue(s, id, scope);
     const build = jubjubGrantChallenges.withdrawUnshielded(g, owner.pk, zero(), 1n, salt);
@@ -366,7 +366,7 @@ async function extendedChecks() {
     for (const v of foreign(arm)) {
       const s = await Sim.create(); await s.activate();
       const origin = originHash('http://localhost:8973');
-      const scope = spendScope({ withdrawUnshielded: true, color: zero(), cap: 10n,
+      const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color: zero(), cap: 10n,
         ...(arm === 'p256' ? { rpIdHash: f.policy.rp_id_hash } : {}) });
       const id = arm === 'k256'
         ? c.derive_grant_id_with_k256({ bytes: s.address }, k.pk, 0n, origin, 0n)

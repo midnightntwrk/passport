@@ -409,6 +409,7 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
   // The stage-one fixture: unshielded spend, per-call 300, cap 450, coin
   // bound 300, pinned to one UserAddress.
   const scope = spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true,
     color,
     cap: 450n,
@@ -435,7 +436,7 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
     () => acc.call(`issue_grant_with_${acc.owner.arm}`, gid, ...scopeArgs({ ...scope, caller }), scopeSalt, ...authArgs(unsignedPin)),
     ['invalid signature', 'range error']);
   await expectAbort(`${tag} read-only grant cannot restrict caller`,
-    () => acc.issue({ ...readOnlyScope({ readPkHash: rnd(32) }), caller }, gid, scopeSalt),
+    () => acc.issue({ ...readOnlyScope({ expiresAt: 0n, readPkHash: rnd(32) }), caller }, gid, scopeSalt),
     'read-only grant cannot restrict caller');
 
   // Built as PlainScope literals, not through `spendScope`, because the
@@ -522,7 +523,7 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
   await expectAbort(`${tag} revoke of an absent id`, () => acc.revoke(rnd(32)), 'unknown grant');
 
   // A read-only grant under another slot: every object field zero (rule 7).
-  const roScope = readOnlyScope({ readPkHash: rnd(32) });
+  const roScope = readOnlyScope({ expiresAt: 0n, readPkHash: rnd(32) });
   const gidRo = grantee.grantId(acc.address, origin, 1n);
   await acc.issue(roScope, gidRo, rnd(32));
   ok(
@@ -607,6 +608,7 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
       // A second grant carrying only the shielded flag, exercised through
       // the unshielded twin.
       const shieldedOnly = spendScope({
+        expiresAt: 0n,
         withdrawShielded: true,
         color,
         cap: 450n,
@@ -742,6 +744,7 @@ async function armNegatives(): Promise<void> {
   const color = rnd(32);
   const recipient = rnd(32);
   const scope = spendScope({
+    expiresAt: 0n,
     withdrawUnshielded: true,
     color,
     cap: 450n,
@@ -979,36 +982,36 @@ function clientIssueRules(): void {
   const readPkHash = rnd(32);
   expectRefusal(
     'issue rule 3 (per_call_cap above cap)',
-    () => spendScope({ withdrawUnshielded: true, color: ZERO32, cap: 10n, perCallCap: 11n }),
+    () => spendScope({ expiresAt: 0n, withdrawUnshielded: true, color: ZERO32, cap: 10n, perCallCap: 11n }),
     'rule 3',
   );
   expectRefusal(
     'issue rule 4 (max_coin_value below per_call_cap)',
-    () => spendScope({ withdrawShielded: true, color: ZERO32, cap: 10n, maxCoinValue: 1n, readPkHash }),
+    () => spendScope({ expiresAt: 0n, withdrawShielded: true, color: ZERO32, cap: 10n, maxCoinValue: 1n, readPkHash }),
     'rule 4',
   );
   expectRefusal(
     'issue rule 5 (shielded without a delegate key hash)',
-    () => spendScope({ withdrawShielded: true, color: ZERO32, cap: 10n }),
+    () => spendScope({ expiresAt: 0n, withdrawShielded: true, color: ZERO32, cap: 10n }),
     'rule 5',
   );
   ok(
-    spendScope({ withdrawShielded: true, color: ZERO32, cap: 10n, readPkHash }).read === true,
+    spendScope({ expiresAt: 0n, withdrawShielded: true, color: ZERO32, cap: 10n, readPkHash }).read === true,
     'issue rule 2 (a shielded flag implies read)',
   );
   expectRefusal(
     'issue rule 1 (no operation flag and no read)',
-    () => assertIssueRules({ ...readOnlyScope({ readPkHash }), read: false }),
+    () => assertIssueRules({ ...readOnlyScope({ expiresAt: 0n, readPkHash }), read: false }),
     'rule 1',
   );
   expectRefusal(
     'issue rule 6 (window bounds are reserved)',
-    () => assertIssueRules({ ...readOnlyScope({ readPkHash }), windowLen: 1n }),
+    () => assertIssueRules({ ...readOnlyScope({ expiresAt: 0n, readPkHash }), windowLen: 1n }),
     'rule 6',
   );
   expectRefusal(
     'issue rule 7 (a read-only grant carrying object fields)',
-    () => assertIssueRules({ ...readOnlyScope({ readPkHash }), cap: 1n }),
+    () => assertIssueRules({ ...readOnlyScope({ expiresAt: 0n, readPkHash }), cap: 1n }),
     'rule 7',
   );
 }

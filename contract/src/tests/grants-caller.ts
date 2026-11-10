@@ -64,7 +64,7 @@ await runScenario('caller-bound scoped grants', async () => {
   const grantee = JubjubGrantee.generate(), origin = originHash('https://bank.example');
   let salt = rnd();
   const id = grantee.grantId(account.addressBytes, origin, 0n);
-  const scope = spendScope({ withdrawUnshielded: true, color, cap: 30n, perCallCap: 10n, caller: bRef.bytes });
+  const scope = spendScope({ expiresAt: 0n, withdrawUnshielded: true, color, cap: 30n, perCallCap: 10n, caller: bRef.bytes });
   let opening = openingOf(scope, salt, origin, 0n);
   await record('issue pinned to B', (await account.issueGrant(owner, id, scope, salt)).txId);
   const material = async () => {
