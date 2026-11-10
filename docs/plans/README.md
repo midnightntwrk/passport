@@ -12,6 +12,10 @@ promises, the components that deliver it, and how the original October MVP plan 
 of merged implementation, open feature PRs, upstream proposals, demo releases,
 SDK work and formal-spec tickets.
 
+**Audit follow-up:** the [remediation queue](AUDIT-REMEDIATION.md) records the
+four agreed implementation priorities, their acceptance criteria, and the next
+task to start immediately after each merge.
+
 **Proposed design and validation plan:** [Account viewing key sharing and recovery](viewing-key-sharing.md)
 defines the lifecycle to evaluate, contract options and acceptance criteria
 for the follow-up to the merged inbox-envelope experiment. Agreed architectural

@@ -10,6 +10,7 @@
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:input-validation": "tsx --test src/tests/input-validation.ts src/tests/signer-input-validation.ts",
+    "test:device-reconnection": "node --import tsx --test src/tests/device-reconnection.ts",
     "test:ecc": "node --import tsx src/tests/ecc-validation.ts",
     "test:ecc-wallet": "node --import tsx src/tests/ecc-wallet.ts",
     "test:ecc-nonces": "node --import tsx src/tests/ecc-followups.ts nonces",

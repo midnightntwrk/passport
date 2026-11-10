@@ -13,7 +13,7 @@
 // `*WithAuth` variants accept a pre-built Authorisation so conformance
 // tests can inject faults (wrong s, stale nonce, wrong counter, replays).
 //
-// The client tracks a device roster (pk → use counter) per MIP-0013 S11:
+// The client tracks a credential- and epoch-scoped roster per MIP-0013 S11:
 // counters advance on every successful gated call, and an unknown counter
 // is recovered by rescanning ledger membership of candidate entries.
 
@@ -94,8 +94,72 @@ export interface DirectSpendOutcome extends SpendOutcome {
   sent: ShieldedCoin;
 }
 
-/** How far the S11 rescan probes for a device's current use counter. */
-const RESCAN_LIMIT = 4096n;
+/** Maximum membership probes in one discovery page, including hints. */
+const COUNTER_PAGE_LIMIT = 4096;
+const MAX_USE_COUNTER = (1n << 64n) - 1n;
+
+/** Serialisable, untrusted position hint. Membership is always rechecked. */
+export interface DeviceCounterHint {
+  version: 1;
+  account: string;
+  credential: string;
+  epoch: string;
+  counter: string;
+}
+
+/** Resume only against the same account, credential, and device epoch. */
+export interface DeviceCounterCursor {
+  version: 1;
+  account: string;
+  credential: string;
+  epoch: string;
+  nextCounter: string;
+}
+
+export interface DeviceCounterSearchOptions {
+  /** A saved page cursor. A changed device epoch requires restart. */
+  cursor?: DeviceCounterCursor;
+  /** A persisted hint, checked before a fresh scan. Cannot accompany a cursor. */
+  hint?: DeviceCounterHint;
+  /** Membership probes for this call, from 1 through 4096. */
+  maxProbes?: number;
+}
+
+export interface DeviceCounterFound {
+  status: 'found';
+  counter: bigint;
+  epoch: bigint;
+  entry: Uint8Array;
+  probes: number;
+  hint: DeviceCounterHint;
+}
+
+export interface DeviceCounterExhausted {
+  status: 'exhausted';
+  epoch: bigint;
+  /** Contiguous scan range, with an exclusive end; hint/forward probes are separate. */
+  fromCounter: bigint;
+  toCounter: bigint;
+  probes: number;
+  /** Null means the scan reached Uint64's end, not proof of non-registration. */
+  cursor: DeviceCounterCursor | null;
+}
+
+export type DeviceCounterSearchResult = DeviceCounterFound | DeviceCounterExhausted;
+
+export class DeviceCounterSearchExhaustedError extends Error {
+  constructor(readonly result: DeviceCounterExhausted) {
+    super('device counter search exhausted its bounded page; registration is undetermined');
+    this.name = 'DeviceCounterSearchExhaustedError';
+  }
+}
+
+export class DeviceCounterCursorError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DeviceCounterCursorError';
+  }
+}
 
 /**
  * Submit with a dust-race retry. The wallet builds fees from its own dust
@@ -155,8 +219,9 @@ function directOutcomeOf(r: any, name: string): { sent: ShieldedCoin; change: Sh
 }
 
 export class CustodyAccount {
-  /** Device roster: pk (hex of x‖y) → current use counter (S11). */
-  private readonly counters = new Map<string, bigint>();
+  /** Full credential, account, and epoch identify each checked roster hint. */
+  private readonly counters = new Map<string, DeviceCounterHint>();
+  private counterEpoch: bigint | undefined;
 
   private constructor(
     readonly address: string,
@@ -248,7 +313,7 @@ export class CustodyAccount {
       },
       finish: () => {
         const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
-        account.counters.set(pkKey(initialDevice.pk), 0n);
+        account.registerDevice(initialDevice, 0n);
         return account;
       },
     };
@@ -293,36 +358,142 @@ export class CustodyAccount {
   // ── Device roster (MIP-0013 S11) ──────────────────────────────────────────
 
   /**
-   * The device's current use counter: the roster value when it still
-   * matches a live entry, else the S11 rescan — probe ledger membership of
-   * the device's entry at candidate counters under the current epoch. The
-   * verification step makes the roster self-healing after out-of-band
-   * calls or desync.
+   * The device's current use counter: a checked roster hint, or one bounded
+   * S11 discovery page. Catch DeviceCounterSearchExhaustedError and resume
+   * with its result.cursor to continue beyond that page.
    */
-  async resolveUseCounter(device: AnyDevice): Promise<bigint> {
-    const l = await this.ledgerState();
-    const known = this.counters.get(pkKey(device.pk));
-    if (known !== undefined) {
-      const entry = device.entryAt(this.addressBytes, l.device_epoch, known);
-      if (l.devices.member(entry)) return known;
+  async resolveUseCounter(device: AnyDevice, options: DeviceCounterSearchOptions = {}): Promise<bigint> {
+    return (await this.requireUseCounter(device, options)).counter;
+  }
+
+  /**
+   * Search one bounded page against one ledger snapshot. Save an exhausted
+   * result's cursor to continue in this or another process. A page never
+   * establishes that a credential is unregistered.
+   */
+  async discoverUseCounter(
+    device: AnyDevice,
+    options: DeviceCounterSearchOptions = {},
+  ): Promise<DeviceCounterSearchResult> {
+    const maxProbes = options.maxProbes ?? COUNTER_PAGE_LIMIT;
+    if (!Number.isSafeInteger(maxProbes) || maxProbes < 1 || maxProbes > COUNTER_PAGE_LIMIT) {
+      throw new RangeError('maxProbes must be an integer from 1 through 4096');
     }
-    for (let k = known ?? 0n; k < (known ?? 0n) + RESCAN_LIMIT; k++) {
-      const entry = device.entryAt(this.addressBytes, l.device_epoch, k);
-      if (l.devices.member(entry)) {
-        this.counters.set(pkKey(device.pk), k);
-        return k;
+    if (options.cursor && options.hint) {
+      throw new DeviceCounterCursorError('supply a cursor or a hint, not both');
+    }
+    const l = await this.ledgerState();
+    const epoch = l.device_epoch;
+    const account = bytesToHex(this.addressBytes);
+    const credential = credentialKey(device);
+    if (this.counterEpoch !== epoch) {
+      this.counters.clear();
+      this.counterEpoch = epoch;
+    }
+    const key = counterKey(this.addressBytes, device, epoch);
+    let fromCounter = 0n;
+    let hint: DeviceCounterHint | undefined;
+    if (options.cursor) {
+      const cursor = options.cursor;
+      checkCounterScope(cursor, account, credential);
+      if (parseCounterUint(cursor.epoch, 0xffffffffn, 'cursor epoch') !== epoch) {
+        throw new DeviceCounterCursorError('device epoch changed; restart device counter discovery');
+      }
+      fromCounter = parseCounterUint(cursor.nextCounter, MAX_USE_COUNTER, 'next counter');
+    } else if (options.hint) {
+      checkCounterScope(options.hint, account, credential);
+      const hintEpoch = parseCounterUint(options.hint.epoch, 0xffffffffn, 'hint epoch');
+      parseCounterUint(options.hint.counter, MAX_USE_COUNTER, 'hint counter');
+      if (hintEpoch === epoch) hint = options.hint;
+    } else {
+      hint = this.counters.get(key);
+    }
+    let probes = 0;
+    const tried = new Set<bigint>();
+    const probe = (counter: bigint): DeviceCounterFound | undefined => {
+      if (tried.has(counter)) return undefined;
+      tried.add(counter);
+      probes++;
+      const entry = device.entryAt(this.addressBytes, epoch, counter);
+      if (!l.devices.member(entry)) return undefined;
+      const foundHint = counterHint(this.addressBytes, device, epoch, counter);
+      this.counters.set(key, foundHint);
+      return { status: 'found', counter, epoch, entry, probes, hint: { ...foundHint } };
+    };
+    if (hint) {
+      const triedHint = BigInt(hint.counter);
+      const found = probe(triedHint);
+      if (found) return found;
+      this.counters.delete(key);
+      if (triedHint > 0n && probes < maxProbes) {
+        // Recovery or re-enrolment can reset a previously advanced key.
+        const reset = probe(0n);
+        if (reset) return reset;
+        // Other sessions commonly advance the same chain. Preserve bounded
+        // forward resynchronisation while reserving work for lower counters.
+        const forwardBudget = Math.floor((maxProbes - probes) / 2);
+        for (let offset = 1n; offset <= BigInt(forwardBudget) && triedHint + offset <= MAX_USE_COUNTER; offset++) {
+          const advanced = probe(triedHint + offset);
+          if (advanced) return advanced;
+        }
       }
     }
-    throw new Error('device entry not found on-ledger (rescan limit reached) — not a registered device?');
+    let nextCounter = fromCounter;
+    while (nextCounter <= MAX_USE_COUNTER) {
+      if (tried.has(nextCounter)) { nextCounter++; continue; }
+      if (probes >= maxProbes) break;
+      const candidate = nextCounter++;
+      const found = probe(candidate);
+      if (found) return found;
+    }
+    return {
+      status: 'exhausted', epoch, fromCounter, toCounter: nextCounter, probes,
+      cursor: nextCounter > MAX_USE_COUNTER ? null : {
+        version: 1, account, credential, epoch: epoch.toString(),
+        nextCounter: nextCounter.toString(),
+      },
+    };
   }
 
-  private advanceCounter(pk: { x: bigint; y: bigint }, used: bigint): void {
-    this.counters.set(pkKey(pk), used + 1n);
+  /** Export a JSON-safe hint for caller-owned storage; this contains no secret. */
+  deviceCounterHint(device: AnyDevice): DeviceCounterHint | undefined {
+    if (this.counterEpoch === undefined) return undefined;
+    const hint = this.counters.get(counterKey(this.addressBytes, device, this.counterEpoch));
+    return hint ? { ...hint } : undefined;
   }
 
-  /** Record a freshly registered device (entry at use counter 0). */
-  registerDevice(pk: { x: bigint; y: bigint }): void {
-    this.counters.set(pkKey(pk), 0n);
+  private async requireUseCounter(
+    device: AnyDevice,
+    options: DeviceCounterSearchOptions = {},
+  ): Promise<DeviceCounterFound> {
+    const result = await this.discoverUseCounter(device, options);
+    if (result.status === 'exhausted') throw new DeviceCounterSearchExhaustedError(result);
+    return result;
+  }
+
+  private advanceCounter(device: AnyDevice, used: bigint, epoch: bigint): void {
+    if (this.counterEpoch !== epoch) return;
+    const key = counterKey(this.addressBytes, device, epoch);
+    if (used === MAX_USE_COUNTER) this.counters.delete(key);
+    else this.counters.set(key, counterHint(this.addressBytes, device, epoch, used + 1n));
+  }
+
+  /** Record fresh enrolment at counter zero. Public-key-only legacy calls
+   *  invalidate hints because a public key alone does not identify a profile. */
+  registerDevice(device: AnyDevice | { x: bigint; y: bigint }, epoch = this.counterEpoch): void {
+    if (!('arm' in device)) {
+      // Legacy callers provide no profile. Dropping hints preserves their
+      // reset-to-zero behaviour without assigning the key to the wrong arm.
+      const x = device.x.toString(16), y = device.y.toString(16);
+      for (const [key, hint] of this.counters) {
+        const [, cachedX, cachedY] = hint.credential.split(':');
+        if (cachedX === x && cachedY === y) this.counters.delete(key);
+      }
+      return;
+    }
+    if (epoch !== undefined) {
+      this.counters.set(counterKey(this.addressBytes, device, epoch), counterHint(this.addressBytes, device, epoch, 0n));
+    }
   }
 
   // ── Wallet-local coin store (MIP-0012 §6.5) ───────────────────────────────
@@ -377,12 +548,12 @@ export class CustodyAccount {
     recipient: Uint8Array,
   ): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter);
     const r = await this.withdrawUnshieldedWithAuth(color, amount, recipient, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
@@ -393,7 +564,7 @@ export class CustodyAccount {
     amount: bigint,
   ): Promise<SpendOutcome> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     // AUTH-10: the approver signs over the exact qualified coin the spend
     // will consume, read from the same store the witness serves.
     const coin = await this.heldCoin(color);
@@ -401,7 +572,7 @@ export class CustodyAccount {
       ? device.sign(jubjubChallenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter);
     const r = await this.withdrawShieldedWithAuth(recipient, color, amount, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
@@ -412,35 +583,35 @@ export class CustodyAccount {
     amount: bigint,
   ): Promise<DirectSpendOutcome> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const coin = await this.heldCoin(color);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter);
     const r = await this.withdrawShieldedToContractWithAuth(recipient, color, amount, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
   async appendInbox(device: AnyDevice, entry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.appendInbox(ctx, device.pk, entry), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).appendInbox(ctx, device.pk, entry), counter);
     const r = await this.appendInboxWithAuth(entry, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
   async rotateEncKey(device: AnyDevice, newKey: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.rotateEncKey(ctx, device.pk, newKey), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).rotateEncKey(ctx, device.pk, newKey), counter);
     const r = await this.rotateEncKeyWithAuth(newKey, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
@@ -455,7 +626,7 @@ export class CustodyAccount {
     const l = await this.ledgerState();
     const newEntry = newDevice.entryAt(this.addressBytes, l.device_epoch, 0n);
     const r = await this.addDeviceEntry(device, newEntry);
-    this.registerDevice(newDevice.pk);
+    this.registerDevice(newDevice, l.device_epoch);
     return r;
   }
 
@@ -463,33 +634,35 @@ export class CustodyAccount {
    *  it — for cross-client enrolment where only the entry travels). */
   async addDeviceEntry(device: AnyDevice, newEntry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.addDevice(ctx, device.pk, newEntry), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).addDevice(ctx, device.pk, newEntry), counter);
     const r = await this.addDeviceWithAuth(newEntry, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
   /** Remove another device by its public key: its current entry is
    *  resolved from the roster or the S11 rescan (MIP-0013 §6). */
-  async removeDevice(device: AnyDevice, target: AnyDevice): Promise<TxResult> {
-    const l = await this.ledgerState();
-    const targetCounter = await this.resolveUseCounter(target);
-    const entry = target.entryAt(this.addressBytes, l.device_epoch, targetCounter);
-    return this.removeDeviceEntry(device, entry);
+  async removeDevice(
+    device: AnyDevice,
+    target: AnyDevice,
+    search: DeviceCounterSearchOptions = {},
+  ): Promise<TxResult> {
+    const found = await this.requireUseCounter(target, search);
+    return this.removeDeviceEntry(device, found.entry);
   }
 
   /** Remove a device by its literal current set element. */
   async removeDeviceEntry(device: AnyDevice, entry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.removeDevice(ctx, device.pk, entry), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).removeDevice(ctx, device.pk, entry), counter);
     const r = await this.removeDeviceEntryWithAuth(entry, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
@@ -596,7 +769,7 @@ export class CustodyAccount {
     });
     const phiLen = BigInt(artefacts.phi.length);
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.publishRecoverySession(
           ctx, device.pk, artefacts.recoveryPk, artefacts.sessionNonce, slots, phiLen, artefacts.wrap,
@@ -611,7 +784,7 @@ export class CustodyAccount {
         slots[0], slots[1], slots[2], slots[3], phiLen, artefacts.wrap,
         ...authArgs(auth),
       ));
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return { txId: txId(r) };
   }
 
@@ -654,19 +827,21 @@ export class CustodyAccount {
    *  on either arm. */
   async recoverCancel(device: AnyDevice): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.recoverCancel(ctx, device.pk), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).recoverCancel(ctx, device.pk), counter);
     const name = `recover_cancel_with_${auth.arm}`;
     const r = await submitWithDustRetry(name, () => this.handle.callTx[name](...authArgs(auth)));
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return { txId: txId(r) };
   }
 
   /** Finalise a recovery whose veto window has closed (permissionless). */
   async recoverFinalise(): Promise<TxResult> {
     const r = await submitWithDustRetry('recover_finalise', () => this.handle.callTx.recover_finalise());
+    this.counters.clear();
+    this.counterEpoch = undefined;
     return { txId: txId(r) };
   }
 
@@ -727,12 +902,12 @@ export class CustodyAccount {
     assertIssueRules(scope);
     const digest = scopeDigest(scopeSalt, scope);
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.issueGrant(ctx, device.pk, grantId, digest), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).issueGrant(ctx, device.pk, grantId, digest), counter);
     const r = await this.issueGrantWithAuth(grantId, scope, scopeSalt, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
@@ -740,24 +915,24 @@ export class CustodyAccount {
    *  and the id may be re-issued later under a fresh salt. */
   async revokeGrant(device: AnyDevice, grantId: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.revokeGrant(ctx, device.pk, grantId), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).revokeGrant(ctx, device.pk, grantId), counter);
     const r = await this.revokeGrantWithAuth(grantId, auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
   /** Revoke every grant: bumps `grant_generation` and clears the map. */
   async revokeAllGrants(device: AnyDevice): Promise<TxResult> {
     const ctx = await this.callContext();
-    const counter = await this.resolveUseCounter(device);
+    const { counter, epoch } = await this.requireUseCounter(device);
     const auth = device.arm === 'jubjub'
       ? device.sign(jubjubChallenges.revokeAllGrants(ctx, device.pk), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).revokeAllGrants(ctx, device.pk), counter);
     const r = await this.revokeAllGrantsWithAuth(auth);
-    this.advanceCounter(device.pk, counter);
+    this.advanceCounter(device, counter, epoch);
     return r;
   }
 
@@ -932,8 +1107,39 @@ function activationArgs(device: AnyDevice, salt: Uint8Array): unknown[] {
   return device.arm === 'k256' ? [device.pk, salt, device.envelope] : [device.pk, salt];
 }
 
-function pkKey(pk: { x: bigint; y: bigint }): string {
-  return `${pk.x.toString(16)}:${pk.y.toString(16)}`;
+function credentialKey(device: AnyDevice): string {
+  const point = `${device.pk.x.toString(16)}:${device.pk.y.toString(16)}`;
+  const profile = device.arm === 'k256' ? device.envelope.toString()
+    : device.arm === 'p256' ? `${bytesToHex(device.policy.rp_id_hash)}:${bytesToHex(device.policy.origin)}`
+      : '';
+  return `${device.arm}:${point}:${profile}`;
+}
+
+function counterKey(address: Uint8Array, device: AnyDevice, epoch: bigint): string {
+  return `${bytesToHex(address)}:${epoch}:${credentialKey(device)}`;
+}
+
+function counterHint(address: Uint8Array, device: AnyDevice, epoch: bigint, counter: bigint): DeviceCounterHint {
+  return { version: 1, account: bytesToHex(address), credential: credentialKey(device), epoch: epoch.toString(), counter: counter.toString() };
+}
+
+function checkCounterScope(
+  value: DeviceCounterHint | DeviceCounterCursor,
+  account: string,
+  credential: string,
+): void {
+  if (value.version !== 1 || value.account !== account || value.credential !== credential) {
+    throw new DeviceCounterCursorError('counter cursor or hint belongs to a different account or credential');
+  }
+}
+
+function parseCounterUint(value: unknown, maximum: bigint, label: string): bigint {
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value) || value.length > 20) {
+    throw new DeviceCounterCursorError(`${label} must be a canonical unsigned decimal string`);
+  }
+  const parsed = BigInt(value);
+  if (parsed > maximum) throw new DeviceCounterCursorError(`${label} is out of range`);
+  return parsed;
 }
 
 // ContractAddress circuit arguments are { bytes: Bytes<32> }; the hex form
