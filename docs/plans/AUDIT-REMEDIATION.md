@@ -9,19 +9,17 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: priority 3, dormant recovery bootstrap.** Implementation and independent
-agent review are complete on `codex/dormant-recovery-bootstrap`, ready for
-pull-request review. This work is based on
-priority 2's merge in [#202](https://github.com/midnightntwrk/passport/pull/202)
-on 2026/11/10 as `44738eebe712ac5703babcac72d3e98b6d38e3c0`.
-Priority 1 merged in [#201](https://github.com/midnightntwrk/passport/pull/201)
-on 2026/11/10 as `f7342f297d945198fcfd7300307b63220a3dfdd9`.
+**Current: priority 4, multiple coins per asset.** Implementation and independent
+agent review are complete on `codex/multi-coin-custody`, ready for pull-request
+review. This work is based on
+priority 3's merge in [#203](https://github.com/midnightntwrk/passport/pull/203)
+on 2026/11/10 as `9d909ae23290608bb589d5541fc414d34cf3125b`.
+The preceding priorities merged in #201 and #202, as recorded below.
 
-**Immediately after priority 3 merges: start priority 4, multiple coins per asset.**
-Verify the merge commit on `origin/main`, mark priority 3 as merged with its
-pull request and validation evidence, and create the next branch from that
-updated baseline. Do not treat an open or merely approved pull request as a
-merge. Continue in the order below, carrying the next item into each hand-off.
+**After priority 4 merges:** verify its merge on `origin/main`, record the
+commit and validation evidence, and reassess the subsequent durable capture
+and recovery-backfill milestone. This completes the four agreed implementation
+priorities; broader custody lifecycle work remains separately scoped.
 
 This document records the continuation instruction. It does not install a
 background merge watcher or establish that any later task has started.
@@ -30,8 +28,8 @@ background merge watcher or establish that any later task has started.
 |---|---|---|---|---|
 | 1 | Reliable device reconnection | `DEV-003`, `DEV-004`; `TASK-DEV-003`, `TASK-DEV-004` | Merged in #201 | Merge `f7342f2`, 2026/11/10 |
 | 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Merged in #202 | Merge `44738ee`, 2026/11/10 |
-| 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Implemented; awaiting merge | Based on merged priority 2 |
-| 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Queued | Priority 3 merged |
+| 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Merged in #203 | Merge `9d909ae`, 2026/11/10 |
+| 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Implemented; awaiting merge | Based on merged priority 3 |
 
 ## 1. Reliable device reconnection
 
@@ -105,7 +103,7 @@ migration compatibility decision.
 - [x] Existing deployments and retired maintenance authority have explicit
   [deployment and migration guidance](../../contract/DORMANT-RECOVERY.md).
 - [x] Independent source and regression review is complete.
-- [ ] The pull request is merged, with its merge commit recorded here.
+- [x] The pull request is merged: #203, commit `9d909ae23290608bb589d5541fc414d34cf3125b`.
 
 Validation on 2026/11/10: the new generated-runtime matrix passes all 20
 cases after a fresh Compact 0.35.0 compilation. The baseline fails the four
@@ -126,13 +124,29 @@ state. The deployment note records those release and migration requirements.
 Scope: private client storage, selection, witness binding, removal, migration,
 and recovery deduplication.
 
-- [ ] Two independent same-colour deposits remain available; spending either
+- [x] Two independent same-colour deposits remain available; spending either
   retains the other.
-- [ ] The signed input is exactly the coin selected by the witness.
-- [ ] Consumed coins are removed individually, recovered duplicates are
-  deduplicated, and spent/live state is preserved.
-- [ ] Existing one-slot private stores migrate without discarding descriptions.
-- [ ] Independent review is complete, and the pull request is merged.
+- [x] The signed input is exactly the coin selected by the witness.
+- [x] Consumed coins are removed individually, recovered duplicates are
+  deduplicated, and locally known spent/live state is preserved.
+- [x] Existing one-slot private stores migrate without discarding retained descriptions.
+- [x] Independent source and regression review is complete.
+- [ ] The pull request is merged, with its merge commit recorded here.
+
+Validation on 2026/11/10: 55 dedicated tests and the TypeScript build pass.
+The matrix includes actual generated-runtime deposit/spend journeys alongside
+signer/witness and transport fixtures, all signing arms and shielded recipient
+twins, migration/restart, exact selection, spent replay, asynchronous mutation,
+retry binding, and finite-grant timing. Relevant existing wallet and recovery
+regressions pass. The baseline overwrite was reproduced before implementation.
+See the [multi-coin guide](../../contract/MULTI-COIN.md) for API migration and
+validation boundaries.
+
+No Compact source or proof artefact changes are needed for this client fix.
+Generated-runtime execution does not establish chain membership, fresh proof,
+or node acceptance. Locally retained spent markers do not replace chain
+validation (`CUST-03`), and descriptions already overwritten by the old format
+cannot be reconstructed by store migration alone.
 
 ## Subsequent milestone
 

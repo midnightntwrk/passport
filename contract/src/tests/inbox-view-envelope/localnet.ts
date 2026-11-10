@@ -1,6 +1,7 @@
 // Experimental inbox transport with real P-256 proofs and accepted shielded
 // spends. Signatures use the labelled software ES256 fixture; PRF outputs are
 // synthetic. This does not claim browser PRF availability or passkey sync.
+import { coinId } from '../../wallet/witnesses.js';
 import { strict as assert } from 'node:assert';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -158,7 +159,7 @@ await runScenario('inbox-view-envelope localnet', async () => {
         await fresh.putCoin({ ...coins[0], mtIndex: index });
         let tx: Awaited<ReturnType<typeof fresh.withdrawShielded>>;
         try {
-          label = name; tx = await fresh.withdrawShielded(restoredDevice, recipient, coins[0].color, coins[0].value);
+          label = name; tx = await fresh.withdrawShielded(restoredDevice, recipient, coins[0].color, coins[0].value, coinId(coins[0]));
         } catch (e) {
           const classification = classifySpendError(e);
           attempts.push({ index, ...classification, message: serialiseError(e).message }); save();

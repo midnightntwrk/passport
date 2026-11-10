@@ -129,7 +129,8 @@ import {
 import { candidateIndices, enumerateContractActions, indexerUrl } from '../wallet/capture.js';
 import { bytesToHex, hexToBytes32 } from '../wallet/hex.js';
 import { pureCircuits } from '../wallet/contract.js';
-import type { ShieldedCoin, Ledger, JubjubPoint, Secp256k1Point } from '../wallet/contract.js';
+import { coinId, withSelectedCoin } from '../wallet/witnesses.js';
+import type { ShieldedCoin, QualifiedCoin, Ledger, JubjubPoint, Secp256k1Point } from '../wallet/contract.js';
 
 // ── Instrumentation ─────────────────────────────────────────────────────────
 //
@@ -446,7 +447,8 @@ async function txStatusByHash(hash: string): Promise<string> {
 
 // ── Held-coin bookkeeping ───────────────────────────────────────────────────
 //
-// One coin of the working color at a time, plus the commitment-tree
+// Each scenario tracks one working coin explicitly; the store retains other
+// same-colour holdings too. The tracked coin carries the commitment-tree
 // candidates its carrying transaction wrote. The change of a `send` is the
 // LAST commitment of the spend's window, so the candidate list is tried from
 // the back; a wrong candidate fails at proving with no transaction (INV-5).
@@ -1337,6 +1339,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           grant.scope.expiresAt === 0n
             ? account.withdrawShieldedWithGrant(
                 grant.grantee, grant.opening, recipient, held.coin.color, amount, changeEntry,
+                undefined, { coinId: coinId(held.coin) },
               )
             : rawGrantSpend({ grant, recipient, amount, changeEntry }));
         attempts.push({ mtIndex: idx.toString(), outcome: `accepted: ${r.txId}` });
@@ -1535,7 +1538,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     if (o.spentPrevOverride !== undefined) opening.spentPrev = o.spentPrevOverride;
     const g = o.context ?? (await account.grantContext(account.grantIdOf(grant.grantee, opening.originHash, opening.slot)));
     const enc = o.encPkOverride ?? (await account.encKey());
-    const coin = await account.heldCoin(held.coin.color);
+    const coin = await account.heldCoin(held.coin.color, coinId(held.coin));
     const predicted = predictChangeCoin(held.coin, o.amount);
     const changeEntry = o.changeEntry ?? sealInboxEntry(o.sealTo ?? enc, predicted);
     const auth = grant.grantee.arm === 'jubjub'
@@ -1544,7 +1547,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       : (grant.grantee as K256Grantee).sign(
           k256GrantChallenges.withdrawShielded(g, (grant.grantee as K256Grantee).pk, o.recipient, held.coin.color, o.amount, changeEntry, enc, coin));
     return account.withdrawShieldedWithGrantAuth(
-      o.recipient, held.coin.color, o.amount, changeEntry, enc, opening, auth as any,
+      o.recipient, held.coin.color, o.amount, changeEntry, enc, opening, auth as any, coin,
     );
   }
 
@@ -1641,7 +1644,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   {
     const g = await account.grantContext(grantA.id);
     const enc = await account.encKey();
-    const coin = await account.heldCoin(held.coin.color);
+    const coin = await account.heldCoin(held.coin.color, coinId(held.coin));
     const predicted = predictChangeCoin(held.coin, 50n);
     const changeEntry = sealInboxEntry(enc, predicted);
     const openingAtSigning: GrantOpening = { ...grantA.opening };
@@ -1652,14 +1655,14 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     // WHICH predicate refuses a byte-identical resubmission, and the answer
     // is recorded rather than assumed.
     const first = await reject('replayed grant A authorisation (identical resubmission)', ['cumulative cap exceeded', 'spent opening mismatch', 'invalid grant signature', 'range error'], () =>
-      account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 50n, changeEntry, enc, openingAtSigning, auth as any));
+      account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 50n, changeEntry, enc, openingAtSigning, auth as any, coin));
     rejectDetails.replayRefusedBy = first;
   }
 
   // (12) stale enc_pk: sign against the live key, rotate, then submit.
   {
     const encOld = await account.encKey();
-    const coin = await account.heldCoin(held.coin.color);
+    const coin = await account.heldCoin(held.coin.color, coinId(held.coin));
     const g = await account.grantContext(grantL.id);
     const predicted = predictChangeCoin(held.coin, 50n);
     const changeEntry = sealInboxEntry(encOld, predicted);
@@ -1680,7 +1683,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     rejectDetails.encKeyNew = bytesToHex(newEncKeys.publicKey);
 
     await reject('stale enc_pk (grant L signed against the pre-rotation key)', ['stale encryption key'], () =>
-      account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 50n, changeEntry, encOld, openingAtSigning, auth as any));
+      account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 50n, changeEntry, encOld, openingAtSigning, auth as any, coin));
 
     // Entries sealed before the rotation stay readable with the retained
     // secret; the account keeps both, and everything sealed from here on
@@ -1758,7 +1761,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   if (legBRes.mtIndex !== null) await account.putCoin({ ...held.coin, mtIndex: legBRes.mtIndex });
   const gL = await account.grantContext(grantL.id);
   const encNow = await account.encKey();
-  const coinNow = await account.heldCoin(held.coin.color);
+  const coinNow = await account.heldCoin(held.coin.color, coinId(held.coin));
   const predictedL2 = predictChangeCoin(held.coin, 100n);
   const changeEntryL2 = sealInboxEntry(encKeys.publicKey, predictedL2);
   const openingL2: GrantOpening = { ...grantL.opening };
@@ -1787,7 +1790,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   let preSignedLanded = true;
   try {
     l2 = await timed('withdraw_shielded_with_grant_jubjub (L #2, pre-signed across a deposit)', () =>
-      account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 100n, changeEntryL2, encNow, openingL2, authL2 as any));
+      account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 100n, changeEntryL2, encNow, openingL2, authL2 as any, coinNow));
   } catch (e: any) {
     preSignedLanded = false;
     livenessDetails.preSignedFirstAttemptError = String(e?.message ?? e).slice(0, 200);
@@ -1797,11 +1800,11 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       await account.putCoin({ ...held.coin, mtIndex: idx });
       try {
         const gRetry = await account.grantContext(grantL.id);
-        const coinRetry = await account.heldCoin(held.coin.color);
+        const coinRetry = await account.heldCoin(held.coin.color, coinId(held.coin));
         const authRetry = (jGrantee as JubjubGrantee).sign(
           jubjubGrantChallenges.withdrawShielded(gRetry, jGrantee.pk, userCpk, held.coin.color, 100n, changeEntryL2, encNow, coinRetry));
         landed = await timed('withdraw_shielded_with_grant_jubjub (L #2, re-signed after the deposit)', () =>
-          account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 100n, changeEntryL2, encNow, openingL2, authRetry as any));
+          account.withdrawShieldedWithGrantAuth(userCpk, held.coin.color, 100n, changeEntryL2, encNow, openingL2, authRetry as any, coinRetry));
         break;
       } catch { /* next candidate */ }
     }
@@ -1902,7 +1905,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       try {
         const gF = await account.grantContext(grantF.id);
         const encF = await account.encKey();
-        const coinF = await account.heldCoin(held.coin.color);
+        const coinF = await account.heldCoin(held.coin.color, coinId(held.coin));
         const predictedF = predictChangeCoin(held.coin, DIRECT);
         const changeEntryF = sealInboxEntry(encKeys.publicKey, predictedF);
         const authF = (kGrantee as K256Grantee).sign(
@@ -1911,10 +1914,8 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
         await pointAt(account.address);
         const callA: any = await timed('withdraw_shielded_to_contract_with_grant_k256 (build)', () =>
-          (createUnprovenCallTx as any)(ctx.providers, {
-            compiledContract: compiledAccountContract(),
+          buildSelected(coinF, {
             circuitId: 'withdraw_shielded_to_contract_with_grant_k256',
-            contractAddress: account.address,
             args: [
               { bytes: accountB.addressBytes },
               held.coin.color,
@@ -1923,7 +1924,6 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
               encF,
               ...grantAuthArgs(grantF.opening, authF as any),
             ],
-            privateStateId: account.privateStateId,
           }));
 
         const resultA = callA?.private?.result;
@@ -2109,11 +2109,11 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   /** The coins the S11 refill deposits, in deposit order. */
   const refills: Held[] = [];
 
-  const coinPublicKeyHex = parseCoinPublicKeyToHex(
-    ctx.providers.walletProvider.getCoinPublicKey(), getNetworkId());
-  const walletEncPk = ctx.providers.walletProvider.getEncryptionPublicKey();
+  interface CallSpec { circuitId: string; args: unknown[]; coin?: QualifiedCoin }
 
-  interface CallSpec { circuitId: string; args: unknown[] }
+  async function buildSelected(coin: QualifiedCoin, spec: CallSpec): Promise<any> {
+    return buildOn(await readStates(ctx.providers, account.address), { ...spec, coin });
+  }
 
   /** Build one call against an explicit contract state (no chain read). */
   async function buildOn(states: ChainStates, spec: CallSpec): Promise<any> {
@@ -2127,13 +2127,13 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
         circuitId: spec.circuitId,
         contractAddress: account.address,
         args: spec.args,
-        coinPublicKey: coinPublicKeyHex,
+        coinPublicKey: parseCoinPublicKeyToHex(ctx.providers.walletProvider.getCoinPublicKey(), getNetworkId()),
         initialContractState: states.contractState,
         initialZswapChainState: states.zswap,
         ledgerParameters: states.ledgerParameters,
-        initialPrivateState: privateState,
+        initialPrivateState: spec.coin ? withSelectedCoin(privateState, spec.coin) : privateState,
       },
-      walletEncPk,
+      ctx.providers.walletProvider.getEncryptionPublicKey(),
     );
   }
 
@@ -2251,22 +2251,19 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       try {
         const g = await account.grantContext(o.grantId);
         const enc = await account.encKey();
-        const qualified = await account.heldCoin(o.coin.color);
+        const qualified = await account.heldCoin(o.coin.color, coinId(o.coin));
         const predicted = predictChangeCoin(o.coin, o.amount);
         const entry = sealInboxEntry(enc, predicted);
         const auth = (jGrantee as JubjubGrantee).sign(
           jubjubGrantChallenges.withdrawShielded(
             g, jGrantee.pk, userCpk, o.coin.color, o.amount, entry, enc, qualified));
         await pointAtA();
-        const built: any = await (createUnprovenCallTx as any)(ctx.providers, {
-          compiledContract: compiledAccountContract(),
+        const built: any = await buildSelected(qualified, {
           circuitId: 'withdraw_shielded_with_grant_jubjub',
-          contractAddress: account.address,
           args: [
             { bytes: userCpk }, o.coin.color, o.amount, entry, enc,
             ...grantAuthArgs(o.opening, auth as any),
           ],
-          privateStateId: account.privateStateId,
         });
         await timed(`${o.label}: prove-only trial at mt_index ${idx}`, () =>
           proveOnly(ctx.providers, built.private.unprovenTx));
@@ -2382,6 +2379,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           };
       return account.withdrawShieldedWithGrantAuth(
         userCpk, held.coin.color, amount, changeEntry, enc, o.opening, auth,
+        await account.heldCoin(held.coin.color, coinId(held.coin)),
       );
     }
 
@@ -2848,7 +2846,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
 
     const marginBefore = await snapshot(account);
     const marginEnc = await account.encKey();
-    const marginCoin = await account.heldCoin(held.coin.color);
+    const marginCoin = await account.heldCoin(held.coin.color, coinId(held.coin));
     const marginPredicted = predictChangeCoin(held.coin, 30n);
     const marginEntry = sealInboxEntry(marginEnc, marginPredicted);
     const marginCtx = await account.grantContext(marginId);
@@ -2859,15 +2857,12 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
     const marginBuildStart = Date.now();
     let marginAttempt: Attempted;
     try {
-      const built: any = await (createUnprovenCallTx as any)(ctx.providers, {
-        compiledContract: compiledAccountContract(),
+      const built: any = await buildSelected(marginCoin, {
         circuitId: 'withdraw_shielded_with_grant_jubjub',
-        contractAddress: account.address,
         args: [
           { bytes: userCpk }, held.coin.color, 30n, marginEntry, marginEnc,
           ...grantAuthArgs(marginOpening, marginAuth as any),
         ],
-        privateStateId: account.privateStateId,
       });
       const builtAt = Date.now();
       marginAttempt = await timed('withdraw_shielded_with_grant_jubjub (expiry inside the admission margin)', () =>
@@ -3148,7 +3143,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
         const enc = await account.encKey();
 
         await account.putCoin({ ...coinA, mtIndex: first.mtIndex });
-        const qualifiedA = await account.heldCoin(coinA.color);
+        const qualifiedA = await account.heldCoin(coinA.color, coinId(coinA));
         const predictedA = predictChangeCoin(coinA, 10n);
         const entryA = sealInboxEntry(enc, predictedA);
         const openingA: GrantOpening = { ...yOpening };
@@ -3156,11 +3151,12 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           jubjubGrantChallenges.withdrawShielded(g, jGrantee.pk, userCpk, coinA.color, 10n, entryA, enc, qualifiedA));
         const call1 = await buildOn(states, {
           circuitId: 'withdraw_shielded_with_grant_jubjub',
+          coin: qualifiedA,
           args: [{ bytes: userCpk }, coinA.color, 10n, entryA, enc, ...grantAuthArgs(openingA, authA as any)],
         });
 
         await account.putCoin({ ...coinB, mtIndex: second.mtIndex });
-        const qualifiedB = await account.heldCoin(coinB.color);
+        const qualifiedB = await account.heldCoin(coinB.color, coinId(coinB));
         const predictedB = predictChangeCoin(coinB, 10n);
         const entryB = sealInboxEntry(enc, predictedB);
         const openingB: GrantOpening = { ...yOpening, spentPrev: yOpening.spentPrev + 10n };
@@ -3171,6 +3167,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           { ...states, contractState: successorState(states.contractState, call1.public.nextContractState) },
           {
             circuitId: 'withdraw_shielded_with_grant_jubjub',
+            coin: qualifiedB,
             args: [{ bytes: userCpk }, coinB.color, 10n, entryB, enc, ...grantAuthArgs(openingB, authB as any)],
           });
         return { call1, call2, grantNonceAtBuild: g.grantNonce, changeA: predictedA, changeB: predictedB };
@@ -3388,7 +3385,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       // built against the same state. Both are complete, signed, unproven
       // transactions before either is proved.
       const ownerCounter = await account.resolveUseCounter(device);
-      const qualified = await account.heldCoin(raceCoin.color);
+      const qualified = await account.heldCoin(raceCoin.color, coinId(raceCoin));
       const ownerAuth = device.sign(
         k256Challenges.withdrawShielded(
           { contractAddress: account.addressBytes, authNonce: l.auth_nonce },
@@ -3396,6 +3393,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
         ownerCounter);
       const ownerCall = await buildOn(states, {
         circuitId: 'withdraw_shielded_with_k256',
+        coin: qualified,
         args: [{ bytes: userCpk }, raceCoin.color, 10n, ...authArgs(ownerAuth)],
       });
 
@@ -3408,6 +3406,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           g, jGrantee.pk, userCpk, raceCoin.color, 10n, granteeEntry, enc, qualified));
       const granteeCall = await buildOn(states, {
         circuitId: 'withdraw_shielded_with_grant_jubjub',
+        coin: qualified,
         args: [{ bytes: userCpk }, raceCoin.color, 10n, granteeEntry, enc, ...grantAuthArgs(raceOpening, granteeAuth as any)],
       });
       console.log('  both calls built over the same qualified coin; proving the owner first');
@@ -3423,7 +3422,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           const now = await account.ledgerState();
           const c = await account.resolveUseCounter(device);
           await account.putCoin({ ...raceCoin, mtIndex: raceRes.mtIndex! });
-          const q = await account.heldCoin(raceCoin.color);
+          const q = await account.heldCoin(raceCoin.color, coinId(raceCoin));
           const a = device.sign(
             k256Challenges.withdrawShielded(
               { contractAddress: account.addressBytes, authNonce: now.auth_nonce },
@@ -3431,6 +3430,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
             c);
           const built = await buildOn(st, {
             circuitId: 'withdraw_shielded_with_k256',
+            coin: q,
             args: [{ bytes: userCpk }, raceCoin.color, 10n, ...authArgs(a)],
           });
           return built.private.unprovenTx;
@@ -3491,7 +3491,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           const stNow = await readStates(ctx.providers, account.address);
           const gNow = await account.grantContext(raceId);
           const encNow2 = await account.encKey();
-          const qNow = await account.heldCoin(raceCoin.color);
+          const qNow = await account.heldCoin(raceCoin.color, coinId(raceCoin));
           const predictedNow = predictChangeCoin(raceCoin, 10n);
           const entryNow = sealInboxEntry(encNow2, predictedNow);
           const authNow = (jGrantee as JubjubGrantee).sign(
@@ -3499,6 +3499,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
               gNow, jGrantee.pk, userCpk, raceCoin.color, 10n, entryNow, encNow2, qNow));
           const builtNow = await buildOn(stNow, {
             circuitId: 'withdraw_shielded_with_grant_jubjub',
+            coin: qNow,
             args: [{ bytes: userCpk }, raceCoin.color, 10n, entryNow, encNow2,
               ...grantAuthArgs(raceOpening, authNow as any)],
           });
@@ -3598,7 +3599,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
       await account.putCoin({ ...preCoin, mtIndex: preRes.mtIndex });
       const gPre = await account.grantContext(preId);
       const encPre = await account.encKey();
-      const qualifiedPre = await account.heldCoin(preCoin.color);
+      const qualifiedPre = await account.heldCoin(preCoin.color, coinId(preCoin));
       const predictedPre = predictChangeCoin(preCoin, 10n);
       const entryPre = sealInboxEntry(encPre, predictedPre);
       const signedAt = new Date().toISOString();
@@ -3630,15 +3631,12 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
           // the ones made before the deposit landed.
           await account.putCoin({ ...preCoin, mtIndex: preRes.mtIndex! });
           await pointAtA();
-          const built: any = await (createUnprovenCallTx as any)(ctx.providers, {
-            compiledContract: compiledAccountContract(),
+          const built: any = await buildSelected(qualifiedPre, {
             circuitId: 'withdraw_shielded_with_grant_jubjub',
-            contractAddress: account.address,
             args: [
               { bytes: userCpk }, preCoin.color, 10n, entryPre, encPre,
               ...grantAuthArgs(preOpening, authPre as any),
             ],
-            privateStateId: account.privateStateId,
           });
           return built.private.unprovenTx;
         }, 'withdraw_shielded_with_grant_jubjub'));

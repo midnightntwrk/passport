@@ -18,6 +18,7 @@
 // depositor-known txId remains only as a recorded fallback: reaching it
 // downgrades the verdict to PARTIAL, not a scaffold bug.
 
+import { coinId } from '../wallet/witnesses.js';
 import { runScenario, step, waitForLedger, sleep } from './runner.js';
 import { writeEvidence, classifySpendError } from './evidence.js';
 import { standardSetup, mintToUser, userCoinPublicKey } from './flow.js';
@@ -137,7 +138,7 @@ await runScenario('custody-discovery', async () => {
     for (const idx of set.candidates) {
       await a.account.putCoin({ nonce: discovered.nonce, color: discovered.color, value: discovered.value, mtIndex: idx });
       try {
-        const r = await a.account.withdrawShielded(a.device, aCpk, discovered.color, discovered.value);
+        const r = await a.account.withdrawShielded(a.device, aCpk, discovered.color, discovered.value, coinId(discovered));
         spendTx = r.txId;
         mtIndexSource = `${set.source} @ index ${idx}`;
         attempts.push({ source: set.source, mtIndex: idx.toString(), outcome: 'accepted', txId: r.txId });

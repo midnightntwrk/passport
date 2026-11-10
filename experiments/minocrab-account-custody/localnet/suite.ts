@@ -6,7 +6,7 @@ import { JubjubDevice, JubjubGrantee, K256Grantee, originHash, spendScope, openi
 import { p256Challenges, p256GrantChallenges } from '../../../contract/src/wallet/signer-p256.js';
 import { softwarePasskey, TEST_ORIGIN, sha256 } from '../../../contract/src/tests/p256-fixtures.js';
 import { generateEncKeyPair, sealInboxEntry, openInboxEntry } from '../../../contract/src/wallet/inbox.js';
-import { makeWitnesses } from '../../../contract/src/wallet/witnesses.js';
+import { makeWitnesses, coinId } from '../../../contract/src/wallet/witnesses.js';
 import { deployFaucet } from '../../../contract/src/node/setup.js';
 import { managedPath, zkConfigPath, userAddressBytes } from '../../../contract/src/node/wallet.js';
 import { userCoinPublicKey } from '../../../contract/src/tests/flow.js';
@@ -92,14 +92,14 @@ export async function fundedSuite(h: any) {
     for (const device of devices)
         await memo(`shielded-${device.arm}`, async () => {
             const { coin, candidates } = await deposit();
-            await record(`withdraw_shielded_with_${device.arm}`, await tryCoin(account, coin, candidates, () => account.withdrawShielded(device, cpk, color, 100n)));
+            await record(`withdraw_shielded_with_${device.arm}`, await tryCoin(account, coin, candidates, () => account.withdrawShielded(device, cpk, color, 100n, coinId(coin))));
         });
     check('funded shielded device withdrawals under all three arms');
     async function composed(device: any, grant?: any) {
         const { coin, candidates } = await deposit();
         const result = await tryCoin(account, coin, candidates, async () => {
             await pointAt(account);
-            const held = await account.heldCoin(color);
+            const held = await account.heldCoin(color, coinId(coin));
             let args: any[], name: string;
             if (grant) {
                 const g = await account.grantContext(grant.id), enc = await account.encKey(), entry = rnd(192);
@@ -124,7 +124,7 @@ export async function fundedSuite(h: any) {
         assert.ok(opened);
         assert.deepEqual(opened, result.sent);
         const { candidates: receivedCandidates } = await candidateIndices(result.txId);
-        await record('receiver onward spend', await tryCoin(receiver, result.sent, receivedCandidates, () => receiver.withdrawShielded(receiverDevice, cpk, color, 100n)));
+        await record('receiver onward spend', await tryCoin(receiver, result.sent, receivedCandidates, () => receiver.withdrawShielded(receiverDevice, cpk, color, 100n, coinId(result.sent))));
         await pointAt(account);
     }
     for (const device of devices)
@@ -143,7 +143,7 @@ export async function fundedSuite(h: any) {
             await record(`withdraw_unshielded_with_grant_${signer.arm}`, await account.withdrawUnshieldedWithGrant(signer, opening, color, 1n, recipient));
             opening.spentPrev += 1n;
             const { coin, candidates } = await deposit();
-            await record(`withdraw_shielded_with_grant_${signer.arm}`, await tryCoin(account, coin, candidates, () => account.withdrawShieldedWithGrant(signer, opening, cpk, color, 100n, rnd(192))));
+            await record(`withdraw_shielded_with_grant_${signer.arm}`, await tryCoin(account, coin, candidates, () => account.withdrawShieldedWithGrant(signer, opening, cpk, color, 100n, rnd(192), undefined, { coinId: coinId(coin) })));
             opening.spentPrev += 100n;
             await composed(undefined, { signer, id, opening });
             opening.spentPrev += 100n;

@@ -10,6 +10,7 @@ import { JubjubDevice, JubjubGrantee, K256Grantee, spendScope, readOnlyScope, op
 import { bytesToHex } from '../wallet/hex.js';
 import { softwarePasskey } from './p256-fixtures.js';
 import { AccountSim } from './sim.js';
+import { emptyCoinStore, withCoin, type CoinStorePrivateState } from '../wallet/witnesses.js';
 
 const b = (n: number) => new Uint8Array(32).fill(n);
 const MAX = (1n << 64n) - 1n;
@@ -38,7 +39,10 @@ function fixture(arm: typeof arms[number] = 'jubjub') {
     return { public: { txId: name }, private: { result: name.includes('_to_contract_')
       ? [coin, { is_some: false, value: coin }] : { is_some: false, value: coin } } };
   } });
-  const account = Reflect.construct(CustodyAccount, [bytesToHex(b(7)), b(7), {}, 'test', { callTx }]) as CustodyAccount;
+  let privateState: CoinStorePrivateState = withCoin(emptyCoinStore(), { ...coin, mtIndex: coin.mt_index });
+  const providers = { privateStateProvider: { get: async () => { state.onCoin?.(); return structuredClone(privateState); },
+    set: async (_id: string, value: CoinStorePrivateState) => { privateState = structuredClone(value); } } };
+  const account = Reflect.construct(CustodyAccount, [bytesToHex(b(7)), b(7), providers, 'test', { callTx }]) as CustodyAccount;
   account.ledgerState = async () => {
     state.ledgerReads++;
     const record = { ...state.record, scope: { ...state.record.scope } };
@@ -46,7 +50,6 @@ function fixture(arm: typeof arms[number] = 'jubjub') {
       grant_generation: state.generation, enc_key: new Uint8Array(state.encKey),
       grants: { member: () => state.present, lookup: () => record } } as any;
   };
-  account.heldCoin = async () => { state.onCoin?.(); return coin; };
   const sign = grantee.sign.bind(grantee);
   (grantee as any).sign = (challenge: any) => { state.signs++; const result = sign(challenge); state.onSign?.(); return result; };
   const scope = spendScope({ withdrawUnshielded: true, color: b(5), cap: 20n, expiresAt: 2000n });
@@ -248,7 +251,9 @@ test('finite grant issue, spend, and revocation exercise generated account circu
     submissions++; const result = await sim.call(name, ...args);
     return { public: { txId: `simulated-${submissions}` }, private: { result } };
   } });
-  const account = Reflect.construct(CustodyAccount, [bytesToHex(sim.address), sim.address, {}, 'test', { callTx }]) as CustodyAccount;
+  const providers = { privateStateProvider: { get: async () => sim.privateState,
+    set: async (_id: string, state: CoinStorePrivateState) => { sim.privateState = state; } } };
+  const account = Reflect.construct(CustodyAccount, [bytesToHex(sim.address), sim.address, providers, 'test', { callTx }]) as CustodyAccount;
   account.ledgerState = async () => sim.ledger();
   const grantee = new JubjubGrantee(42n), sign = grantee.sign.bind(grantee);
   grantee.sign = challenge => { signs++; return sign(challenge); };

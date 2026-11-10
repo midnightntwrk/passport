@@ -104,7 +104,7 @@ await runScenario('custody-shielded', async () => {
   console.log(`  change: value=${spend1.change.value} nonce=${bytesToHex(spend1.change.nonce).slice(0, 16)}…`);
 
   step('test 3b: persist the SURVIVING coin (result.change, §6.3) and backfill the inbox');
-  await s.account.dropCoin(coin.color);
+  await s.account.dropCoin(coin);
   const changeCapture = await captureChange(s.account, s.device, s.encKeys, spend1.txId, {
     nonce: spend1.change.nonce,
     color: spend1.change.color,
@@ -130,7 +130,7 @@ await runScenario('custody-shielded', async () => {
   details.changeSpendTx = spend2.txId;
   details.changeSpendAttempts = spend2.attempts;
   if (spend2.change) throw new Error('full-amount spend unexpectedly returned change');
-  await s.account.dropCoin(coin.color);
+  await s.account.dropCoin(spend1.change);
   console.log(`  ✓ node accepted the change spend: ${spend2.txId}`);
   console.log('  (this is the regression gate for the consumed-coin defect, R4)');
 

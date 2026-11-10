@@ -7,7 +7,7 @@ import { pureCircuits as c } from '../wallet/contract.js';
 import { assertionMaterial, parseES256Signature, webauthnPolicy } from '../wallet/webauthn.js';
 import { p256Challenges, p256GrantChallenges } from '../wallet/signer-p256.js';
 import { AccountSim } from './sim.js';
-import { withCoin } from '../wallet/witnesses.js';
+import { withCoin, withSelectedCoin } from '../wallet/witnesses.js';
 import {
   JubjubDevice, K256Device, jubjubChallenges, authArgs, grantAuthArgs,
   originHash, scopeArgs, scopeDigest, spendScope, openingOf,
@@ -154,9 +154,10 @@ for (const [base, build] of [
   ['withdraw_shielded_to_contract', p256Challenges.withdrawShieldedToContract],
 ] as const) {
   const a = await sign(build(sim.callContext(), f.pk, recipient, coin.color, 5n, coin));
-  sim.privateState = withCoin(sim.privateState, { ...coin, nonce: rnd(), mtIndex: coin.mt_index });
+  const wrongCoin = { ...coin, nonce: rnd() };
+  sim.privateState = withSelectedCoin(withCoin(sim.privateState, { ...wrongCoin, mtIndex: coin.mt_index }), wrongCoin);
   await assert.rejects(() => sim.call(`${base}_with_p256`, { bytes: recipient }, coin.color, 5n, ...authArgs(a)), /signature/);
-  sim.privateState = withCoin(sim.privateState, { ...coin, mtIndex: coin.mt_index });
+  sim.privateState = withSelectedCoin(withCoin(sim.privateState, { ...coin, mtIndex: coin.mt_index }), coin);
   await assert.rejects(() => sim.call(`${base}_with_p256`, { bytes: rnd() }, coin.color, 5n, ...authArgs(a)), /signature/);
 }
 const id = delegate.grantee.grantId(sim.address, origin, 0n);

@@ -38,7 +38,7 @@ export {
 export type { EncKeyPair, PlainCoin } from './wallet/inbox.js';
 
 export { CustodyAccount } from './wallet/account.js';
-export type { TxResult, SpendOutcome, DirectSpendOutcome } from './wallet/account.js';
+export type { TxResult, SpendOutcome, DirectSpendOutcome, ShieldedGrantOptions } from './wallet/account.js';
 
 export { inboxWalk } from './wallet/discovery.js';
 export type { DiscoveredCoin } from './wallet/discovery.js';
@@ -53,6 +53,11 @@ export {
   emptyCoinStore,
   withCoin,
   withoutCoin,
+  coinId,
+  migrateCoinStore,
+  coinsForColour,
+  selectCoin,
+  withSelectedCoin,
   makeWitnesses,
 } from './wallet/witnesses.js';
-export type { CoinStorePrivateState, StoredCoin } from './wallet/witnesses.js';
+export type { CoinStorePrivateState, MultiCoinStore, StoredCoin, CoinIdentity } from './wallet/witnesses.js';
