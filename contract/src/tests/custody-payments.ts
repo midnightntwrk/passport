@@ -29,6 +29,7 @@ import {
 } from './flow.js';
 import { deployAccount, compiledAccountContract } from '../node/setup.js';
 import { CustodyAccount } from '../wallet/account.js';
+import { coinId, withSelectedCoin } from '../wallet/witnesses.js';
 import { K256Device, k256Challenges } from '../wallet/signer.js';
 import { generateEncKeyPair, sealInboxEntry } from '../wallet/inbox.js';
 import { inboxWalk } from '../wallet/discovery.js';
@@ -74,7 +75,7 @@ await runScenario('custody-payments', async () => {
   details.hop1Tx = hop1.txId;
   if (!hop1.change) throw new Error('expected change from the partial spend');
   // Maintain A's store per the change rule.
-  await s.account.dropCoin(coin.color);
+  await s.account.dropCoin(coin);
   const hop1Change = await captureChange(s.account, s.device, s.encKeys, hop1.txId, hop1.change);
   console.log('  waiting 15s for the wallet to index the received coin...');
   await sleep(15_000);
@@ -122,12 +123,14 @@ await runScenario('custody-payments', async () => {
     const ctxA = await s.account.callContext();
     // AUTH-10: the challenge covers the exact qualified coin (this
     // candidate's mt_index included), so each retry is a fresh approval.
-    const heldA = await s.account.heldCoin(coin.color);
+    const heldA = await s.account.heldCoin(coin.color, coinId(hop1.change));
     const authA = s.device.sign(
       k256Challenges.withdrawShieldedToContract(ctxA, s.device.pk, accountB.addressBytes, coin.color, DIRECT, heldA),
       await s.account.resolveUseCounter(s.device),
     );
     await pointAt(s.account.address);
+    await s.ctx.providers.privateStateProvider.set(s.account.privateStateId,
+      withSelectedCoin(await s.account.coinStore(), heldA));
     const callA: any = await (createUnprovenCallTx as any)(s.ctx.providers, {
       compiledContract: compiledAccountContract(),
       circuitId: 'withdraw_shielded_to_contract_with_k256',
@@ -199,8 +202,8 @@ await runScenario('custody-payments', async () => {
     (l) => l.inbox_count === 2n,
   );
 
-  // Maintain A's coin store across the composed spend.
-  await s.account.dropCoin(coin.color);
+  // Manual composition does not use the SDK handle's private-state commit.
+  await s.account.dropCoin(hop1.change);
   if (changeA) {
     await captureChange(s.account, s.device, s.encKeys, composedTxId, {
       nonce: changeA.nonce,
@@ -245,7 +248,7 @@ await runScenario('custody-payments', async () => {
   for (const idx of sweep) {
     await accountB.putCoin({ nonce: received.nonce, color: received.color, value: received.value, mtIndex: idx });
     try {
-      const r = await accountB.withdrawShielded(deviceB, userCpk, received.color, received.value);
+      const r = await accountB.withdrawShielded(deviceB, userCpk, received.color, received.value, coinId(received));
       spendTx = r.txId;
       winningIdx = idx;
       onwardAttempts.push({ mtIndex: idx.toString(), outcome: `accepted: ${r.txId}` });

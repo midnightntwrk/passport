@@ -623,15 +623,10 @@ await runScenario('recovery-sim', async () => {
         [foreignId, ...scopeArgs(foreignScope), foreignSalt]);
       // Deliberately supply an adversarial wallet-local witness. This tests
       // the circuit's object guard, before any shielded custody operation.
-      const previousPrivateState = gs.privateState;
-      gs.privateState = {
-        ...previousPrivateState,
-        coins: { ...previousPrivateState.coins, [Buffer.from(admittedColor).toString('hex')]: {
-          nonceHex: Buffer.from(foreignCoin.nonce).toString('hex'),
-          colorHex: Buffer.from(foreignCoin.color).toString('hex'),
-          value: foreignCoin.value.toString(), mtIndex: foreignCoin.mt_index.toString(),
-        } },
-      };
+      const previousWitness = gs.contract.witnesses.held_coin;
+      // Bypass the honest wallet's colour guard deliberately: this is a
+      // circuit-negative fixture, not a valid version-2 private store.
+      gs.contract.witnesses.held_coin = (ctx: any) => [ctx.privateState, foreignCoin];
       try {
         for (const toContract of [false, true]) {
           const record = gs.ledger().grants.lookup(foreignId);
@@ -651,7 +646,7 @@ await runScenario('recovery-sim', async () => {
           assert(snapshot() === beforeForeign, `${circuit}: foreign witness refusal changes no state`);
         }
       } finally {
-        gs.privateState = previousPrivateState;
+        gs.contract.witnesses.held_coin = previousWitness;
       }
     }
 

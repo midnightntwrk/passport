@@ -77,7 +77,7 @@ await runScenario('leak-audit', async () => {
     s.account, s.device, userCpk, coin, SPEND, dep.candidates,
   );
   if (!spend.change) throw new Error('expected change from the partial spend');
-  await s.account.dropCoin(coin.color);
+  await s.account.dropCoin(coin);
   const backfill = await captureChange(s.account, s.device, s.encKeys, spend.txId, spend.change);
   details.conformingTxs = { deposit: dep.depositTx, spend: spend.txId, backfill: backfill.depositTx };
 

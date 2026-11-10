@@ -266,9 +266,11 @@ never-expiring grants. Omission, numbers, negative values, and overflow are
 rejected; the helpers no longer silently choose unlimited lifetime. Existing
 callers must add their intended expiry decision.
 
-`issueGrant` and the three high-level `withdraw*WithGrant` methods accept an
-optional final `GrantPreflightOptions` argument, exported from
-`src/wallet/account.ts`. Finite grants require that argument. It supplies:
+`issueGrant` and `withdrawUnshieldedWithGrant` accept an optional final
+`GrantPreflightOptions` argument, exported from `src/wallet/account.ts`.
+The two shielded spending methods accept `ShieldedGrantOptions`, which also
+supports an explicit `coinId`; non-expiring grants may supply selection alone.
+Finite grants require the complete timing configuration. It supplies:
 
 - `readNodeHeadTimeSeconds`: an asynchronous callback that freshly reads the
   supported node's current head timestamp and returns whole UNIX seconds as
@@ -348,6 +350,13 @@ journey issues a finite grant, spends through it, and rejects use after
 revocation. Fixture migrations retain deliberate circuit and admission
 negative controls through raw authorisations. This is client and generated-
 runtime evidence, with no new proof, real-browser, or node admission run.
+
+### Multiple shielded coins per asset
+
+The private coin store now retains separate same-colour holdings and binds
+shielded spends to an exact selected coin. See [the multi-coin guide](MULTI-COIN.md)
+for selection, legacy-store migration, spent markers, raw-authorisation
+arguments, validation, and the remaining change-capture/recovery boundaries.
 
 ## Known issues and remaining validation
 

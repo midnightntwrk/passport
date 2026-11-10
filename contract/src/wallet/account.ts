@@ -33,6 +33,11 @@ import {
   emptyCoinStore,
   withCoin,
   withoutCoin,
+  coinId,
+  migrateCoinStore,
+  selectCoin,
+  withSelectedCoin,
+  type CoinIdentity,
   type CoinStorePrivateState,
 } from './witnesses.js';
 import {
@@ -67,6 +72,28 @@ import {
 import type { EncKeyPair } from './inbox.js';
 import { checkGrantExpiry, GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 export { GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
+
+/** Selection alone is sufficient for a deliberately non-expiring grant.
+ * Finite grants still require the complete preflight timing configuration. */
+export type ShieldedGrantOptions = { coinId?: string } & (GrantPreflightOptions | {
+  readNodeHeadTimeSeconds?: never;
+  admissionMarginSeconds?: never;
+  proveAndBalanceSeconds?: never;
+  nowSeconds?: never;
+});
+
+function grantTiming(options?: ShieldedGrantOptions): GrantPreflightOptions | undefined {
+  if (!options || options.readNodeHeadTimeSeconds === undefined) return undefined;
+  // The union permits a reader only with the complete timing branch. The
+  // runtime preflight also validates every field for untyped callers.
+  return options as GrantPreflightOptions;
+}
+
+// The SDK persists the whole private snapshot after every successful call.
+// Reject overlapping work across account objects sharing this provider/ID,
+// including non-shielded calls, rather than losing concurrent coin writes.
+const activeStores = new WeakMap<object, Set<string>>();
+type SelectedSubmit = (name: string, args: unknown[], retry?: boolean) => Promise<any>;
 
 /** The recovery artefacts an account is born with (recovery MIP section 8):
  *  the recovery public key P = s·G, the wrap, and the veto window. */
@@ -306,25 +333,18 @@ export class CustodyAccount {
       privateStateId,
       initialPrivateState,
     });
-    return {
-      address,
-      salt,
-      activate: (device, s) => {
-        const name = `activate_initial_device_with_${device.arm}`;
-        return submitWithDustRetry(name, () => (found as any).callTx[name](...activationArgs(device, s)));
-      },
-      finish: () => {
-        const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
-        account.registerDevice(initialDevice, 0n);
-        return account;
-      },
+    const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
+    account.registerDevice(initialDevice, 0n);
+    return { address, salt,
+      activate: (device, s) => account.activateInitialDevice(device, s),
+      finish: () => account,
     };
   }
 
   /** Low-level activation call against a live account (bootstrap probes). */
   activateInitialDevice(device: AnyDevice, salt: Uint8Array): Promise<unknown> {
     const name = `activate_initial_device_with_${device.arm}`;
-    return submitWithDustRetry(name, () => this.handle.callTx[name](...activationArgs(device, salt)));
+    return submitWithDustRetry(name, () => this.dispatch(name, ...activationArgs(device, salt)));
   }
 
   static async connect(
@@ -338,7 +358,7 @@ export class CustodyAccount {
       contractAddress: address,
       compiledContract,
       privateStateId,
-      initialPrivateState: initialState,
+      initialPrivateState: migrateCoinStore(initialState),
     });
     return new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
   }
@@ -502,42 +522,109 @@ export class CustodyAccount {
 
   async coinStore(): Promise<CoinStorePrivateState> {
     const s = await this.providers.privateStateProvider.get(this.privateStateId);
-    return (s as CoinStorePrivateState) ?? emptyCoinStore();
+    return migrateCoinStore(s ?? emptyCoinStore());
   }
 
-  async putCoin(coin: { nonce: Uint8Array; color: Uint8Array; value: bigint; mtIndex: bigint }): Promise<void> {
-    const s = await this.coinStore();
-    await this.providers.privateStateProvider.set(this.privateStateId, withCoin(s, coin));
+  private async withStoreGuard<T>(action: () => Promise<T>): Promise<T> {
+    const provider = this.providers.privateStateProvider;
+    let busy = activeStores.get(provider);
+    if (!busy) { busy = new Set(); activeStores.set(provider, busy); }
+    if (busy.has(this.privateStateId)) throw new Error('coin store is busy with another operation');
+    busy.add(this.privateStateId);
+    try { return await action(); }
+    finally { busy.delete(this.privateStateId); }
   }
 
-  async dropCoin(color: Uint8Array): Promise<void> {
-    const s = await this.coinStore();
-    await this.providers.privateStateProvider.set(this.privateStateId, withoutCoin(s, color));
+  private async clearStoredSelection(): Promise<void> {
+    const state = await this.providers.privateStateProvider.get(this.privateStateId);
+    if (state?.selectedCoin) {
+      await this.providers.privateStateProvider.set(this.privateStateId, migrateCoinStore(state));
+    }
   }
 
-  /** The stored qualified coin for a color — the witness value the spend
-   *  will consume, needed for the AUTH-10 challenge binding. */
-  async heldCoin(color: Uint8Array): Promise<QualifiedCoin> {
-    const s = await this.coinStore();
-    const stored = s.coins[bytesToHex(color)];
-    if (!stored) throw new Error(`no held coin for color ${bytesToHex(color)} in the local store`);
-    return {
-      nonce: hexToBytes(stored.nonceHex),
-      color: hexToBytes(stored.colorHex),
-      value: BigInt(stored.value),
-      mt_index: BigInt(stored.mtIndex),
-    };
+  /** Every SDK call shares the same private-state guard, even when its circuit
+   * does not use held_coin. A stale selection from an interrupted call is not
+   * inherited by a later operation. */
+  private dispatch(name: string, ...args: unknown[]): Promise<any> {
+    return this.withStoreGuard(async () => {
+      await this.clearStoredSelection();
+      return this.handle.callTx[name](...args);
+    });
+  }
+
+  async putCoin(coin: CoinIdentity & { mtIndex: bigint }): Promise<void> {
+    await this.withStoreGuard(async () => {
+      await this.providers.privateStateProvider.set(this.privateStateId, withCoin(await this.coinStore(), coin));
+    });
+  }
+
+  /** Retire exactly one locally known coin. Repeated retirement is harmless. */
+  async dropCoin(coin: CoinIdentity | string): Promise<void> {
+    await this.withStoreGuard(async () => {
+      await this.providers.privateStateProvider.set(this.privateStateId, withoutCoin(await this.coinStore(), coin));
+    });
+  }
+
+  /** A colour with several live inputs requires an explicit stable coin ID. */
+  async heldCoin(color: Uint8Array, id?: string): Promise<QualifiedCoin> {
+    return selectCoin(await this.coinStore(), color, id);
+  }
+
+  private withSelectedSpend<T>(
+    color: Uint8Array,
+    selected: string | QualifiedCoin | undefined,
+    action: (coin: QualifiedCoin, submit: SelectedSubmit) => Promise<T>,
+  ): Promise<T> {
+    return this.withStoreGuard(async () => {
+      const state = await this.coinStore();
+      const coin = typeof selected === 'object'
+        ? selected : selectCoin(state, color, selected);
+      if (bytesToHex(coin.color) !== bytesToHex(color)) throw new Error('selected coin colour mismatch');
+      const pinned = withSelectedCoin(state, coin);
+      // Copy the input before any asynchronous signing code can run.
+      const input = selectCoin(pinned, color, coinId(coin));
+      const pin = { ...pinned.selectedCoin! };
+      await this.providers.privateStateProvider.set(this.privateStateId, pinned);
+      const matches = (value: any) => value && Object.entries(pin).every(([key, v]) => value[key] === v);
+      let failed = false;
+      try {
+        const submit: SelectedSubmit = async (name, args, retry = false) => {
+          const invoke = async () => {
+            const current = await this.providers.privateStateProvider.get(this.privateStateId);
+            if (!matches(current?.selectedCoin)) throw new Error('selected coin changed before submission');
+            withSelectedCoin(current, input);
+            return this.handle.callTx[name](...args);
+          };
+          return retry ? submitWithDustRetry(name, invoke) : invoke();
+        };
+        return await action(input, submit);
+      } catch (error) {
+        failed = true;
+        throw error;
+      } finally {
+        try {
+          // Read the latest state: never restore the old snapshot over spent
+          // tombstones or other updates committed by the SDK.
+          const current = await this.providers.privateStateProvider.get(this.privateStateId);
+          if (matches(current?.selectedCoin)) {
+            await this.providers.privateStateProvider.set(this.privateStateId, migrateCoinStore(current));
+          }
+        } catch (cleanupError) {
+          if (!failed) throw cleanupError;
+        }
+      }
+    });
   }
 
   // ── Permissionless surface ────────────────────────────────────────────────
 
   async depositUnshielded(color: Uint8Array, amount: bigint): Promise<TxResult> {
-    const r = await submitWithDustRetry('deposit_unshielded', () => this.handle.callTx.deposit_unshielded(color, amount));
+    const r = await submitWithDustRetry('deposit_unshielded', () => this.dispatch('deposit_unshielded', color, amount));
     return { txId: txId(r) };
   }
 
   async depositShielded(coin: ShieldedCoin, entry: Uint8Array): Promise<TxResult> {
-    const r = await submitWithDustRetry('deposit_shielded', () => this.handle.callTx.deposit_shielded(coin, entry));
+    const r = await submitWithDustRetry('deposit_shielded', () => this.dispatch('deposit_shielded', coin, entry));
     return { txId: txId(r) };
   }
 
@@ -564,18 +651,20 @@ export class CustodyAccount {
     recipient: Uint8Array,
     color: Uint8Array,
     amount: bigint,
+    selectedCoinId?: string,
   ): Promise<SpendOutcome> {
-    const ctx = await this.callContext();
-    const { counter, epoch } = await this.requireUseCounter(device);
-    // AUTH-10: the approver signs over the exact qualified coin the spend
-    // will consume, read from the same store the witness serves.
-    const coin = await this.heldCoin(color);
-    const auth = device.arm === 'jubjub'
-      ? device.sign(jubjubChallenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter)
-      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter);
-    const r = await this.withdrawShieldedWithAuth(recipient, color, amount, auth);
-    this.advanceCounter(device, counter, epoch);
-    return r;
+    return this.withSelectedSpend(color, selectedCoinId, async (coin, submit) => {
+      if (amount > coin.value) throw new Error('selected coin has insufficient value for this spend');
+      const ctx = await this.callContext();
+      const { counter, epoch } = await this.requireUseCounter(device);
+      const auth = device.arm === 'jubjub'
+        ? device.sign(jubjubChallenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter)
+        : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter);
+      const name = `withdraw_shielded_with_${auth.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, ...authArgs(auth)], true);
+      this.advanceCounter(device, counter, epoch);
+      return { txId: txId(r), change: changeOf(r) };
+    });
   }
 
   async withdrawShieldedToContract(
@@ -583,16 +672,20 @@ export class CustodyAccount {
     recipient: Uint8Array,
     color: Uint8Array,
     amount: bigint,
+    selectedCoinId?: string,
   ): Promise<DirectSpendOutcome> {
-    const ctx = await this.callContext();
-    const { counter, epoch } = await this.requireUseCounter(device);
-    const coin = await this.heldCoin(color);
-    const auth = device.arm === 'jubjub'
-      ? device.sign(jubjubChallenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter)
-      : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter);
-    const r = await this.withdrawShieldedToContractWithAuth(recipient, color, amount, auth);
-    this.advanceCounter(device, counter, epoch);
-    return r;
+    return this.withSelectedSpend(color, selectedCoinId, async (coin, submit) => {
+      if (amount > coin.value) throw new Error('selected coin has insufficient value for this spend');
+      const ctx = await this.callContext();
+      const { counter, epoch } = await this.requireUseCounter(device);
+      const auth = device.arm === 'jubjub'
+        ? device.sign(jubjubChallenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter)
+        : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter);
+      const name = `withdraw_shielded_to_contract_with_${auth.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, ...authArgs(auth)], true);
+      this.advanceCounter(device, counter, epoch);
+      return { txId: txId(r), ...directOutcomeOf(r, name) };
+    });
   }
 
   async appendInbox(device: AnyDevice, entry: Uint8Array): Promise<TxResult> {
@@ -680,7 +773,7 @@ export class CustodyAccount {
     a: Authorisation,
   ): Promise<TxResult> {
     const name = `withdraw_unshielded_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+    const r = await submitWithDustRetry(name, () => this.dispatch(name,
       color, amount, { bytes: recipient }, ...authArgs(a),
     ));
     return { txId: txId(r) };
@@ -691,12 +784,13 @@ export class CustodyAccount {
     color: Uint8Array,
     amount: bigint,
     a: Authorisation,
+    expectedCoin?: QualifiedCoin,
   ): Promise<SpendOutcome> {
-    const name = `withdraw_shielded_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
-      { bytes: recipient }, color, amount, ...authArgs(a),
-    ));
-    return { txId: txId(r), change: changeOf(r) };
+    return this.withSelectedSpend(color, expectedCoin, async (_coin, submit) => {
+      const name = `withdraw_shielded_with_${a.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, ...authArgs(a)], true);
+      return { txId: txId(r), change: changeOf(r) };
+    });
   }
 
   async withdrawShieldedToContractWithAuth(
@@ -704,44 +798,36 @@ export class CustodyAccount {
     color: Uint8Array,
     amount: bigint,
     a: Authorisation,
+    expectedCoin?: QualifiedCoin,
   ): Promise<DirectSpendOutcome> {
-    const name = `withdraw_shielded_to_contract_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
-      { bytes: recipient }, color, amount, ...authArgs(a),
-    ));
-    const result = circuitResult(r);
-    if (!Array.isArray(result) || !result[0]?.nonce) {
-      throw new Error('withdraw_shielded_to_contract: [sent, change] result not found on the call surface');
-    }
-    const maybeChange = result[1];
-    return {
-      txId: txId(r),
-      sent: result[0] as ShieldedCoin,
-      change: maybeChange?.is_some ? (maybeChange.value as ShieldedCoin) : null,
-    };
+    return this.withSelectedSpend(color, expectedCoin, async (_coin, submit) => {
+      const name = `withdraw_shielded_to_contract_with_${a.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, ...authArgs(a)], true);
+      return { txId: txId(r), ...directOutcomeOf(r, name) };
+    });
   }
 
   async appendInboxWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
     const name = `append_inbox_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](entry, ...authArgs(a)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, entry, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
   async rotateEncKeyWithAuth(newKey: Uint8Array, a: Authorisation): Promise<TxResult> {
     const name = `rotate_enc_key_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](newKey, ...authArgs(a)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, newKey, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
   async addDeviceWithAuth(newEntry: Uint8Array, a: Authorisation): Promise<TxResult> {
     const name = `add_device_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](newEntry, ...authArgs(a)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, newEntry, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
   async removeDeviceEntryWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
     const name = `remove_device_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](entry, ...authArgs(a)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, entry, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
@@ -781,7 +867,7 @@ export class CustodyAccount {
         ), counter);
     const name = `publish_recovery_session_with_${auth.arm}`;
     const r = await submitWithDustRetry(name, () =>
-      this.handle.callTx[name](
+      this.dispatch(name,
         artefacts.recoveryPk, artefacts.sessionNonce,
         slots[0], slots[1], slots[2], slots[3], phiLen, artefacts.wrap,
         ...authArgs(auth),
@@ -821,7 +907,7 @@ export class CustodyAccount {
       },
     );
     const r = await submitWithDustRetry('recover_submit', () =>
-      this.handle.callTx.recover_submit(...recoverSubmitArgs(auth)));
+      this.dispatch('recover_submit', ...recoverSubmitArgs(auth)));
     return { txId: txId(r) };
   }
 
@@ -834,14 +920,14 @@ export class CustodyAccount {
       ? device.sign(jubjubChallenges.recoverCancel(ctx, device.pk), counter)
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).recoverCancel(ctx, device.pk), counter);
     const name = `recover_cancel_with_${auth.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](...authArgs(auth)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, ...authArgs(auth)));
     this.advanceCounter(device, counter, epoch);
     return { txId: txId(r) };
   }
 
   /** Finalise a recovery whose veto window has closed (permissionless). */
   async recoverFinalise(): Promise<TxResult> {
-    const r = await submitWithDustRetry('recover_finalise', () => this.handle.callTx.recover_finalise());
+    const r = await submitWithDustRetry('recover_finalise', () => this.dispatch('recover_finalise'));
     this.counters.clear();
     this.counterEpoch = undefined;
     return { txId: txId(r) };
@@ -946,7 +1032,7 @@ export class CustodyAccount {
       : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).issueGrant(ctx, device.pk, grantId, digest), counter);
     await checkGrantExpiry(scope.expiresAt, options);
     const name = `issue_grant_with_${auth.arm}`;
-    const submitted = await this.handle.callTx[name](grantId, ...scopeArgs(scope), scopeSalt, ...authArgs(auth));
+    const submitted = await this.dispatch(name, grantId, ...scopeArgs(scope), scopeSalt, ...authArgs(auth));
     this.advanceCounter(device, counter, epoch);
     return { txId: txId(submitted) };
   }
@@ -981,7 +1067,7 @@ export class CustodyAccount {
   async issueGrantWithAuth(grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array, a: Authorisation): Promise<TxResult> {
     await this.requireGrantCapability();
     const name = `issue_grant_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+    const r = await submitWithDustRetry(name, () => this.dispatch(name,
       grantId, ...scopeArgs(scope), scopeSalt, ...authArgs(a),
     ));
     return { txId: txId(r) };
@@ -989,13 +1075,13 @@ export class CustodyAccount {
 
   async revokeGrantWithAuth(grantId: Uint8Array, a: Authorisation): Promise<TxResult> {
     const name = `revoke_grant_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](grantId, ...authArgs(a)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, grantId, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
   async revokeAllGrantsWithAuth(a: Authorisation): Promise<TxResult> {
     const name = `revoke_all_grants_with_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](...authArgs(a)));
+    const r = await submitWithDustRetry(name, () => this.dispatch(name, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
@@ -1035,7 +1121,7 @@ export class CustodyAccount {
     // One dispatch only. A refused attempt must re-enter this method, reread
     // state and head time, and request a fresh authorisation if still usable.
     const name = `withdraw_unshielded_with_grant_${auth.arm}`;
-    const r = await this.handle.callTx[name](color, amount, { bytes: recipient }, ...grantAuthArgs(opening, auth));
+    const r = await this.dispatch(name, color, amount, { bytes: recipient }, ...grantAuthArgs(opening, auth));
     return { txId: txId(r) };
   }
 
@@ -1047,24 +1133,24 @@ export class CustodyAccount {
     amount: bigint,
     changeEntry: Uint8Array,
     encPk?: Uint8Array,
-    options?: GrantPreflightOptions,
+    options?: ShieldedGrantOptions,
   ): Promise<SpendOutcome> {
-    const coin = await this.heldCoin(color);
-    const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), options);
-    const g = checked.context;
-    const enc = encPk ?? checked.encKey;
-    if (bytesToHex(enc) !== bytesToHex(checked.encKey)) {
-      throw new GrantPreflightError('encryption_key_changed', 'supplied change encryption key is not current');
-    }
-    const auth = grantee.arm === 'jubjub'
-      ? grantee.sign(jubjubGrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
-      : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
-    await this.recheckGrant(checked, options, enc);
-    const name = `withdraw_shielded_with_grant_${auth.arm}`;
-    const r = await this.handle.callTx[name](
-      { bytes: recipient }, color, amount, changeEntry, enc, ...grantAuthArgs(opening, auth),
-    );
-    return { txId: txId(r), change: changeOf(r) };
+    return this.withSelectedSpend(color, options?.coinId, async (coin, submit) => {
+      if (amount > coin.value) throw new Error('selected coin has insufficient value for this spend');
+      const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), grantTiming(options));
+      const g = checked.context;
+      const enc = encPk ?? checked.encKey;
+      if (bytesToHex(enc) !== bytesToHex(checked.encKey)) {
+        throw new GrantPreflightError('encryption_key_changed', 'supplied change encryption key is not current');
+      }
+      const auth = grantee.arm === 'jubjub'
+        ? grantee.sign(jubjubGrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
+        : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
+      await this.recheckGrant(checked, grantTiming(options), enc);
+      const name = `withdraw_shielded_with_grant_${auth.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, changeEntry, enc, ...grantAuthArgs(opening, auth)]);
+      return { txId: txId(r), change: changeOf(r) };
+    });
   }
 
   async withdrawShieldedToContractWithGrant(
@@ -1075,27 +1161,27 @@ export class CustodyAccount {
     amount: bigint,
     changeEntry: Uint8Array,
     encPk?: Uint8Array,
-    options?: GrantPreflightOptions,
+    options?: ShieldedGrantOptions,
   ): Promise<DirectSpendOutcome> {
-    const coin = await this.heldCoin(color);
-    const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), options);
-    const g = checked.context;
-    const enc = encPk ?? checked.encKey;
-    if (bytesToHex(enc) !== bytesToHex(checked.encKey)) {
-      throw new GrantPreflightError('encryption_key_changed', 'supplied change encryption key is not current');
-    }
-    const auth = grantee.arm === 'jubjub'
-      ? grantee.sign(jubjubGrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
-      : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
-    await this.recheckGrant(checked, options, enc);
-    const name = `withdraw_shielded_to_contract_with_grant_${auth.arm}`;
-    const r = await this.handle.callTx[name](
-      { bytes: recipient }, color, amount, changeEntry, enc, ...grantAuthArgs(opening, auth),
-    );
-    return { txId: txId(r), ...directOutcomeOf(r, name) };
+    return this.withSelectedSpend(color, options?.coinId, async (coin, submit) => {
+      if (amount > coin.value) throw new Error('selected coin has insufficient value for this spend');
+      const checked = await this.checkedGrant(this.grantIdOf(grantee, opening.originHash, opening.slot), grantTiming(options));
+      const g = checked.context;
+      const enc = encPk ?? checked.encKey;
+      if (bytesToHex(enc) !== bytesToHex(checked.encKey)) {
+        throw new GrantPreflightError('encryption_key_changed', 'supplied change encryption key is not current');
+      }
+      const auth = grantee.arm === 'jubjub'
+        ? grantee.sign(jubjubGrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
+        : await grantee.sign((grantee.arm === 'p256' ? p256GrantChallenges : k256GrantChallenges).withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
+      await this.recheckGrant(checked, grantTiming(options), enc);
+      const name = `withdraw_shielded_to_contract_with_grant_${auth.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, changeEntry, enc, ...grantAuthArgs(opening, auth)]);
+      return { txId: txId(r), ...directOutcomeOf(r, name) };
+    });
   }
 
-  /** The live `enc_key` cell: what a grantee seals change entries to. */
+  /** The live encryption key used to seal change entries. */
   async encKey(): Promise<Uint8Array> {
     const l = await this.ledgerState();
     return l.enc_key;
@@ -1116,7 +1202,7 @@ export class CustodyAccount {
     a: GrantAuthorisation,
   ): Promise<TxResult> {
     const name = `withdraw_unshielded_with_grant_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+    const r = await submitWithDustRetry(name, () => this.dispatch(name,
       color, amount, { bytes: recipient }, ...grantAuthArgs(opening, a),
     ));
     return { txId: txId(r) };
@@ -1130,12 +1216,13 @@ export class CustodyAccount {
     encPk: Uint8Array,
     opening: GrantOpening,
     a: GrantAuthorisation,
+    expectedCoin?: QualifiedCoin,
   ): Promise<SpendOutcome> {
-    const name = `withdraw_shielded_with_grant_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
-      { bytes: recipient }, color, amount, changeEntry, encPk, ...grantAuthArgs(opening, a),
-    ));
-    return { txId: txId(r), change: changeOf(r) };
+    return this.withSelectedSpend(color, expectedCoin, async (_coin, submit) => {
+      const name = `withdraw_shielded_with_grant_${a.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, changeEntry, encPk, ...grantAuthArgs(opening, a)], true);
+      return { txId: txId(r), change: changeOf(r) };
+    });
   }
 
   async withdrawShieldedToContractWithGrantAuth(
@@ -1146,17 +1233,21 @@ export class CustodyAccount {
     encPk: Uint8Array,
     opening: GrantOpening,
     a: GrantAuthorisation,
+    expectedCoin?: QualifiedCoin,
   ): Promise<DirectSpendOutcome> {
-    const name = `withdraw_shielded_to_contract_with_grant_${a.arm}`;
-    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
-      { bytes: recipient }, color, amount, changeEntry, encPk, ...grantAuthArgs(opening, a),
-    ));
-    return { txId: txId(r), ...directOutcomeOf(r, name) };
+    return this.withSelectedSpend(color, expectedCoin, async (_coin, submit) => {
+      const name = `withdraw_shielded_to_contract_with_grant_${a.arm}`;
+      const r = await submit(name, [{ bytes: recipient }, color, amount, changeEntry, encPk, ...grantAuthArgs(opening, a)], true);
+      return { txId: txId(r), ...directOutcomeOf(r, name) };
+    });
   }
 
   /** Raw call-tx surface, for tests that need shapes not modelled above. */
   get callTx(): any {
-    return this.handle.callTx;
+    return new Proxy(this.handle.callTx, {
+      get: (target, name) => typeof name === 'string' && typeof target[name] === 'function'
+        ? (...args: unknown[]) => this.dispatch(name, ...args) : target[name],
+    });
   }
 }
 

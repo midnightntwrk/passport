@@ -10,6 +10,7 @@ import {
 import { JubjubDevice, K256Device, P256Device, authArgs, jubjubChallenges, type AnyDevice } from '../wallet/signer.js';
 import { bytesToHex } from '../wallet/hex.js';
 import { AccountSim } from './sim.js';
+import { emptyCoinStore } from '../wallet/witnesses.js';
 import { softwarePasskey, TEST_ORIGIN, TEST_RP } from './p256-fixtures.js';
 
 const MAX = (1n << 64n) - 1n;
@@ -18,7 +19,9 @@ const jsonCopy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 // Exercise the real constructor and its initial empty roster. The private
 // constructor is reached reflectively only to replace network transport.
 function client(address: Uint8Array, ledgerState: () => unknown, callTx: object = {}): CustodyAccount {
-  const account = Reflect.construct(CustodyAccount, [bytesToHex(address), address, {}, 'test', { callTx }]) as CustodyAccount;
+  let privateState = emptyCoinStore();
+  const providers = { privateStateProvider: { get: async () => privateState, set: async (_id: string, state: typeof privateState) => { privateState = state; } } };
+  const account = Reflect.construct(CustodyAccount, [bytesToHex(address), address, providers, 'test', { callTx }]) as CustodyAccount;
   account.ledgerState = async () => ledgerState() as any;
   return account;
 }

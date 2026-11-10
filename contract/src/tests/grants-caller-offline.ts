@@ -10,7 +10,7 @@ import {
   k256GrantChallenges, scopeArgs, scopeDigest, spendScope, readOnlyScope, originHash,
   openingOf, grantAuthArgs, authArgs, assertIssueRules,
 } from '../wallet/signer.js';
-import { withCoin } from '../wallet/witnesses.js';
+import { withCoin, withSelectedCoin } from '../wallet/witnesses.js';
 
 const rnd = (n = 32) => new Uint8Array(randomBytes(n));
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
@@ -98,7 +98,7 @@ for (const grantee of [JubjubGrantee.generate(), K256Grantee.generate()]) {
   await sim.authorised('revoke_grant', (c, d) => jubjubChallenges.revokeGrant(c, d.pk, id), [id]);
   await issue(shieldScope);
   const coin = { nonce: rnd(), color, value: 10n, mt_index: 0n };
-  sim.privateState = withCoin(sim.privateState, { ...coin, mtIndex: coin.mt_index });
+  sim.privateState = withSelectedCoin(withCoin(sim.privateState, { ...coin, mtIndex: coin.mt_index }), coin);
   for (const name of ['withdraw_shielded', 'withdraw_shielded_to_contract']) {
     await assert.rejects(() => invoke(contractCaller(wrong), `${name}_with_grant_${grantee.arm}`,
       [{ bytes: recipient }, color, 5n, rnd(192), sim.ledger().enc_key, ...grantAuthArgs(opening, auth)]), /grant caller mismatch/);

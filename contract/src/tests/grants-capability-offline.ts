@@ -2,6 +2,7 @@
 // and the externally signed entrypoint must enforce the same schema check.
 import { strict as assert } from 'node:assert';
 import { CustodyAccount } from '../wallet/account.js';
+import { emptyCoinStore, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { JubjubDevice, readOnlyScope, type Authorisation } from '../wallet/signer.js';
 import { runScenario, step } from './runner.js';
 
@@ -12,7 +13,13 @@ void runScenario('grants-capability-offline', async () => {
   const auth: Authorisation = device.sign(() => bytes, 0n);
   let signingContexts = 0, submissions = 0;
   const account = Object.create(CustodyAccount.prototype) as CustodyAccount;
+  let privateState: CoinStorePrivateState = emptyCoinStore();
   Object.assign(account, {
+    privateStateId: 'capability-test',
+    providers: { privateStateProvider: {
+      get: async () => structuredClone(privateState),
+      set: async (_id: string, state: CoinStorePrivateState) => { privateState = structuredClone(state); },
+    } },
     callContext: async () => { signingContexts++; throw new Error('unexpected signing context'); },
     handle: { callTx: { issue_grant_with_jubjub: async () => {
       submissions++;

@@ -13,6 +13,7 @@
 //      holds a real coin so the rejection demonstrably happens at the
 //      seam's signature check, not at the witness.
 
+import { coinId } from '../wallet/witnesses.js';
 import { runScenario, step, waitForLedger } from './runner.js';
 import { writeEvidence } from './evidence.js';
 import { standardSetup, mintToUser, depositAndCapture, expectAbort } from './flow.js';
@@ -80,14 +81,14 @@ await runScenario('auth-replay', async () => {
   step('test 4: a withdraw_shielded signature is rejected by withdraw_shielded_to_contract');
   const dest = new Uint8Array(32).fill(3); // 32-byte recipient, identical bytes for both circuits
   const ctx = await s.account.callContext();
-  const heldCoin = await s.account.heldCoin(minted.color);
+  const heldCoin = await s.account.heldCoin(minted.color, coinId(minted));
   const authShielded = s.device.sign(
     k256Challenges.withdrawShielded(ctx, s.device.pk, dest, minted.color, SPEND, heldCoin),
     await s.account.resolveUseCounter(s.device),
   );
   details.crossCircuitRejection = await expectAbort(
     'sibling circuit with identical arguments and witness values (AUTH-3, per-circuit tags)',
-    () => s.account.withdrawShieldedToContractWithAuth(dest, minted.color, SPEND, authShielded),
+    () => s.account.withdrawShieldedToContractWithAuth(dest, minted.color, SPEND, authShielded, heldCoin),
   );
   const oneAfter = await s.account.ledgerState();
   if (oneAfter.auth_nonce !== ctx.authNonce) {

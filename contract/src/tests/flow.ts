@@ -16,6 +16,7 @@ import {
 } from '../node/setup.js';
 import { coinPublicKeyBytes } from '../node/wallet.js';
 import { CustodyAccount } from '../wallet/account.js';
+import { coinId } from '../wallet/witnesses.js';
 import {
   K256Device, jubjubChallenges, k256Challenges, p256Challenges, scopeDigest,
   type AnyDevice, type PlainScope,
@@ -183,7 +184,7 @@ export async function withdrawShieldedWithRetry(
   for (const idx of candidates) {
     await account.putCoin({ ...coin, mtIndex: idx });
     try {
-      const r = await account.withdrawShielded(device, recipient, coin.color, amount);
+      const r = await account.withdrawShielded(device, recipient, coin.color, amount, coinId(coin));
       attempts.push({ mtIndex: idx.toString(), outcome: `accepted: ${r.txId}` });
       return {
         txId: r.txId,

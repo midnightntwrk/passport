@@ -5,6 +5,7 @@ import { strict as assert } from 'node:assert';
 import { compiledNative, contracts, sdk, types, ledgerApi, rt } from './adapter.js';
 import { CONFIG } from '../../../contract/src/node/wallet.js';
 import { sealInboxEntry } from '../../../contract/src/wallet/inbox.js';
+import { withSelectedCoin } from '../../../contract/src/wallet/witnesses.js';
 export async function composeExactSpend(providers: any, sender: any, receiver: any, receiverKey: Uint8Array, coinPublicKey: Uint8Array, circuit: string, args: any[], held: any) {
     const block = await providers.publicDataProvider.queryBlock();
     assert.ok(block?.hash);
@@ -18,7 +19,7 @@ export async function composeExactSpend(providers: any, sender: any, receiver: a
         const result = types.exitResultOrError(await runtime.runPromiseExit(executable.circuit(name, {
             address: account.address,
             contractState: state.contractState,
-            privateState: state.privateState,
+            privateState: account === sender ? withSelectedCoin(state.privateState, held) : state.privateState,
             ledgerParameters: state.ledgerParameters,
             parentBlockHash: block.hash,
         }, ...parameters)));
