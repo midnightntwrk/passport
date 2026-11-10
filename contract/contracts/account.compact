@@ -2913,6 +2913,11 @@ export circuit recover_finalise(): [] {
   devices.resetToDefault();
   devices.insert(pending_entry);
   device_count = 1 as Uint<8>;
+  // Recovery is available before initial activation. Installing its successor
+  // consumes the original bootstrap authority too, so no activation arm can
+  // later reintroduce the committed initial device into the recovered epoch.
+  booted = true;
+  boot = pad(32, "");
   recovery_pk = pending_recovery_pk;
   recovery_phi_len = 0 as Uint<8>;
   pending_recovery    = false;

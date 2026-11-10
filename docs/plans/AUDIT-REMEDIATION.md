@@ -9,13 +9,16 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: priority 2, grant preflight.** Implementation and independent agent
-review are complete on `codex/grant-preflight`, ready for pull-request review.
+**Current: priority 3, dormant recovery bootstrap.** Implementation and independent
+agent review are complete on `codex/dormant-recovery-bootstrap`, ready for
+pull-request review. This work is based on
+priority 2's merge in [#202](https://github.com/midnightntwrk/passport/pull/202)
+on 2026/11/10 as `44738eebe712ac5703babcac72d3e98b6d38e3c0`.
 Priority 1 merged in [#201](https://github.com/midnightntwrk/passport/pull/201)
 on 2026/11/10 as `f7342f297d945198fcfd7300307b63220a3dfdd9`.
 
-**Immediately after priority 2 merges: start priority 3, dormant recovery bootstrap.**
-Verify the merge commit on `origin/main`, mark priority 2 as merged with its
+**Immediately after priority 3 merges: start priority 4, multiple coins per asset.**
+Verify the merge commit on `origin/main`, mark priority 3 as merged with its
 pull request and validation evidence, and create the next branch from that
 updated baseline. Do not treat an open or merely approved pull request as a
 merge. Continue in the order below, carrying the next item into each hand-off.
@@ -26,8 +29,8 @@ background merge watcher or establish that any later task has started.
 | Order | Work | Audit identifiers | State | Start condition |
 |---|---|---|---|---|
 | 1 | Reliable device reconnection | `DEV-003`, `DEV-004`; `TASK-DEV-003`, `TASK-DEV-004` | Merged in #201 | Merge `f7342f2`, 2026/11/10 |
-| 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Implemented; awaiting merge | Based on merged priority 1 |
-| 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Queued | Priority 2 merged |
+| 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Merged in #202 | Merge `44738ee`, 2026/11/10 |
+| 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Implemented; awaiting merge | Based on merged priority 2 |
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Queued | Priority 3 merged |
 
 ## 1. Reliable device reconnection
@@ -72,7 +75,7 @@ enforcement remains authoritative; preflight is not an admission guarantee.
   behaviour and regression coverage.
 - [x] Valid grants continue to reach signing and submission.
 - [x] Independent implementation review is complete.
-- [ ] The pull request is merged, with its merge commit recorded here.
+- [x] The pull request is merged: #202, commit `44738eebe712ac5703babcac72d3e98b6d38e3c0`.
 
 Validation on 2026/11/10: all 30 preflight tests and the TypeScript build
 passed. The matrix covers all three signing arms and spending twins, zero-sign
@@ -93,14 +96,30 @@ Scope: recovery finalisation consumes outstanding original activation authority.
 A small source edit still requires verifier regeneration and a deployment or
 migration compatibility decision.
 
-- [ ] All three bootstrap arms reject delayed original activation after
+- [x] All three bootstrap arms reject delayed original activation after
   recovery, before and after a successor operation.
-- [ ] The successor can operate and enrol another device; actual membership
+- [x] The successor can operate and enrol another device; actual membership
   agrees with the device count.
-- [ ] Cancellation, activation during pending recovery, and later epochs have
+- [x] Cancellation, activation during pending recovery, and later epochs have
   explicit tests.
-- [ ] Existing deployments and retired maintenance authority are addressed.
-- [ ] Independent review is complete, and the pull request is merged.
+- [x] Existing deployments and retired maintenance authority have explicit
+  [deployment and migration guidance](../../contract/DORMANT-RECOVERY.md).
+- [x] Independent source and regression review is complete.
+- [ ] The pull request is merged, with its merge commit recorded here.
+
+Validation on 2026/11/10: the new generated-runtime matrix passes all 20
+cases after a fresh Compact 0.35.0 compilation. The baseline fails the four
+dormant-activation cases, covering JubJub, both K256 envelopes, and P256;
+the other 16 lifecycle controls pass. The TypeScript build, existing recovery
+simulator, and P256 offline checks pass. Independent review repeats all 20
+new cases successfully. Among 52 textual ZKIR circuits, only `recover_finalise`
+changes; its new proving and verifier keys generate successfully with the
+bundled ZKIR 3.1.0-rc.1 tool.
+
+This is a source correction with runtime and targeted key-generation evidence.
+It does not establish a complete release artefact set, fresh proof or node
+acceptance, a live verifier replacement, or repair of previously affected
+state. The deployment note records those release and migration requirements.
 
 ## 4. Multiple coins per asset
 
