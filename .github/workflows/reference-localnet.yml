@@ -32,7 +32,6 @@ jobs:
       CI_EVIDENCE_DIR: ${{ github.workspace }}/reference-localnet-evidence
       CI_COMPOSE_PROJECT: passport-ci-${{ github.run_id }}-${{ github.run_attempt }}
       CI_COMMAND_TIMEOUT_MS: '3600000'
-      COMPACT_DIR: ${{ runner.temp }}/reference-compact-0.35.0
       RAYON_NUM_THREADS: '2'
       REFERENCE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       REFERENCE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -48,7 +47,9 @@ jobs:
         with:
           node-version: '22.22.2'
       - name: Require a fresh evidence directory
-        run: test ! -e "$CI_EVIDENCE_DIR" && test ! -L "$CI_EVIDENCE_DIR"
+        run: |
+          test ! -e "$CI_EVIDENCE_DIR" && test ! -L "$CI_EVIDENCE_DIR"
+          echo "COMPACT_DIR=$RUNNER_TEMP/reference-compact-0.35.0" >> "$GITHUB_ENV"
       - name: Record initial provenance
         run: node scripts/ci-evidence.mjs initial started
       - name: Reserve disk for complete reference keys
