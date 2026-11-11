@@ -46,6 +46,10 @@ jobs:
           node-version: '22.22.2'
       - name: Record initial provenance
         run: node scripts/ci-evidence.mjs initial started
+      - name: Verify regression runner failure handling
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap scripts/ci-run.test.mjs | tee "$CI_EVIDENCE_DIR/runner-controls.log"
       - name: Install pinned Compact and Rust toolchains
         run: |
           node scripts/ci-run.mjs install-compact command - -- bash scripts/ci-install-compact.sh

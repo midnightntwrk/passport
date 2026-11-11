@@ -41,7 +41,7 @@ background merge watcher or establish that any later task has started.
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
 | 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Merged in #206 | Merge `617f256`, 2026/11/11 |
 | 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Implemented and validated in #207; awaiting merge | Based on merged priority 6 |
-| 8 | Pinned reference regression and proof/localnet CI | `TODO-CI-01` | Implementation and validation in progress | Stacked on #207 with user authorisation |
+| 8 | Pinned reference regression and proof/localnet CI | `TODO-CI-01` | Implemented in #208; checks and dependency notes below | Stacked on #207 with user authorisation |
 
 ## 1. Reliable device reconnection
 
@@ -324,9 +324,10 @@ recovery journey, and retained evidence. See the
 - [x] Separate generated-runtime evidence from complete key generation and
   proof/node acceptance.
 - [x] Record exact installed verifiers and transaction identities in live evidence.
-- [ ] Complete clean local and hosted validation, including a deliberately broken
-  source invariant that makes the regression workflow fail.
-- [ ] Complete independent review and record the dependent pull request.
+- [x] Pass clean local compilation, build, and all 27 regression commands.
+- [x] Demonstrate a deliberately broken source invariant failing on GitHub.
+- [x] Complete independent source review and open dependent
+  [#208](https://github.com/midnightntwrk/passport/pull/208).
 - [ ] Verify #207's merge, then rebase and retarget this implementation onto main.
 - [ ] Merge this workflow and separately configure/verify the required check.
 
@@ -335,3 +336,29 @@ and Luna for test-inventory extraction. The primary agent owns integration,
 the heavy lane, live execution, documentation, and evidence reconciliation.
 The main branch protection read on 2026/11/11 required only `scan` and `DCO`;
 the new regression job is not yet a merge requirement.
+
+Validation on 2026/11/11: the clean local lane passed 492 TAP cases, 45 native
+Rust cases, and the additional script checks. Twelve subprocess controls test
+the runner's failure, empty-output, duplicate-summary, skip, and timeout
+behaviour. A separate local harness run reused the previously generated keys;
+its three recovery phases, two prover controls, ten selected receipts, and
+52 installed-verifier comparisons passed, with cleanup verified. That run
+validates orchestration and assertions, not fresh key generation.
+
+The first hosted fast lane
+[passed](https://github.com/midnightntwrk/passport/actions/runs/43041255349).
+The disposable source mutation in
+[#209](https://github.com/midnightntwrk/passport/pull/209) removed bootstrap
+consumption and made four dormant-recovery cases fail across all initial
+profiles, producing a
+[failed regression job](https://github.com/midnightntwrk/passport/actions/runs/43041370895).
+Its defect is confined to the disposable control branch and must never merge.
+The control is restored and closed after its evidence is retained.
+
+Use [#208's current checks](https://github.com/midnightntwrk/passport/pull/208/checks)
+and their retained artefacts for final-head hosted results, including complete
+fresh generation and the heavy journey. A historical pass does not certify a
+later head. The initial workflow-context error and separate Opengrep findings
+were retained and corrected: runner paths are set in execution steps, TAP
+parsing uses a fixed expression, and only the fixed loopback prover version
+request has a rule-specific exception with redirects disabled.

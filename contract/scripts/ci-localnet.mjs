@@ -114,7 +114,9 @@ if (process.argv[2] === 'cleanup') {
       return Number.parseInt(head.number, 16) >= 2 ? await rpc('chain_getBlockHash', [0]) : null;
     });
     evidence.proverVersion = await until('proof server', async () => {
-      const response = await fetch('http://127.0.0.1:6300/version', { signal: AbortSignal.timeout(2_000) });
+      // Fixed loopback development service, no credentials, and no redirects.
+      // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
+      const response = await fetch('http://127.0.0.1:6300/version', { signal: AbortSignal.timeout(2_000), redirect: 'error' });
       return response.ok ? response.text() : null;
     });
     assert.match(evidence.proverVersion, /9\.0\.0-rc\.8/);

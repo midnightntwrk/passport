@@ -52,6 +52,10 @@ jobs:
           echo "COMPACT_DIR=$RUNNER_TEMP/reference-compact-0.35.0" >> "$GITHUB_ENV"
       - name: Record initial provenance
         run: node scripts/ci-evidence.mjs initial started
+      - name: Verify regression runner failure handling
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap scripts/ci-run.test.mjs | tee "$CI_EVIDENCE_DIR/runner-controls.log"
       - name: Reserve disk for complete reference keys
         run: |
           test "$RUNNER_ENVIRONMENT" = github-hosted

@@ -39,10 +39,16 @@ await new Promise(resolveLog => log.end(resolveLog));
 Object.assign(report, result, { completedAt: new Date().toISOString() });
 let completion = true;
 if (kind === 'tap') {
-  const count = key => Number(output.match(new RegExp(`^# ${key} (\\d+)\\s*$`, 'm'))?.[1] ?? NaN);
-  report.tests = count('tests');
-  completion = report.tests > 0 && count('pass') === report.tests &&
-    ['fail', 'cancelled', 'skipped', 'todo'].every(key => count(key) === 0);
+  const counts = new Map();
+  let duplicate = false;
+  for (const match of output.matchAll(/^# (tests|pass|fail|cancelled|skipped|todo) (\d+)[\t ]*$/gm)) {
+    if (counts.has(match[1])) duplicate = true;
+    counts.set(match[1], Number(match[2]));
+  }
+  report.tests = counts.get('tests') ?? null;
+  completion = !duplicate && counts.size === 6 && [...counts.values()].every(Number.isSafeInteger) &&
+    report.tests > 0 && counts.get('pass') === report.tests &&
+    ['fail', 'cancelled', 'skipped', 'todo'].every(key => counts.get(key) === 0);
 } else if (kind === 'cargo') {
   const results = [...output.matchAll(/test result: (\w+)\. (\d+) passed; (\d+) failed; (\d+) ignored;/g)];
   report.tests = results.reduce((sum, row) => sum + Number(row[2]), 0);

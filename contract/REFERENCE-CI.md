@@ -58,6 +58,8 @@ and completion checks. TAP suites must report positive test counts with no
 failures, skipped tests, cancellations, or TODOs. Cargo must execute tests with
 no failures or ignored cases. Script suites have explicit completion markers.
 The runner rejects a zero-exit command that produces no expected test evidence.
+Both workflows first run twelve isolated subprocess controls for the runner,
+including empty output, skipped tests, duplicate summaries, and timeouts.
 The deterministic grant vectors are checked for changes before native checks
 consume them.
 
