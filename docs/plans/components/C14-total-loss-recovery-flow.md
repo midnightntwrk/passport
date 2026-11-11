@@ -84,11 +84,16 @@ that a `buss-req` really comes from the account owner (out-of-band
 confirmation UX) — the maths bounds what a malicious quorum can do,
 the UX bounds how often one forms.
 
-**Recovery of the encryption secret.** The existing 64-byte `recovery_wrap`
-seals the viewing secret under a key derived from the recovery secret;
-refresh requires a session update. Freshness and successor lifecycle
-remain. Merged experiment #177 proposes an inbox recovery-group recipient, but that
-extension is unimplemented and untested; its experiment covers passkey readers.
+**Recovery of the encryption secret.** The 2026/11/11
+[reference client](../../../contract/VIEWING-RECOVERY.md) checks an unwrapped
+secret against current `enc_key`, persists it through an explicit encrypted
+vault, and reloads it after restart. It distinguishes current viewing capability
+from a stale, unknown, or absent guardian backup. Refresh requires a fresh
+full-roster session; finalisation leaves backup absent until that publication.
+Guardian transport, historical-key handling, and inbox migration across rotation
+remain separate work. Merged experiment #177 proposes an inbox recovery-group
+recipient, but that extension is unimplemented and untested; its experiment
+covers passkey readers.
 
 **Cryptographer review of the integration.** The ANARKey construction
 is published; our integration (φ handling, session nonces, the

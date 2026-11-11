@@ -9,20 +9,19 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: chain-verified holdings reconstruction, CUST-03.** Durable change
-capture merged in [#205](https://github.com/midnightntwrk/passport/pull/205),
-`c87933d5eb0b893ac907dfe86a76be462cdfeaf7`, verified against `origin/main` on
+**Current: restore and persist current viewing capability, REC-WRAP-001 and
+REC-WALLET-001.** Chain-verified holdings reconstruction merged in
+[#206](https://github.com/midnightntwrk/passport/pull/206),
+`617f2569eee0147b6e26597b34f270a0ff117abf`, verified against `origin/main` on
 2026/11/11. This implementation starts from that merge on
-`codex/chain-verified-recovery`. Implementation, independent review, and targeted
-validation are complete; [#206](https://github.com/midnightntwrk/passport/pull/206)
-awaits review and merge.
+`codex/current-viewing-recovery`. Implementation, independent review, and targeted
+validation are complete in [#207](https://github.com/midnightntwrk/passport/pull/207),
+awaiting merge.
 
-**After CUST-03 merges:** verify its merge and retained regression evidence,
-then restore and persist current viewing capability (`REC-WRAP-001`,
-`REC-WALLET-001`), including stale recovery wraps after rotation. Partial
-transaction-outcome repair remains a separate custody milestone: observed input
-and change holdings alone cannot prove which operation succeeded. Direct-payment
-composition also remains separate work.
+**After this merges:** verify its merge and retained regression evidence, then
+add the pinned reference regression CI lane (`TODO-CI-01`). Compromised-credential
+containment, partial transaction-outcome repair, production-scale discovery,
+and complete guardian transport remain separate open work.
 
 This document records the continuation instruction. It does not install a
 background merge watcher or establish that any later task has started.
@@ -34,7 +33,8 @@ background merge watcher or establish that any later task has started.
 | 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Merged in #203 | Merge `9d909ae`, 2026/11/10 |
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Merged in #204 | Merge `277a8e3`, 2026/11/10 |
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
-| 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Implemented and validated; #206 awaits merge | Based on merged priority 5 |
+| 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Merged in #206 | Merge `617f256`, 2026/11/11 |
+| 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Implemented and validated in #207; awaiting merge | Based on merged priority 6 |
 
 ## 1. Reliable device reconnection
 
@@ -218,7 +218,7 @@ See the [implementation guide](../../contract/CHAIN-RECOVERY.md).
 - [x] Keep uncertain and partial journal reservations quarantined.
 - [x] Complete targeted regressions, independent review, and fresh-process
   localnet validation; record evidence and limitations.
-- [ ] Merge the pull request and record its merge commit.
+- [x] Merge the pull request: #206, commit `617f2569eee0147b6e26597b34f270a0ff117abf`.
 
 A complete candidate pass is not proof of a complete account balance. Lost owner
 change that was never backfilled, with its local description and journal also
@@ -243,10 +243,63 @@ to bounded candidate retry through the pinned block's exclusive commitment-tree
 boundary. This is tested, but its worst-case work scales with the global tree.
 Optimising discovery through emitted events or complete indexed account history,
 and measuring recovery at production scale, remain follow-up work. Partial
-transaction repair and current viewing-key restoration also remain open.
+transaction repair remains open; current viewing-key restoration is addressed
+by priority 7 below.
 
 The live run reused the pinned full keyed artefacts generated on 2026/11/10.
 There was no circuit change or new key generation. Controlled SDK transport
 fixtures, native-ledger tests, actual prover checks, and node acceptance evidence
 are separate validation layers. This is targeted custody evidence, not the full
 localnet matrix or complete MIP conformance.
+
+
+## 7. Current viewing capability and guardian backup
+
+Scope: indexed guardian reconstruction, current-key validation, acknowledged
+persistent storage, private-profile merging, stale/unknown/absent backup status,
+and verified fresh full-roster session publication. See the
+[implementation guide](../../contract/VIEWING-RECOVERY.md).
+
+- [x] Refuse a successfully decrypted key that does not match current `enc_key`.
+- [x] Require an explicit persistent vault and read back the exact scoped key
+  before private-profile publication or a persistence acknowledgement.
+- [x] Preserve existing holdings and metadata; support a fresh-profile reload.
+- [x] Expose stale, unknown, and absent backup outcomes separately from current
+  viewing capability and pending authority recovery.
+- [x] Refuse unavailable/invalid guardian input and reused or partial fresh sessions.
+- [x] Recheck key, artefact, and pending context around persistence and publication.
+- [x] Complete independent review, regression tests, and a fresh-process localnet
+  guardian restore, restart, successor spend, and renewed backup journey.
+- [x] Open [#207](https://github.com/midnightntwrk/passport/pull/207).
+- [ ] Merge #207 and record its merge commit.
+
+Validation on 2026/11/11: 93 new helper, account/generated-runtime, and real
+filesystem-vault tests passed, alongside 399 prior wallet/custody/reconstruction
+regressions, recovery offline and simulator checks, and the TypeScript build.
+The final new suite includes a status-read race recheck added after the broader
+regression run. A generated-runtime journey proves the important incomplete
+outcome: a live device can rotate encryption during pending recovery, authority
+finalisation can succeed, and the client still reports stale viewing and refuses
+the obsolete vault key.
+
+All three fresh-process localnet phases passed. Provisioning exercised stale
+wrap refusal and unavailable-roster refusal. Two indexed paper-key-derived
+shares then restored and persisted the current key into an empty profile,
+reconstructing 800 without submitting a transaction. Another fresh process
+loaded only the vault, finalised authority recovery, reported the consumed
+backup as absent, spent 100, backfilled change, preserved the same-colour sibling,
+and verified 700 before publishing a fresh full-roster session. Ten successful
+transaction receipts were cross-checked against node block hashes.
+
+This is targeted localnet evidence using pinned keyed artefacts generated on
+2026/11/10, with no circuit change, new key generation, or full localnet-matrix
+rerun. The initial provision phase preceded the final status-read recheck;
+restoration and finalisation used the final product sources, and each phase
+records its source hashes. The isolated services are stopped with volumes retained.
+The canonical MIP-0022 comparison uses upstream
+`4a85a87b4e4c5d59ee88a5786a8ecb11f5dc5c6f`.
+
+The caller authenticates guardian exchanges and configures the network/provider
+and vault-key policy. The reference helper does not add a browser ceremony or
+prevent an external rotation during pending recovery. A current viewing key
+cannot imply a complete reconstructed balance or repair lost change descriptions.

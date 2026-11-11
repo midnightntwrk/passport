@@ -382,7 +382,18 @@ coverage and verified subtotals. It requires viewing capability but no device
 signature or trial spend. Optional account application preserves siblings and
 spent markers. See [the chain recovery guide](CHAIN-RECOVERY.md) for bounded
 continuation, provider trust, and remaining gaps. Uncertain journal operations
-remain quarantined; viewing-key restoration is separate work.
+remain quarantined.
+
+### Current viewing capability and guardian backup
+
+The [viewing recovery client](VIEWING-RECOVERY.md) verifies recovered material
+against the current encryption public key, persists it in an explicit encrypted
+vault, and rechecks the chain before acknowledging success. It exposes local-key
+currency, guardian-wrap freshness, and pending authority recovery separately.
+Rotation leaves a stale-backup warning until a fresh full-roster session is
+verified. The supported indexed guardian input does not implement transport or
+browser ceremony UX, and a finalisation transaction alone does not establish
+whole-wallet recovery.
 
 ## Known issues and remaining validation
 
