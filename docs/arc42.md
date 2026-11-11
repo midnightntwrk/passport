@@ -288,6 +288,15 @@ without another append. Lost acknowledgements do not authorise resubmission.
 The journal supports one writer process and does not establish chain-wide
 live/spent discovery or atomic recovery across external viewing-key rotation.
 
+The separate [chain recovery client](../contract/CHAIN-RECOVERY.md) pins an indexed,
+finalised block, decrypts inbox candidates, qualifies their actual commitment
+positions, and checks a finite history of applied nullifiers. It needs viewing
+capability but no device signature or submitted trial spend. Reports distinguish
+live, spent, and unknown holdings and expose bounded continuation and verified
+subtotals. Optional application preserves siblings and local spent markers.
+Neither a full inbox pass nor observed change establishes complete account
+recovery or the outcome of an uncertain journal operation.
+
 ### 6.3 Device Addition and Removal
 
 A live device enrols a derived entry, including across arms. Removal cannot target the

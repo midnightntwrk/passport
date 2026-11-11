@@ -370,8 +370,19 @@ duplicate append; their recorded and decryptable assurances remain distinct.
 See [the durable change guide](DURABLE-CHANGE.md) for encrypted storage, stable
 reconnection, explicit endpoint configuration, interruption handling, and the
 single-writer concurrency profile. Durable mode disables automatic spend
-submission retries, including on raw-authorisation methods. Chain-wide spent
-reconstruction and direct-payment SDK composition remain separate work.
+submission retries, including on raw-authorisation methods. Direct-payment SDK
+composition remains separate work.
+
+### Chain-verified holdings reconstruction
+
+The read-only recovery API classifies inbox, local, and journal descriptions as
+live, spent, or unknown at an indexed, finalised block. It qualifies actual
+commitments, checks applied nullifiers, deduplicates identities, and reports
+coverage and verified subtotals. It requires viewing capability but no device
+signature or trial spend. Optional account application preserves siblings and
+spent markers. See [the chain recovery guide](CHAIN-RECOVERY.md) for bounded
+continuation, provider trust, and remaining gaps. Uncertain journal operations
+remain quarantined; viewing-key restoration is separate work.
 
 ## Known issues and remaining validation
 

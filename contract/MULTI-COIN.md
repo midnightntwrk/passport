@@ -131,7 +131,9 @@ They do not establish full custody or recovery conformance. The optional
 [durable change client](DURABLE-CHANGE.md) adds journalled capture,
 qualification, and recovery backfill (`CUST-02`). Callers without that
 configuration still manage returned change themselves. Chain-verified
-live/spent discovery (`CUST-03`) and viewing-key restoration remain separate work.
+live/spent discovery is now available through the separate
+[chain recovery API](CHAIN-RECOVERY.md), with explicit unknown states and verified
+subtotals. Viewing-key restoration remains separate work.
 
 ## Validation
 

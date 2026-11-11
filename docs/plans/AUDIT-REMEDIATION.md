@@ -9,17 +9,18 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: durable change capture and recovery backfill, CUST-02.** The four
-agreed improvements are merged. This implementation starts from priority 4's
-merge in [#204](https://github.com/midnightntwrk/passport/pull/204),
-`277a8e345873348d5e1b1c6a6416c2ce0e857894`, verified against `origin/main` on
-2026/11/11. Implementation, independent review, and targeted validation are
-complete on `codex/durable-change-backfill`; pull-request review and merge remain.
+**Current: chain-verified holdings reconstruction, CUST-03.** Durable change
+capture merged in [#205](https://github.com/midnightntwrk/passport/pull/205),
+`c87933d5eb0b893ac907dfe86a76be462cdfeaf7`, verified against `origin/main` on
+2026/11/11. This implementation starts from that merge on
+`codex/chain-verified-recovery`; validation and review are in progress.
 
-**After CUST-02 merges:** verify its merge and retained regression evidence,
-then reassess chain-verified live/spent reconstruction (`CUST-03`). Partial
-execution remains explicitly quarantined until that evidence exists. Viewing-key
-restoration and direct-payment composition remain separate milestones.
+**After CUST-03 merges:** verify its merge and retained regression evidence,
+then restore and persist current viewing capability (`REC-WRAP-001`,
+`REC-WALLET-001`), including stale recovery wraps after rotation. Partial
+transaction-outcome repair remains a separate custody milestone: observed input
+and change holdings alone cannot prove which operation succeeded. Direct-payment
+composition also remains separate work.
 
 This document records the continuation instruction. It does not install a
 background merge watcher or establish that any later task has started.
@@ -30,7 +31,8 @@ background merge watcher or establish that any later task has started.
 | 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Merged in #202 | Merge `44738ee`, 2026/11/10 |
 | 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Merged in #203 | Merge `9d909ae`, 2026/11/10 |
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Merged in #204 | Merge `277a8e3`, 2026/11/10 |
-| 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Implemented and validated; awaiting merge | Based on merged priority 4 |
+| 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
+| 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Implementation and validation in progress | Based on merged priority 5 |
 
 ## 1. Reliable device reconnection
 
@@ -167,7 +169,7 @@ qualification, and idempotent owner backfill or grant adoption. See the
 - [x] State single-process concurrency and the remaining total-loss gap before backfill.
 - [x] Complete the interruption matrix, existing regressions, independent review,
   and three-process localnet recovery journey; record exact outcomes here.
-- [ ] Merge the pull request and record its merge commit.
+- [x] Merge the pull request: #205, commit `c87933d5eb0b893ac907dfe86a76be462cdfeaf7`.
 
 The localnet journey injects lost acknowledgements after actual spend and append
 submissions, reopens the journal in fresh processes, and later spends the
@@ -194,3 +196,29 @@ matrix or complete MIP conformance.
 
 Reference-contract CI is a parallel assurance recommendation (`TODO-CI-01`).
 This queue does not claim that a required merge gate already exists.
+
+
+## 6. Chain-verified holdings reconstruction
+
+Scope: viewing-only candidate discovery, actual commitment qualification,
+authoritative applied-nullifier observation at an indexed and finalised block,
+explicit coverage and bounded continuation, and optional guarded store updates.
+See the [implementation guide](../../contract/CHAIN-RECOVERY.md).
+
+- [x] Reconstruct several same-colour holdings without a device signature or
+  submitted trial spend.
+- [x] Require a checked commitment witness and completed finite nullifier history
+  before declaring a coin live; verify receipts before declaring it spent.
+- [x] Exclude authenticated arbitrary descriptions, duplicates, and externally
+  spent coins from verified subtotals.
+- [x] Preserve unknown states, incomplete coverage, sibling holdings, and local
+  spent tombstones. Bind both inbox and coin continuations to one chain snapshot.
+- [x] Keep uncertain and partial journal reservations quarantined.
+- [ ] Complete targeted regressions, independent review, and fresh-process
+  localnet validation; record evidence and limitations.
+- [ ] Merge the pull request and record its merge commit.
+
+A complete candidate pass is not proof of a complete account balance. Lost owner
+change that was never backfilled, with its local description and journal also
+lost, cannot be reconstructed from a commitment alone. This API consumes viewing
+keys; it does not yet restore or validate recovery-wrap contents.

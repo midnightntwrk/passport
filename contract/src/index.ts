@@ -38,7 +38,16 @@ export {
 export type { EncKeyPair, PlainCoin } from './wallet/inbox.js';
 
 export { CustodyAccount } from './wallet/account.js';
-export type { TxResult, SpendOutcome, DirectSpendOutcome, ShieldedGrantOptions, DurableChangesOptions, ConnectOptions } from './wallet/account.js';
+export type { TxResult, SpendOutcome, DirectSpendOutcome, ShieldedGrantOptions, DurableChangesOptions, ConnectOptions, RecoverHoldingsOptions } from './wallet/account.js';
+
+export { scanHoldings } from './wallet/chain-recovery.js';
+export type {
+  ChainRecoveryAdapter, ChainRecoverySnapshot, ChainRecoveryScope, ChainRecoveryCursor,
+  CoinSearchCursor, ChainCoinInspection, ChainRecoveryCandidate, RecoveryCandidateSource,
+  ScanHoldingsOptions, RecoveredHolding, HoldingsRecoveryReport,
+} from './wallet/chain-recovery.js';
+export { createSdkChainRecoveryAdapter } from './wallet/sdk-chain-recovery.js';
+export type { SdkChainRecoveryOptions } from './wallet/sdk-chain-recovery.js';
 
 export { DurableChangeCoordinator, DurableChangePendingError } from './wallet/change-journal.js';
 export type {
