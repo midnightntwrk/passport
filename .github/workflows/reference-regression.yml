@@ -1,0 +1,77 @@
+name: Reference regression
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-regression-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reference-regression:
+    name: Reference regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      REFERENCE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      REFERENCE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CI_LANE: 'reference'
+      CI_EVIDENCE_DIR: ${{ github.workspace }}/reference-ci-evidence
+      COMPACT_DIR: ${{ runner.temp }}/reference-compact-0.35.0
+      RUSTUP_TOOLCHAIN: '1.98.1'
+      CARGO_BUILD_JOBS: '2'
+      RAYON_NUM_THREADS: '4'
+      CI_COMMAND_TIMEOUT_MS: '900000'
+    defaults:
+      run:
+        working-directory: contract
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare evidence directory
+        run: |
+          test ! -e "$CI_EVIDENCE_DIR"
+          mkdir -p "$CI_EVIDENCE_DIR"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.22.2'
+      - name: Record initial provenance
+        run: node scripts/ci-evidence.mjs initial started
+      - name: Install pinned Compact and Rust toolchains
+        run: |
+          node scripts/ci-run.mjs install-compact command - -- bash scripts/ci-install-compact.sh
+          node scripts/ci-run.mjs install-rust command - -- rustup toolchain install 1.98.1 --profile minimal
+      - name: Clean lockfile installation
+        run: |
+          test "$(node --version)" = v22.22.2
+          test ! -e node_modules && test ! -L node_modules
+          node scripts/ci-run.mjs npm-ci command - -- npm ci --ignore-scripts --no-audit --no-fund
+          git diff --exit-code -- package-lock.json
+      - name: Generate fresh runtimes and the SDK assembly fixture key
+        run: node scripts/ci-run.mjs compile-reference command - -- npm run ci:compile
+      - name: Build reference TypeScript
+        run: node scripts/ci-run.mjs build command - -- npm run build
+      - name: Run offline and native reference regressions
+        run: npm run ci:reference
+      - name: Record final provenance
+        if: always()
+        env:
+          REFERENCE_JOB_STATUS: ${{ job.status }}
+        run: node scripts/ci-evidence.mjs final "$REFERENCE_JOB_STATUS"
+      - name: Preserve regression logs and provenance
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: reference-regression-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reference-ci-evidence/
+          if-no-files-found: error
+          retention-days: 14

@@ -9,6 +9,7 @@ import { CONFIG } from '../node/wallet.js';
 import { createFileViewingKeyStore } from '../node/viewing-key-store.js';
 import { createFileChangeJournalStore } from '../node/change-journal-store.js';
 import { CustodyAccount } from '../wallet/account.js';
+import { allCircuits } from '../wallet/wave-deploy.js';
 import { createSdkChangeAdapter } from '../wallet/sdk-change-adapter.js';
 import { createSdkChainRecoveryAdapter } from '../wallet/sdk-chain-recovery.js';
 import { JubjubDevice } from '../wallet/signer.js';
@@ -56,7 +57,31 @@ async function durableOptions(networkId: string, key: Uint8Array) {
   return { networkId, journalStore, adapter: context => createSdkChangeAdapter({ ...context,
     indexerUrl: CONFIG.indexer, proofServerUrl: CONFIG.proofServer }) };
 }
-async function record(txId: string) { receipt.transactions.push(await confirmTransaction(txId, true)); }
+async function record(txId: string) {
+  const confirmed = await confirmTransaction(txId, true);
+  const response = await fetch(CONFIG.indexer, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `query ($offset: TransactionOffset!) {
+      transactions(offset: $offset) {
+        hash block { height hash }
+        ... on RegularTransaction { identifiers transactionResult { status } }
+      }
+    }`, variables: { offset: { identifier: txId } } }), signal: AbortSignal.timeout(15_000),
+  });
+  assert.ok(response.ok);
+  const result: any = await response.json(); assert.equal(result.errors, undefined);
+  const strip = (value: string) => value.replace(/^0x/, '').toLowerCase();
+  const row = result.data?.transactions?.find((candidate: any) =>
+    candidate.identifiers?.some((id: string) => strip(id) === strip(txId)));
+  assert.ok(row, 'receipt query must return the exact requested transaction identifier');
+  assert.equal(row.transactionResult.status, 'SUCCESS');
+  assert.ok(confirmed.raw && typeof confirmed.raw === 'object' && 'hash' in confirmed.raw);
+  assert.ok('nodeBlockHash' in confirmed && typeof confirmed.nodeBlockHash === 'string');
+  assert.equal(row.hash, confirmed.raw.hash);
+  assert.equal(row.block.height, confirmed.blockHeight);
+  assert.equal(strip(row.block.hash), strip(confirmed.nodeBlockHash));
+  receipt.transactions.push({ ...confirmed, identifiers: row.identifiers });
+}
 function trackSubmission(providers: any) {
   let count = 0;
   const original = providers.midnightProvider.submitTx.bind(providers.midnightProvider);
@@ -116,6 +141,21 @@ async function main() {
       await account.putCoin({ ...qualified, mtIndex: qualified.mt_index });
       ids.push(coinId(coin)); await record(deposit.txId);
     }
+    const anchor = receipt.transactions.at(-1);
+    const state = await ctx.providers.publicDataProvider.queryContractState(account.address,
+      { blockHash: anchor.raw.block.hash });
+    assert.ok(state, 'deployed account state must exist at the confirmed anchor');
+    const verifiers = [];
+    for (const circuit of allCircuits().sort()) {
+      const generated = await readFile(resolve('contracts/managed/account/keys', `${circuit}.verifier`));
+      const installed = state.operation(circuit)?.verifierKey;
+      assert.ok(installed, `missing installed verifier: ${circuit}`);
+      assert.deepEqual(Buffer.from(installed), generated, `installed verifier differs: ${circuit}`);
+      verifiers.push({ circuit, bytes: generated.length,
+        sha256: createHash('sha256').update(generated).digest('hex'), identical: true });
+    }
+    receipt.deployment = { address: account.address, networkId, genesisHash: networkId,
+      anchor: { height: anchor.blockHeight, hash: anchor.raw.block.hash }, verifiers };
     const vaultKeyHex = randomBytes(32).toString('hex');
     await save(recoveryPath, { address: account.address, networkId, vaultKeyHex, n: refreshed.n, t: refreshed.t,
       shares: [refreshed.shares[0], refreshed.shares[2]] });
