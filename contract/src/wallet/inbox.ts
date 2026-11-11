@@ -63,6 +63,20 @@ export function generateEncKeyPair(): EncKeyPair {
   };
 }
 
+/** Derive the advertised X25519 viewing key from a retained secret. */
+export function deriveEncPublicKey(secretKey: Uint8Array): Uint8Array {
+  if (!(secretKey instanceof Uint8Array) || secretKey.length !== 32) {
+    throw new Error('X25519 secret keys must be exactly 32 bytes');
+  }
+  const privateKey = createPrivateKey({
+    key: Buffer.concat([PKCS8_PREFIX, Buffer.from(secretKey)]),
+    type: 'pkcs8',
+    format: 'der',
+  });
+  const publicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }) as Buffer;
+  return new Uint8Array(publicKey.subarray(publicKey.length - 32));
+}
+
 function x25519(rawSecret: Uint8Array, rawPeerPublic: Uint8Array): Buffer {
   if (rawSecret.length !== 32 || rawPeerPublic.length !== 32) {
     throw new Error('X25519 keys must be exactly 32 bytes');

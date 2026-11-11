@@ -69,7 +69,14 @@ import {
   type GrantOpening,
   type PlainScope,
 } from './signer.js';
-import type { EncKeyPair } from './inbox.js';
+import { deriveEncPublicKey, openInboxEntry, sealInboxEntry, type EncKeyPair } from './inbox.js';
+import {
+  DurableChangeCoordinator,
+  type ChangeJournalEntry,
+  type ChangeJournalStore,
+  type DurableTransactionAdapter,
+  type PrepareBackfill,
+} from './change-journal.js';
 import { checkGrantExpiry, GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 export { GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 
@@ -90,10 +97,39 @@ function grantTiming(options?: ShieldedGrantOptions): GrantPreflightOptions | un
 }
 
 // The SDK persists the whole private snapshot after every successful call.
-// Reject overlapping work across account objects sharing this provider/ID,
-// including non-shielded calls, rather than losing concurrent coin writes.
-const activeStores = new WeakMap<object, Set<string>>();
+// Reject overlapping work across account objects sharing this provider,
+// whose contract-address context is mutable, including non-shielded calls.
+const activeStores = new WeakSet<object>();
 type SelectedSubmit = (name: string, args: unknown[], retry?: boolean) => Promise<any>;
+
+async function withProviderLock<T>(provider: any, action: () => Promise<T>): Promise<T> {
+  if (activeStores.has(provider)) throw new Error('coin store is busy with another operation');
+  activeStores.add(provider);
+  try { return await action(); } finally { activeStores.delete(provider); }
+}
+
+async function withProviderGuard<T>(provider: any, address: string, action: () => Promise<T>): Promise<T> {
+  return withProviderLock(provider, async () => {
+    await provider.setContractAddress?.(address);
+    return await action();
+  });
+}
+
+export interface DurableChangesOptions {
+  /** Explicit network identity, for example a genesis hash, to prevent cross-network replay. */
+  networkId: string;
+  /** An explicitly configured atomic, durable, confidential journal store. */
+  journalStore: ChangeJournalStore;
+  adapter: DurableTransactionAdapter | ((context: {
+    providers: any; compiledContract: any; address: string; privateStateId: string;
+  }) => DurableTransactionAdapter);
+}
+
+export interface ConnectOptions {
+  /** Required for durable mode. Reopens existing private state without replacing it. */
+  privateStateId?: string;
+  durableChanges?: DurableChangesOptions;
+}
 
 /** The recovery artefacts an account is born with (recovery MIP section 8):
  *  the recovery public key P = s·G, the wrap, and the veto window. */
@@ -107,6 +143,7 @@ export interface DeployOptions {
   /** See wave-deploy's authority note; the default retires it. */
   retireAuthority?: boolean;
   recovery?: RecoveryBirth;
+  durableChanges?: DurableChangesOptions;
 }
 
 export interface TxResult {
@@ -116,6 +153,8 @@ export interface TxResult {
 export interface SpendOutcome extends TxResult {
   /** The surviving change coin returned by the circuit (private channel). */
   change: ShieldedCoin | null;
+  /** Durable capture and recovery status, when configured. */
+  capture?: ChangeJournalEntry;
 }
 
 export interface DirectSpendOutcome extends SpendOutcome {
@@ -251,6 +290,8 @@ export class CustodyAccount {
   /** Full credential, account, and epoch identify each checked roster hint. */
   private readonly counters = new Map<string, DeviceCounterHint>();
   private counterEpoch: bigint | undefined;
+  private readonly changeCoordinator?: DurableChangeCoordinator;
+  private readonly durableAdapter?: DurableTransactionAdapter;
 
   private constructor(
     readonly address: string,
@@ -258,7 +299,54 @@ export class CustodyAccount {
     readonly providers: any,
     readonly privateStateId: string,
     private readonly handle: any,
-  ) {}
+    compiledContract?: any,
+    durableChanges?: DurableChangesOptions,
+  ) {
+    if (durableChanges) {
+      if (!durableChanges.networkId?.trim() || !durableChanges.journalStore || !durableChanges.adapter) {
+        throw new Error('durable changes require a network identity, journal store, and transaction adapter');
+      }
+      this.durableAdapter = typeof durableChanges.adapter === 'function'
+        ? durableChanges.adapter({ providers, compiledContract, address, privateStateId }) : durableChanges.adapter;
+      const scope = JSON.stringify([durableChanges.networkId, address, privateStateId]);
+      this.changeCoordinator = new DurableChangeCoordinator(scope, durableChanges.journalStore, {
+        observe: ids => this.durableAdapter!.observe(ids),
+        qualify: (change, ids) => this.durableAdapter!.qualify(change, ids),
+        adopt: async (input, change) => {
+          const raw = await providers.privateStateProvider.get(privateStateId);
+          const current = migrateCoinStore(raw ?? emptyCoinStore());
+          let next = migrateCoinStore({ ...current, spentCoins: { ...current.spentCoins, [coinId(input)]: true } });
+          if (change) next = withCoin(next, { ...change, mtIndex: change.mt_index });
+          // History replay may run after a later spend has pinned its input.
+          // Preserve that exact live selection; retiring it still clears it.
+          if (raw?.selectedCoin) {
+            const selectedId = `${raw.selectedCoin.nonceHex}:${raw.selectedCoin.colorHex}:${raw.selectedCoin.value}`;
+            if (next.coins[selectedId] && Object.entries(raw.selectedCoin).every(([key, value]) => next.coins[selectedId][key] === value)) {
+              next = withSelectedCoin(next, selectCoin(next, hexToBytes(raw.selectedCoin.colorHex), selectedId));
+            }
+          }
+          await providers.privateStateProvider.set(privateStateId, next);
+        },
+        seal: async change => sealInboxEntry(await this.encKey(), change),
+        findInboxEntry: async entry => {
+          const state = await this.ledgerState();
+          const expected = bytesToHex(entry);
+          for (let i = 0n; i < state.inbox_count; i++) {
+            if (state.inbox.member(i) && bytesToHex(state.inbox.lookup(i)) === expected) return true;
+          }
+          return false;
+        },
+        verifyInboxEntry: async (entry, change) => {
+          const secret = (await this.readCoinStore()).encSecretKeyHex;
+          if (!secret) return false;
+          if (bytesToHex(deriveEncPublicKey(hexToBytes(secret))) !== bytesToHex(await this.encKey())) return false;
+          const opened = openInboxEntry(hexToBytes(secret), entry);
+          if (!opened || coinId(opened) !== coinId(change)) throw new Error('recovery entry does not decrypt to the captured change');
+          return true;
+        },
+      });
+    }
+  }
 
   static async deploy(
     providers: any,
@@ -296,49 +384,51 @@ export class CustodyAccount {
     activate: (device: AnyDevice, salt: Uint8Array) => Promise<unknown>;
     finish: () => CustodyAccount;
   }> {
-    const privateStateId = freshPrivateStateId();
-    const initialPrivateState = emptyCoinStore(encKeys.secretKey);
-    // kernel.self() is not available in the constructor, so the initial
-    // entry cannot be inserted at deploy time; the constructor stores a
-    // salted boot commitment and the arm's activate_initial_device inserts
-    // the real address-bound entry immediately after (see the contract's
-    // `boot` cell for the full rationale).
-    const salt = new Uint8Array(32);
-    globalThis.crypto.getRandomValues(salt);
-    const boot = initialDevice.bootCommitment(salt);
-    // Recovery at birth (recovery MIP, Backwards Compatibility): with no
-    // artefacts supplied, a fresh birth secret is sampled, its public key
-    // published, and the secret discarded here, so the account is
-    // recoverable only by a party that was handed the secret, which nobody
-    // was. Deployers that want a recoverable account pass their own key
-    // and wrap.
-    const birth = opts?.recovery ?? {
-      recoveryPk: JubjubDevice.generate().pk,
-      wrap: new Uint8Array(64),
-      vetoWindowSeconds: 3n * 24n * 3600n,
-    };
-    // The full deploy exceeds per-block limits, so the account deploys in
-    // waves: the initial device's arm first, the other arm's verifier keys
-    // by maintenance update (see wave-deploy.ts).
-    const address = await deployAccountInWaves(providers, compiledContract, {
-      firstArm: initialDevice.arm,
-      args: [boot, encKeys.publicKey, birth.recoveryPk, birth.wrap, birth.vetoWindowSeconds],
-      privateStateId,
-      initialPrivateState,
-      retireAuthority: opts?.retireAuthority,
+    return withProviderLock(providers.privateStateProvider, async () => {
+      const privateStateId = freshPrivateStateId();
+      const initialPrivateState = emptyCoinStore(encKeys.secretKey);
+      // kernel.self() is not available in the constructor, so the initial
+      // entry cannot be inserted at deploy time; the constructor stores a
+      // salted boot commitment and the arm's activate_initial_device inserts
+      // the real address-bound entry immediately after (see the contract's
+      // `boot` cell for the full rationale).
+      const salt = new Uint8Array(32);
+      globalThis.crypto.getRandomValues(salt);
+      const boot = initialDevice.bootCommitment(salt);
+      // Recovery at birth (recovery MIP, Backwards Compatibility): with no
+      // artefacts supplied, a fresh birth secret is sampled, its public key
+      // published, and the secret discarded here, so the account is
+      // recoverable only by a party that was handed the secret, which nobody
+      // was. Deployers that want a recoverable account pass their own key
+      // and wrap.
+      const birth = opts?.recovery ?? {
+        recoveryPk: JubjubDevice.generate().pk,
+        wrap: new Uint8Array(64),
+        vetoWindowSeconds: 3n * 24n * 3600n,
+      };
+      // The full deploy exceeds per-block limits, so the account deploys in
+      // waves: the initial device's arm first, the other arm's verifier keys
+      // by maintenance update (see wave-deploy.ts).
+      const address = await deployAccountInWaves(providers, compiledContract, {
+        firstArm: initialDevice.arm,
+        args: [boot, encKeys.publicKey, birth.recoveryPk, birth.wrap, birth.vetoWindowSeconds],
+        privateStateId,
+        initialPrivateState,
+        retireAuthority: opts?.retireAuthority,
+      });
+      const found = await (findDeployedContract as any)(providers, {
+        contractAddress: address,
+        compiledContract,
+        privateStateId,
+        initialPrivateState,
+      });
+      const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found, compiledContract, opts?.durableChanges);
+      account.registerDevice(initialDevice, 0n);
+      return { address, salt,
+        activate: (device, s) => account.activateInitialDevice(device, s),
+        finish: () => account,
+      };
     });
-    const found = await (findDeployedContract as any)(providers, {
-      contractAddress: address,
-      compiledContract,
-      privateStateId,
-      initialPrivateState,
-    });
-    const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
-    account.registerDevice(initialDevice, 0n);
-    return { address, salt,
-      activate: (device, s) => account.activateInitialDevice(device, s),
-      finish: () => account,
-    };
   }
 
   /** Low-level activation call against a live account (bootstrap probes). */
@@ -352,15 +442,20 @@ export class CustodyAccount {
     compiledContract: any,
     address: string,
     initialState: CoinStorePrivateState = emptyCoinStore(),
+    options: ConnectOptions = {},
   ): Promise<CustodyAccount> {
-    const privateStateId = freshPrivateStateId();
-    const found = await (findDeployedContract as any)(providers, {
-      contractAddress: address,
-      compiledContract,
-      privateStateId,
-      initialPrivateState: migrateCoinStore(initialState),
+    if (options.durableChanges && !options.privateStateId) throw new Error('durable reconnect requires a stable privateStateId');
+    const privateStateId = options.privateStateId ?? freshPrivateStateId();
+    return withProviderGuard(providers.privateStateProvider, address, async () => {
+      const stored = options.privateStateId ? await providers.privateStateProvider.get(privateStateId) : null;
+      const found = await (findDeployedContract as any)(providers, {
+        contractAddress: address,
+        compiledContract,
+        privateStateId,
+        initialPrivateState: migrateCoinStore(stored ?? initialState),
+      });
+      return new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found, compiledContract, options.durableChanges);
     });
-    return new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
   }
 
   // ── Ledger reads ──────────────────────────────────────────────────────────
@@ -521,18 +616,16 @@ export class CustodyAccount {
   // ── Wallet-local coin store (MIP-0012 §6.5) ───────────────────────────────
 
   async coinStore(): Promise<CoinStorePrivateState> {
+    return this.withStoreGuard(() => this.readCoinStore());
+  }
+
+  private async readCoinStore(): Promise<CoinStorePrivateState> {
     const s = await this.providers.privateStateProvider.get(this.privateStateId);
     return migrateCoinStore(s ?? emptyCoinStore());
   }
 
   private async withStoreGuard<T>(action: () => Promise<T>): Promise<T> {
-    const provider = this.providers.privateStateProvider;
-    let busy = activeStores.get(provider);
-    if (!busy) { busy = new Set(); activeStores.set(provider, busy); }
-    if (busy.has(this.privateStateId)) throw new Error('coin store is busy with another operation');
-    busy.add(this.privateStateId);
-    try { return await action(); }
-    finally { busy.delete(this.privateStateId); }
+    return withProviderGuard(this.providers.privateStateProvider, this.address, action);
   }
 
   private async clearStoredSelection(): Promise<void> {
@@ -547,6 +640,7 @@ export class CustodyAccount {
    * inherited by a later operation. */
   private dispatch(name: string, ...args: unknown[]): Promise<any> {
     return this.withStoreGuard(async () => {
+      if (this.changeCoordinator && name.startsWith('withdraw_shielded')) throw new Error('durable shielded spends require a typed account method');
       await this.clearStoredSelection();
       return this.handle.callTx[name](...args);
     });
@@ -554,14 +648,14 @@ export class CustodyAccount {
 
   async putCoin(coin: CoinIdentity & { mtIndex: bigint }): Promise<void> {
     await this.withStoreGuard(async () => {
-      await this.providers.privateStateProvider.set(this.privateStateId, withCoin(await this.coinStore(), coin));
+      await this.providers.privateStateProvider.set(this.privateStateId, withCoin(await this.readCoinStore(), coin));
     });
   }
 
   /** Retire exactly one locally known coin. Repeated retirement is harmless. */
   async dropCoin(coin: CoinIdentity | string): Promise<void> {
     await this.withStoreGuard(async () => {
-      await this.providers.privateStateProvider.set(this.privateStateId, withoutCoin(await this.coinStore(), coin));
+      await this.providers.privateStateProvider.set(this.privateStateId, withoutCoin(await this.readCoinStore(), coin));
     });
   }
 
@@ -570,13 +664,40 @@ export class CustodyAccount {
     return selectCoin(await this.coinStore(), color, id);
   }
 
+  /** Detached journal diagnostics, including uncertain input reservations. */
+  async changeJournal(): Promise<ChangeJournalEntry[]> {
+    return this.changeCoordinator?.list() ?? [];
+  }
+
+  /** Resume capture and owner recovery publication without resending a spend. */
+  async reconcileChanges(device?: AnyDevice): Promise<ChangeJournalEntry[]> {
+    if (!this.changeCoordinator) throw new Error('durable changes are not configured');
+    return this.withStoreGuard(async () => {
+      await this.clearStoredSelection();
+      return this.changeCoordinator!.reconcile(device ? this.prepareChangeBackfill(device) : undefined);
+    });
+  }
+
+  private prepareChangeBackfill(device: AnyDevice): PrepareBackfill {
+    return async entry => {
+      const ctx = await this.callContext();
+      const { counter } = await this.requireUseCounter(device);
+      const auth = device.arm === 'jubjub'
+        ? device.sign(jubjubChallenges.appendInbox(ctx, device.pk, entry), counter)
+        : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).appendInbox(ctx, device.pk, entry), counter);
+      return this.durableAdapter!.prepare(`append_inbox_with_${auth.arm}`, [entry, ...authArgs(auth)]);
+    };
+  }
+
   private withSelectedSpend<T>(
     color: Uint8Array,
     selected: string | QualifiedCoin | undefined,
     action: (coin: QualifiedCoin, submit: SelectedSubmit) => Promise<T>,
+    recoveryDevice?: AnyDevice,
   ): Promise<T> {
     return this.withStoreGuard(async () => {
-      const state = await this.coinStore();
+      await this.changeCoordinator?.assertAvailable();
+      const state = await this.readCoinStore();
       const coin = typeof selected === 'object'
         ? selected : selectCoin(state, color, selected);
       if (bytesToHex(coin.color) !== bytesToHex(color)) throw new Error('selected coin colour mismatch');
@@ -587,17 +708,34 @@ export class CustodyAccount {
       await this.providers.privateStateProvider.set(this.privateStateId, pinned);
       const matches = (value: any) => value && Object.entries(pin).every(([key, v]) => value[key] === v);
       let failed = false;
+      let capture: ChangeJournalEntry | undefined;
       try {
         const submit: SelectedSubmit = async (name, args, retry = false) => {
           const invoke = async () => {
             const current = await this.providers.privateStateProvider.get(this.privateStateId);
             if (!matches(current?.selectedCoin)) throw new Error('selected coin changed before submission');
             withSelectedCoin(current, input);
+            if (this.changeCoordinator) {
+              const grant = name.includes('_with_grant_');
+              const outcome = await this.changeCoordinator.execute({
+                circuitId: name, input,
+                recipient: (args[0] as { bytes: Uint8Array }).bytes,
+                amount: args[2] as bigint,
+                recovery: grant ? { mode: 'grant', entry: args[3] as Uint8Array } : { mode: 'owner' },
+              }, () => this.durableAdapter!.prepare(name, args));
+              capture = outcome.entry;
+              return outcome.result;
+            }
             return this.handle.callTx[name](...args);
           };
-          return retry ? submitWithDustRetry(name, invoke) : invoke();
+          return retry && !this.changeCoordinator ? submitWithDustRetry(name, invoke) : invoke();
         };
-        return await action(input, submit);
+        const result = await action(input, submit);
+        if (capture && recoveryDevice) {
+          const entries = await this.changeCoordinator!.reconcile(this.prepareChangeBackfill(recoveryDevice));
+          capture = entries.find(entry => entry.id === capture!.id)!;
+        }
+        return capture ? { ...result, capture } : result;
       } catch (error) {
         failed = true;
         throw error;
@@ -664,7 +802,7 @@ export class CustodyAccount {
       const r = await submit(name, [{ bytes: recipient }, color, amount, ...authArgs(auth)], true);
       this.advanceCounter(device, counter, epoch);
       return { txId: txId(r), change: changeOf(r) };
-    });
+    }, device);
   }
 
   async withdrawShieldedToContract(
@@ -685,7 +823,7 @@ export class CustodyAccount {
       const r = await submit(name, [{ bytes: recipient }, color, amount, ...authArgs(auth)], true);
       this.advanceCounter(device, counter, epoch);
       return { txId: txId(r), ...directOutcomeOf(r, name) };
-    });
+    }, device);
   }
 
   async appendInbox(device: AnyDevice, entry: Uint8Array): Promise<TxResult> {

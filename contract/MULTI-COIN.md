@@ -69,13 +69,16 @@ the typed shielded authorisation methods when the store contains several
 matching coins. Custom transaction builders must supply an explicitly
 selected private state, for example with `withSelectedCoin(state, signedCoin)`,
 and manage their own persistence and concurrency boundaries.
+Durable mode rejects raw shielded `account.callTx` calls; use its typed spending
+methods so the journal cannot be bypassed accidentally.
 
 The witness's next private state retires only the consumed identity, retains
 other holdings, and records a local spent marker. The pinned SDK persists
 that next state after a fully successful transaction. A rejected circuit
 does not itself persist retirement. An uncertain submission result, a partial
 chain outcome, or a failure to persist local state still needs reconciliation
-against the chain; this change does not add a crash-recovery journal.
+against the chain. Configure the [durable change client](DURABLE-CHANGE.md) to
+retain those submission boundaries and reconcile captured change after restart.
 
 `dropCoin(coinOrId)` and `withoutCoin(state, coinOrId)` now require an exact
 coin description or identity. Repeating removal of a known spent identity
@@ -84,10 +87,10 @@ could accidentally remove a different surviving coin of that asset. Existing
 callers should remove redundant post-spend cleanup or pass the consumed
 identity explicitly.
 
-State mutations and SDK calls share an in-process guard keyed by the private
-state provider object and private-state ID. A selected spend holds that guard
+State reads, mutations, and SDK calls share an in-process guard keyed by the
+private-state provider object. A selected spend holds that guard
 through signing, submission, and cleanup. Overlapping operations using the
-same provider/ID fail with a busy error; they do not wait inside a signer
+same provider fail with a busy error; they do not wait inside a signer
 callback. Non-shielded SDK calls also use the guard because they can persist
 a whole private-state snapshot. Transient selections are cleared after the
 operation, and a later operation discards a selection left by interruption.
@@ -124,10 +127,11 @@ verify their chain commitments or nullifier status.
 These changes address the retained-store and input-binding parts of the
 audit's pinned [MIP-0012 §6.5](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/02fce36cfa44541305310dc25fd38f399dbe8d92/mips/mip-0012-native-asset-custody.md#65-coin-store-index-capture-and-discovery)
 and [MIP-0013 AUTH-10](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/02fce36cfa44541305310dc25fd38f399dbe8d92/mips/mip-0013-account-authorisation.md#9-invariants).
-They do not establish full custody or recovery conformance. Durable change
-capture and inbox backfill (`CUST-02`), chain-verified discovery (`CUST-03`),
-and viewing-key restoration remain separate work. Spend results still need
-their change descriptions retained, qualified, and backfilled.
+They do not establish full custody or recovery conformance. The optional
+[durable change client](DURABLE-CHANGE.md) adds journalled capture,
+qualification, and recovery backfill (`CUST-02`). Callers without that
+configuration still manage returned change themselves. Chain-verified
+live/spent discovery (`CUST-03`) and viewing-key restoration remain separate work.
 
 ## Validation
 
