@@ -76,7 +76,12 @@ import {
   type ChangeJournalStore,
   type DurableTransactionAdapter,
   type PrepareBackfill,
+  restoreJournalCoin,
 } from './change-journal.js';
+import {
+  scanHoldings, recoverySubtotal,
+  type ChainRecoveryAdapter, type ChainRecoveryCandidate, type HoldingsRecoveryReport, type ScanHoldingsOptions,
+} from './chain-recovery.js';
 import { checkGrantExpiry, GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 export { GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 
@@ -129,6 +134,13 @@ export interface ConnectOptions {
   /** Required for durable mode. Reopens existing private state without replacing it. */
   privateStateId?: string;
   durableChanges?: DurableChangesOptions;
+}
+
+export interface RecoverHoldingsOptions extends Omit<ScanHoldingsOptions, 'address' | 'viewingKeys'> {
+  /** Omit to use the viewing key retained in private state. Historical keys may be supplied explicitly. */
+  viewingKeys?: Uint8Array[];
+  /** Default false. Apply only individually verified live/spent observations. */
+  apply?: boolean;
 }
 
 /** The recovery artefacts an account is born with (recovery MIP section 8):
@@ -667,6 +679,54 @@ export class CustodyAccount {
   /** Detached journal diagnostics, including uncertain input reservations. */
   async changeJournal(): Promise<ChangeJournalEntry[]> {
     return this.changeCoordinator?.list() ?? [];
+  }
+
+  /** Reconstruct a bounded, pinned page using viewing capability and chain data.
+   * Reports are private and describe one snapshot, not a promise of future spendability.
+   * Unknown retained inventory stays local, but never contributes to verifiedSubtotal. */
+  async recoverHoldings(adapter: ChainRecoveryAdapter, options: RecoverHoldingsOptions): Promise<HoldingsRecoveryReport> {
+    return this.withStoreGuard(async () => {
+      const stored = await this.readCoinStore();
+      const viewingKeys = options.viewingKeys ?? (stored.encSecretKeyHex ? [hexToBytes(stored.encSecretKeyHex)] : []);
+      // Explicit candidate continuations come first so callers can prioritise a
+      // previously unfinished search over the account's retained descriptions.
+      const candidates: ChainRecoveryCandidate[] = [...(options.candidates ?? [])];
+      for (const coin of Object.values(stored.coins)) {
+        const qualified = restoreJournalCoin(coin);
+        candidates.push({ coin: qualified, hints: [qualified.mt_index], source: 'local' });
+      }
+      for (const entry of await this.changeJournal()) {
+        candidates.push({ coin: restoreJournalCoin(entry.input), hints: [BigInt(entry.input.mtIndex!)], source: 'journal' });
+        if (entry.change) {
+          const change = entry.qualifiedChange ?? entry.change;
+          candidates.push({ coin: restoreJournalCoin(change), hints: change.mtIndex === undefined ? [] : [BigInt(change.mtIndex)], source: 'journal' });
+        }
+      }
+      const report = await scanHoldings(adapter, { ...options, address: this.address, viewingKeys, candidates });
+      if (!options.apply) return report;
+      // Re-read the latest snapshot and merge exact identities. Neither a page
+      // boundary nor an unknown classification authorises deleting a sibling.
+      let next = await this.readCoinStore();
+      const localSpentConflicts: string[] = [];
+      let importedLive = 0, recordedSpent = 0;
+      for (const holding of report.holdings) {
+        if (holding.status === 'spent') {
+          next = migrateCoinStore({ ...next, spentCoins: { ...next.spentCoins, [holding.id]: true } });
+          recordedSpent++;
+        } else if (holding.status === 'live') {
+          if (next.spentCoins?.[holding.id]) { localSpentConflicts.push(holding.id); continue; }
+          next = withCoin(next, { ...holding.qualifiedCoin!, mtIndex: holding.qualifiedCoin!.mt_index });
+          importedLive++;
+        }
+      }
+      if (importedLive || recordedSpent) await this.providers.privateStateProvider.set(this.privateStateId, next);
+      report.application = { importedLive, recordedSpent, localSpentConflicts };
+      if (localSpentConflicts.length) {
+        report.coverage.complete = false;
+        report.verifiedSubtotal = recoverySubtotal(report.holdings, new Set(localSpentConflicts));
+      }
+      return report;
+    });
   }
 
   /** Resume capture and owner recovery publication without resending a spend. */

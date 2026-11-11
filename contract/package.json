@@ -40,6 +40,7 @@
     "test:multi-coin": "node --import tsx --test src/tests/multi-coin.ts",
     "test:durable-change": "node --import tsx --test src/tests/durable-change.ts src/tests/durable-change-account.ts src/tests/durable-change-sdk.ts src/tests/change-journal-store.ts",
     "test:change-qualification": "node --import tsx --test src/tests/change-qualification.ts",
+    "test:chain-recovery": "node --import tsx --test src/tests/chain-recovery.ts src/tests/chain-recovery-account.ts src/tests/chain-recovery-ledger.ts src/tests/chain-recovery-sdk.ts",
     "test:recovery-bootstrap": "node --import tsx --test src/tests/recovery-bootstrap.ts",
     "test:recovery": "tsx src/tests/recovery-conformance.ts",
     "test:grants-offline": "tsx src/tests/grants-offline.ts",

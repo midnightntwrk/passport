@@ -135,8 +135,10 @@ not participate in those guards. There is no distributed lock or compare-and-swa
 An unresolved spend blocks further shielded spending through that durable
 account. Do not bypass the journal through raw SDK calls or another client.
 Private-state history is replayed chronologically, but the journal is not an
-authoritative index of coins spent by other clients. Live/spent reconstruction
-and partial-execution repair remain `CUST-03`.
+authoritative index of coins spent by other clients. The separate
+[chain recovery API](CHAIN-RECOVERY.md) verifies live/spent holdings, including
+external spends. It does not infer transaction outcomes from those holdings:
+partial-execution repair remains open, and uncertain reservations stay quarantined.
 
 Owner backfill is a second transaction. Losing both local stores and the journal
 before it is recorded can still lose knowledge of change. Retaining the journal
