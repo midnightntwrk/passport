@@ -14,7 +14,9 @@ REC-WALLET-001.** Chain-verified holdings reconstruction merged in
 [#206](https://github.com/midnightntwrk/passport/pull/206),
 `617f2569eee0147b6e26597b34f270a0ff117abf`, verified against `origin/main` on
 2026/11/11. This implementation starts from that merge on
-`codex/current-viewing-recovery`; implementation and targeted validation are in progress.
+`codex/current-viewing-recovery`. Implementation, independent review, and targeted
+validation are complete in [#207](https://github.com/midnightntwrk/passport/pull/207),
+awaiting merge.
 
 **After this merges:** verify its merge and retained regression evidence, then
 add the pinned reference regression CI lane (`TODO-CI-01`). Compromised-credential
@@ -32,7 +34,7 @@ background merge watcher or establish that any later task has started.
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Merged in #204 | Merge `277a8e3`, 2026/11/10 |
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
 | 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Merged in #206 | Merge `617f256`, 2026/11/11 |
-| 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Implementation and validation in progress | Based on merged priority 6 |
+| 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Implemented and validated in #207; awaiting merge | Based on merged priority 6 |
 
 ## 1. Reliable device reconnection
 
@@ -241,7 +243,8 @@ to bounded candidate retry through the pinned block's exclusive commitment-tree
 boundary. This is tested, but its worst-case work scales with the global tree.
 Optimising discovery through emitted events or complete indexed account history,
 and measuring recovery at production scale, remain follow-up work. Partial
-transaction repair and current viewing-key restoration also remain open.
+transaction repair remains open; current viewing-key restoration is addressed
+by priority 7 below.
 
 The live run reused the pinned full keyed artefacts generated on 2026/11/10.
 There was no circuit change or new key generation. Controlled SDK transport
@@ -265,9 +268,36 @@ and verified fresh full-roster session publication. See the
   viewing capability and pending authority recovery.
 - [x] Refuse unavailable/invalid guardian input and reused or partial fresh sessions.
 - [x] Recheck key, artefact, and pending context around persistence and publication.
-- [ ] Complete independent review, regression tests, and a fresh-process localnet
+- [x] Complete independent review, regression tests, and a fresh-process localnet
   guardian restore, restart, successor spend, and renewed backup journey.
-- [ ] Merge the pull request and record its merge commit.
+- [x] Open [#207](https://github.com/midnightntwrk/passport/pull/207).
+- [ ] Merge #207 and record its merge commit.
+
+Validation on 2026/11/11: 93 new helper, account/generated-runtime, and real
+filesystem-vault tests passed, alongside 399 prior wallet/custody/reconstruction
+regressions, recovery offline and simulator checks, and the TypeScript build.
+The final new suite includes a status-read race recheck added after the broader
+regression run. A generated-runtime journey proves the important incomplete
+outcome: a live device can rotate encryption during pending recovery, authority
+finalisation can succeed, and the client still reports stale viewing and refuses
+the obsolete vault key.
+
+All three fresh-process localnet phases passed. Provisioning exercised stale
+wrap refusal and unavailable-roster refusal. Two indexed paper-key-derived
+shares then restored and persisted the current key into an empty profile,
+reconstructing 800 without submitting a transaction. Another fresh process
+loaded only the vault, finalised authority recovery, reported the consumed
+backup as absent, spent 100, backfilled change, preserved the same-colour sibling,
+and verified 700 before publishing a fresh full-roster session. Ten successful
+transaction receipts were cross-checked against node block hashes.
+
+This is targeted localnet evidence using pinned keyed artefacts generated on
+2026/11/10, with no circuit change, new key generation, or full localnet-matrix
+rerun. The initial provision phase preceded the final status-read recheck;
+restoration and finalisation used the final product sources, and each phase
+records its source hashes. The isolated services are stopped with volumes retained.
+The canonical MIP-0022 comparison uses upstream
+`4a85a87b4e4c5d59ee88a5786a8ecb11f5dc5c6f`.
 
 The caller authenticates guardian exchanges and configures the network/provider
 and vault-key policy. The reference helper does not add a browser ceremony or

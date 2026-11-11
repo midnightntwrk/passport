@@ -184,3 +184,21 @@ remove the pre-backfill total-loss gap or repair uncertain journal operations.
 Run `npm run test:viewing-recovery` for helper, account, and encrypted-vault tests.
 Fresh-process localnet results, source revisions, and remaining evidence limits
 are recorded in the [remediation queue](../docs/plans/AUDIT-REMEDIATION.md).
+
+The [localnet fixture](src/tests/viewing-recovery-localnet.ts) runs as three
+separate processes. With the pinned localnet services and full keyed artefacts
+prepared as described in the [reference setup](README.md), run from `contract/`:
+
+```sh
+node --import tsx src/tests/viewing-recovery-localnet.ts provision /private/tmp/passport-viewing-fixture
+node --import tsx src/tests/viewing-recovery-localnet.ts restore /private/tmp/passport-viewing-fixture
+node --import tsx src/tests/viewing-recovery-localnet.ts finalise-spend /private/tmp/passport-viewing-fixture
+```
+
+Use a fresh private directory. The fixture is restricted to loopback endpoints,
+the undeployed network, and public development funding. Its profiles contain
+test guardian shares and vault keys; retain those privately. `receipt.json`
+contains the sanitised phase results, public transaction receipts, and source
+hashes. The final process does not load guardian material. These three phases
+passed on 2026/11/11, including restored holdings of 800, a successor spend of
+100, verified remaining holdings of 700, and fresh backup publication.
