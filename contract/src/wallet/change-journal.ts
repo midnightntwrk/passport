@@ -103,7 +103,7 @@ const detached = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const decimal = (value: unknown, bits: number): value is string => typeof value === 'string'
   && /^(0|[1-9]\d*)$/.test(value) && BigInt(value) < (1n << BigInt(bits));
 const hex = (value: unknown, size: number): value is string => typeof value === 'string'
-  && new RegExp(`^[0-9a-f]{${size * 2}}$`).test(value);
+  && value.length === size * 2 && /^[0-9a-f]+$/.test(value);
 
 export function journalCoin(coin: ShieldedCoin | QualifiedCoin): JournalCoin {
   const result: JournalCoin = { nonceHex: bytesToHex(coin.nonce), colorHex: bytesToHex(coin.color), value: coin.value.toString() };

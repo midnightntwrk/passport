@@ -102,7 +102,7 @@ export async function createFileChangeJournalStore(options: FileChangeJournalOpt
             || !/^[0-9a-f]{32}$/.test(envelope.tag) || typeof envelope.ciphertext !== 'string') {
             throw new Error('invalid encrypted change journal envelope');
           }
-          const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(envelope.nonce, 'hex'));
+          const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(envelope.nonce, 'hex'), { authTagLength: 16 });
           decipher.setAAD(aad(scope));
           decipher.setAuthTag(Buffer.from(envelope.tag, 'hex'));
           const plaintext = Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, 'base64')), decipher.final()]);
@@ -118,7 +118,7 @@ export async function createFileChangeJournalStore(options: FileChangeJournalOpt
       const plaintext = Buffer.from(JSON.stringify(journal), 'utf8');
       const path = filename(scope);
       const nonce = randomBytes(12);
-      const cipher = createCipheriv('aes-256-gcm', key, nonce);
+      const cipher = createCipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
       cipher.setAAD(aad(scope));
       const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
       const envelope = JSON.stringify({ format: FORMAT, nonce: nonce.toString('hex'),

@@ -53,7 +53,7 @@ test('encrypted journal persists privately and reopens in a fresh process', asyn
   assert.deepEqual(await readdir(directory), [path.split('/').at(-1)]);
 }));
 
-test('wrong key, altered ciphertext, and cross-scope transplant are refused', async () => fixture(async (directory, key) => {
+test('wrong key, truncated tags, altered ciphertext, and cross-scope transplant are refused', async () => fixture(async (directory, key) => {
   const store = await createFileChangeJournalStore({ directory, encryptionKey: key });
   await store.set(scope, snapshot());
   const wrongKey = await createFileChangeJournalStore({ directory, encryptionKey: randomBytes(32) });
@@ -61,6 +61,10 @@ test('wrong key, altered ciphertext, and cross-scope transplant are refused', as
   await copyFile(pathFor(directory), pathFor(directory, 'different-account'));
   await assert.rejects(store.get('different-account'));
   const envelope = JSON.parse(await readFile(pathFor(directory), 'utf8'));
+  for (const tag of ['', envelope.tag.slice(0, 24), `${envelope.tag}00`]) {
+    await writeFile(pathFor(directory), JSON.stringify({ ...envelope, tag }));
+    await assert.rejects(store.get(scope), /invalid encrypted change journal envelope/);
+  }
   const ciphertext = Buffer.from(envelope.ciphertext, 'base64');
   ciphertext[0] ^= 1;
   envelope.ciphertext = ciphertext.toString('base64');
