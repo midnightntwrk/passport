@@ -24,7 +24,6 @@ jobs:
       REFERENCE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       CI_LANE: 'reference'
       CI_EVIDENCE_DIR: ${{ github.workspace }}/reference-ci-evidence
-      COMPACT_DIR: ${{ runner.temp }}/reference-compact-0.35.0
       RUSTUP_TOOLCHAIN: '1.98.1'
       CARGO_BUILD_JOBS: '2'
       RAYON_NUM_THREADS: '4'
@@ -41,6 +40,7 @@ jobs:
         run: |
           test ! -e "$CI_EVIDENCE_DIR"
           mkdir -p "$CI_EVIDENCE_DIR"
+          printf 'COMPACT_DIR=%s/reference-compact-0.35.0\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: '22.22.2'
