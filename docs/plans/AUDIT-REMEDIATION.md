@@ -9,8 +9,13 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: restore and persist current viewing capability, REC-WRAP-001 and
-REC-WALLET-001.** Chain-verified holdings reconstruction merged in
+**Current: pinned reference regression CI, TODO-CI-01.** The user authorised
+starting this milestone before [#207](https://github.com/midnightntwrk/passport/pull/207)
+merges. CI work is stacked on its head `3b2f6ed4c70d117f3595a25cc763e09f9879a738`
+on `codex/pinned-reference-ci`; PR #207 remains a dependency.
+
+**Awaiting merge: restore and persist current viewing capability, REC-WRAP-001
+and REC-WALLET-001.** Chain-verified holdings reconstruction merged in
 [#206](https://github.com/midnightntwrk/passport/pull/206),
 `617f2569eee0147b6e26597b34f270a0ff117abf`, verified against `origin/main` on
 2026/11/11. This implementation starts from that merge on
@@ -18,8 +23,9 @@ REC-WALLET-001.** Chain-verified holdings reconstruction merged in
 validation are complete in [#207](https://github.com/midnightntwrk/passport/pull/207),
 awaiting merge.
 
-**After this merges:** verify its merge and retained regression evidence, then
-add the pinned reference regression CI lane (`TODO-CI-01`). Compromised-credential
+**After #207 merges:** verify its merge, then rebase and retarget the dependent
+CI pull request onto `main`. Required-check enforcement is a separate acceptance
+step after the workflow exists on `main`. Compromised-credential
 containment, partial transaction-outcome repair, production-scale discovery,
 and complete guardian transport remain separate open work.
 
@@ -35,6 +41,7 @@ background merge watcher or establish that any later task has started.
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
 | 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Merged in #206 | Merge `617f256`, 2026/11/11 |
 | 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Implemented and validated in #207; awaiting merge | Based on merged priority 6 |
+| 8 | Pinned reference regression and proof/localnet CI | `TODO-CI-01` | Implementation and validation in progress | Stacked on #207 with user authorisation |
 
 ## 1. Reliable device reconnection
 
@@ -303,3 +310,28 @@ The caller authenticates guardian exchanges and configures the network/provider
 and vault-key policy. The reference helper does not add a browser ceremony or
 prevent an external rotation during pending recovery. A current viewing key
 cannot imply a complete reconstructed balance or repair lost change descriptions.
+
+## 8. Pinned reference regression and proof/localnet CI
+
+Scope: clean pinned installation, fresh generation, TypeScript, all seven recent
+remediation suites, relevant offline/native tests, a separate bounded proof and
+recovery journey, and retained evidence. See the
+[CI guide](../../contract/REFERENCE-CI.md).
+
+- [x] Define a pull-request regression check without path or target-branch filters.
+- [x] Pin compiler archives, dependency resolution, actions, and localnet images.
+- [x] Reject failed, empty, skipped, or incomplete test execution.
+- [x] Separate generated-runtime evidence from complete key generation and
+  proof/node acceptance.
+- [x] Record exact installed verifiers and transaction identities in live evidence.
+- [ ] Complete clean local and hosted validation, including a deliberately broken
+  source invariant that makes the regression workflow fail.
+- [ ] Complete independent review and record the dependent pull request.
+- [ ] Verify #207's merge, then rebase and retarget this implementation onto main.
+- [ ] Merge this workflow and separately configure/verify the required check.
+
+The implementation uses Sol for workflow/helpers, Astra for independent review,
+and Luna for test-inventory extraction. The primary agent owns integration,
+the heavy lane, live execution, documentation, and evidence reconciliation.
+The main branch protection read on 2026/11/11 required only `scan` and `DCO`;
+the new regression job is not yet a merge requirement.
