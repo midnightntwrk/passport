@@ -9,17 +9,19 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: restore and persist current viewing capability, REC-WRAP-001 and
-REC-WALLET-001.** Chain-verified holdings reconstruction merged in
-[#206](https://github.com/midnightntwrk/passport/pull/206),
-`617f2569eee0147b6e26597b34f270a0ff117abf`, verified against `origin/main` on
-2026/11/11. This implementation starts from that merge on
-`codex/current-viewing-recovery`. Implementation, independent review, and targeted
-validation are complete in [#207](https://github.com/midnightntwrk/passport/pull/207),
-awaiting merge.
+**Current: pinned reference regression CI, TODO-CI-01.** The user authorised
+starting this milestone before [#207](https://github.com/midnightntwrk/passport/pull/207)
+merged. That merge is now verified at `dc57bcc43ab57bd73c2d37407ad3cbbfb3be37a6`,
+and [#208](https://github.com/midnightntwrk/passport/pull/208) is rebased onto it
+and targets `main`. Following the user's CI-duration feedback, routine checks
+generate no keys; keyed SDK assembly, full proving, and localnet are manual.
 
-**After this merges:** verify its merge and retained regression evidence, then
-add the pinned reference regression CI lane (`TODO-CI-01`). Compromised-credential
+**Completed: restore and persist current viewing capability, REC-WRAP-001
+and REC-WALLET-001.** #207 merged on 2026/11/11 at 15:57:35 UTC. Its merge tree
+matches the reviewed head `3b2f6ed4c70d117f3595a25cc763e09f9879a738` exactly.
+
+**After #208 merges:** configure and verify required-check enforcement as a
+separate acceptance step. Compromised-credential
 containment, partial transaction-outcome repair, production-scale discovery,
 and complete guardian transport remain separate open work.
 
@@ -34,7 +36,8 @@ background merge watcher or establish that any later task has started.
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Merged in #204 | Merge `277a8e3`, 2026/11/10 |
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
 | 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Merged in #206 | Merge `617f256`, 2026/11/11 |
-| 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Implemented and validated in #207; awaiting merge | Based on merged priority 6 |
+| 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Merged in #207 | Merge `dc57bcc`, 2026/11/11 |
+| 8 | Pinned reference regression and manual proof/localnet validation | `TODO-CI-01` | Implemented in #208; validation notes below | Rebased onto merged priority 7 |
 
 ## 1. Reliable device reconnection
 
@@ -271,7 +274,8 @@ and verified fresh full-roster session publication. See the
 - [x] Complete independent review, regression tests, and a fresh-process localnet
   guardian restore, restart, successor spend, and renewed backup journey.
 - [x] Open [#207](https://github.com/midnightntwrk/passport/pull/207).
-- [ ] Merge #207 and record its merge commit.
+- [x] Merge #207: `dc57bcc43ab57bd73c2d37407ad3cbbfb3be37a6`, verified against
+  freshly fetched `origin/main` on 2026/11/11.
 
 Validation on 2026/11/11: 93 new helper, account/generated-runtime, and real
 filesystem-vault tests passed, alongside 399 prior wallet/custody/reconstruction
@@ -303,3 +307,70 @@ The caller authenticates guardian exchanges and configures the network/provider
 and vault-key policy. The reference helper does not add a browser ceremony or
 prevent an external rotation during pending recovery. A current viewing key
 cannot imply a complete reconstructed balance or repair lost change descriptions.
+
+## 8. Pinned reference regression and proof/localnet CI
+
+Scope: clean pinned installation, fresh runtimes without keys, TypeScript, all
+seven recent remediation suites, relevant offline/native tests, a separate
+manual keyed SDK/proof/recovery tier, and retained evidence. See the
+[CI guide](../../contract/REFERENCE-CI.md).
+
+- [x] Define a pull-request regression check without path or target-branch filters.
+- [x] Pin compiler archives, dependency resolution, actions, and localnet images.
+- [x] Reject failed, empty, skipped, or incomplete test execution.
+- [x] Separate generated-runtime evidence from complete key generation and
+  proof/node acceptance.
+- [x] Record exact installed verifiers and transaction identities in live evidence.
+- [x] Pass clean local compilation, build, and all 27 regression commands.
+- [x] Demonstrate a deliberately broken source invariant failing on GitHub.
+- [x] Complete independent source review and open dependent
+  [#208](https://github.com/midnightntwrk/passport/pull/208).
+- [x] Verify #207's merge, then rebase and retarget this implementation onto main.
+- [x] Remove full key generation from routine PR checks; keep the single keyed
+  SDK assembly case explicit in the manual tier, with no silent skipped tests.
+- [ ] Merge this workflow and separately configure/verify the required check.
+
+The implementation uses Sol for workflow/helpers, Astra for independent review,
+and Luna for test-inventory extraction. The primary agent owns integration,
+the heavy lane, live execution, documentation, and evidence reconciliation.
+The main branch protection read on 2026/11/11 required only `scan` and `DCO`;
+the new regression job is not yet a merge requirement.
+
+Initial validation on 2026/11/11: the clean local lane passed 492 TAP cases, 45 native
+Rust cases, and the additional script checks. Twelve subprocess controls test
+the runner's failure, empty-output, duplicate-summary, skip, and timeout
+behaviour. A separate local harness run reused the previously generated keys;
+its three recovery phases, two prover controls, ten selected receipts, and
+52 installed-verifier comparisons passed, with cleanup verified. That run
+validates orchestration and assertions, not fresh key generation.
+
+The first hosted fast lane
+[passed](https://github.com/midnightntwrk/passport/actions/runs/43041255349).
+The disposable source mutation in
+[#209](https://github.com/midnightntwrk/passport/pull/209) removed bootstrap
+consumption and made four dormant-recovery cases fail across all initial
+profiles, producing a
+[failed regression job](https://github.com/midnightntwrk/passport/actions/runs/43041370895).
+Its defect is confined to the disposable control branch and must never merge.
+The control was restored, passed again, and closed without merging. Its temporary
+remote branch was removed. This demonstrates workflow failure propagation, not
+required-check enforcement.
+
+The initial hosted fast lane spent 507 of 733 command seconds compiling; the
+full keyed build took 58 minutes before its live journey. In response to the
+user's duration constraint, routine CI now generates runtimes only, retaining
+491 TAP cases, 45 Rust tests, twelve runner controls, and additional script
+checks. The one unchanged keyed SDK assembly case moved to an explicit manual
+test. The full proof/localnet workflow has only a manual trigger, with no PR or
+scheduled run. Routine CI targets under ten minutes and has a fifteen-minute
+job limit; measured current results remain authoritative. No timeout increase
+was made to the expensive manual lane.
+
+Use [#208's current checks](https://github.com/midnightntwrk/passport/pull/208/checks)
+and their retained artefacts for final-head routine results. Proof/localnet
+evidence must identify the actual manually tested revision and scope; it is
+not implied by a green routine check. A historical pass does not certify a
+later head. The initial workflow-context error and separate Opengrep findings
+were retained and corrected: runner paths are set in execution steps, TAP
+parsing uses a fixed expression, and the fixed loopback prover version request
+uses the rule's explicit `localhost` allowance with redirects disabled.

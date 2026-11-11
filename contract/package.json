@@ -39,6 +39,7 @@
     "test:recovery-sim": "tsx src/tests/recovery-sim.ts",
     "test:multi-coin": "node --import tsx --test src/tests/multi-coin.ts",
     "test:durable-change": "node --import tsx --test src/tests/durable-change.ts src/tests/durable-change-account.ts src/tests/durable-change-sdk.ts src/tests/change-journal-store.ts",
+    "test:durable-change-sdk-keyed": "node --import tsx --test src/tests/durable-change-sdk-assembly.ts",
     "test:change-qualification": "node --import tsx --test src/tests/change-qualification.ts",
     "test:chain-recovery": "node --import tsx --test src/tests/chain-recovery.ts src/tests/chain-recovery-account.ts src/tests/chain-recovery-ledger.ts src/tests/chain-recovery-sdk.ts",
     "test:recovery-bootstrap": "node --import tsx --test src/tests/recovery-bootstrap.ts",
@@ -68,7 +69,10 @@
     "test:p256-grants": "tsx src/tests/p256-grants.ts",
     "test:p256-grant-refusals": "tsx src/tests/p256-grant-refusals.ts",
     "test:grants-capability-offline": "tsx src/tests/grants-capability-offline.ts",
-    "test:viewing-recovery": "node --import tsx --test src/tests/viewing-recovery.ts src/tests/viewing-recovery-account.ts src/tests/viewing-key-store.ts"
+    "test:viewing-recovery": "node --import tsx --test src/tests/viewing-recovery.ts src/tests/viewing-recovery-account.ts src/tests/viewing-key-store.ts",
+    "ci:compile": "bash scripts/ci-compile-reference.sh runtime-only",
+    "ci:reference": "node scripts/ci-reference.mjs",
+    "ci:evidence": "node scripts/ci-evidence.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

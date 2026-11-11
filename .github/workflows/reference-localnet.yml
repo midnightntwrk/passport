@@ -1,0 +1,91 @@
+name: Reference proof and localnet
+
+on:
+  # Full key generation is expensive and is an explicit integration check.
+  # Keep it off routine pull requests and scheduled runs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-localnet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reference-localnet:
+    name: Reference proof and localnet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CI_LANE: localnet
+      CI_EVIDENCE_DIR: ${{ github.workspace }}/reference-localnet-evidence
+      CI_COMPOSE_PROJECT: passport-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      CI_COMMAND_TIMEOUT_MS: '3600000'
+      RAYON_NUM_THREADS: '2'
+      REFERENCE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      REFERENCE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    defaults:
+      run:
+        working-directory: contract
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.22.2'
+      - name: Require a fresh evidence directory
+        run: |
+          test ! -e "$CI_EVIDENCE_DIR" && test ! -L "$CI_EVIDENCE_DIR"
+          echo "COMPACT_DIR=$RUNNER_TEMP/reference-compact-0.35.0" >> "$GITHUB_ENV"
+      - name: Record initial provenance
+        run: node scripts/ci-evidence.mjs initial started
+      - name: Verify regression runner failure handling
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap scripts/ci-run.test.mjs | tee "$CI_EVIDENCE_DIR/runner-controls.log"
+      - name: Reserve disk for complete reference keys
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = Linux
+          df -Pk . > "$CI_EVIDENCE_DIR/disk-before.txt"
+          # These SDKs are unused by this job and belong to its ephemeral VM.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          df -Pk . > "$CI_EVIDENCE_DIR/disk-after.txt"
+          test "$(df -Pk . | awk 'NR==2 {print $4}')" -ge 27262976
+      - name: Install the pinned compiler
+        run: node scripts/ci-run.mjs install-compact command - -- bash scripts/ci-install-compact.sh
+      - name: Clean lockfile installation
+        run: |
+          test "$(node --version)" = v22.22.2
+          test ! -e node_modules && test ! -L node_modules
+          node scripts/ci-run.mjs npm-ci command - -- npm ci --ignore-scripts --no-audit --no-fund
+          git diff --exit-code -- package-lock.json
+      - name: Generate fresh complete reference keys
+        run: node scripts/ci-run.mjs compile-keyed command - -- bash scripts/ci-compile-reference.sh keyed
+      - name: Build and validate deployment artefacts
+        run: |
+          node scripts/ci-run.mjs build command - -- npm run build
+          node scripts/ci-run.mjs toolchain-offline scenario toolchain-offline -- node --import tsx src/tests/toolchain-offline.ts
+      - name: Verify keyed SDK assembly
+        run: node scripts/ci-run.mjs test-durable-change-sdk-keyed tap - -- npm run test:durable-change-sdk-keyed
+      - name: Run bounded proof controls and three-process recovery
+        run: node scripts/ci-localnet.mjs
+      - name: Stop only this run's localnet and remove its volumes
+        if: always()
+        run: node scripts/ci-localnet.mjs cleanup
+      - name: Record final provenance
+        if: always()
+        env:
+          REFERENCE_JOB_STATUS: ${{ job.status }}
+        run: node scripts/ci-evidence.mjs final "$REFERENCE_JOB_STATUS"
+      - name: Preserve public proof and recovery evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: reference-localnet-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reference-localnet-evidence/
+          if-no-files-found: error
+          retention-days: 14

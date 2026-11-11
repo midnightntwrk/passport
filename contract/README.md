@@ -507,6 +507,10 @@ substituting that helper during reproduction.
 
 ## Running
 
+The [reference CI guide](REFERENCE-CI.md) defines the pinned pull-request
+regression lane, bounded proof/localnet lane, retained evidence, and separate
+branch-protection acceptance. It also documents how to reproduce each tier.
+
 Run from `contract/`, using Node.js **>=22.12**, the pinned Compact compiler,
 Rust for the cross-implementation checks, and Docker for node-backed suites.
 Generated code and keys under `contracts/managed/` are not committed.
