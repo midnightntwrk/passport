@@ -18,7 +18,7 @@ jobs:
   reference-regression:
     name: Reference regression
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     env:
       REFERENCE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       REFERENCE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -27,7 +27,7 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.98.1'
       CARGO_BUILD_JOBS: '2'
       RAYON_NUM_THREADS: '4'
-      CI_COMMAND_TIMEOUT_MS: '900000'
+      CI_COMMAND_TIMEOUT_MS: '600000'
     defaults:
       run:
         working-directory: contract
@@ -60,8 +60,8 @@ jobs:
           test ! -e node_modules && test ! -L node_modules
           node scripts/ci-run.mjs npm-ci command - -- npm ci --ignore-scripts --no-audit --no-fund
           git diff --exit-code -- package-lock.json
-      - name: Generate fresh runtimes and the SDK assembly fixture key
-        run: node scripts/ci-run.mjs compile-reference command - -- npm run ci:compile
+      - name: Generate fresh runtimes and prepare native tests in parallel
+        run: node scripts/ci-prepare.mjs
       - name: Build reference TypeScript
         run: node scripts/ci-run.mjs build command - -- npm run build
       - name: Run offline and native reference regressions

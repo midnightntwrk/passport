@@ -48,7 +48,7 @@ const report = {
   phase, status, lane, compileMode, recordedAt: new Date().toISOString(),
   scope: lane === 'localnet'
     ? 'Bounded localnet and native prover evidence, with explicitly recorded fixture steps and artefact scope. This does not establish release readiness or branch-protection enforcement.'
-    : 'Reference generated-runtime, offline, and native regression evidence. The fast compile generates one real fixture key for SDK assembly. This does not establish proof verification, localnet acceptance, release readiness, or branch-protection enforcement.',
+    : 'Reference generated-runtime, offline, and native regression evidence. Routine CI generates no proving or verifier keys; keyed SDK assembly and proof/localnet checks are separate manual validation. This does not establish proof verification, localnet acceptance, release readiness, or branch-protection enforcement.',
   event: process.env.GITHUB_EVENT_NAME ?? null, runId: process.env.GITHUB_RUN_ID ?? null,
   runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
   githubSha: process.env.GITHUB_SHA ?? null,

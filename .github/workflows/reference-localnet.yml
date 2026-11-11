@@ -1,18 +1,8 @@
 name: Reference proof and localnet
 
 on:
-  # Validate changes to the heavy lane before it reaches the default branch.
-  # This filtered workflow is not a required pull-request check.
-  pull_request:
-    paths:
-      - '.github/workflows/reference-localnet.yml'
-      - 'contract/scripts/ci-*.mjs'
-      - 'contract/scripts/ci-*.sh'
-      - 'contract/infra/docker-compose.ci.yml'
-      - 'contract/src/tests/viewing-recovery-localnet.ts'
-      - 'contract/src/tests/change-qualification.ts'
-  schedule:
-    - cron: '23 4 * * 1'
+  # Full key generation is expensive and is an explicit integration check.
+  # Keep it off routine pull requests and scheduled runs.
   workflow_dispatch:
 
 permissions:
@@ -79,6 +69,8 @@ jobs:
         run: |
           node scripts/ci-run.mjs build command - -- npm run build
           node scripts/ci-run.mjs toolchain-offline scenario toolchain-offline -- node --import tsx src/tests/toolchain-offline.ts
+      - name: Verify keyed SDK assembly
+        run: node scripts/ci-run.mjs test-durable-change-sdk-keyed tap - -- npm run test:durable-change-sdk-keyed
       - name: Run bounded proof controls and three-process recovery
         run: node scripts/ci-localnet.mjs
       - name: Stop only this run's localnet and remove its volumes

@@ -1,23 +1,38 @@
 # Reference regression CI
 
-Implementation dated 2026/11/11, addressing `TODO-CI-01`. This change is stacked
-on [PR #207](https://github.com/midnightntwrk/passport/pull/207), which has not
-merged at the time of writing. Its viewing-recovery tests are part of this CI
-baseline. Retarget and rebase after that dependency merges.
+Implementation dated 2026/11/11, addressing `TODO-CI-01`. This change is based
+on [PR #207](https://github.com/midnightntwrk/passport/pull/207), merged into main
+at `dc57bcc43ab57bd73c2d37407ad3cbbfb3be37a6`. Its viewing-recovery tests are
+part of this CI baseline.
 
 ## What runs
 
 | Lane | Trigger | Evidence and limits |
 |---|---|---|
-| **Reference regression** | Every pull request, pushes to `main`, merge groups, and manual dispatch | Fresh generated runtimes, one freshly generated SDK fixture key, TypeScript, seven remediation suites, existing offline checks, and locked Rust tests. No proof or node-admission claim. |
-| **Reference proof and localnet** | Weekly on Monday at 04:23 UTC, manual dispatch, and pull requests changing its CI helpers or selected fixtures | Complete fresh reference keys, deployment-artefact checks, native-prover controls, and a three-process JubJub recovery journey on a fresh localnet. This is a bounded integration tier, not the full conformance matrix. |
+| **Reference regression** | Every pull request, pushes to `main`, merge groups, and manual dispatch | Fresh generated runtimes without keys, TypeScript, seven remediation suites, existing offline checks, and locked Rust tests. No proof or node-admission claim. |
+| **Reference proof and localnet** | Manual dispatch only | Complete fresh reference keys, the keyed SDK assembly test, deployment-artefact checks, native-prover controls, and a three-process JubJub recovery journey on a fresh localnet. This is a bounded integration tier, not the full conformance matrix. |
 
 The fast workflow has no path or target-branch filter. This keeps its check
 available for stacked pull requests and for a future required-check policy.
-The heavy workflow is deliberately separate and must not be configured as a
-required pull-request check, because its path filter can prevent a run.
-Scheduled and manual activation require the workflow on the default branch;
-the CI-file pull-request trigger permits validation before merge.
+The heavy workflow is deliberately manual and must not be configured as a
+required pull-request check. It has no automatic PR, push, or scheduled trigger.
+GitHub manual dispatch requires the workflow on the default branch; the local
+commands below provide a route before it merges.
+
+Routine CI targets under ten minutes, with a fifteen-minute job limit and
+ten-minute per-command limits. This is a performance target, not a guarantee.
+The initial keyed fast run took about twelve minutes, including 507 seconds of
+compilation. A complete key build took 58 minutes before proving or localnet
+execution. Routine CI therefore omits key generation; the one SDK assembly
+case requiring a real verifier is an explicit separate test, not a skipped case.
+The remaining 491 TAP cases, 45 Rust tests, twelve runner controls, and additional
+script checks stay automatic. Per-module timings are retained in
+`compile-timings.jsonl`; current PR checks provide the revised measured duration.
+Local timing showed that the account compiler dominates even without keys.
+The hosted job therefore overlaps fresh compilation with single-worker native
+test builds. It generates and checks deterministic vectors first, then runs
+independent regression processes with at most four workers. Native execution
+and cross-implementation checks follow after all parallel suites finish.
 
 ## Pins and clean inputs
 
@@ -46,10 +61,11 @@ or hermetic build, or independently audit the parameter ceremony.
 
 Each compile removes only the six named generated reference module directories,
 then regenerates them from the checkout. The caller probe retains the compiler
-flags already specified by `package.json`. The fast lane uses `--skip-zk`, then
-generates `withdraw_shielded_with_jubjub` keys from the freshly generated ZKIR:
-the unchanged durable-change SDK test needs a real verifier to assemble its
-unproven transaction. This one key is not a complete deployable key bundle.
+flags already specified by `package.json`. The fast lane uses `--skip-zk` and
+produces no keys. The optional `runtime-plus-fixture-key` mode also generates
+`withdraw_shielded_with_jubjub` keys from fresh ZKIR for the isolated SDK assembly
+test. That test mocks proving, balancing, and submission; it is not proof or
+node-acceptance evidence. This one key is not a complete deployable key bundle.
 
 ## Failure and evidence handling
 
@@ -110,10 +126,19 @@ node scripts/ci-evidence.mjs final success
 The final status above must reflect the preceding commands' actual outcome.
 For the heavy tier, use a separate fresh checkout/evidence directory, run
 `bash scripts/ci-compile-reference.sh keyed`, build, and run
-`node --import tsx src/tests/toolchain-offline.ts`. Set `CI_LANE=localnet` and a
+`node --import tsx src/tests/toolchain-offline.ts`, followed by
+`npm run test:durable-change-sdk-keyed`. Set `CI_LANE=localnet` and a
 unique `CI_COMPOSE_PROJECT=passport-ci-<run-id>` before
 `node scripts/ci-localnet.mjs`. Docker must be running and ports 9944, 8088,
-and 6300 must be available. Do not reuse the fast lane's partial key bundle.
+and 6300 must be available. The fast lane has no deployable key bundle.
+
+To run only the isolated SDK assembly check, use a separate checkout and run
+`bash scripts/ci-compile-reference.sh runtime-plus-fixture-key`, build, and run
+`npm run test:durable-change-sdk-keyed`. This avoids the full localnet tier.
+Run the manual proof/localnet tier when qualifying releases or changes to
+circuits, compiler pins, proof integration, or recovery. These paths have no
+automatic proof coverage unless someone explicitly runs that tier; a green
+routine PR check cannot substitute for it.
 
 ## Merge enforcement and remaining acceptance
 
