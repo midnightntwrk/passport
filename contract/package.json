@@ -67,7 +67,8 @@
     "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts",
     "test:p256-grants": "tsx src/tests/p256-grants.ts",
     "test:p256-grant-refusals": "tsx src/tests/p256-grant-refusals.ts",
-    "test:grants-capability-offline": "tsx src/tests/grants-capability-offline.ts"
+    "test:grants-capability-offline": "tsx src/tests/grants-capability-offline.ts",
+    "test:viewing-recovery": "node --import tsx --test src/tests/viewing-recovery.ts src/tests/viewing-recovery-account.ts src/tests/viewing-key-store.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

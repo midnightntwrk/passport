@@ -59,6 +59,16 @@ export type { SdkChangeAdapterOptions } from './wallet/sdk-change-adapter.js';
 export { createFileChangeJournalStore } from './node/change-journal-store.js';
 export type { FileChangeJournalOptions } from './node/change-journal-store.js';
 
+export { ViewingRecoveryError, viewingSnapshot, openCurrentViewingKey,
+  reconstructRecoverySecret, reconstructCurrentViewingKey } from './wallet/viewing-recovery.js';
+export type {
+  ViewingKeyScope, PersistedViewingKey, ViewingKeyStore, ViewingRecoveryOptions,
+  GuardianRecoveryInput, PublishViewingRecoveryOptions, ViewingRecoverySnapshot,
+  ViewingRecoveryStatus, ViewingKeyPersistenceResult, ViewingRecoveryErrorCode,
+} from './wallet/viewing-recovery.js';
+export { createFileViewingKeyStore } from './node/viewing-key-store.js';
+export type { FileViewingKeyStoreOptions } from './node/viewing-key-store.js';
+
 export { inboxWalk } from './wallet/discovery.js';
 export type { DiscoveredCoin } from './wallet/discovery.js';
 

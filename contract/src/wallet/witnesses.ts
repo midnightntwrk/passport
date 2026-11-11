@@ -4,6 +4,7 @@
 import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import type { Ledger, QualifiedCoin } from './contract.js';
 import { hexToBytes, bytesToHex } from './hex.js';
+import type { ViewingWrapVerification } from './viewing-recovery.js';
 
 export interface StoredCoin {
   nonceHex: string;
@@ -14,6 +15,8 @@ export interface StoredCoin {
 export interface CoinIdentity { nonce: Uint8Array; color: Uint8Array; value: bigint }
 export interface CoinStorePrivateState {
   encSecretKeyHex: string | null;
+  /** Trusted local verification history, bound to an exact recovery artefact set. */
+  viewingWrapVerification?: ViewingWrapVerification;
   /** Absent in the legacy colour-keyed store. */
   version?: 2;
   /** Stable coin identity -> live qualified description in version 2. */

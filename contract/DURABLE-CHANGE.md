@@ -145,6 +145,8 @@ before it is recorded can still lose knowledge of change. Retaining the journal
 allows that gap to be repaired; it does not make the gap atomic. Viewing-key
 rotation must be coordinated with outstanding recovery publication, and an entry
 that no longer matches the current recovery key must not be declared recoverable.
+The [viewing recovery client](VIEWING-RECOVERY.md) exposes stale wraps and persists
+verified current material; it does not make pending backfill and rotation atomic.
 
 Direct contract-recipient payment composition remains subject to `DIRECT-01` in
 the pinned SDK. The durable adapter does not bypass that assembly restriction or

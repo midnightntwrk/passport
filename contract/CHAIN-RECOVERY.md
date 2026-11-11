@@ -184,8 +184,10 @@ quarantined. Repairing partial execution needs separate transaction-level eviden
 - Owner change lost before inbox backfill, with its local description and journal
   also lost, is not recoverable from a commitment alone. The durable journal
   remains necessary for that gap.
-- This API consumes viewing keys; it does not restore them, validate a recovery
-  wrap, or repair a stale wrap after rotation. Those are the next recovery work.
+- This API consumes viewing keys. The separate [viewing recovery client](VIEWING-RECOVERY.md)
+  restores and persists current material, validates its wrap, and supports fresh
+  guardian-session publication. Historical-key retention and inbox re-encryption
+  across rotation remain separate work.
 - A live classification is a snapshot observation. Another client can spend the
   coin later. Refresh before use, and still handle on-chain rejection.
 - A custom `ChainRecoveryAdapter` is trusted to honour the evidence contract.

@@ -83,6 +83,15 @@ import {
   type ChainRecoveryAdapter, type ChainRecoveryCandidate, type HoldingsRecoveryReport, type ScanHoldingsOptions,
 } from './chain-recovery.js';
 import { checkGrantExpiry, GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
+import { sealWrap } from './recovery.js';
+import {
+  ViewingRecoveryError, viewingSnapshot, assertViewingSnapshot, viewingRecoveryStatus, viewingWrapVerification,
+  openCurrentViewingKey, reconstructRecoverySecret, validateGuardianInput, prepareViewingRecoverySession,
+  validateViewingKeyScope, validatePersistedViewingKey, persistedViewingKey,
+  type ViewingRecoveryOptions, type ViewingRecoverySnapshot, type ViewingKeyPersistenceResult,
+  type ViewingRecoveryStatus, type GuardianRecoveryInput, type PublishViewingRecoveryOptions,
+  type ViewingWrapVerification,
+} from './viewing-recovery.js';
 export { GrantPreflightError, type GrantPreflightOptions } from './grant-preflight.js';
 
 /** Selection alone is sufficient for a deliberately non-expiring grant.
@@ -654,8 +663,179 @@ export class CustodyAccount {
     return this.withStoreGuard(async () => {
       if (this.changeCoordinator && name.startsWith('withdraw_shielded')) throw new Error('durable shielded spends require a typed account method');
       await this.clearStoredSelection();
+      if (name.startsWith('rotate_enc_key_with_')) {
+        const snapshot = viewingSnapshot(this.address, await this.ledgerState());
+        if (!(args[0] instanceof Uint8Array) || bytesToHex(args[0]) !== bytesToHex(snapshot.encKey)) {
+          // Invalidate before submission, including when its acknowledgement is
+          // lost. A later failed rotation may leave a conservative warning.
+          const current = await this.readCoinStore();
+          await this.providers.privateStateProvider.set(this.privateStateId,
+            { ...current, viewingWrapVerification: viewingWrapVerification(snapshot, 'invalidated') });
+        }
+      } else if (name.startsWith('publish_recovery_session_with_')) {
+        const { viewingWrapVerification: _old, ...current } = await this.readCoinStore();
+        // Opaque publication provides no evidence that the new wrap is current.
+        await this.providers.privateStateProvider.set(this.privateStateId, current);
+      }
       return this.handle.callTx[name](...args);
     });
+  }
+
+  /** Read-only freshness diagnostics. A current local key is not, by itself,
+   * evidence that the published guardian backup can restore that key. */
+  async viewingRecoveryStatus(): Promise<ViewingRecoveryStatus> {
+    return this.withStoreGuard(async () => {
+      const snapshot = viewingSnapshot(this.address, await this.ledgerState());
+      const state = await this.readCoinStore();
+      assertViewingSnapshot(snapshot, viewingSnapshot(this.address, await this.ledgerState()));
+      return viewingRecoveryStatus(snapshot, state.encSecretKeyHex, state.viewingWrapVerification);
+    });
+  }
+
+  /** Restore only an authenticated wrap whose key matches current enc_key.
+   * The caller retains its recovery material until this durable acknowledgement. */
+  async restoreViewingKey(secret: Uint8Array, options: ViewingRecoveryOptions): Promise<ViewingKeyPersistenceResult> {
+    const copy = secret instanceof Uint8Array ? secret.slice() : secret;
+    try {
+      return await this.withStoreGuard(async () => {
+        const snapshot = viewingSnapshot(this.address, await this.ledgerState());
+        const key = openCurrentViewingKey(copy, snapshot);
+        try { return await this.persistCurrentViewingKey(key, options, snapshot, viewingWrapVerification(snapshot)); }
+        finally { key.fill(0); }
+      });
+    } finally { if (copy instanceof Uint8Array) copy.fill(0); }
+  }
+
+  async restoreViewingKeyFromGuardians(input: GuardianRecoveryInput, options: ViewingRecoveryOptions): Promise<ViewingKeyPersistenceResult> {
+    const checked = validateGuardianInput(input);
+    return this.withStoreGuard(async () => {
+      const snapshot = viewingSnapshot(this.address, await this.ledgerState());
+      const secret = reconstructRecoverySecret(snapshot, checked);
+      try {
+        const key = openCurrentViewingKey(secret, snapshot);
+        try { return await this.persistCurrentViewingKey(key, options, snapshot, viewingWrapVerification(snapshot)); }
+        finally { key.fill(0); }
+      } finally { secret.fill(0); }
+    });
+  }
+
+  /** Persist caller-held current viewing material, without asserting wrap validity. */
+  async persistViewingKey(key: Uint8Array, options: ViewingRecoveryOptions): Promise<ViewingKeyPersistenceResult> {
+    const copy = key instanceof Uint8Array ? key.slice() : key;
+    try {
+      return await this.withStoreGuard(async () => this.persistCurrentViewingKey(copy, options,
+        viewingSnapshot(this.address, await this.ledgerState())));
+    } finally { if (copy instanceof Uint8Array) copy.fill(0); }
+  }
+
+  /** Reopen the durable vault in a fresh process and verify against current chain
+   * state before making its key available to holdings reconstruction. */
+  async loadViewingKey(options: ViewingRecoveryOptions): Promise<ViewingKeyPersistenceResult> {
+    return this.withStoreGuard(async () => {
+      const scope = validateViewingKeyScope({ networkId: options?.networkId, address: this.address });
+      if (!options?.store || typeof options.store.get !== 'function' || typeof options.store.set !== 'function') {
+        throw new ViewingRecoveryError('invalid-input', 'an explicit durable viewing key store is required');
+      }
+      const snapshot = viewingSnapshot(this.address, await this.ledgerState());
+      let record;
+      try {
+        record = await options.store.get(scope);
+        if (!record) throw new Error('missing key');
+        record = validatePersistedViewingKey(record, scope);
+      } catch { throw new ViewingRecoveryError('persistence-unconfirmed', 'persisted viewing key could not be verified'); }
+      const key = hexToBytes(record.encSecretKeyHex);
+      try { return await this.persistCurrentViewingKey(key, options, snapshot, undefined, false); }
+      finally { key.fill(0); }
+    });
+  }
+
+  private async persistCurrentViewingKey(key: Uint8Array, options: ViewingRecoveryOptions,
+    snapshot: ViewingRecoverySnapshot, marker?: ViewingWrapVerification, writeVault = true): Promise<ViewingKeyPersistenceResult> {
+    const scope = validateViewingKeyScope({ networkId: options?.networkId, address: this.address });
+    const store = options?.store;
+    if (!store || typeof store.get !== 'function' || typeof store.set !== 'function') {
+      throw new ViewingRecoveryError('invalid-input', 'an explicit durable viewing key store is required');
+    }
+    const record = persistedViewingKey(scope, key);
+    if (record.encPublicKeyHex !== bytesToHex(snapshot.encKey)) {
+      throw new ViewingRecoveryError('viewing-key-mismatch', 'viewing material does not match the current encryption public key');
+    }
+    assertViewingSnapshot(snapshot, viewingSnapshot(this.address, await this.ledgerState()));
+    // The durable copy must exist before private state can expose the recovered
+    // key. A lost acknowledgement remains an error; a later load can retry.
+    try {
+      if (writeVault) await store.set(record);
+      const persisted = validatePersistedViewingKey(await store.get(scope), scope);
+      if (persisted.encSecretKeyHex !== record.encSecretKeyHex || persisted.encPublicKeyHex !== record.encPublicKeyHex) throw new Error('key changed');
+    } catch { throw new ViewingRecoveryError('persistence-unconfirmed', 'durable viewing key write was not confirmed; retain recovery material'); }
+    assertViewingSnapshot(snapshot, viewingSnapshot(this.address, await this.ledgerState()));
+    let confirmed: CoinStorePrivateState;
+    try {
+      const current = await this.readCoinStore();
+      const next = { ...current, encSecretKeyHex: record.encSecretKeyHex,
+        ...(marker ? { viewingWrapVerification: marker } : {}) };
+      await this.providers.privateStateProvider.set(this.privateStateId, next);
+      confirmed = await this.readCoinStore();
+      if (confirmed.encSecretKeyHex !== record.encSecretKeyHex
+        || (marker && JSON.stringify(confirmed.viewingWrapVerification) !== JSON.stringify(marker))) throw new Error('private key changed');
+    } catch { throw new ViewingRecoveryError('persistence-unconfirmed', 'private viewing key write was not confirmed; the durable copy can be reloaded'); }
+    const after = viewingSnapshot(this.address, await this.ledgerState());
+    assertViewingSnapshot(snapshot, after);
+    return { ...viewingRecoveryStatus(after, confirmed.encSecretKeyHex, confirmed.viewingWrapVerification), networkId: scope.networkId, persisted: true };
+  }
+
+  /** Publish a complete fresh guardian session around the retained current key.
+   * Shares must be freshly obtained for this session from the full roster. */
+  async publishViewingRecoverySession(device: AnyDevice, options: PublishViewingRecoveryOptions): Promise<TxResult & { viewingRecovery: ViewingRecoveryStatus }> {
+    const copied = { ...validateGuardianInput(options, true), sessionNonce: options.sessionNonce?.slice(),
+      recoverySecret: options.recoverySecret?.slice() };
+    try {
+      return await this.withStoreGuard(async () => {
+        const snapshot = viewingSnapshot(this.address, await this.ledgerState());
+        const prepared = prepareViewingRecoverySession(snapshot, copied);
+        const stored = await this.readCoinStore();
+        if (viewingRecoveryStatus(snapshot, stored.encSecretKeyHex).localKey !== 'current') {
+          throw new ViewingRecoveryError('viewing-key-mismatch', 'persist the current viewing key before publishing its guardian backup');
+        }
+        const key = hexToBytes(stored.encSecretKeyHex!);
+        let wrap: Uint8Array;
+        try { wrap = sealWrap(copied.recoverySecret, this.addressBytes, key); } finally { key.fill(0); }
+        const slots: [bigint, bigint, bigint, bigint] = [0n, 0n, 0n, 0n];
+        prepared.phi.forEach((value, index) => { slots[index] = value; });
+        const ctx = await this.callContext();
+        const { counter, epoch } = await this.requireUseCounter(device);
+        const auth = device.arm === 'jubjub'
+          ? device.sign(jubjubChallenges.publishRecoverySession(ctx, device.pk, prepared.recoveryPk,
+              prepared.sessionNonce, slots, BigInt(prepared.phi.length), wrap), counter)
+          : await device.sign((device.arm === 'p256' ? p256Challenges : k256Challenges).publishRecoverySession(ctx, device.pk,
+              prepared.recoveryPk, prepared.sessionNonce, slots, BigInt(prepared.phi.length), wrap), counter);
+        assertViewingSnapshot(snapshot, viewingSnapshot(this.address, await this.ledgerState()));
+        const { viewingWrapVerification: _old, ...before } = await this.readCoinStore();
+        await this.providers.privateStateProvider.set(this.privateStateId, before);
+        const name = `publish_recovery_session_with_${auth.arm}`;
+        const result = await submitWithDustRetry(name, async () => {
+          assertViewingSnapshot(snapshot, viewingSnapshot(this.address, await this.ledgerState()));
+          return this.handle.callTx[name](prepared.recoveryPk, prepared.sessionNonce,
+            slots[0], slots[1], slots[2], slots[3], BigInt(prepared.phi.length), wrap, ...authArgs(auth));
+        });
+        this.advanceCounter(device, counter, epoch);
+        const after = viewingSnapshot(this.address, await this.ledgerState());
+        assertViewingSnapshot({ ...snapshot, recoveryPk: prepared.recoveryPk, recoverySession: prepared.sessionNonce,
+          phi: prepared.phi, recoveryWrap: wrap, recoveryVersion: 1n }, after);
+        const current = await this.readCoinStore();
+        if (viewingRecoveryStatus(after, current.encSecretKeyHex).localKey !== 'current') {
+          throw new ViewingRecoveryError('viewing-key-mismatch', 'local viewing key changed during session publication');
+        }
+        const marker = viewingWrapVerification(after);
+        await this.providers.privateStateProvider.set(this.privateStateId, { ...current, viewingWrapVerification: marker });
+        const confirmed = await this.readCoinStore();
+        if (JSON.stringify(confirmed.viewingWrapVerification) !== JSON.stringify(marker)) {
+          throw new ViewingRecoveryError('persistence-unconfirmed', 'recovery verification history was not persisted');
+        }
+        assertViewingSnapshot(after, viewingSnapshot(this.address, await this.ledgerState()));
+        return { txId: txId(result), viewingRecovery: viewingRecoveryStatus(after, confirmed.encSecretKeyHex, marker) };
+      });
+    } finally { copied.recoverySecret?.fill(0); }
   }
 
   async putCoin(coin: CoinIdentity & { mtIndex: bigint }): Promise<void> {

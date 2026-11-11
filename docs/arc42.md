@@ -332,6 +332,17 @@ enforcement does not enforce off-chain read-capability revocation.
    **resets the complete device set**, and installs only the authorised successor.
    Grants from the prior epoch become inert; finalisation does not need fresh signatures.
 
+The reference [viewing recovery client](../contract/VIEWING-RECOVERY.md) now
+validates indexed guardian reconstruction and checks the unwrapped secret against
+current `enc_key`. It acknowledges an explicit encrypted vault before merging
+private state, then rechecks the chain. Restart reloads and validates that vault
+without needing the discarded recovery secret. Current viewing, backup freshness,
+and pending authority recovery remain separate statuses. Rotation invalidates
+backup verification; a fresh full-roster session restores it. Finalisation clears
+the public vector and therefore reports backup absent until a new session exists.
+Guardian transport, browser ceremony UX, and atomic key rotation/inbox migration
+remain outside this bounded client implementation.
+
 The reset addresses **erratum 7**: unchecked opaque entries can embed future epochs,
 so an epoch bump alone allows pre-planted authority to survive. Pending-phase
 entries must also be retired. This implements the retirement obligation in
