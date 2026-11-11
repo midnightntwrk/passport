@@ -360,5 +360,5 @@ and their retained artefacts for final-head hosted results, including complete
 fresh generation and the heavy journey. A historical pass does not certify a
 later head. The initial workflow-context error and separate Opengrep findings
 were retained and corrected: runner paths are set in execution steps, TAP
-parsing uses a fixed expression, and only the fixed loopback prover version
-request has a rule-specific exception with redirects disabled.
+parsing uses a fixed expression, and the fixed loopback prover version request
+uses the rule's explicit `localhost` allowance with redirects disabled.

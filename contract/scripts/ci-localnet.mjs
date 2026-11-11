@@ -115,8 +115,7 @@ if (process.argv[2] === 'cleanup') {
     });
     evidence.proverVersion = await until('proof server', async () => {
       // Fixed loopback development service, no credentials, and no redirects.
-      // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
-      const response = await fetch('http://127.0.0.1:6300/version', { signal: AbortSignal.timeout(2_000), redirect: 'error' });
+      const response = await fetch('http://localhost:6300/version', { signal: AbortSignal.timeout(2_000), redirect: 'error' });
       return response.ok ? response.text() : null;
     });
     assert.match(evidence.proverVersion, /9\.0\.0-rc\.8/);
