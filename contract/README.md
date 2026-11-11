@@ -358,6 +358,21 @@ shielded spends to an exact selected coin. See [the multi-coin guide](MULTI-COIN
 for selection, legacy-store migration, spent markers, raw-authorisation
 arguments, validation, and the remaining change-capture/recovery boundaries.
 
+### Durable change capture and recovery backfill
+
+Opt-in durable mode saves the exact input, change, and final transaction
+identifiers before submission. After restart, it distinguishes complete success,
+partial execution, rejection, and unknown outcomes, qualifies the actual change
+commitment, and resumes owner inbox backfill without resending an uncertain
+spend. Grant entries already appended by the circuit are adopted without a
+duplicate append; their recorded and decryptable assurances remain distinct.
+
+See [the durable change guide](DURABLE-CHANGE.md) for encrypted storage, stable
+reconnection, explicit endpoint configuration, interruption handling, and the
+single-writer concurrency profile. Durable mode disables automatic spend
+submission retries, including on raw-authorisation methods. Chain-wide spent
+reconstruction and direct-payment SDK composition remain separate work.
+
 ## Known issues and remaining validation
 
 1. **Individual-device revocation is incomplete.** `remove_device` removes

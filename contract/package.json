@@ -38,6 +38,8 @@
     "test:recovery-offline": "tsx src/tests/recovery-offline.ts",
     "test:recovery-sim": "tsx src/tests/recovery-sim.ts",
     "test:multi-coin": "node --import tsx --test src/tests/multi-coin.ts",
+    "test:durable-change": "node --import tsx --test src/tests/durable-change.ts src/tests/durable-change-account.ts src/tests/durable-change-sdk.ts src/tests/change-journal-store.ts",
+    "test:change-qualification": "node --import tsx --test src/tests/change-qualification.ts",
     "test:recovery-bootstrap": "node --import tsx --test src/tests/recovery-bootstrap.ts",
     "test:recovery": "tsx src/tests/recovery-conformance.ts",
     "test:grants-offline": "tsx src/tests/grants-offline.ts",

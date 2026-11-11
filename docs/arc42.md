@@ -261,6 +261,10 @@ sequenceDiagram
     S-->>C: Signature / WebAuthn assertion
     C->>P: Circuit inputs and required witnesses
     P-->>C: Proof
+    opt Durable client mode
+        C->>C: Flush exact input, change, and final transaction identifiers
+        C->>C: Flush submission checkpoint
+    end
     C->>L: Funded, proved transaction
     alt Fresh authority, valid proof and unspent inputs
         L->>L: Apply gated custody effects and discovery updates
@@ -274,6 +278,15 @@ sequenceDiagram
 Local execution can also reject before proving/submission. Shielded signatures
 bind the qualified coin, including `mt_index`; changing a candidate requires
 new approval. A valid proof alone does not guarantee admission or settlement.
+
+The optional [durable change client](../contract/DURABLE-CHANGE.md) records the
+submission boundary and reconciles complete, partial, rejected, and unknown
+outcomes. Only complete execution permits change qualification and adoption.
+Owner recovery backfill is a separately journalled, authorised transaction;
+grant change entries are already appended by the circuit and are adopted
+without another append. Lost acknowledgements do not authorise resubmission.
+The journal supports one writer process and does not establish chain-wide
+live/spent discovery or atomic recovery across external viewing-key rotation.
 
 ### 6.3 Device Addition and Removal
 

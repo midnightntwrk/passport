@@ -38,7 +38,17 @@ export {
 export type { EncKeyPair, PlainCoin } from './wallet/inbox.js';
 
 export { CustodyAccount } from './wallet/account.js';
-export type { TxResult, SpendOutcome, DirectSpendOutcome, ShieldedGrantOptions } from './wallet/account.js';
+export type { TxResult, SpendOutcome, DirectSpendOutcome, ShieldedGrantOptions, DurableChangesOptions, ConnectOptions } from './wallet/account.js';
+
+export { DurableChangeCoordinator, DurableChangePendingError } from './wallet/change-journal.js';
+export type {
+  ChangeJournal, ChangeJournalEntry, ChangeJournalStore, ChangeIntent,
+  DurableTransactionAdapter, PreparedChangeTransaction, TransactionObservation,
+} from './wallet/change-journal.js';
+export { createSdkChangeAdapter } from './wallet/sdk-change-adapter.js';
+export type { SdkChangeAdapterOptions } from './wallet/sdk-change-adapter.js';
+export { createFileChangeJournalStore } from './node/change-journal-store.js';
+export type { FileChangeJournalOptions } from './node/change-journal-store.js';
 
 export { inboxWalk } from './wallet/discovery.js';
 export type { DiscoveredCoin } from './wallet/discovery.js';

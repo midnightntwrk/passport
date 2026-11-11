@@ -1,6 +1,6 @@
 # Audit remediation queue
 
-Updated: 2026/11/10. Review baseline: Passport `e0e4e0e6272399d71dfaaa7cae0689ab4e2363f3`.
+Updated: 2026/11/11. Review baseline: Passport `e0e4e0e6272399d71dfaaa7cae0689ab4e2363f3`.
 
 This is the agreed order for four bounded improvements following the repository
 audit. It tracks implementation and merge state separately. Closing a finding
@@ -9,17 +9,17 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: priority 4, multiple coins per asset.** Implementation and independent
-agent review are complete on `codex/multi-coin-custody`, ready for pull-request
-review. This work is based on
-priority 3's merge in [#203](https://github.com/midnightntwrk/passport/pull/203)
-on 2026/11/10 as `9d909ae23290608bb589d5541fc414d34cf3125b`.
-The preceding priorities merged in #201 and #202, as recorded below.
+**Current: durable change capture and recovery backfill, CUST-02.** The four
+agreed improvements are merged. This implementation starts from priority 4's
+merge in [#204](https://github.com/midnightntwrk/passport/pull/204),
+`277a8e345873348d5e1b1c6a6416c2ce0e857894`, verified against `origin/main` on
+2026/11/11. Implementation, independent review, and targeted validation are
+complete on `codex/durable-change-backfill`; pull-request review and merge remain.
 
-**After priority 4 merges:** verify its merge on `origin/main`, record the
-commit and validation evidence, and reassess the subsequent durable capture
-and recovery-backfill milestone. This completes the four agreed implementation
-priorities; broader custody lifecycle work remains separately scoped.
+**After CUST-02 merges:** verify its merge and retained regression evidence,
+then reassess chain-verified live/spent reconstruction (`CUST-03`). Partial
+execution remains explicitly quarantined until that evidence exists. Viewing-key
+restoration and direct-payment composition remain separate milestones.
 
 This document records the continuation instruction. It does not install a
 background merge watcher or establish that any later task has started.
@@ -29,7 +29,8 @@ background merge watcher or establish that any later task has started.
 | 1 | Reliable device reconnection | `DEV-003`, `DEV-004`; `TASK-DEV-003`, `TASK-DEV-004` | Merged in #201 | Merge `f7342f2`, 2026/11/10 |
 | 2 | Check grant liveness and expiry before signing | `GRANTS-04`; `TASK-GRANTS-04` | Merged in #202 | Merge `44738ee`, 2026/11/10 |
 | 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Merged in #203 | Merge `9d909ae`, 2026/11/10 |
-| 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Implemented; awaiting merge | Based on merged priority 3 |
+| 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Merged in #204 | Merge `277a8e3`, 2026/11/10 |
+| 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Implemented and validated; awaiting merge | Based on merged priority 4 |
 
 ## 1. Reliable device reconnection
 
@@ -131,7 +132,7 @@ and recovery deduplication.
   deduplicated, and locally known spent/live state is preserved.
 - [x] Existing one-slot private stores migrate without discarding retained descriptions.
 - [x] Independent source and regression review is complete.
-- [ ] The pull request is merged, with its merge commit recorded here.
+- [x] The pull request is merged: #204, commit `277a8e345873348d5e1b1c6a6416c2ce0e857894`.
 
 Validation on 2026/11/10: 55 dedicated tests and the TypeScript build pass.
 The matrix includes actual generated-runtime deposit/spend journeys alongside
@@ -148,12 +149,48 @@ or node acceptance. Locally retained spent markers do not replace chain
 validation (`CUST-03`), and descriptions already overwritten by the old format
 cannot be reconstructed by store migration alone.
 
-## Subsequent milestone
+## 5. Durable change capture and recovery backfill
 
-After these four priorities, reassess durable change capture and recovery
-backfill (`CUST-02`, `TODO-CUST-02`). Its target is a receive, spend, restart,
-and recover journey with interruption tests and an idempotent journal.
-It depends on the multi-coin model and remains outside the current change.
+Scope: opt-in reference-client journalling, encrypted durable Node storage,
+stable private-state reopening, exact outcome reconciliation, actual commitment
+qualification, and idempotent owner backfill or grant adoption. See the
+[implementation guide](../../contract/DURABLE-CHANGE.md).
+
+- [x] Save the exact input, operation, predicted change, and all final transaction
+  identifiers before permitting submission.
+- [x] Distinguish complete, partial, rejected, and unknown outcomes after restart.
+- [x] Retain uncertainty after lost acknowledgements and avoid automatic resubmission.
+- [x] Adopt confirmed change without discarding siblings or resurrecting later-spent coins.
+- [x] Backfill owner change and adopt grant entries without duplicate append.
+- [x] Separate recorded ciphertext from verified decryptable recovery.
+- [x] Provide encrypted atomic storage with acknowledged file and directory flushes.
+- [x] State single-process concurrency and the remaining total-loss gap before backfill.
+- [x] Complete the interruption matrix, existing regressions, independent review,
+  and three-process localnet recovery journey; record exact outcomes here.
+- [ ] Merge the pull request and record its merge commit.
+
+The localnet journey injects lost acknowledgements after actual spend and append
+submissions, reopens the journal in fresh processes, and later spends the
+recovered change while preserving a same-colour sibling. Transport fixtures and
+generated-runtime checks are reported separately from live proof and node
+evidence. No fresh Compact compilation is required because circuits are unchanged.
+
+Validation on 2026/11/11: all 93 dedicated durable-recovery tests passed,
+including 22 before/after journal-write interruption cuts, generated-runtime
+recovery, the actual SDK preparation boundary, receipt controls, and encrypted
+storage reopening in a fresh process. The TypeScript build, all 137 existing
+multi-coin/reconnection/preflight/bootstrap/input-validation tests, all 127
+offline grant tests, and the existing unit, recovery, capability, caller, and
+P256 offline checks passed. Two separate live-prover controls passed, including
+rejection of a wrong occupied commitment position through the production adapter.
+
+All four fresh-process localnet phases passed: lost spend acknowledgement,
+lost owner-backfill acknowledgement, restart and later change spend, and grant
+change publication without duplicate append. Seven indexed successful
+transactions were cross-checked against node block hashes. This reused the
+pinned full keyed artefacts generated on 2026/11/10, with no new key-generation
+claim. It is targeted custody evidence, not a rerun of the entire localnet
+matrix or complete MIP conformance.
 
 Reference-contract CI is a parallel assurance recommendation (`TODO-CI-01`).
 This queue does not claim that a required merge gate already exists.
