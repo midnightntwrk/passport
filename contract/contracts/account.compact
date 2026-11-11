@@ -2916,8 +2916,8 @@ export circuit recover_finalise(): [] {
   // Recovery is available before initial activation. Installing its successor
   // consumes the original bootstrap authority too, so no activation arm can
   // later reintroduce the committed initial device into the recovered epoch.
-  // Deliberate negative control: CI must reject missing bootstrap consumption.
-
+  booted = true;
+  boot = pad(32, "");
   recovery_pk = pending_recovery_pk;
   recovery_phi_len = 0 as Uint<8>;
   pending_recovery    = false;
