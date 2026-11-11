@@ -21,10 +21,10 @@ export interface SdkChainRecoveryOptions {
 }
 
 const snapshotQuery = `query RecoverySnapshot($address: HexEncoded!, $offset: BlockOffset!) {
-  block(offset: $offset) { hash height protocolVersion contractZswapState(address: $address) }
+  block(offset: $offset) { hash height protocolVersion zswapEndIndex contractZswapState(address: $address) }
   contract(address: $address, offset: $offset) { state }
 }`;
-const anchorQuery = `query RecoveryAnchor($offset: BlockOffset!) { block(offset: $offset) { hash height protocolVersion } }`;
+const anchorQuery = `query RecoveryAnchor($offset: BlockOffset!) { block(offset: $offset) { hash height protocolVersion zswapEndIndex } }`;
 const outputQuery = `query RecoveryOutputs($filter: ContractEventFilter!, $limit: Int!, $offset: Int!) {
   contractEvents(filter: $filter, limit: $limit, offset: $offset) {
     id version protocolVersion contractAddress
@@ -166,9 +166,11 @@ export function createSdkChainRecoveryAdapter(options: SdkChainRecoveryOptions):
       if (blockHeight > finalisedHeight) throw new Error('requested recovery snapshot is not finalised');
       await canonical(blockHeight, blockHash);
       const response = await gql(snapshotQuery, { address, offset: { hash: blockHash } });
+      const treeEnd = uint(response.block?.zswapEndIndex, 'snapshot commitment frontier');
       const checkAnchor = (block: any) => {
         if (!block || hex32(block.hash, 'indexed block hash') !== blockHash
-          || uint(block.height, 'indexed height', 31) !== blockHeight || versionOfRecord(block) !== 'v9') {
+          || uint(block.height, 'indexed height', 31) !== blockHeight || versionOfRecord(block) !== 'v9'
+          || uint(block.zswapEndIndex, 'snapshot commitment frontier') !== treeEnd) {
           throw new Error('recovery snapshot is not indexed consistently');
         }
       };
@@ -200,13 +202,15 @@ export function createSdkChainRecoveryAdapter(options: SdkChainRecoveryOptions):
         return rows.length ? 'spent' : 'live';
       }
 
-      async function inspect(coin: ShieldedCoin, search: { hints: bigint[]; nextIndex?: bigint; eventOffset?: number; maxIndices: number }): Promise<ChainCoinInspection> {
+      async function inspect(coin: ShieldedCoin, search: { hints: bigint[]; nextIndex?: bigint; eventOffset?: number; mode?: 'events' | 'tree'; maxIndices: number }): Promise<ChainCoinInspection> {
         try {
           const maxIndices = positive(search.maxIndices, 'qualification limit');
           if (maxIndices > 4096) throw new Error('qualification limit exceeds 4096');
-          const start = search.nextIndex ?? 0n;
+          let start = search.nextIndex ?? 0n;
           uint(start, 'qualification cursor');
           const windowOffset = Number(uint(search.eventOffset ?? 0, 'event cursor', 31));
+          let mode = search.mode ?? 'events';
+          if (!['events', 'tree'].includes(mode) || (mode === 'tree' && windowOffset !== 0)) throw new Error('invalid commitment search mode');
           const raw = { nonce: hex32(Buffer.from(coin.nonce).toString('hex'), 'coin nonce'),
             type: hex32(Buffer.from(coin.color).toString('hex'), 'coin colour'), value: uint(coin.value, 'coin value', 128) };
           const commitment = ZswapOutput.newContractOwned(raw, undefined, address).commitment;
@@ -215,7 +219,7 @@ export function createSdkChainRecoveryAdapter(options: SdkChainRecoveryOptions):
           async function check(index: bigint): Promise<ChainCoinInspection | undefined> {
             uint(index, 'candidate index');
             if (index < start || visited.has(index.toString())) return;
-            if (attempts >= maxIndices) return { status: 'unknown', reason: 'commitment search budget exhausted', nextIndex: index.toString(), nextEventOffset: windowOffset };
+            if (attempts >= maxIndices) return { status: 'unknown', reason: 'commitment search budget exhausted', nextIndex: index.toString(), nextEventOffset: mode === 'tree' ? 0 : windowOffset, nextMode: mode };
             visited.add(index.toString()); attempts++;
             let input: ReturnType<typeof ZswapInput.newContractOwned>;
             try { input = ZswapInput.newContractOwned({ ...raw, mt_index: index }, undefined, address, commitments); }
@@ -232,62 +236,73 @@ export function createSdkChainRecoveryAdapter(options: SdkChainRecoveryOptions):
           }
           // Hints are tried once. On continuation, resume the ordered chain
           // ranges, so a bad high hint cannot consume every page or skip lows.
-          if (search.nextIndex === undefined && windowOffset === 0) for (const hint of [...search.hints].sort((a, b) => a < b ? -1 : a > b ? 1 : 0)) {
+          if (mode === 'events' && search.nextIndex === undefined && windowOffset === 0) for (const hint of [...search.hints].sort((a, b) => a < b ? -1 : a > b ? 1 : 0)) {
             const found = await check(hint);
             if (found) return found.status === 'unknown' && found.nextIndex !== undefined ? { ...found, nextIndex: '0' } : found;
           }
-          const pageSize = 100;
-          let lastId = -1;
-          const ranges: { lower: bigint; upper: bigint }[] = [];
-          let eventHistoryComplete = false;
-          let nextEventOffset = windowOffset;
-          // On a position continuation, the first event page was necessarily in
-          // the original window. Recheck only that page, then advance/reset, so
-          // changing maxEventPages between calls cannot skip newly added lows.
-          const eventPageLimit = start > 0n ? 1 : maxEventPages;
-          for (let page = 0; page < eventPageLimit; page++) {
-            uint(nextEventOffset, 'event cursor', 31);
-            const data = await gql(outputQuery, { filter: { contractAddress: address,
-              types: ['SHIELDED_RECEIVE', 'SHIELDED_MINT'], fieldPrefixes: [{ fieldName: 'commitment', prefix: commitment }],
-              fromBlock: 0, toBlock: Number(blockHeight) }, limit: pageSize, offset: nextEventOffset });
-            if (!Array.isArray(data.contractEvents) || data.contractEvents.length > pageSize) throw new Error('invalid commitment event page');
-            for (const event of data.contractEvents) {
-              if (!Number.isSafeInteger(event.id) || event.id <= lastId || event.version !== 1 || versionOfRecord(event) !== 'v9'
-                || hex32(event.contractAddress, 'event contract') !== address || hex32(event.commitment, 'event commitment') !== commitment) {
-                throw new Error('inconsistent commitment event');
+          if (mode === 'events') {
+            const pageSize = 100;
+            let lastId = -1;
+            const ranges: { lower: bigint; upper: bigint }[] = [];
+            let eventHistoryComplete = false;
+            let nextEventOffset = windowOffset;
+            // On a position continuation, the first event page was necessarily in
+            // the original window. Recheck only that page, then advance/reset, so
+            // changing maxEventPages between calls cannot skip newly added lows.
+            const eventPageLimit = start > 0n ? 1 : maxEventPages;
+            for (let page = 0; page < eventPageLimit; page++) {
+              uint(nextEventOffset, 'event cursor', 31);
+              const data = await gql(outputQuery, { filter: { contractAddress: address,
+                types: ['SHIELDED_RECEIVE', 'SHIELDED_MINT'], fieldPrefixes: [{ fieldName: 'commitment', prefix: commitment }],
+                fromBlock: 0, toBlock: Number(blockHeight) }, limit: pageSize, offset: nextEventOffset });
+              if (!Array.isArray(data.contractEvents) || data.contractEvents.length > pageSize) throw new Error('invalid commitment event page');
+              for (const event of data.contractEvents) {
+                if (!Number.isSafeInteger(event.id) || event.id <= lastId || event.version !== 1 || versionOfRecord(event) !== 'v9'
+                  || hex32(event.contractAddress, 'event contract') !== address || hex32(event.commitment, 'event commitment') !== commitment) {
+                  throw new Error('inconsistent commitment event');
+                }
+                lastId = event.id;
+                const transaction = event.transaction;
+                const eventHeight = uint(transaction?.block?.height, 'output block height', 31);
+                if (eventHeight > blockHeight) throw new Error('output lies beyond recovery snapshot');
+                await canonical(eventHeight, hex32(transaction.block.hash, 'output block hash'));
+                hex32(transaction.hash, 'output transaction hash');
+                const lower = uint(transaction.zswapStartIndex, 'output start index');
+                const upper = uint(transaction.zswapEndIndex, 'output end index');
+                if (upper <= lower) throw new Error('invalid output commitment range');
+                ranges.push({ lower, upper });
               }
-              lastId = event.id;
-              const transaction = event.transaction;
-              const eventHeight = uint(transaction?.block?.height, 'output block height', 31);
-              if (eventHeight > blockHeight) throw new Error('output lies beyond recovery snapshot');
-              await canonical(eventHeight, hex32(transaction.block.hash, 'output block hash'));
-              hex32(transaction.hash, 'output transaction hash');
-              const lower = uint(transaction.zswapStartIndex, 'output start index');
-              const upper = uint(transaction.zswapEndIndex, 'output end index');
-              if (upper <= lower) throw new Error('invalid output commitment range');
-              ranges.push({ lower, upper });
+              nextEventOffset += data.contractEvents.length;
+              if (data.contractEvents.length < pageSize) { eventHistoryComplete = true; break; }
             }
-            nextEventOffset += data.contractEvents.length;
-            if (data.contractEvents.length < pageSize) { eventHistoryComplete = true; break; }
+            ranges.sort((a, b) => a.lower < b.lower ? -1 : a.lower > b.lower ? 1 : 0);
+            const merged: typeof ranges = [];
+            for (const range of ranges) {
+              const previous = merged.at(-1);
+              if (previous && range.lower <= previous.upper) {
+                if (range.upper > previous.upper) previous.upper = range.upper;
+              } else merged.push({ ...range });
+            }
+            for (const range of merged) for (let index = range.lower > start ? range.lower : start; index < range.upper; index++) {
+              const found = await check(index); if (found) return found;
+            }
+            // Event order need not match commitment order. Advancing the event
+            // window resets the index; a qualification pause retains this window.
+            if (!eventHistoryComplete) {
+              uint(nextEventOffset, 'event cursor', 31);
+              return { status: 'unknown', reason: 'commitment event history budget exhausted', nextIndex: '0', nextEventOffset, nextMode: 'events' };
+            }
+            // Contract receive/mint events require emitted contract logs. The
+            // pinned generated account does not emit them, so an empty event
+            // history is not an empty coin set. Retry positions against the
+            // anchored global frontier, with a distinct resumable search mode.
+            mode = 'tree'; start = 0n;
           }
-          ranges.sort((a, b) => a.lower < b.lower ? -1 : a.lower > b.lower ? 1 : 0);
-          const merged: typeof ranges = [];
-          for (const range of ranges) {
-            const previous = merged.at(-1);
-            if (previous && range.lower <= previous.upper) {
-              if (range.upper > previous.upper) previous.upper = range.upper;
-            } else merged.push({ ...range });
-          }
-          for (const range of merged) for (let index = range.lower > start ? range.lower : start; index < range.upper; index++) {
+          if (start > treeEnd) throw new Error('commitment cursor exceeds snapshot frontier');
+          for (let index = start; index < treeEnd; index++) {
             const found = await check(index); if (found) return found;
           }
-          // Event order need not match commitment order. Advancing the event
-          // window resets the index; a qualification pause retains this window.
-          if (!eventHistoryComplete) {
-            uint(nextEventOffset, 'event cursor', 31);
-            return { status: 'unknown', reason: 'commitment event history budget exhausted', nextIndex: '0', nextEventOffset };
-          }
-          return { status: 'unknown', reason: 'no verified commitment position in available output events' };
+          return { status: 'unknown', reason: 'no verified commitment position in completed tree search' };
         } catch (error) {
           return { status: 'unknown', reason: error instanceof Error ? error.message : 'chain evidence unavailable' };
         }

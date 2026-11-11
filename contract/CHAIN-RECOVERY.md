@@ -11,6 +11,13 @@ local and journal descriptions and can explicitly apply verified observations.
 Both return **live**, **spent**, or **unknown** for each distinct coin, a pinned
 block, coverage information, and a `verifiedSubtotal` for each asset.
 
+This implements the inbox walk and candidate qualification described in
+[MIP-0012 §6.5, pinned revision](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/02fce36cfa44541305310dc25fd38f399dbe8d92/mips/mip-0012-native-asset-custody.md#65-coin-store-index-capture-and-discovery),
+using contract events when available and bounded candidate retry otherwise.
+It does not establish the MIP's full
+reconstruction invariant when change was never backfilled or current viewing
+capability is unavailable.
+
 ## What establishes a verified holding
 
 The concrete adapter targets the pinned v9 ledger and indexer API. It checks the
@@ -21,7 +28,9 @@ exact block. Continued scans remain pinned to the same block.
 1. Decrypt an inbox entry with a supplied viewing key, or accept a retained
    description as a candidate. Authentication alone does not establish a coin.
 2. Derive its contract-owned commitment and locate candidate positions from
-   matching shielded receive/mint events, or retained index hints.
+   matching shielded receive/mint events, or retained index hints. If completed
+   event history yields no qualified position, scan candidate indices up to the
+   pinned block's exclusive commitment-tree boundary.
 3. Check the actual commitment witness through the trusted prover's `/check`
    endpoint. Merely constructing an input at an occupied index is insufficient.
 4. Derive the exact contract-owned nullifier and read its finite history through
@@ -30,8 +39,12 @@ exact block. Continued scans remain pinned to the same block.
 
 A qualified commitment with an applied nullifier is **spent**. A qualified
 commitment with a completed, empty nullifier history is **live at that block**.
-Missing events, rejected witnesses, timeouts, truncated streams, malformed
-responses, and budget exhaustion remain **unknown**, with no verified value.
+Once a snapshot is open, a candidate remains **unknown**, with no verified value,
+if no position qualifies or evidence gathering remains incomplete because of
+timeouts, truncated streams, malformed responses, or exhausted budgets. Missing
+event logs trigger candidate retry; a rejected position does not prevent later
+positions from qualifying. Failure to open or validate the snapshot rejects the
+scan before producing a report or applying holdings.
 
 The filtered contract commitment tree omits nullifiers, so it cannot establish
 spentness on its own. The pinned indexer stores nullifiers from applied ledger
@@ -46,6 +59,17 @@ Primary implementation basis: pinned indexer
 [nullifier storage](https://github.com/midnightntwrk/midnight-indexer/blob/b5e6c809/indexer-api/src/infra/storage/shielded_nullifiers.rs),
 [applied ledger events](https://github.com/midnightntwrk/midnight-indexer/blob/b5e6c809/indexer-common/src/domain/ledger/ledger_state.rs),
 and [transactional indexing](https://github.com/midnightntwrk/midnight-indexer/blob/b5e6c809/chain-indexer/src/infra/storage.rs).
+The [block commitment boundary](https://github.com/midnightntwrk/midnight-indexer/blob/b5e6c809/chain-indexer/src/application.rs#L574)
+is captured after applying that block's transactions.
+
+The pinned generated account does not emit the optional receive/mint contract
+logs. Its live event query is therefore empty even when holdings exist. The
+commitment-tree fallback is required on this stack. It may require many bounded
+pages on a large network; missing event logs are not treated as missing coins.
+Worst-case work per candidate scales with the global tree boundary, even though
+the witness tree is filtered to this account. Per-call limits bound each request,
+not the total cost of a complete recovery. Production-scale performance has not
+been established by the small localnet journey.
 
 ## Read-only scan
 
@@ -83,16 +107,21 @@ Inbox, candidate, and commitment limits default to 256 and accept 1 through
 `maxEventPages` adjusts that window. Timeouts are explicit adapter options.
 
 `report.cursor` continues the inbox. Each unknown holding may also have a
-`searchCursor`, containing its coin identity, snapshot, event-window offset,
-and next commitment position. Supply both forms of continuation when present:
+`searchCursor`, containing its coin identity, snapshot, search mode (`events` or
+`tree`), event-window offset, and next commitment position. Supply both forms of
+continuation when present:
 
 ```ts
 const next = await scanHoldings(adapter, {
   networkId: expectedGenesisHash, address,
   viewingKeys: [currentViewingSecret],
-  ...(report.cursor ? { cursor: report.cursor } : {}),
-  candidates: report.holdings.filter(h => h.searchCursor).map(h => ({
-    coin: h.coin, searchCursor: h.searchCursor,
+  cursor: report.cursor ?? {
+    version: 1, scope: report.scope,
+    nextInboxIndex: report.coverage.nextInboxIndex,
+  },
+  candidates: report.holdings.filter(h => h.status === 'unknown').map(h => ({
+    coin: h.coin,
+    ...(h.searchCursor ? { searchCursor: h.searchCursor } : {}),
   })),
 });
 ```
@@ -100,10 +129,21 @@ const next = await scanHoldings(adapter, {
 All cursors in one call must refer to the same network, account, and block. A
 new event window resets the position because event order need not match
 commitment order. A position pause stays within its current event window.
+After event search finishes without qualification, tree mode starts at zero
+and advances through the anchored tree. That mode transition is one-way and
+retains a bounded qualification budget; it is not a submitted trial spend.
 Corrupt, conflicting, or out-of-scope cursors are rejected. Retry unavailable
 evidence without inventing progress. Retain prior reports if presenting a
 multi-page result, deduplicate by coin identity, and keep their snapshot scope.
 Do not add subtotals from overlapping pages.
+
+Indexer retention can make an old snapshot unavailable. In that case, begin a
+new scan at a new anchor; do not combine its observations with the old snapshot.
+
+Carry all unknown descriptions, including those without a search cursor after
+an initial transport failure. The fallback inbox cursor above pins their retry
+to the same block even when the inbox has already ended. Retry according to the
+reported reason; permanent missing evidence need not improve at the same block.
 
 `coverage.complete` describes a single full pass over that pinned inbox and its
 candidate set, with the current viewing key, no unreadable or missing entries,

@@ -18,7 +18,7 @@ function fixture(coins: ShieldedCoin[] = [a]) {
   const keys = generateEncKeyPair();
   const entries: (Uint8Array | null)[] = coins.map(value => sealInboxEntry(keys.publicKey, value));
   const observed = { opens: [] as { address: string; blockHash?: string }[], reads: [] as bigint[],
-    inspections: [] as { id: string; hints: bigint[]; nextIndex?: bigint; eventOffset?: number; maxIndices: number }[] };
+    inspections: [] as { id: string; hints: bigint[]; nextIndex?: bigint; eventOffset?: number; mode?: 'events' | 'tree'; maxIndices: number }[] };
   const states = new Map<string, ChainCoinInspection>();
   for (const [i, value] of coins.entries()) states.set(coinId(value), { status: 'live', coin: { ...value, mt_index: BigInt(i) } });
   const snapshot: ChainRecoverySnapshot = {
@@ -369,4 +369,57 @@ test('transient unknown evidence preserves both dimensions of an existing candid
   const report = await f.scan({ candidates: [{ coin: a, searchCursor }] });
   assert.equal(report.holdings[0].reason, 'temporary verifier outage');
   assert.deepEqual(report.holdings[0].searchCursor, searchCursor);
+});
+
+test('event search can transition to a complete-tree search from index zero', async () => {
+  const f = fixture();
+  f.states.set(coinId(a), { status: 'unknown', reason: 'tree fallback', nextIndex: '0', nextEventOffset: 0, nextMode: 'tree' });
+  const report = await f.scan({ candidates: [{ coin: a, searchCursor: {
+    version: 1, scope, coinId: coinId(a), nextIndex: '999', eventOffset: 200, mode: 'events',
+  } }] });
+  assert.equal(report.holdings[0].reason, 'tree fallback');
+  assert.equal(report.holdings[0].searchCursor?.mode, 'tree');
+  assert.equal(report.holdings[0].searchCursor?.nextIndex, '0');
+  assert.equal(report.holdings[0].searchCursor?.eventOffset, 0);
+});
+
+test('tree continuations reject backwards modes, indices, and event offsets', async t => {
+  for (const [nextIndex, nextEventOffset, nextMode] of [
+    ['0', 0, 'events'], ['8', 0, 'tree'], ['9', 0, 'tree'], ['10', 100, 'tree'], ['10', 0, 'invalid'],
+  ] as const) await t.test(`${nextMode}/${nextIndex}/${nextEventOffset}`, async () => {
+    const f = fixture();
+    f.snapshot.inspect = async () => ({ status: 'unknown', reason: 'bad continuation', nextIndex, nextEventOffset, nextMode } as any);
+    const searchCursor = { version: 1 as const, scope, coinId: coinId(a), nextIndex: '9', eventOffset: 0, mode: 'tree' as const };
+    const report = await f.scan({ candidates: [{ coin: a, searchCursor }] });
+    assert.equal(report.holdings[0].reason, 'inspection-failed');
+    assert.deepEqual(report.holdings[0].searchCursor, searchCursor);
+  });
+});
+
+test('tree mode and retry position survive a transient unknown response', async () => {
+  const f = fixture();
+  f.states.set(coinId(a), { status: 'unknown', reason: 'temporary verifier outage' });
+  const searchCursor = { version: 1 as const, scope, coinId: coinId(a), nextIndex: '91', eventOffset: 0, mode: 'tree' as const };
+  const report = await f.scan({ candidates: [{ coin: a, searchCursor }] });
+  assert.deepEqual(report.holdings[0].searchCursor, searchCursor);
+  assert.equal(f.observed.inspections[0].mode, 'tree');
+  assert.equal(f.observed.inspections[0].nextIndex, 91n);
+});
+
+test('malformed search modes and nonzero tree event offsets reject before snapshot reads', async t => {
+  for (const [mode, eventOffset] of [['invalid', 0], ['tree', 100], [1, 0]] as const) await t.test(`${mode}/${eventOffset}`, async () => {
+    const f = fixture();
+    await assert.rejects(f.scan({ candidates: [{ coin: a, searchCursor: {
+      version: 1, scope, coinId: coinId(a), nextIndex: '0', eventOffset, mode,
+    } as any }] }));
+    assert.equal(f.observed.opens.length, 0);
+  });
+});
+
+test('candidate overflow preserves the tree search mode', async () => {
+  const f = fixture([a, b]);
+  const searchCursor = { version: 1 as const, scope, coinId: coinId(b), nextIndex: '9', eventOffset: 0, mode: 'tree' as const };
+  const report = await f.scan({ maxCandidates: 1, candidates: [{ coin: a }, { coin: b, searchCursor }] });
+  assert.equal(report.holdings[1].reason, 'candidate-budget');
+  assert.deepEqual(report.holdings[1].searchCursor, searchCursor);
 });

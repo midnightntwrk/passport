@@ -15,7 +15,7 @@ import { createSdkChainRecoveryAdapter } from '../wallet/sdk-chain-recovery.js';
 import { JubjubDevice } from '../wallet/signer.js';
 import { generateEncKeyPair, sealInboxEntry } from '../wallet/inbox.js';
 import { coinId, emptyCoinStore } from '../wallet/witnesses.js';
-import type { HoldingsRecoveryReport } from '../wallet/chain-recovery.js';
+import type { CoinSearchCursor } from '../wallet/chain-recovery.js';
 import { mintToUser, userCoinPublicKey } from './flow.js';
 import { confirmTransaction } from './instrumentation.js';
 
@@ -167,6 +167,9 @@ async function main() {
     const adapter = recoveryAdapter(profile.networkId, reader.providers.zkConfigProvider);
     const base = { networkId: profile.networkId, maxEntries: 4096, maxCoinIndices: 4096 };
     const report = await account.recoverHoldings(adapter, base);
+    console.log('recovery observations:', json(report.holdings.map(holding => ({
+      value: holding.coin.value, status: holding.status, reason: holding.reason,
+    }))));
     assert.equal(reader.writes(), initialWrites, 'read-only scan does not alter private inventory');
     assert.equal(reader.forbiddenCalls(), 0, 'viewing recovery signs and submits nothing');
     const fixture = JSON.parse(await readFile(fixturePath, 'utf8'));
@@ -175,6 +178,39 @@ async function main() {
     assert.equal(status(fixture.changeId), phase === 'recover' ? 'live' : 'spent');
     assert.equal(report.verifiedSubtotal.length, 1);
     assert.equal(report.verifiedSubtotal[0].value, phase === 'recover' ? 700n : 200n);
+    const real = report.holdings.find(holding => holding.status === 'live')!;
+    assert.ok(real.qualifiedCoin);
+    const invented = { ...real.coin, nonce: real.coin.nonce.slice() };
+    invented.nonce[0] ^= 1;
+    const snapshot = await adapter.openSnapshot({ address: profile.address, blockHash: report.scope.blockHash });
+    const wrongDescription = await snapshot.inspect(invented,
+      { hints: [real.qualifiedCoin.mt_index], maxIndices: 4096 });
+    assert.equal(wrongDescription.status, 'unknown', 'an occupied index cannot qualify an invented coin');
+    assert.ok(wrongDescription.status === 'unknown');
+    assert.equal(wrongDescription.reason, 'no verified commitment position in completed tree search',
+      'a transport failure must not stand in for the occupied-index negative control');
+    let searchCursor: CoinSearchCursor | undefined, sawTreeCursor = false, treeContinuationVerified = false;
+    for (let attempt = 0; attempt < 4096; attempt++) {
+      const bounded = await account.recoverHoldings(adapter, { ...base, maxCandidates: 1, maxCoinIndices: 1,
+        cursor: { version: 1, scope: report.scope, nextInboxIndex: report.coverage.inboxCount },
+        candidates: [{ coin: real.coin, ...(searchCursor ? { searchCursor } : {}) }] });
+      assert.equal(bounded.holdings.length, 1);
+      assert.equal(bounded.coverage.openedEntries, 0, 'tree continuation does not rescan the inbox');
+      const holding = bounded.holdings[0];
+      assert.equal(holding.id, real.id);
+      if (holding.status === 'live') {
+        assert.equal(holding.qualifiedCoin!.mt_index, real.qualifiedCoin.mt_index);
+        treeContinuationVerified = true;
+        break;
+      }
+      assert.equal(holding.status, 'unknown');
+      assert.ok(holding.searchCursor, 'unfinished bounded search must retain its continuation');
+      searchCursor = holding.searchCursor;
+      if (searchCursor.mode === 'tree') sawTreeCursor = true;
+    }
+    assert.ok(sawTreeCursor, 'the live control must exercise a tree continuation');
+    assert.ok(treeContinuationVerified, 'bounded tree recovery must finish within the local fixture limit');
+    assert.equal(reader.writes(), initialWrites, 'bounded reconstruction leaves private inventory untouched');
     if (phase === 'recover-again') {
       assert.equal(status(fixture.bogusId), 'unknown');
       assert.equal(report.coverage.complete, false);
@@ -205,10 +241,12 @@ async function main() {
       liveCoins: report.holdings.filter(h => h.status === 'live').length, spentCoins: report.holdings.filter(h => h.status === 'spent').length,
       unknownCoins: report.coverage.unknownCandidates, verifiedValue: report.verifiedSubtotal[0].value,
       completeCandidateCoverage: report.coverage.complete, noOriginalInventoryOrJournal: true, signOrSubmitCalls: reader.forbiddenCalls(),
+      occupiedIndexWrongDescriptionRejected: true, treeContinuationVerified,
       wrongKeyIncomplete: true, pageCoverageExplicit: true, idempotentApplication: true,
       importedLive: applied.application!.importedLive, recordedSpent: applied.application!.recordedSpent });
   }
   receipt.status = phase === 'recover-again' ? 'PASS' : 'IN_PROGRESS';
+  delete receipt.failedPhase;
   receipt.lastUpdated = new Date().toISOString();
   await writeFile(receiptPath, json(receipt), { mode: 0o600 });
   console.log(`chain-recovery-localnet ${phase}: PASS`);

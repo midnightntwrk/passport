@@ -37,7 +37,7 @@ async function fixture(t: TestContext) {
   const commitments = unclosed.postBlockUpdate(new Date('2026-11-11T00:00:00Z'), 600n).filter(sim.addressHex);
   const index = positions.get(output.commitment)!;
   const input = ZswapInput.newContractOwned({ ...raw, mt_index: index }, undefined, sim.addressHex, commitments);
-  const block = { hash: anchor, height: 42, protocolVersion: 2_000_000,
+  const block = { hash: anchor, height: 42, protocolVersion: 2_000_000, zswapEndIndex: '2',
     contractZswapState: Buffer.from(commitments.serialize()).toString('hex') };
   const event = { id: 1, version: 1, protocolVersion: 2_000_000, contractAddress: sim.addressHex,
     commitment: output.commitment, transaction: { hash: txHash, block: { hash: outputBlock, height: 40 },
@@ -55,6 +55,7 @@ async function fixture(t: TestContext) {
     // Success is controlled transport evidence. Native preimages contain fresh
     // randomness, and this fixture does not claim to execute the constraints.
     check: (_body: Buffer): number => 200,
+    acknowledge: (socket: WebSocket) => { socket.send(JSON.stringify({ type: 'connection_ack' })); },
     stream: (socket: WebSocket, id: string) => { socket.send(JSON.stringify({ id, type: 'complete' })); },
     beforeAnchor: () => {},
     status: 200,
@@ -99,7 +100,7 @@ async function fixture(t: TestContext) {
   server.on('upgrade', (request, socket, head) => ws.handleUpgrade(request, socket, head, socket => ws.emit('connection', socket, request)));
   ws.on('connection', socket => socket.on('message', data => {
     const message = JSON.parse(String(data));
-    if (message.type === 'connection_init') socket.send(JSON.stringify({ type: 'connection_ack' }));
+    if (message.type === 'connection_init') replies.acknowledge(socket);
     else if (message.type === 'subscribe') {
       observed.subscriptions.push(message);
       replies.stream(socket, message.id);
@@ -119,8 +120,8 @@ async function fixture(t: TestContext) {
     requestTimeoutMs: 1_000, subscriptionTimeoutMs: 250, maxEventPages: 2 };
   const adapter = () => createSdkChainRecoveryAdapter(options);
   const open = () => adapter().openSnapshot({ address: sim.addressHex });
-  const inspect = async (hints: bigint[] = [], nextIndex?: bigint, maxIndices = 10, eventOffset?: number) =>
-    (await open()).inspect(coin, { hints, nextIndex, maxIndices, eventOffset });
+  const inspect = async (hints: bigint[] = [], nextIndex?: bigint, maxIndices = 10, eventOffset?: number, mode?: 'events' | 'tree') =>
+    (await open()).inspect(coin, { hints, nextIndex, maxIndices, eventOffset, mode });
   return { replies, observed, options, adapter, open, inspect, event, spentRow, index, input, sim, keys, entry };
 }
 
@@ -157,6 +158,7 @@ test('SDK rejects incomplete, unrelated, and errored nullifier streams', async t
     ['normal close is not complete', socket => socket.close()],
     ['timeout is not empty history', () => {}],
     ['unrelated operation completion', (socket, id) => socket.send(JSON.stringify({ id: `${id}-other`, type: 'complete' }))],
+    ['completion carrying payload errors', (socket, id) => socket.send(JSON.stringify({ id, type: 'complete', payload: { errors: [{ message: 'fixture error' }] } }))],
     ['GraphQL error', (socket, id) => socket.send(JSON.stringify({ id, type: 'error', payload: [{ message: 'fixture error' }] }))],
     ['next with errors', (socket, id) => socket.send(JSON.stringify({ id, type: 'next', payload: { errors: [{ message: 'fixture error' }] } }))],
     ['malformed JSON', socket => socket.send('{broken')],
@@ -166,6 +168,15 @@ test('SDK rejects incomplete, unrelated, and errored nullifier streams', async t
     f.replies.stream = stream;
     assert.equal((await f.inspect([f.index])).status, 'unknown');
   });
+});
+
+test('SDK completion before connection acknowledgement cannot establish empty history', async t => {
+  const f = await fixture(t);
+  f.replies.acknowledge = socket => { socket.send(JSON.stringify({ id: '1', type: 'complete' })); };
+  const result = await f.inspect([f.index]);
+  assert.equal(result.status, 'unknown');
+  if (result.status === 'unknown') assert.match(result.reason, /unexpected nullifier stream message/);
+  assert.equal(f.observed.subscriptions.length, 0, 'an unsubscribed stream has no bounded history to complete');
 });
 
 test('SDK rejects nullifier scope, exact identity, and receipt inconsistencies', async t => {
@@ -200,6 +211,9 @@ test('SDK refuses wrong genesis, stale snapshots, missing indexer anchors, and u
     ['wrong indexed height', () => { f.replies.block.height = 41; }],
     ['future protocol era', () => { f.replies.block.protocolVersion = 3_000_000; }],
     ['malformed contract state', () => { f.replies.contractState = '00'; }],
+    ['missing commitment frontier', () => { delete f.replies.block.zswapEndIndex; }],
+    ['negative commitment frontier', () => { f.replies.block.zswapEndIndex = '-1'; }],
+    ['out-of-range commitment frontier', () => { f.replies.block.zswapEndIndex = (1n << 64n).toString(); }],
   ];
   const state = f.replies.contractState;
   for (const [name, mutate] of cases) await t.test(name, async () => {
@@ -348,6 +362,7 @@ test('SDK output page transport failure remains unknown rather than an empty his
   f.replies.events = () => { throw new Error('fixture page transport failed'); };
   assert.equal((await f.inspect()).status, 'unknown');
   assert.equal(f.observed.subscriptions.length, 0);
+  assert.equal(f.observed.checks.length, 0, 'a failed event query is not an empty completed history');
 });
 
 test('SDK changing the event-page budget on continuation cannot skip lower positions in a later page', async t => {
@@ -369,4 +384,77 @@ test('SDK changing the event-page budget on continuation cannot skip lower posit
   assert.equal(second.nextIndex, '0');
   assert.equal(second.nextEventOffset, 100);
   assert.equal((await f.inspect([], BigInt(second.nextIndex!), 1, second.nextEventOffset)).status, 'live');
+});
+
+test('SDK empty event history falls back to the bounded complete commitment tree', async t => {
+  const f = await fixture(t);
+  f.replies.events = () => [];
+  let checks = 0; f.replies.check = () => ++checks === 1 ? 400 : 200;
+  const result = await f.inspect();
+  assert.equal(result.status, 'live', result.status === 'unknown' ? result.reason : undefined);
+  assert.equal(result.coin.mt_index, f.index);
+  assert.equal(f.observed.checks.length, 2);
+  assert.equal(f.observed.subscriptions.length, 1, 'membership checking still requires separate nullifier evidence');
+});
+
+test('SDK tree fallback resumes its own cursor without repeating the event query', async t => {
+  const f = await fixture(t);
+  f.replies.events = () => [];
+  let checks = 0; f.replies.check = () => ++checks === 1 ? 400 : 200;
+  const first = await f.inspect([], undefined, 1);
+  assert.equal(first.status, 'unknown');
+  if (first.status !== 'unknown') return;
+  assert.equal(first.nextMode, 'tree');
+  assert.equal(first.nextIndex, '1');
+  assert.equal(first.nextEventOffset, 0);
+  const second = await f.inspect([999n], BigInt(first.nextIndex!), 1, first.nextEventOffset, first.nextMode);
+  assert.equal(second.status, 'live');
+  assert.equal(second.coin.mt_index, f.index);
+  assert.equal(f.observed.requests.filter(value => value.query?.includes('RecoveryOutputs')).length, 1);
+  assert.equal(f.observed.checks.length, 2, 'resumption must not repeat index zero or stale hints');
+});
+
+test('SDK completed tree search never imports an authenticated but unqualified description', async t => {
+  const f = await fixture(t);
+  f.replies.events = () => [];
+  f.replies.check = () => 400;
+  const result = await f.inspect();
+  assert.equal(result.status, 'unknown');
+  if (result.status === 'unknown') {
+    assert.match(result.reason, /no verified commitment|no valid commitment/i);
+    assert.equal(result.nextIndex, undefined, 'the finite tree was completely checked');
+  }
+  assert.equal(f.observed.checks.length, 2);
+  assert.equal(f.observed.subscriptions.length, 0);
+});
+
+test('SDK tree fallback verifier failure remains unknown without a false live subtotal', async t => {
+  const f = await fixture(t);
+  f.replies.events = () => [];
+  f.replies.check = () => 404;
+  const result = await f.inspect();
+  assert.equal(result.status, 'unknown');
+  if (result.status === 'unknown') assert.match(result.reason, /verifier unavailable/);
+  assert.equal(f.observed.checks.length, 1, 'unavailable verification stops rather than treating the failed position as absent');
+  assert.equal(f.observed.subscriptions.length, 0);
+});
+
+test('SDK an empty complete commitment tree cannot establish a live coin', async t => {
+  const f = await fixture(t);
+  f.replies.events = () => [];
+  f.replies.block.zswapEndIndex = '0';
+  assert.equal((await f.inspect()).status, 'unknown');
+  assert.equal(f.observed.checks.length, 0);
+  assert.equal(f.observed.subscriptions.length, 0);
+});
+
+test('SDK changing the commitment frontier during a nullifier scan invalidates its snapshot', async t => {
+  const f = await fixture(t);
+  f.replies.stream = (socket, id) => {
+    f.replies.block.zswapEndIndex = '3';
+    socket.send(JSON.stringify({ id, type: 'complete' }));
+  };
+  const result = await f.inspect([f.index]);
+  assert.equal(result.status, 'unknown');
+  if (result.status === 'unknown') assert.match(result.reason, /snapshot is not indexed consistently/);
 });

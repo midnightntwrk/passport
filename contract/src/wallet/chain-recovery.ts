@@ -23,11 +23,13 @@ export interface CoinSearchCursor {
   coinId: string;
   nextIndex: string;
   eventOffset?: number;
+  /** Omission preserves the initial event search; tree fallback never switches back. */
+  mode?: 'events' | 'tree';
 }
 
 export type ChainCoinInspection =
   | { status: 'live' | 'spent'; coin: QualifiedCoin }
-  | { status: 'unknown'; reason: string; nextIndex?: string; nextEventOffset?: number };
+  | { status: 'unknown'; reason: string; nextIndex?: string; nextEventOffset?: number; nextMode?: 'events' | 'tree' };
 
 export interface ChainRecoverySnapshot {
   scope: ChainRecoveryScope;
@@ -37,7 +39,7 @@ export interface ChainRecoverySnapshot {
   /** Live requires commitment qualification and authoritative nullifier absence;
    * spent requires the exact commitment and authoritative nullifier presence. */
   inspect(coin: ShieldedCoin, options: {
-    hints: bigint[]; nextIndex?: bigint; eventOffset?: number; maxIndices: number;
+    hints: bigint[]; nextIndex?: bigint; eventOffset?: number; mode?: 'events' | 'tree'; maxIndices: number;
   }): Promise<ChainCoinInspection>;
 }
 
@@ -177,9 +179,12 @@ export async function scanHoldings(adapter: ChainRecoveryAdapter, options: ScanH
     const hints = (candidate.hints ?? []).map(index);
     const cursor = candidate.searchCursor ? { version: candidate.searchCursor.version,
       scope: scopeOf(candidate.searchCursor.scope), coinId: candidate.searchCursor.coinId, nextIndex: candidate.searchCursor.nextIndex,
-      ...(candidate.searchCursor.eventOffset === undefined ? {} : { eventOffset: candidate.searchCursor.eventOffset }) } : undefined;
+      ...(candidate.searchCursor.eventOffset === undefined ? {} : { eventOffset: candidate.searchCursor.eventOffset }),
+      ...(candidate.searchCursor.mode === undefined ? {} : { mode: candidate.searchCursor.mode }) } : undefined;
     if (cursor && (cursor.version !== 1 || cursor.coinId !== id || !uint64(cursor.nextIndex)
       || (cursor.eventOffset !== undefined && !eventOffset(cursor.eventOffset))
+      || (cursor.mode !== undefined && !['events', 'tree'].includes(cursor.mode))
+      || (cursor.mode === 'tree' && (cursor.eventOffset ?? 0) !== 0)
       || cursor.scope.networkId !== options.networkId || cursor.scope.address !== options.address)) throw new Error('coin search cursor scope mismatch');
     return { coin, id, hints, cursor, source: candidate.source ?? 'caller' as RecoveryCandidateSource };
   });
@@ -212,7 +217,8 @@ export async function scanHoldings(adapter: ChainRecoveryAdapter, options: ScanH
     if (found) {
       duplicateDescriptions++;
       if (found.cursor && cursor && (found.cursor.nextIndex !== cursor.nextIndex
-        || (found.cursor.eventOffset ?? 0) !== (cursor.eventOffset ?? 0))) throw new Error('conflicting recovery coin cursors');
+        || (found.cursor.eventOffset ?? 0) !== (cursor.eventOffset ?? 0)
+        || (found.cursor.mode ?? 'events') !== (cursor.mode ?? 'events'))) throw new Error('conflicting recovery coin cursors');
       if (cursor) found.cursor = cursor;
     } else {
       found = { holding: { id, coin: cloneCoin(coin), status: 'unknown', sources: [], inboxIndices: [] }, hints: new Set(), cursor };
@@ -244,8 +250,10 @@ export async function scanHoldings(adapter: ChainRecoveryAdapter, options: ScanH
   let inspectedCandidates = 0;
   for (const candidate of pending.values()) {
     const { holding } = candidate;
-    const continuation = (nextIndex: string, offset = candidate.cursor?.eventOffset): CoinSearchCursor => ({
+    const continuation = (nextIndex: string, offset = candidate.cursor?.eventOffset,
+      mode = candidate.cursor?.mode): CoinSearchCursor => ({
       version: 1, scope: { ...scope }, coinId: holding.id, nextIndex, ...(offset === undefined ? {} : { eventOffset: offset }),
+      ...(mode === undefined ? {} : { mode }),
     });
     if (inspectedCandidates >= maxCandidates) {
       holding.reason = 'candidate-budget';
@@ -258,19 +266,28 @@ export async function scanHoldings(adapter: ChainRecoveryAdapter, options: ScanH
       const observed = await snapshot.inspect(cloneCoin(holding.coin), {
         hints: [...candidate.hints], ...(nextIndex === undefined ? {} : { nextIndex }), maxIndices: maxCoinIndices,
         ...(candidate.cursor?.eventOffset === undefined ? {} : { eventOffset: candidate.cursor.eventOffset }),
+        ...(candidate.cursor?.mode === undefined ? {} : { mode: candidate.cursor.mode }),
       });
       assertSnapshot();
       if (!observed || !['live', 'spent', 'unknown'].includes(observed.status)) throw new Error('invalid recovery inspection');
       if (observed.status === 'unknown') {
         if (typeof observed.reason !== 'string' || !observed.reason) throw new Error('invalid recovery inspection reason');
         holding.reason = observed.reason;
-        if (observed.nextIndex !== undefined || observed.nextEventOffset !== undefined) {
+        if (observed.nextIndex !== undefined || observed.nextEventOffset !== undefined || observed.nextMode !== undefined) {
           const nextPosition = observed.nextIndex ?? '0';
-          const nextOffset = observed.nextEventOffset ?? candidate.cursor?.eventOffset ?? 0;
+          const previousMode = candidate.cursor?.mode ?? 'events';
+          const nextMode = observed.nextMode ?? previousMode;
+          const nextOffset = observed.nextEventOffset ?? (nextMode === 'tree' ? 0 : candidate.cursor?.eventOffset ?? 0);
           const previousOffset = candidate.cursor?.eventOffset ?? 0;
-          if (!uint64(nextPosition) || !eventOffset(nextOffset) || nextOffset < previousOffset
-            || (nextOffset === previousOffset && BigInt(nextPosition) <= (nextIndex ?? -1n))) throw new Error('invalid recovery coin continuation');
-          holding.searchCursor = continuation(nextPosition, nextOffset);
+          if (!uint64(nextPosition) || !eventOffset(nextOffset) || !['events', 'tree'].includes(nextMode)
+            || (previousMode === 'tree' && nextMode !== 'tree')
+            || (nextMode === 'tree' && nextOffset !== 0)
+            || (nextMode === previousMode && (nextOffset < previousOffset
+              || (nextOffset === previousOffset && BigInt(nextPosition) <= (nextIndex ?? -1n))))) {
+            throw new Error('invalid recovery coin continuation');
+          }
+          holding.searchCursor = continuation(nextPosition, nextOffset,
+            observed.nextMode ?? candidate.cursor?.mode);
         } else if (candidate.cursor) holding.searchCursor = continuation(candidate.cursor.nextIndex);
       } else {
         const qualified = { ...cloneCoin(observed.coin), mt_index: index(observed.coin.mt_index) };
