@@ -141,6 +141,9 @@ seals the current private viewing key, signs the publication, rechecks the conte
 and verifies the resulting ledger artefacts before recording local freshness.
 It rejects reuse of the current recovery key or session and refuses publication
 while recovery is pending.
+Generate new values with `newRecoverySecret` and `newSessionNonce` from
+`wallet/recovery.ts`. The checks reject current-value reuse; they do not prove
+that a caller-supplied value has never appeared in historical sessions.
 
 Supplying every indexed share does not authenticate the external guardian
 exchange. The caller must derive and obtain those shares under the intended
