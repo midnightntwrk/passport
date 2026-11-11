@@ -13,7 +13,9 @@ requires regression evidence; it does not automatically establish a complete
 capture merged in [#205](https://github.com/midnightntwrk/passport/pull/205),
 `c87933d5eb0b893ac907dfe86a76be462cdfeaf7`, verified against `origin/main` on
 2026/11/11. This implementation starts from that merge on
-`codex/chain-verified-recovery`; validation and review are in progress.
+`codex/chain-verified-recovery`. Implementation, independent review, and targeted
+validation are complete; [#206](https://github.com/midnightntwrk/passport/pull/206)
+awaits review and merge.
 
 **After CUST-03 merges:** verify its merge and retained regression evidence,
 then restore and persist current viewing capability (`REC-WRAP-001`,
@@ -32,7 +34,7 @@ background merge watcher or establish that any later task has started.
 | 3 | Consume bootstrap authority during dormant recovery | `REC-BOOT-001`; `REC-TASK-1` | Merged in #203 | Merge `9d909ae`, 2026/11/10 |
 | 4 | Preserve multiple shielded coins of the same asset | `CUST-01`; `TODO-CUST-01` | Merged in #204 | Merge `277a8e3`, 2026/11/10 |
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
-| 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Implementation and validation in progress | Based on merged priority 5 |
+| 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Implemented and validated; #206 awaits merge | Based on merged priority 5 |
 
 ## 1. Reliable device reconnection
 
@@ -214,7 +216,7 @@ See the [implementation guide](../../contract/CHAIN-RECOVERY.md).
 - [x] Preserve unknown states, incomplete coverage, sibling holdings, and local
   spent tombstones. Bind both inbox and coin continuations to one chain snapshot.
 - [x] Keep uncertain and partial journal reservations quarantined.
-- [ ] Complete targeted regressions, independent review, and fresh-process
+- [x] Complete targeted regressions, independent review, and fresh-process
   localnet validation; record evidence and limitations.
 - [ ] Merge the pull request and record its merge commit.
 
@@ -222,3 +224,29 @@ A complete candidate pass is not proof of a complete account balance. Lost owner
 change that was never backfilled, with its local description and journal also
 lost, cannot be reconstructed from a commitment alone. This API consumes viewing
 keys; it does not yet restore or validate recovery-wrap contents.
+
+Validation on 2026/11/11: all 169 dedicated recovery tests, 230 existing wallet
+and custody regression tests, the TypeScript build, and both existing live-prover
+qualification controls passed. The four fresh-process localnet phases passed:
+provision two same-colour deposits and owner change, reconstruct with viewing
+capability alone, spend recovered change from another client, and reconstruct
+again. The verified subtotal fell from 700 to 200. Spent originals and change
+were excluded, duplicate descriptions added no value, and an authenticated
+invented description stayed unknown. Both recovery phases rejected an invented
+description at a real occupied commitment index through the actual prover. The
+final phase also verified continuation with one commitment position per call.
+Seven successful transaction receipts were cross-checked against node block hashes.
+
+The first live attempt exposed an integration gap: the pinned generated account
+does not emit the optional contract receive/mint logs. Recovery now falls back
+to bounded candidate retry through the pinned block's exclusive commitment-tree
+boundary. This is tested, but its worst-case work scales with the global tree.
+Optimising discovery through emitted events or complete indexed account history,
+and measuring recovery at production scale, remain follow-up work. Partial
+transaction repair and current viewing-key restoration also remain open.
+
+The live run reused the pinned full keyed artefacts generated on 2026/11/10.
+There was no circuit change or new key generation. Controlled SDK transport
+fixtures, native-ledger tests, actual prover checks, and node acceptance evidence
+are separate validation layers. This is targeted custody evidence, not the full
+localnet matrix or complete MIP conformance.

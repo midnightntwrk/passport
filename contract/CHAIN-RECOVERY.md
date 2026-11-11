@@ -199,5 +199,24 @@ quarantined. Repairing partial execution needs separate transaction-level eviden
 real native-ledger negative controls, and controlled HTTP/WebSocket failures.
 SDK transport fixtures mock prover responses and do not claim live proofs.
 The separate localnet journey in `src/tests/chain-recovery-localnet.ts` exercises
-real proof checks and fresh-process reconstruction. Its run results are recorded
-in the remediation queue after execution.
+real proof checks and fresh-process reconstruction. All four phases passed on
+2026/11/11, including viewing-only reconstruction,
+external spending, duplicate and bogus entries, the occupied-index negative
+control, and one-position tree continuation. The run reused existing keyed
+artefacts. See the [remediation queue](../docs/plans/AUDIT-REMEDIATION.md#6-chain-verified-holdings-reconstruction)
+for counts, results, and scope limits.
+
+To repeat the live journey, start the isolated loopback localnet described in
+[the contract setup guide](README.md), with the pinned keyed
+artefacts available, then run these commands from `contract/`. Use a fresh,
+private fixture directory and the public development wallet only:
+
+```sh
+node --import tsx src/tests/chain-recovery-localnet.ts provision /private/tmp/chain-recovery-fixture
+node --import tsx src/tests/chain-recovery-localnet.ts recover /private/tmp/chain-recovery-fixture
+node --import tsx src/tests/chain-recovery-localnet.ts external-spend /private/tmp/chain-recovery-fixture
+node --import tsx src/tests/chain-recovery-localnet.ts recover-again /private/tmp/chain-recovery-fixture
+```
+
+The fixture directory contains private viewing and journal material. Only its
+sanitised `receipt.json` and status logs belong in shared validation evidence.
