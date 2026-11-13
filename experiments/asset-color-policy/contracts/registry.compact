@@ -1,0 +1,26 @@
+pragma language_version 0.27;
+import CompactStandardLibrary;
+
+contract Policy {
+  circuit check(key: Bytes<32>): [];
+}
+
+// EXPERIMENT ONLY: a typed policy reference selected by an asset key.
+export ledger policies: Map<Bytes<32>, Policy>;
+export ledger admin_commitment: Bytes<32>;
+
+constructor(key: Bytes<32>, policy: Policy, admin_hash: Bytes<32>) {
+  policies.insert(disclose(key), disclose(policy));
+  admin_commitment = disclose(admin_hash);
+}
+
+export circuit resolve(key: Bytes<32>): Policy {
+  assert(policies.member(disclose(key)), "registry has no policy for asset");
+  return policies.lookup(disclose(key));
+}
+
+export circuit rebind(key: Bytes<32>, policy: Policy, secret: Bytes<32>): [] {
+  assert(persistentHash<Bytes<32>>(secret) == admin_commitment, "invalid registry admin");
+  assert(policies.member(disclose(key)), "registry has no policy for asset");
+  policies.insert(disclose(key), disclose(policy));
+}
