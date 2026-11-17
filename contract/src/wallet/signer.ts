@@ -149,7 +149,7 @@ export class JubjubDevice {
       grindNonce++;
     }
 
-    const s = (r + ((c % JUBJUB_R) * (this.sk % JUBJUB_R)) % JUBJUB_R) % JUBJUB_R;
+    const s = (r + ((c % JUBJUB_R) * this.sk) % JUBJUB_R) % JUBJUB_R;
     return { arm: 'jubjub', pk: this.pk, use_counter: useCounter, sig_r: sigR, sig_s: s, grind_nonce: grindNonce };
   }
 }
@@ -789,7 +789,7 @@ function schnorrSignGrinding(sk: bigint, challenge: ChallengeBuilder): {
     }
     grindNonce++;
   }
-  const s = (r + ((c % JUBJUB_R) * (sk % JUBJUB_R)) % JUBJUB_R) % JUBJUB_R;
+  const s = (r + ((c % JUBJUB_R) * sk) % JUBJUB_R) % JUBJUB_R;
   return { sig_r: sigR, sig_s: s, grind_nonce: grindNonce };
 }
 

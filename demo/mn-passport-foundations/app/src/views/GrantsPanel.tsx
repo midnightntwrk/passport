@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
-import { hexToBytes, bytesToHex, randomBytes32 } from '../../../src/wallet/hex.js';
+import { bytesToHex, randomBytes32 } from '../../../src/wallet/hex.js';
+import { parseGrantSecret } from '../../../src/wallet/grant-secret.js';
 
 import { userAddressBytes } from '../lib/providers.js';
 import { ViewHeader, Panel, ActionButton, Mono, Chip, CapBar } from '../ui.js';
@@ -122,7 +123,7 @@ export function GrantsPanel({ ctx }: { ctx: AppContext }) {
             onRun={async () => {
               // A separate connection holding ONLY the grant secret — exactly
               // what a dApp backend would hold.
-              const dapp = await ctx.reconnect({ grantSecret: hexToBytes(dappSecret.trim()) });
+              const dapp = await ctx.reconnect({ grantSecret: parseGrantSecret(dappSecret) });
               const r = await dapp.grantWithdrawNight(
                 nightColor,
                 BigInt(dappAmount),
