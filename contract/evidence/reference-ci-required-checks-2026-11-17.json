@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-11-17 14:25:38 UTC",
+  "repository": "midnightntwrk/passport",
+  "branch": "main",
+  "workflowMerge": {
+    "pullRequest": 208,
+    "commit": "99062671d939641cb9ed9274d3d18fce764d539a",
+    "mergedAt": "2026-11-11T18:24:08Z"
+  },
+  "requiredStatusChecks": {
+    "strict": true,
+    "checks": [
+      {
+        "context": "scan",
+        "app_id": null
+      },
+      {
+        "context": "DCO",
+        "app_id": 1861
+      },
+      {
+        "context": "Reference regression",
+        "app_id": 15368
+      }
+    ]
+  },
+  "enforceAdmins": true,
+  "appliedPullRequestCheck": {
+    "pullRequest": 210,
+    "head": "185d82d141e85eecc7676019d79cdbc0c3d7b92c",
+    "requiredChecks": [
+      "scan",
+      "Reference regression",
+      "DCO"
+    ]
+  },
+  "verificationCommands": [
+    "gh api repos/midnightntwrk/passport/branches/main/protection",
+    "gh pr checks 210 --repo midnightntwrk/passport --required --json name,state,bucket,link",
+    "gh pr view 208 --repo midnightntwrk/passport --json state,mergedAt,mergeCommit"
+  ],
+  "scope": "Read-only confirmation of active main branch protection and the required-check list on an open pull request. The proof/localnet workflow remains a separate manual tier."
+}

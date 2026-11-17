@@ -13,14 +13,17 @@ part of this CI baseline.
 | **Reference proof and localnet** | Manual dispatch only | Complete fresh reference keys, the keyed SDK assembly test, deployment-artefact checks, native-prover controls, and a three-process JubJub recovery journey on a fresh localnet. This is a bounded integration tier, not the full conformance matrix. |
 
 The fast workflow has no path or target-branch filter. This keeps its check
-available for stacked pull requests and for a future required-check policy.
+available for stacked pull requests and the required-check policy configured
+on `main` on 2026/11/17.
 The heavy workflow is deliberately manual and must not be configured as a
 required pull-request check. It has no automatic PR, push, or scheduled trigger.
 GitHub manual dispatch requires the workflow on the default branch; the local
 commands below provide a route before it merges.
 
-Routine CI targets under ten minutes, with a fifteen-minute job limit and
-ten-minute per-command limits. This is a performance target, not a guarantee.
+Routine commands retain ten-minute limits. Fresh reference compilation has
+a separate twenty-minute budget, within a thirty-minute job limit: the
+Ledger profile's [validated run](https://github.com/midnightntwrk/passport/actions/runs/44094728407)
+needed 725 seconds to compile. These are execution bounds, not latency guarantees.
 The initial keyed fast run took about twelve minutes, including 507 seconds of
 compilation. A complete key build took 58 minutes before proving or localnet
 execution. Routine CI therefore omits key generation; the one SDK assembly
@@ -140,18 +143,17 @@ circuits, compiler pins, proof integration, or recovery. These paths have no
 automatic proof coverage unless someone explicitly runs that tier; a green
 routine PR check cannot substitute for it.
 
-## Merge enforcement and remaining acceptance
+## Merge enforcement
 
-A read-only check on 2026/11/11 found main's required contexts were `scan` and
-`DCO`. The separate active ruleset did not add reference test requirements.
-This implementation does not change repository protection settings.
-
-After the workflow is merged and its final check name is established, an
-administrator must add **Reference regression** to the required checks if it
-is to block merging. Retain existing review, signature, and status requirements.
-Demonstrating a failing source invariant makes this workflow fail; it does not
-by itself demonstrate required-check enforcement. `TODO-CI-01` remains open
-for that separate configuration and enforcement evidence.
+**Configured and verified on 2026/11/17; `TODO-CI-01` is complete.**
+The user added **Reference regression** to `main`'s required status checks,
+retaining `scan` and `DCO`. The new check is bound to GitHub Actions (app ID
+15368); branches must be up to date, and protection applies to administrators.
+The branch-protection API and `gh pr checks 210 --required` both confirm the
+requirement. The [configuration receipt](evidence/reference-ci-required-checks-2026-11-17.json)
+records this read-only verification separately from the earlier failing-source
+control. The workflow itself merged in #208 on 2026/11/11. Full proving and
+localnet remain manual and are not required PR checks.
 
 Current validation and dependency state are recorded in the
 [remediation queue](../docs/plans/AUDIT-REMEDIATION.md).
