@@ -1,0 +1,11 @@
+{
+  "outcome": "PASS",
+  "timestamp": "2026-11-17T12:51:18.801281+00:00",
+  "adapter_sha256": "52548ba5d7ee793cf9cad7de1b93df845508280c871e57c7be7829f001711721",
+  "cache_manifest_sha256": "3287908a8da6950fda31b6173710309d1c3a726fdb2e3a413719ef8006fcfb47",
+  "cache_root": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/ledger-flex-account/contract/contracts/managed/account",
+  "stage": "/private/tmp/ledger-flex-account-finalized",
+  "regenerated_text_ir_checked": 52,
+  "cached_artifacts_rehashed": 208,
+  "artifacts_copied_and_rehashed": 156
+}

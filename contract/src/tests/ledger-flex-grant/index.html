@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passport — Ledger grant test</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#0b0c10;color:#f8f9fc}body{max-width:900px;margin:40px auto;padding:0 24px}h1{font-size:36px;line-height:1.2}h2{font-size:19px}.muted{color:#b3bece}section{background:#171a23;border:1px solid #303745;border-radius:14px;padding:24px;margin:20px 0}button{border:0;border-radius:8px;padding:14px 20px;margin:12px 8px 0 0;font:inherit;font-weight:650;background:#5be0c1;color:#0b0c10;cursor:pointer}button:disabled{opacity:.5;cursor:wait}[hidden]{display:none}pre,code{font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}#error{color:#ffc27a}#phase{color:#5be0c1;font-weight:650}input{font:inherit;max-width:100%}
+</style>
+<p class="muted">PASSPORT / LOCALNET EXPERIMENT</p>
+<h1>Use your Ledger as a grant key.</h1>
+<p>A fresh account receives 100 test units. Its owner grants your Ledger authority to spend up to 12 units, with a maximum of 10 per call and one fixed recipient.</p>
+<section><div id="phase">CONNECTING</div><h2 id="status">Connecting…</h2>
+<p>Connect and unlock your Flex over USB, then open <strong>Ledger Security Key</strong>.</p>
+<div id="registration" hidden>
+<label>Earlier Ledger capture <input id="capture" type="file" accept=".json,application/json"></label><br>
+<button id="import">Use credential from capture</button><button id="create">Create new security-key credential</button>
+<p class="muted">Import uses only the public key and credential ID. A new signature is required for each account request. For a new credential, choose a USB security key in the browser prompt.</p>
+</div>
+<button id="approve" hidden>Sign with Ledger</button><p id="error" role="alert"></p></section>
+<section><h2>What happens</h2>
+<ol><li>Approve a 5-unit spend from the grant.</li><li>Sign a 1-unit revocation test. The owner revokes the grant before this request is attempted, so it must fail.</li></ol>
+<p class="muted">Only non-native localnet test assets are used. The software test owner pays fees and manages the grant. Ledger WebAuthn confirms the localhost relying party; the operation details are displayed by this browser, not on the Ledger screen.</p>
+<h2>Account</h2><code id="account"></code><h2>Current operation</h2><pre id="operation"></pre></section>
+<section><h2>Progress and results</h2><pre id="events"></pre><pre id="result"></pre></section>
+<script type="module" src="/app.js"></script>
+</html>

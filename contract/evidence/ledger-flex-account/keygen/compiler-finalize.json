@@ -1,0 +1,17 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 439.367,
+  "finished_at": "2026-11-17T12:51:28.754165+00:00",
+  "command": [
+    "/Users/nicolasdiprima/.compact/versions/0.35.0/aarch64-darwin/compactc.bin",
+    "--feature-zkir-v3",
+    "contracts/account.compact",
+    "/tmp/ledger-flex-account-finalized"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/ledger-flex-account/contract",
+  "task_local_path_prefix": [
+    "/tmp/ledger-flex-account-cache-adapter",
+    "/Users/nicolasdiprima/.compact/versions/0.35.0/aarch64-darwin"
+  ],
+  "rayon_num_threads": 2
+}

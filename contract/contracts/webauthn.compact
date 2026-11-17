@@ -1,7 +1,10 @@
 // Profiled WebAuthn assertion verification. Every signed byte is reconstructed
 // in-circuit; a client-supplied hash or a client-only JSON check is insufficient.
-// This profile accepts the Level-3 JSON order type/challenge/origin/crossOrigin,
-// with crossOrigin=false, no additional members, and 37-byte authenticatorData.
+// The account profile accepts the Level-3 JSON order type/challenge/origin/
+// crossOrigin, with crossOrigin=false, either no extra member or Chromium's
+// exact GREASE member, and 37-byte authenticatorData. This is a two-shape
+// profile, not arbitrary variable-length JSON. The selector chooses a hash
+// computed in-circuit, never a client-supplied digest.
 // originLength is a compile-time profile parameter, not a padded signed string.
 module WebAuthn<#originLength> {
   import CompactStandardLibrary;
@@ -80,6 +83,24 @@ module WebAuthn<#originLength> {
     ]);
   }
 
+  export pure circuit webauthn_client_data_hash_chrome_grease(
+    challenge: Bytes<32>, origin: Bytes<originLength>
+  ): Bytes<32> {
+    for (const b of origin) {
+      assert(b >= 33 && b <= 126 && b != 34 && b != 92, "invalid origin bytes");
+    }
+    // Chromium sometimes appends exactly this member. Every byte, including
+    // the extra member and closing brace, belongs to the signed JSON hash.
+    // With a 21-byte origin the complete message is 243 bytes.
+    return persistentHash<[Bytes<36>, Bytes<43>, Bytes<12>, Bytes<originLength>, Bytes<21>, Bytes<109>, Bytes<1>]>([
+      pad(36, "{\"type\":\"webauthn.get\",\"challenge\":\""),
+      webauthn_challenge_base64(challenge), pad(12, "\",\"origin\":\""),
+      origin, pad(21, "\",\"crossOrigin\":false"),
+      pad(109, ",\"other_keys_can_be_added_here\":\"do not compare clientDataJSON against a template. See https://goo.gl/yabPex\""),
+      pad(1, "}")
+    ]);
+  }
+
   export pure circuit p256_verify_digest(
     digest: Bytes<32>, sig: Secp256r1EcdsaSignature, pk: Secp256r1Point
   ): Boolean {
@@ -91,10 +112,10 @@ module WebAuthn<#originLength> {
     return secp256r1EcdsaVerify(digest, sig, pk);
   }
 
-  export pure circuit webauthn_verify(
+  export pure circuit webauthn_verify_profiled(
     challenge: Bytes<32>, policy: WebAuthnPolicy,
     authenticator_data: Bytes<37>, sig: Secp256r1EcdsaSignature,
-    pk: Secp256r1Point
+    pk: Secp256r1Point, chrome_grease: Boolean
   ): Boolean {
     assert(slice<32>(authenticator_data, 0) == policy.rp_id_hash, "WebAuthn RP mismatch");
     // UP + UV required for every operation. AT/ED and reserved bits are clear;
@@ -103,9 +124,19 @@ module WebAuthn<#originLength> {
     assert(flags == 5 || flags == 13 || flags == 29, "WebAuthn flags require UP and UV");
     // signCount is signed but deliberately not an anti-replay counter: synced
     // passkeys may return zero. Device/grant nonces carry transaction freshness.
-    const digest = persistentHash<[Bytes<37>, Bytes<32>]>([
-      authenticator_data, webauthn_client_data_hash(challenge, policy.origin)
-    ]);
+    const client_hash = chrome_grease
+      ? webauthn_client_data_hash_chrome_grease(challenge, policy.origin)
+      : webauthn_client_data_hash(challenge, policy.origin);
+    const digest = persistentHash<[Bytes<37>, Bytes<32>]>([authenticator_data, client_hash]);
     return p256_verify_digest(digest, sig, pk);
+  }
+
+  // Keep the original fixed-profile helper for existing probes and vectors.
+  export pure circuit webauthn_verify(
+    challenge: Bytes<32>, policy: WebAuthnPolicy,
+    authenticator_data: Bytes<37>, sig: Secp256r1EcdsaSignature,
+    pk: Secp256r1Point
+  ): Boolean {
+    return webauthn_verify_profiled(challenge, policy, authenticator_data, sig, pk, false);
   }
 }

@@ -72,7 +72,10 @@
     "test:viewing-recovery": "node --import tsx --test src/tests/viewing-recovery.ts src/tests/viewing-recovery-account.ts src/tests/viewing-key-store.ts",
     "ci:compile": "bash scripts/ci-compile-reference.sh runtime-only",
     "ci:reference": "node scripts/ci-reference.mjs",
-    "ci:evidence": "node scripts/ci-evidence.mjs"
+    "ci:evidence": "node scripts/ci-evidence.mjs",
+    "test:ledger-flex-offline": "tsx src/tests/ledger-flex-offline.ts",
+    "test:ledger-flex-grant": "tsx src/tests/ledger-flex-grant.ts",
+    "verify:ledger-flex": "node --import tsx src/tests/ledger-flex-evidence.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

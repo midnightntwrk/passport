@@ -3,6 +3,9 @@
 // Keys, RP and exact origin are private authorisation inputs. Device entries
 // and boot commitments bind the policy, so a prover cannot choose a new RP.
 // Grant identity binds origin; its salted rp_commit binds the RP separately.
+// chrome_grease selects between two canonical signed JSON encodings for the
+// same policy. It is not credential identity or a caller-supplied digest;
+// the signature must verify over the selected in-circuit reconstruction.
 
 // Keep these structs internal: Compact 0.35's exported-struct TypeScript
 // unifier omits curve-secp256r1. Inline ABI emission handles the same fields.
@@ -12,6 +15,7 @@ struct P256Auth {
   policy: WebAuthnPolicy;
   authenticator_data: Bytes<37>;
   sig: Secp256r1EcdsaSignature;
+  chrome_grease: Boolean;
 }
 
 struct P256GrantAuth {
@@ -19,6 +23,7 @@ struct P256GrantAuth {
   policy: WebAuthnPolicy;
   authenticator_data: Bytes<37>;
   sig: Secp256r1EcdsaSignature;
+  chrome_grease: Boolean;
 }
 
 export pure circuit compute_public_point_with_p256(scalar: Secp256r1Scalar): Secp256r1Point {
@@ -59,7 +64,7 @@ circuit require_authorised_with_p256(auth: P256Auth, challenge: Bytes<32>): [] {
     kernel.self(), auth.pk, auth.policy, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(webauthn_verify(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk),
+  assert(webauthn_verify_profiled(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk, auth.chrome_grease),
          "invalid WebAuthn signature");
   devices.remove(entry);
   devices.insert(disclose(derive_device_entry_with_p256(
@@ -333,7 +338,7 @@ circuit settle_grant_with_p256(
   id: Bytes<32>, g: GrantRecord, auth: P256GrantAuth, challenge: Bytes<32>,
   scope_salt: Bytes<32>, new_spent: Uint<128>
 ): [] {
-  assert(webauthn_verify(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk), "invalid grant signature");
+  assert(webauthn_verify_profiled(challenge, auth.policy, auth.authenticator_data, auth.sig, auth.pk, auth.chrome_grease), "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch: g.epoch, gen: g.gen, issued_at: g.issued_at, nonce: (g.nonce + 1) as Uint<64>,
     spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),

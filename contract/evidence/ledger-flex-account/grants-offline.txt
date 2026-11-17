@@ -1,0 +1,145 @@
+
+── [dev k256 / grantee k256] lifecycle and the unshielded grant twin
+PASS  [dev k256/grantee k256] spec_version is 3
+PASS  [dev k256/grantee k256] grant state starts empty at generation 0
+PASS  [dev k256/grantee k256] device signs and stores caller pin
+PASS  [dev k256/grantee k256] caller pin cannot be added to signed unrestricted scope aborts with "invalid signature" or "range error"
+PASS  [dev k256/grantee k256] read-only grant cannot restrict caller aborts with "read-only grant cannot restrict caller"
+PASS  [dev k256/grantee k256] empty scope aborts with "empty scope"
+PASS  [dev k256/grantee k256] shielded without read aborts with "shielded spend requires read"
+PASS  [dev k256/grantee k256] per_call_cap > cap aborts with "per-call cap above cap"
+PASS  [dev k256/grantee k256] spend with max_coin_value < per_call_cap aborts with "coin bound below per-call cap"
+PASS  [dev k256/grantee k256] read without delegate key aborts with "read without delegate key"
+PASS  [dev k256/grantee k256] window bounds reserved aborts with "window bounds reserved"
+PASS  [dev k256/grantee k256] read-only grant with object fields aborts with "read-only grant carries object fields"
+PASS  [dev k256/grantee k256] no record written by a refused issue (local abort leaves state untouched)
+PASS  [dev k256/grantee k256] issue over an absent id writes the record
+PASS  [dev k256/grantee k256] record epoch/gen/active/nonce as specified
+PASS  [dev k256/grantee k256] issued_at is auth_nonce as advanced by the device seam
+PASS  [dev k256/grantee k256] spent_commit commits to 0
+PASS  [dev k256/grantee k256] object_commit as derived
+PASS  [dev k256/grantee k256] rp_commit as derived
+PASS  [dev k256/grantee k256] clear scope fields written
+PASS  [dev k256/grantee k256] re-issue over a live id aborts with "grant already active"
+PASS  [dev k256/grantee k256] revoke of an absent id aborts with "unknown grant"
+PASS  [dev k256/grantee k256] read-only grant under slot 1 issued
+PASS  [dev k256/grantee k256] mirror funded off-node (receiveUnshielded simulated)
+PASS  [dev k256/grantee k256] grant call advances the record nonce
+PASS  [dev k256/grantee k256] spent_commit re-commits to the cumulative spend
+PASS  [dev k256/grantee k256] auth_nonce unchanged by a grant call (GR-5)
+PASS  [dev k256/grantee k256] round advanced exactly once (GR-13)
+PASS  [dev k256/grantee k256] device_count untouched (GR-12)
+PASS  [dev k256/grantee k256] mirror debited by the custody chip
+PASS  [dev k256/grantee k256] identical resubmission (stale nonce) aborts with "invalid grant signature"
+PASS  [dev k256/grantee k256] over per_call_cap aborts with "amount above per-call cap"
+PASS  [dev k256/grantee k256] over cumulative cap (200 + 300 > 450) aborts with "cumulative cap exceeded"
+PASS  [dev k256/grantee k256] wrong spent_prev opening aborts with "spent opening mismatch"
+PASS  [dev k256/grantee k256] wrong recipient under pin aborts with "recipient not admitted by pin"
+PASS  [dev k256/grantee k256] recipient-kind mismatch (opening 2 against committed 1) aborts with "scope object mismatch"
+PASS  [dev k256/grantee k256] wrong scope_salt aborts with "scope object mismatch"
+PASS  [dev k256/grantee k256] foreign key (no record) aborts with "unknown grant"
+PASS  [dev k256/grantee k256] out-of-scope operation aborts with "operation not in scope"
+PASS  [dev k256/grantee k256] state restored to the post-success snapshot for the next items
+PASS  [dev k256/grantee k256] grantee key against the device seam aborts with "unknown device entry"
+PASS  [dev k256/grantee k256] grant call before expires_at executes (blockTimeLessThan true)
+PASS  [dev k256/grantee k256] grant call after expires_at aborts with "grant expired"
+PASS  [dev k256/grantee k256] expires_at = 0 never expires (second call on the open-ended grant)
+PASS  [dev k256/grantee k256] revoke writes a tombstone, other fields kept
+PASS  [dev k256/grantee k256] grant call against a tombstone aborts with "grant revoked"
+PASS  [dev k256/grantee k256] revoke of a tombstone aborts with "grant not live"
+PASS  [dev k256/grantee k256] re-issue over a tombstone yields a fresh incarnation
+PASS  [dev k256/grantee k256] prior-incarnation opening against the re-issue aborts with "scope object mismatch"
+PASS  [dev k256/grantee k256] revoke_all bumps grant_generation
+PASS  [dev k256/grantee k256] revoke_all resets the map (3 records cleared)
+PASS  [dev k256/grantee k256] grant call after revoke_all (record absent) aborts with "unknown grant"
+PASS  [dev k256/grantee k256] re-issue under the new generation records gen = 1
+
+── [dev jubjub / grantee jubjub] lifecycle and the unshielded grant twin
+PASS  [dev jubjub/grantee jubjub] spec_version is 3
+PASS  [dev jubjub/grantee jubjub] grant state starts empty at generation 0
+PASS  [dev jubjub/grantee jubjub] device signs and stores caller pin
+PASS  [dev jubjub/grantee jubjub] caller pin cannot be added to signed unrestricted scope aborts with "invalid signature" or "range error"
+PASS  [dev jubjub/grantee jubjub] read-only grant cannot restrict caller aborts with "read-only grant cannot restrict caller"
+PASS  [dev jubjub/grantee jubjub] empty scope aborts with "empty scope"
+PASS  [dev jubjub/grantee jubjub] shielded without read aborts with "shielded spend requires read"
+PASS  [dev jubjub/grantee jubjub] per_call_cap > cap aborts with "per-call cap above cap"
+PASS  [dev jubjub/grantee jubjub] spend with max_coin_value < per_call_cap aborts with "coin bound below per-call cap"
+PASS  [dev jubjub/grantee jubjub] read without delegate key aborts with "read without delegate key"
+PASS  [dev jubjub/grantee jubjub] window bounds reserved aborts with "window bounds reserved"
+PASS  [dev jubjub/grantee jubjub] read-only grant with object fields aborts with "read-only grant carries object fields"
+PASS  [dev jubjub/grantee jubjub] no record written by a refused issue (local abort leaves state untouched)
+PASS  [dev jubjub/grantee jubjub] issue over an absent id writes the record
+PASS  [dev jubjub/grantee jubjub] record epoch/gen/active/nonce as specified
+PASS  [dev jubjub/grantee jubjub] issued_at is auth_nonce as advanced by the device seam
+PASS  [dev jubjub/grantee jubjub] spent_commit commits to 0
+PASS  [dev jubjub/grantee jubjub] object_commit as derived
+PASS  [dev jubjub/grantee jubjub] rp_commit as derived
+PASS  [dev jubjub/grantee jubjub] clear scope fields written
+PASS  [dev jubjub/grantee jubjub] re-issue over a live id aborts with "grant already active"
+PASS  [dev jubjub/grantee jubjub] revoke of an absent id aborts with "unknown grant"
+PASS  [dev jubjub/grantee jubjub] read-only grant under slot 1 issued
+PASS  [dev jubjub/grantee jubjub] mirror funded off-node (receiveUnshielded simulated)
+PASS  [dev jubjub/grantee jubjub] grant call advances the record nonce
+PASS  [dev jubjub/grantee jubjub] spent_commit re-commits to the cumulative spend
+PASS  [dev jubjub/grantee jubjub] auth_nonce unchanged by a grant call (GR-5)
+PASS  [dev jubjub/grantee jubjub] round advanced exactly once (GR-13)
+PASS  [dev jubjub/grantee jubjub] device_count untouched (GR-12)
+PASS  [dev jubjub/grantee jubjub] mirror debited by the custody chip
+PASS  [dev jubjub/grantee jubjub] identical resubmission (stale nonce) aborts with "invalid grant signature" or "range error"
+PASS  [dev jubjub/grantee jubjub] over per_call_cap aborts with "amount above per-call cap"
+PASS  [dev jubjub/grantee jubjub] over cumulative cap (200 + 300 > 450) aborts with "cumulative cap exceeded"
+PASS  [dev jubjub/grantee jubjub] wrong spent_prev opening aborts with "spent opening mismatch"
+PASS  [dev jubjub/grantee jubjub] wrong recipient under pin aborts with "recipient not admitted by pin"
+PASS  [dev jubjub/grantee jubjub] recipient-kind mismatch (opening 2 against committed 1) aborts with "scope object mismatch"
+PASS  [dev jubjub/grantee jubjub] wrong scope_salt aborts with "scope object mismatch"
+PASS  [dev jubjub/grantee jubjub] foreign key (no record) aborts with "unknown grant"
+PASS  [dev jubjub/grantee jubjub] out-of-scope operation aborts with "operation not in scope"
+PASS  [dev jubjub/grantee jubjub] state restored to the post-success snapshot for the next items
+PASS  [dev jubjub/grantee jubjub] grantee key against the device seam aborts with "unknown device entry"
+PASS  [dev jubjub/grantee jubjub] grant call before expires_at executes (blockTimeLessThan true)
+PASS  [dev jubjub/grantee jubjub] grant call after expires_at aborts with "grant expired"
+PASS  [dev jubjub/grantee jubjub] expires_at = 0 never expires (second call on the open-ended grant)
+PASS  [dev jubjub/grantee jubjub] revoke writes a tombstone, other fields kept
+PASS  [dev jubjub/grantee jubjub] grant call against a tombstone aborts with "grant revoked"
+PASS  [dev jubjub/grantee jubjub] revoke of a tombstone aborts with "grant not live"
+PASS  [dev jubjub/grantee jubjub] re-issue over a tombstone yields a fresh incarnation
+PASS  [dev jubjub/grantee jubjub] prior-incarnation opening against the re-issue aborts with "scope object mismatch"
+PASS  [dev jubjub/grantee jubjub] revoke_all bumps grant_generation
+PASS  [dev jubjub/grantee jubjub] revoke_all resets the map (3 records cleared)
+PASS  [dev jubjub/grantee jubjub] grant call after revoke_all (record absent) aborts with "unknown grant"
+PASS  [dev jubjub/grantee jubjub] re-issue under the new generation records gen = 1
+
+── arm-specific negatives
+PASS  [k256] grantee at the point at infinity aborts with "identity point"
+PASS  [k256] wrong envelope in the trailer (grant_id mismatch) aborts with "envelope not admitted for a spend grant"
+PASS  [k256] an envelope-1 grantee is a different grant identity from the same key at envelope 0
+PASS  [k256] envelope-1 grantee spending aborts with "envelope not admitted for a spend grant"
+PASS  [jubjub] grantee at the identity (0, 1) aborts with "grantee key has small order"
+PASS  [jubjub] grantee at the order-2 point (0, -1) aborts: unreachable
+PASS  [jubjub] signature presented under the wrong grind nonce aborts with "invalid grant signature" or "range error"
+PASS  [cross-arm] a jubjub grantee against a k256 grant aborts with "unknown grant"
+PASS  [cross-arm] a k256 grantee against a jubjub grant aborts with "unknown grant"
+PASS  [negatives] no negative disturbed the grant generation
+
+── the shielded twins, which cannot execute off-node
+PASS  withdraw_shielded_with_grant_k256 exists and declares 15 arguments
+PASS  withdraw_shielded_to_contract_with_grant_k256 exists and declares 15 arguments
+PASS  withdraw_shielded_with_grant_jubjub exists and declares 16 arguments
+PASS  withdraw_shielded_to_contract_with_grant_jubjub exists and declares 16 arguments
+
+── client-side issue rules
+PASS  issue rule 3 (per_call_cap above cap) refused client-side with "rule 3"
+PASS  issue rule 4 (max_coin_value below per_call_cap) refused client-side with "rule 4"
+PASS  issue rule 5 (shielded without a delegate key hash) refused client-side with "rule 5"
+PASS  issue rule 2 (a shielded flag implies read)
+PASS  issue rule 1 (no operation flag and no read) refused client-side with "rule 1"
+PASS  issue rule 6 (window bounds are reserved) refused client-side with "rule 6"
+PASS  issue rule 7 (a read-only grant carrying object fields) refused client-side with "rule 7"
+
+   53 passed, 0 failed  [dev k256 / grantee k256] lifecycle and the unshielded grant twin
+   53 passed, 0 failed  [dev jubjub / grantee jubjub] lifecycle and the unshielded grant twin
+   10 passed, 0 failed  arm-specific negatives
+    4 passed, 0 failed  the shielded twins, which cannot execute off-node
+    7 passed, 0 failed  client-side issue rules
+
+127 passed, 0 failed

@@ -1,19 +1,20 @@
 # P-256 / profiled WebAuthn
 
-Current circuit sizes and proving timings: [P256-MEASUREMENTS.md](P256-MEASUREMENTS.md).
+Earlier fixed-profile circuit sizes and proving timings:
+[P256-MEASUREMENTS.md](P256-MEASUREMENTS.md). These predate the Ledger profile
+extension and must not be presented as measurements of its regenerated keys.
 
 The `p256` account arm verifies ES256 assertions in Compact 0.35.0,
 runtime 0.20.0, ZKIR 3.1. It shares the custody, grant-scope and recovery
 mutation chips with the JubJub and secp256k1 arms. The account roster is
 **52 circuits**: four shared and sixteen per credential arm.
-The 15,000-verifier-byte planner packs it into ten waves for any initial
-arm. All 36 pre-existing circuits retain byte-identical ZKIR and verifier
-keys relative to the merged Compact-0.35 build.
+The earlier fixed-profile run used ten waves with the 15,000-verifier-byte
+planner. Deployment computes its waves from the actual regenerated keys.
 
-## Supported profile: `wa-json134`
+## Supported profile: `wa-json134-or-chrome243`
 
-This tranche implements the explicitly selected **fixed-profile** scope.
-The accepted `clientDataJSON` is exactly 134 bytes:
+The Ledger pilot extends the original bounded profile to two exact signed
+byte shapes. The first `clientDataJSON` shape is 134 bytes:
 
 ```json
 {"type":"webauthn.get","challenge":"<43 unpadded base64url characters>","origin":"<21 ASCII bytes>","crossOrigin":false}
@@ -23,17 +24,33 @@ Order, punctuation, spelling and whitespace are significant. The origin
 has exactly 21 bytes (for example `http://localhost:8973`); it is **not
 zero-padded**. The browser adapter requires a canonical HTTPS origin, or
 HTTP localhost. It rejects unsupported shapes before proving. Different
-origin lengths, omitted `crossOrigin`, extra JSON members, cross-origin
-iframes, authenticator extensions and attested credential data are outside
-this profile. Supporting another length requires compiling another
-profile and measuring its keys; this implementation does not claim
-general variable-length WebAuthn support.
+origin lengths, omitted `crossOrigin`, arbitrary extra JSON members,
+cross-origin iframes, authenticator extensions and attested credential data
+are outside this profile.
+
+The second shape is 243 bytes: the same required fields followed by exactly
+Chromium's `other_keys_can_be_added_here` string member with value
+`do not compare clientDataJSON against a template. See https://goo.gl/yabPex`.
+Chromium randomly adds this member to expose rigid-template assumptions.
+The `chrome_grease` Boolean in `P256Auth`/`P256GrantAuth` selects which exact
+byte sequence the circuit reconstructs and hashes before the single native
+ECDSA check. A wrong selector fails signature verification; it cannot supply
+an unchecked hash. Both shapes share the same verifier key for an operation.
+The TypeScript adapter compares against these two allowed shapes but verifies
+the received bytes verbatim. Nothing is stripped or reserialised for signing.
+
+This pilot deliberately does not implement general variable-length WebAuthn
+JSON. A browser change outside these two shapes fails with an unsupported
+profile error; it is not silently retried or normalised. Supporting arbitrary
+additional fields remains a separate integration task. This ABI change needs
+regenerated keys and a fresh test account; it is not an upgrade of a live
+account whose maintenance authority has been retired.
 
 This is an implementation-specific profile. The
 [ECDSA Authorisation for Custody Accounts draft](../docs/mps-mip/mips/mip-xxxx-signature-schemes.md)
 records the signing boundary and permits named bounded profiles; complete
 recipe references, the common UV requirement and evidence mapping remain
-specification work. `wa-json134` is not an adopted
+specification work. Neither profile name is an adopted
 W3C/FIDO or MIP baseline. This implementation keeps key/RP/origin private,
 binds policy per device and requires UP+UV on every call. The draft requires
 every reachable verifier accepting a credential to enforce its authorised
@@ -112,6 +129,7 @@ and JubJub successor; the recovered device can enrol a new passkey.
 npm ci
 npm run compile
 npm run test:p256-offline
+npm run test:ledger-flex-offline
 npm run measure:p256
 # With the standalone stack and WALLET_SEED configured per README:
 EVIDENCE_DIR=evidence/p256-webauthn npm run test:p256
@@ -210,3 +228,87 @@ Compact 0.35's TypeScript exported-struct unifier omits
 The account's P-256 authorisation structs are therefore internal, with
 the same fields emitted inline in the generated ABI. No compiler patch
 or generated-code edit is required.
+
+### Ledger Flex grant experiment
+
+**Observed result: PASS, 17 November 2026.** The interactive Ledger credential
+authorised a five-unit grant withdrawal, confirmed as `SUCCESS` at localnet
+block 396. A second fresh signature was refused after the owner revoked the
+grant at block 407. The account finished with 95 units and an inactive grant.
+Per-call cap, recipient, changed-amount and replay controls also refused
+locally, with unchanged state and no proving or submission calls.
+
+The [experiment guide](../experiments/ledger-flex-account/README.md) links
+the published [`grant-flow.json`](evidence/ledger-flex-account/grant-flow.json)
+evidence and reproduction instructions. The full raw run remains local;
+the published projection retains original signed bytes and omits credential
+lookup IDs and local stack traces. `npm run verify:ledger-flex` independently
+verifies the published signatures with Node/OpenSSL and checks grant bindings
+and recorded outcome consistency. Historical node acceptance remains
+supported by the recorded receipts.
+The verifier also uses the immutable grant issuance value from a
+[supplementary read-only account query](evidence/ledger-flex-account/post-run-state.json)
+collected after the run at 13:09 UTC. That later snapshot is separate from
+the original capture and does not independently prove historical chain state.
+The accepted grant transaction is
+`0021a7483505d3b6529eabb91b2e0e7782e0a5fec66071ab527813c0d8993bf289`.
+The grant proof took 44.334 seconds through the timed proving provider and
+was 6,364 bytes. This is one observation, not a cold-cache benchmark.
+Both fresh hardware assertions in this run had the 134-byte shape; the
+243-byte capture was separately verified by the native offline tests.
+The live run demonstrates a grant key; fresh hardware device-key operations
+remain a separate experiment.
+
+The Ledger integration was built from upstream `origin/main` at
+`99062671d939641cb9ed9274d3d18fce764d539a`. The initial and reconnect
+captures in `src/tests/ledger-flex/fixtures` use the same USB credential
+and exercise both supported client-data shapes. `test:ledger-flex-offline`
+verifies their original hardware signatures with the compiled native
+Compact verifier. It separately exercises fresh device and grant operations
+with software-generated signatures. Those offline operations do not prove
+that the Ledger has authorised an account transaction.
+
+The interactive runner closes that gap using a fresh localnet account and
+fresh challenges. After compiling all account keys and starting the pinned
+stack described in README, run from `contract`:
+
+```sh
+# WALLET_SEED is the disposable localnet funding wallet from README.
+LEDGER_CREDENTIAL_FILE='/path/to/ledger-flex-vector (1).json' \
+EVIDENCE_DIR=evidence/ledger-flex-account/live \
+npm run test:ledger-flex-grant
+# Open http://localhost:8973 in Chrome.
+```
+
+Stop any earlier probe listening on port 8973 first. The optional file
+imports only the public credential metadata; its previous signature is
+never reused to authorise a new operation. Without that file, the page can
+import it or register an external USB ES256 credential. Use the same browser
+origin and Ledger Security Key credential as the capture.
+
+The runner deploys a disposable account with a software JubJub owner,
+deposits 100 non-native localnet test units, and issues the Ledger a grant
+with a total cap of 12, a per-call cap of 10, and a pinned recipient/token/RP.
+It then needs two user ceremonies:
+
+1. **Sign with Ledger** approves a fresh five-unit grant spend. After local
+   scope and changed-amount refusal checks, the runner proves and submits
+   that spend and confirms its indexed transaction against the node. The
+   account must retain 95 units and the grant nonce must advance to one.
+2. **Sign with Ledger** signs a one-unit request for the revocation test.
+   The owner revokes the grant before the runner attempts the signed request.
+   It must be refused, leaving the account at 95 units.
+
+The browser displays the account operation; WebAuthn on the Ledger confirms
+the relying party and does not clear-sign these spend details on its screen.
+User cancellation records an unchanged-state check and leaves the next
+ceremony waiting for another explicit click. No software signer substitutes
+for either grant signature.
+
+Evidence is written incrementally to `EVIDENCE_DIR/run-<uuid>.json`.
+`PASS` requires the accepted hardware-authorised spend plus scope, replay
+and revoked-grant refusal checks. Negative controls execute compiled account
+circuits locally and must perform zero proving or submission calls; they
+are not invalid proofs rejected by the node. Public signatures, source/key
+hashes and transaction IDs are recorded. Hardware model and UV method are
+user-observed because this flow does not verify hardware attestation.

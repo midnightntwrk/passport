@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-11-17T13:09:34.695Z",
+  "source": "Read-only query of the completed localnet account after the recorded experiment; not part of the original run capture.",
+  "account": "33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa",
+  "grantId": "a365a5e908a574fcf2e90069e5725cbf351748bc172758fb6bb602fe9d836577",
+  "issuedAt": "1",
+  "grantNonce": "1",
+  "grantActive": false,
+  "accountBalance": "95",
+  "stateSha256": "8989276b7721f8acbab71b6269c646244376f62de59d00bc0cf823205101019f",
+  "chain": {
+    "block": {
+      "height": 498,
+      "hash": "319ac1d68af569b9a75cb4a92d7188d709867e169a81d2b9a4e94d23bfb7f1ec",
+      "timestamp": 1794920958000
+    },
+    "nodeBlockHash": "0x319ac1d68af569b9a75cb4a92d7188d709867e169a81d2b9a4e94d23bfb7f1ec"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "outcome": "PASS",
+  "verified_at": "2026-11-17T12:31:21.193391+00:00",
+  "circuit_count": 52,
+  "key_file_count": 104,
+  "prover_bytes": 12178308313,
+  "verifier_bytes": 132804,
+  "manifest_sha256": "0719293cbbae97b503bcd3da0f54bbd62350e4f5f1c6cf68739bc39856038af9",
+  "keygen_elapsed_seconds": 460.827
+}

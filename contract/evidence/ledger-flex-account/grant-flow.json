@@ -1,0 +1,568 @@
+{
+  "testId": "ledger-flex-grant",
+  "verdict": "PASS",
+  "runId": "1b8363df-5f11-4e34-9e9a-f018944786a0",
+  "startedAt": "2026-11-17T12:52:36.832Z",
+  "origin": "http://localhost:8973",
+  "rpId": "localhost",
+  "profile": "wa-json134-or-chrome243",
+  "accountOwner": "disposable software JubJub test device",
+  "grantee": "interactive USB WebAuthn; physical Ledger use is user-observed, not attested",
+  "attestation": "none",
+  "operation": "withdraw_unshielded_with_grant_p256",
+  "transactions": [
+    {
+      "name": "mint 100 test units",
+      "txId": "00098f3cf7a1897e845781b33508593c2780e32811a56163152b38c6ab77c5b413",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 373,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 38,
+        "hash": "dfebc169cdd4e3391b5b782960ab09f6598ac9d0f9d85702be6e45da700b978d",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 373,
+          "hash": "68122fd615864f1cdf0ed3b0da5811657505b1c09453201df31172385e271377"
+        }
+      },
+      "nodeBlockHash": "0x68122fd615864f1cdf0ed3b0da5811657505b1c09453201df31172385e271377"
+    },
+    {
+      "name": "deposit_unshielded",
+      "txId": "0016fb324b56dd6a25f5f6d6c0027378849feb2cf8e536b76a87da682efc0fb82d",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 379,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 39,
+        "hash": "f423bfa485de7d8b5f64673b011c53a5c220fabbf7d65aab7b65fc22318ebe26",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 379,
+          "hash": "6752a315d2fd491821de7e17fd94ebcbd26f243e6c5a9fc7cc2b94ec279dce98"
+        }
+      },
+      "nodeBlockHash": "0x6752a315d2fd491821de7e17fd94ebcbd26f243e6c5a9fc7cc2b94ec279dce98"
+    },
+    {
+      "name": "issue_grant_with_jubjub",
+      "txId": "00bffbcc59596a001e98aac3dc549cf854b3e43917a2a0e594fe6a7e75f49cf3db",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 384,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 40,
+        "hash": "85b9fb3eba2c74ee95c0be448a3e9fce4fa23d74716e3666c363b05b80559f70",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 384,
+          "hash": "6f00df1934ea767f6af947e6d199dc18cf2d10867b2adff546b8441f3c63a753"
+        }
+      },
+      "nodeBlockHash": "0x6f00df1934ea767f6af947e6d199dc18cf2d10867b2adff546b8441f3c63a753"
+    },
+    {
+      "name": "withdraw_unshielded_with_grant_p256",
+      "txId": "0021a7483505d3b6529eabb91b2e0e7782e0a5fec66071ab527813c0d8993bf289",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 396,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 41,
+        "hash": "b9d11cb583a4839f95081397abddf3cb4dd0a0115558da2c759164d2dc1e9a0d",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 396,
+          "hash": "c181be10640c213fa3d8395add8056e01330fe8b8f773d90610a6fcafb13eb7e"
+        }
+      },
+      "nodeBlockHash": "0xc181be10640c213fa3d8395add8056e01330fe8b8f773d90610a6fcafb13eb7e"
+    },
+    {
+      "name": "revoke_grant_with_jubjub",
+      "txId": "0008182ff92602a9c8985c623d26497c0bf3272dd5bad25e903613596d87d64742",
+      "startIndex": 28,
+      "endIndex": 28,
+      "blockHeight": 407,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 42,
+        "hash": "39c464ec45b48979e959f0021b6974b3ca88e6e38425a7147b9ae86096d08d78",
+        "startIndex": 28,
+        "endIndex": 28,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 407,
+          "hash": "0eb3a28c524e4712015ec94a199fff46f8f511c6d9ad9dfb15cdff1756bc9324"
+        }
+      },
+      "nodeBlockHash": "0x0eb3a28c524e4712015ec94a199fff46f8f511c6d9ad9dfb15cdff1756bc9324"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "5aff4927-8615-4bce-ad92-b035f49ee52e",
+      "challenge": "ba16db7c0574f5c9f41fedb0f792aea96ab5a2d01079d01864e61101b0bbdc69",
+      "requestedAt": "2026-11-17T12:58:08.284Z",
+      "receivedAt": "2026-11-17T12:58:12.395Z",
+      "browserMilliseconds": 2303.300000011921,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+      "authenticatorData": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763056afc3c23",
+      "clientDataJSON": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22756862626641563039636e30482d327739354b75715771316f744151656441595a4f59524162433733476b222c226f726967696e223a22687474703a2f2f6c6f63616c686f73743a38393733222c2263726f73734f726967696e223a66616c73657d",
+      "signature": "3045022100f45712535d6604616ed43342ecee55f6b75ba83f8e7c9859ea48534521d2aeba02201b354021fee3536348a0946030eace5e98f1e3df468a2f7ab40c79665e28db30",
+      "adapterVerified": true,
+      "chromeGrease": false
+    },
+    {
+      "id": "3cf65488-428b-4387-94f4-77164c792fb1",
+      "challenge": "71bd41f17d763574d88180a0b20d15acf622d812c57c28cfa5d6a7d224b26571",
+      "requestedAt": "2026-11-17T12:59:20.578Z",
+      "receivedAt": "2026-11-17T13:00:00.973Z",
+      "browserMilliseconds": 2131.5,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+      "authenticatorData": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763056afc3c26",
+      "clientDataJSON": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2263623142385831324e58545967594367736730567250596932424c4666436a507064616e306953795a5845222c226f726967696e223a22687474703a2f2f6c6f63616c686f73743a38393733222c2263726f73734f726967696e223a66616c73657d",
+      "signature": "3045022100e358496ab02f5b5f4c68ff19685ec0ebaa3ad6fd0777e806a2a4644b1cca1f640220341d90d8afe89745b4735e762f034acc5fe0f26f7d82b7cd41d0337ff1759e43",
+      "adapterVerified": true,
+      "chromeGrease": false
+    }
+  ],
+  "negatives": [
+    {
+      "name": "amount above per-call cap",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: amount above per-call cap",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: amount above per-call cap"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: amount above per-call cap"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'withdraw_unshielded_with_grant_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: amount above per-call cap"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "stateSha256": "c52e1407c0c40bf9c6dd7c4c38da09e6f8dd89ab22fbf5e025801463d631f7a9",
+      "proofCalls": 0,
+      "submissions": 0
+    },
+    {
+      "name": "recipient outside pin",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: recipient not admitted by pin",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: recipient not admitted by pin"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: recipient not admitted by pin"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'withdraw_unshielded_with_grant_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: recipient not admitted by pin"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "stateSha256": "c52e1407c0c40bf9c6dd7c4c38da09e6f8dd89ab22fbf5e025801463d631f7a9",
+      "proofCalls": 0,
+      "submissions": 0
+    },
+    {
+      "name": "changed signed amount within scope",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: invalid grant signature"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'withdraw_unshielded_with_grant_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: invalid grant signature"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "stateSha256": "c52e1407c0c40bf9c6dd7c4c38da09e6f8dd89ab22fbf5e025801463d631f7a9",
+      "proofCalls": 0,
+      "submissions": 0
+    },
+    {
+      "name": "replay with current spent opening",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: invalid grant signature"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'withdraw_unshielded_with_grant_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: invalid grant signature"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "stateSha256": "0179f45e6c7d64ae86b656efc880faf160bb2ccb7d9fdee42cab5481f7b50a1f",
+      "proofCalls": 0,
+      "submissions": 0
+    },
+    {
+      "name": "revoked grant with valid pre-revocation signature",
+      "stage": "local circuit execution",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant revoked",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant revoked"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: grant revoked"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'withdraw_unshielded_with_grant_p256'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: grant revoked"
+          }
+        ]
+      },
+      "stateUnchanged": true,
+      "stateSha256": "8989276b7721f8acbab71b6269c646244376f62de59d00bc0cf823205101019f",
+      "proofCalls": 0,
+      "submissions": 0
+    }
+  ],
+  "samples": [
+    {
+      "label": "deploy",
+      "keyLocation": "contract:33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa/activate_initial_device_with_jubjub?vk=b33fa139d34231f6ba1144a4ac3e947b35e679e8e91d31b554d7ff916932931e",
+      "startedAt": "2026-11-17T12:56:02.958Z",
+      "milliseconds": 2028.929833000002,
+      "proofBytes": 5772
+    },
+    {
+      "label": "deposit_unshielded",
+      "keyLocation": "contract:33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa/deposit_unshielded?vk=bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9",
+      "startedAt": "2026-11-17T12:57:17.851Z",
+      "milliseconds": 248.24124999996275,
+      "proofBytes": 3852
+    },
+    {
+      "label": "issue_grant_with_jubjub",
+      "keyLocation": "contract:33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa/issue_grant_with_jubjub?vk=008fa78514089341d53ead256a5f8878eb630d3f60741f3bc6bd34d41a84b2f7",
+      "startedAt": "2026-11-17T12:57:39.724Z",
+      "milliseconds": 8446.851332999999,
+      "proofBytes": 5772
+    },
+    {
+      "label": "withdraw_unshielded_with_grant_p256",
+      "keyLocation": "contract:33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa/withdraw_unshielded_with_grant_p256?vk=f031da5af1bddb6adcc6d7a90f08cd18ea41501791db42eb1637296e23507749",
+      "startedAt": "2026-11-17T12:58:16.473Z",
+      "milliseconds": 44333.88166700001,
+      "proofBytes": 6364
+    },
+    {
+      "label": "revoke_grant_with_jubjub",
+      "keyLocation": "contract:33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa/revoke_grant_with_jubjub?vk=2acbb4bf271df28b6fb6ed20d931a10a51975d661dd917b8855c41f8dffac289",
+      "startedAt": "2026-11-17T13:00:01.589Z",
+      "milliseconds": 3950.495666999952,
+      "proofBytes": 5772
+    }
+  ],
+  "browserEvents": [],
+  "limitations": [
+    "Non-native localnet unshielded test assets only.",
+    "Negative controls execute compiled account circuits against indexed state, without proving or submission.",
+    "Ledger WebAuthn confirms the relying party; spend details are displayed by the browser, not clear-signed on the device.",
+    "No PRF, recovery, real-world funds or hardware-attestation claim."
+  ],
+  "importedCaptureSha256": "fafb5c778f4e6a776a3267e85b4920c2260d2eb129309500014384ae06807e3f",
+  "credential": {
+    "pk": {
+      "x": "78104774094025557427358718239374375753449262376651071890279176911283506885940",
+      "y": "4496541118737658011657638431929094680312140756902863922824437904241758194601",
+      "identity": false
+    },
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    "rpId": "localhost",
+    "origin": "http://localhost:8973",
+    "source": "public credential imported from earlier Ledger capture"
+  },
+  "provenance": {
+    "./ledger-flex-grant.ts": {
+      "bytes": 18622,
+      "sha256": "bb3520e9abf2475d013f4354a6eb2a340d410a6b08ce6aa37a58f59238575b9a"
+    },
+    "./ledger-flex-grant/client.ts": {
+      "bytes": 6753,
+      "sha256": "8c8000d29e955ad32655d18f52a034b46a73f1fdf891f8d5f89fb44c1ce23ffd"
+    },
+    "./ledger-flex-grant/index.html": {
+      "bytes": 2601,
+      "sha256": "9042d16793cc84fbdcab2bcd4a2242bbb8ac7255a34c82a31caf3f9c31f27fe7"
+    },
+    "../wallet/account.ts": {
+      "bytes": 80639,
+      "sha256": "4287ea4d97a3e704a53273ba5c2d1a1755403ff5ef3c84a2c87a3b24857c819c"
+    },
+    "../wallet/signer.ts": {
+      "bytes": 39983,
+      "sha256": "8aff53bc868332a125feef14a2cf84882f689dc47a4574333cab2dca385217ce"
+    },
+    "../wallet/signer-p256.ts": {
+      "bytes": 5893,
+      "sha256": "dbdb8abf64f03e139a2d7f3614d510da7bb794237bee7f0ca5bb858e6c1c0c5e"
+    },
+    "../wallet/webauthn.ts": {
+      "bytes": 9524,
+      "sha256": "2a2b1f5d2ebe7069deab1e3a7c5688166ec1947fadad5dc0bfbf5436390d1c3f"
+    },
+    "../../package-lock.json": {
+      "bytes": 112661,
+      "sha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51"
+    },
+    "../../contracts/account.compact": {
+      "bytes": 130368,
+      "sha256": "1aebd2759b968f464ef17e35293794c77924693bf707ac5b9fee1ad0582ece0c"
+    },
+    "../../contracts/account-p256.compact": {
+      "bytes": 20254,
+      "sha256": "bbcbb61be50693ee76158cec9de8e00a2c0bd5d6dd29bd24ffae462b4d3e7e0e"
+    },
+    "../../contracts/webauthn.compact": {
+      "bytes": 6431,
+      "sha256": "16eaf754400718abb2f39c3fdd68feceb8b33304316c525da550f1ce36674315"
+    },
+    "../../contracts/managed/account/contract/index.js": {
+      "bytes": 1710036,
+      "sha256": "83dbf3270b103df50f4bcc7201337fac5b6a97143c2f80aa78186f4cbfe9cb67"
+    },
+    "../../contracts/managed/account/compiler/contract-manifest.json": {
+      "bytes": 37718,
+      "sha256": "5a25634ae3f68931cc1cd2b395bcbeef37c7c2d51d865dc4f309449187b04af5"
+    },
+    "../../contracts/managed/account/zkir/activate_initial_device_with_jubjub.bzkir": {
+      "bytes": 1993,
+      "sha256": "18a73910ac9c1db1ae52a8c48abcbd891838d75206c5da48eb1338fd0db622ce"
+    },
+    "../../contracts/managed/account/keys/activate_initial_device_with_jubjub.verifier": {
+      "bytes": 2313,
+      "sha256": "b33fa139d34231f6ba1144a4ac3e947b35e679e8e91d31b554d7ff916932931e"
+    },
+    "../../contracts/managed/account/zkir/deposit_unshielded.bzkir": {
+      "bytes": 1654,
+      "sha256": "b64d5d0243053a4b383493835a3a2412e09c89248d351076c5097f528eb7e2f8"
+    },
+    "../../contracts/managed/account/keys/deposit_unshielded.verifier": {
+      "bytes": 1353,
+      "sha256": "bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9"
+    },
+    "../../contracts/managed/account/zkir/issue_grant_with_jubjub.bzkir": {
+      "bytes": 10152,
+      "sha256": "19887b86c759417a93ff30f90830e479ef987f5df2785a2ff9f42668cf8b0a99"
+    },
+    "../../contracts/managed/account/keys/issue_grant_with_jubjub.verifier": {
+      "bytes": 2313,
+      "sha256": "008fa78514089341d53ead256a5f8878eb630d3f60741f3bc6bd34d41a84b2f7"
+    },
+    "../../contracts/managed/account/zkir/revoke_grant_with_jubjub.bzkir": {
+      "bytes": 4621,
+      "sha256": "5bd4be3866cc3ecd94dbebb041813ecb3d9612f2de67b5f6fc4dc614303cdd0a"
+    },
+    "../../contracts/managed/account/keys/revoke_grant_with_jubjub.verifier": {
+      "bytes": 2313,
+      "sha256": "2acbb4bf271df28b6fb6ed20d931a10a51975d661dd917b8855c41f8dffac289"
+    },
+    "../../contracts/managed/account/zkir/withdraw_unshielded_with_grant_p256.bzkir": {
+      "bytes": 280257,
+      "sha256": "5330239c53dd0ed79d0b085fde18de4231ba4bf8c4adbe12120107000f4a8848"
+    },
+    "../../contracts/managed/account/keys/withdraw_unshielded_with_grant_p256.verifier": {
+      "bytes": 2745,
+      "sha256": "f031da5af1bddb6adcc6d7a90f08cd18ea41501791db42eb1637296e23507749"
+    }
+  },
+  "chain": {
+    "block": {
+      "height": 329,
+      "hash": "a934eaee4b615eac09897d3feb966534513d82dd9018d11b17fbca2f2aa83ab7",
+      "timestamp": 1794919944006
+    },
+    "nodeBlockHash": "0xa934eaee4b615eac09897d3feb966534513d82dd9018d11b17fbca2f2aa83ab7"
+  },
+  "account": "33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa",
+  "grant": {
+    "id": "a365a5e908a574fcf2e90069e5725cbf351748bc172758fb6bb602fe9d836577",
+    "color": "4381ef40cf3dcd629fbfe20e935347cbf659e495571497acb70b9be22809a94f",
+    "recipient": "bc610dd07c52f59012a88c2f9f1c5f34cbacc75b868202975d6f19beaf37284b",
+    "cap": "12",
+    "perCallCap": "10"
+  },
+  "completedAt": "2026-11-17T13:00:26.089Z",
+  "progress": {
+    "runId": "1b8363df-5f11-4e34-9e9a-f018944786a0",
+    "phase": "complete",
+    "message": "PASS: the Ledger authorised a real localnet grant spend; scope, replay and revocation checks passed.",
+    "origin": "http://localhost:8973",
+    "rpId": "localhost",
+    "events": [
+      {
+        "at": "2026-11-17T12:52:36.847Z",
+        "message": "Checking localnet and deploying a fresh test account. No Ledger approval is needed yet."
+      },
+      {
+        "at": "2026-11-17T12:56:26.534Z",
+        "message": "Minting and depositing 100 non-native localnet test units\u2026"
+      },
+      {
+        "at": "2026-11-17T12:58:08.284Z",
+        "message": "Ready for your Ledger. Review the operation below, then click \u201cSign with Ledger\u201d."
+      },
+      {
+        "at": "2026-11-17T12:58:12.395Z",
+        "message": "Checking your Ledger signature and the account operation\u2026"
+      },
+      {
+        "at": "2026-11-17T12:58:12.439Z",
+        "message": "Testing scope refusals, then proving and submitting the approved 5-unit spend\u2026"
+      },
+      {
+        "at": "2026-11-17T12:59:20.578Z",
+        "message": "Ready for your Ledger. Review the operation below, then click \u201cSign with Ledger\u201d."
+      },
+      {
+        "at": "2026-11-17T13:00:00.973Z",
+        "message": "Checking your Ledger signature and the account operation\u2026"
+      },
+      {
+        "at": "2026-11-17T13:00:00.982Z",
+        "message": "Revoking the grant, then checking that the signed 1-unit request is refused\u2026"
+      },
+      {
+        "at": "2026-11-17T13:00:26.089Z",
+        "message": "PASS: the Ledger authorised a real localnet grant spend; scope, replay and revocation checks passed."
+      }
+    ],
+    "account": "33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa",
+    "operation": {
+      "purpose": "Sign a revocation test: the grant will be revoked before this 1-unit request is attempted",
+      "account": "33ea792ed53f516536f292cfee0751de7c23f3f22cf49c0717e4ac98f597c6aa",
+      "grantId": "a365a5e908a574fcf2e90069e5725cbf351748bc172758fb6bb602fe9d836577",
+      "tokenColor": "4381ef40cf3dcd629fbfe20e935347cbf659e495571497acb70b9be22809a94f",
+      "amount": "1",
+      "recipient": "bc610dd07c52f59012a88c2f9f1c5f34cbacc75b868202975d6f19beaf37284b",
+      "grantNonce": "1",
+      "totalCap": "12",
+      "perCallCap": "10"
+    },
+    "result": {
+      "acceptedSpendTxId": "0021a7483505d3b6529eabb91b2e0e7782e0a5fec66071ab527813c0d8993bf289",
+      "remainingAccountBalance": "95",
+      "grantNonce": "1",
+      "grantRevoked": true,
+      "finalAccountBalance": "95",
+      "scopeRejection": true,
+      "replayRejection": true,
+      "revokedGrantRejection": true
+    }
+  },
+  "publication": {
+    "sourceRunSha256": "7b012804aa267ca804acc05e9990e47674df57cb8805029051e8f81f8107d09b",
+    "omittedFields": [
+      "credentialId",
+      "inspected",
+      "stack"
+    ],
+    "note": "Projection of the recorded live run. Original signed bytes, public key, transaction outcomes and source/artifact hashes are preserved. Credential lookup IDs and local stack traces remain only in the local raw run."
+  }
+}

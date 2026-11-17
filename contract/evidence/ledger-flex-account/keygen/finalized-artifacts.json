@@ -1,0 +1,13 @@
+{
+  "outcome": "PASS",
+  "timestamp": "2026-11-17T12:51:57.015429+00:00",
+  "current": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/ledger-flex-account/contract/contracts/managed/account",
+  "backup": "/tmp/ledger-flex-account-before-native-finalization",
+  "promotion": "macOS renamex_np RENAME_SWAP: atomic whole-directory exchange",
+  "checked_manifest_entries": 212,
+  "expected_vk_count": 52,
+  "compiler_manifest_sha256": "5a25634ae3f68931cc1cd2b395bcbeef37c7c2d51d865dc4f309449187b04af5",
+  "compiled_js_sha256": "83dbf3270b103df50f4bcc7201337fac5b6a97143c2f80aa78186f4cbfe9cb67",
+  "cache_replay_sha256": "9102e0251a1bd8c7aa0c8ce4aab4d3b91bb96b8d91e7958d0e68de0a038867a9",
+  "compiler_finalization_sha256": "b0f6a48ed28a8e67836717bd38bda4b814d47e39cbc1df67f31ba38d78ba1f61"
+}

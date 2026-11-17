@@ -3,7 +3,8 @@ import CompactStandardLibrary;
 include "webauthn";
 import WebAuthn<21>;
 export { WebAuthnPolicy, webauthn_challenge_base64, webauthn_client_data_hash,
-         p256_verify_digest, webauthn_verify };
+         webauthn_client_data_hash_chrome_grease,
+         p256_verify_digest, webauthn_verify, webauthn_verify_profiled };
 
 // Public output prevents the compiler from treating these benchmarks as pure
 // helpers. This is a verifier-cost probe, not an enrolled account gate.
@@ -21,5 +22,17 @@ export circuit verify_webauthn(
   sig: Secp256r1EcdsaSignature, pk: Secp256r1Point
 ): [] {
   assert(webauthn_verify(challenge, policy, authenticator_data, sig, pk), "invalid WebAuthn signature");
+  accepted = disclose(challenge);
+}
+
+// Both supported browser shapes share this entry point and verifier key.
+// The selector changes the reconstructed signed bytes; it is not trusted
+// evidence of a browser decision and cannot make the wrong signature pass.
+export circuit verify_webauthn_profiled(
+  challenge: Bytes<32>, policy: WebAuthnPolicy, authenticator_data: Bytes<37>,
+  sig: Secp256r1EcdsaSignature, pk: Secp256r1Point, chrome_grease: Boolean
+): [] {
+  assert(webauthn_verify_profiled(challenge, policy, authenticator_data, sig, pk, chrome_grease),
+    "invalid profiled WebAuthn signature");
   accepted = disclose(challenge);
 }

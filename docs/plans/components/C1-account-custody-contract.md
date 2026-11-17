@@ -13,6 +13,14 @@ mapping and individual-device revocation remain separate. See the
 [standards register](../MIPS.md) and [reference guide](../../../contract/README.md).
 The dated August/September observations below describe earlier stages.
 
+**Experiment 2026/11/17:** a Ledger Flex connected over USB successfully
+authorised an ACC grant withdrawal on localnet. The full 52-circuit account
+accepted the five-unit spend, and scope, replay and revoked-grant controls
+passed with a final balance of 95 test units. See the
+[Ledger experiment and evidence](../../../experiments/ledger-flex-account/README.md).
+This validates the grant-key flow under the two-shape WebAuthn profile;
+live Ledger device-key operations remain separate.
+
 
 ## Outcome
 

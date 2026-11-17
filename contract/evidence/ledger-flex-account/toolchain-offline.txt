@@ -1,0 +1,13 @@
+
+━━━ toolchain-offline ━━━
+
+── SDK constructs account and scaffolding deployments from checked artifacts
+(node:50770) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+── all account ZKIR/VKs load; every arm's wave plan covers the roster and signs v4 updates
+  ✓ jubjub: 52 circuits across 10 planned waves
+  ✓ k256: 52 circuits across 10 planned waves
+  ✓ p256: 52 circuits across 10 planned waves
+
+◆ toolchain-offline: PASS

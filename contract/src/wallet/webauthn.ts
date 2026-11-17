@@ -1,11 +1,12 @@
-// Browser-compatible transport and strict adapter for profile wa-json134.
+// Browser-compatible transport and strict adapter for wa-json134-or-chrome243.
 // Client validation gives useful errors; the circuit independently rebuilds
 // these signed bytes and checks RP, flags, challenge and the enrolled origin.
 import { p256 } from '@noble/curves/nist.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-export const WEBAUTHN_PROFILE = 'wa-json134';
+export const WEBAUTHN_PROFILE = 'wa-json134-or-chrome243';
 export const WEBAUTHN_ORIGIN_BYTES = 21;
+export const CHROME_GREASE_VALUE = 'do not compare clientDataJSON against a template. See https://goo.gl/yabPex';
 export interface WebAuthnPolicy { rp_id_hash: Uint8Array; origin: Uint8Array }
 export interface P256PublicKey { x: bigint; y: bigint; identity: boolean }
 export interface WebAuthnAssertion {
@@ -53,6 +54,16 @@ export function clientDataJSON(challenge: Uint8Array, origin: Uint8Array): Uint8
   }));
 }
 
+/** The second supported byte shape: the canonical fields plus Chromium's
+ * exact GREASE member. This constructs expected bytes for comparison; the
+ * received bytes are still hashed verbatim during signature verification. */
+export function clientDataJSONChromeGrease(challenge: Uint8Array, origin: Uint8Array): Uint8Array {
+  // Reuse the standard helper's length/encoding checks and retain its order.
+  const normal = decoder.decode(clientDataJSON(challenge, origin));
+  return encoder.encode(normal.slice(0, -1) +
+    `,"other_keys_can_be_added_here":${JSON.stringify(CHROME_GREASE_VALUE)}}`);
+}
+
 /** Strict DER conversion: no BER lengths, negatives, redundant zeroes, tails,
  * zero or out-of-range scalars. High-S is valid ES256 and is preserved. */
 export function parseES256Signature(der: Uint8Array): { r: bigint; s: bigint } {
@@ -86,7 +97,10 @@ export function validateP256Key(pk: P256PublicKey): void {
 export function assertionMaterial(
   challenge: Uint8Array, policy: WebAuthnPolicy, pk: P256PublicKey, assertion: WebAuthnAssertion,
 ) {
-  if (!equalBytes(assertion.clientDataJSON, clientDataJSON(challenge, policy.origin))) {
+  const normal = clientDataJSON(challenge, policy.origin);
+  const chrome_grease = !equalBytes(assertion.clientDataJSON, normal);
+  if (chrome_grease &&
+      !equalBytes(assertion.clientDataJSON, clientDataJSONChromeGrease(challenge, policy.origin))) {
     throw new Error(`unsupported or mismatched clientDataJSON (${WEBAUTHN_PROFILE})`);
   }
   const data = assertion.authenticatorData;
@@ -102,7 +116,7 @@ export function assertionMaterial(
   if (!p256.verify(assertion.signature, message, key, { format: 'der', lowS: false })) {
     throw new Error('invalid WebAuthn ES256 signature');
   }
-  return { pk, policy, authenticator_data: new Uint8Array(data), sig };
+  return { pk, policy, authenticator_data: new Uint8Array(data), sig, chrome_grease };
 }
 
 /** Credential private keys remain in navigator.credentials/authenticator. */

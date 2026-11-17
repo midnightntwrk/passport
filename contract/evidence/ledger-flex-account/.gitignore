@@ -1,0 +1,10 @@
+# Raw browser runs and original publication inputs stay local. The published
+# grant-flow.json preserves signed bytes and records the raw run's SHA-256.
+live/
+local/
+
+# Development attempts and smoke checks are superseded by the final native
+# compiler/keygen receipts and their hash-linked drivers.
+keygen/*.attempt1
+keygen/cache-adapter-smoke.json
+keygen/cache-replay-direct-test.json
