@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 const contract = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runner = resolve(contract, 'scripts/ci-run.mjs');
 const tasks = [
-  { label: 'compile-reference', command: ['npm', 'run', 'ci:compile'] },
+  { label: 'compile-reference', command: ['npm', 'run', 'ci:compile'],
+    env: process.env.CI_COMPILE_TIMEOUT_MS === undefined ? process.env :
+      { ...process.env, CI_COMMAND_TIMEOUT_MS: process.env.CI_COMPILE_TIMEOUT_MS } },
   ...['signer-rs', 'buss-rs'].map(crate => ({
     label: `${crate}-prebuild`,
     command: ['cargo', 'test', '--no-run', '--locked', '--manifest-path', `${crate}/Cargo.toml`],

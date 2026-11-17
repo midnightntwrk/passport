@@ -18,7 +18,7 @@ jobs:
   reference-regression:
     name: Reference regression
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       REFERENCE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       REFERENCE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -28,6 +28,9 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       RAYON_NUM_THREADS: '4'
       CI_COMMAND_TIMEOUT_MS: '600000'
+      # Fresh compilation of all account arms needs a separate budget.
+      # Regression commands retain their ten-minute limit.
+      CI_COMPILE_TIMEOUT_MS: '1200000'
     defaults:
       run:
         working-directory: contract
