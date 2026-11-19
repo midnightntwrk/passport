@@ -8,6 +8,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const sizes = JSON.parse(readFileSync(path.join(root, 'evidence/p256-webauthn/circuit-sizes.json'), 'utf8'));
 const run = JSON.parse(readFileSync(path.join(root, 'evidence/p256-webauthn/conformance-and-proving.json'), 'utf8'));
 assert.equal(run.verdict, 'PASS');
+assert.equal(sizes.profile, run.details.profile, 'circuit measurements and proving run must use the same profile');
+const assertionInputShape = run.details.assertionInputShape ?? 'canonical134';
 const labels = [
   ['Native P-256 verifier', 'probe-p256', 'verify_ecdsa'],
   ['Profiled WebAuthn verifier', 'probe-p256', 'verify_webauthn'],
@@ -33,7 +35,7 @@ for (const [label, contract, circuit] of labels) {
   lines.push(`| ${label} | ${shape.k} | ${shape.rows.toLocaleString('en-US')} | ${(shape.assets.prover.bytes / 2 ** 20).toFixed(2)} | ${times[0].toFixed(3)} | ${times[1].toFixed(3)} / ${times[2].toFixed(3)} | ${((times[1] + times[2]) / 2).toFixed(3)} |`);
 }
 lines.push('',
-  '**Scope.** The first two rows are standalone verifier-cost probes with a public digest/challenge output. The account rows measure the same `rotate_enc_key` operation with enrolment, rolling entry and nonce checks. The WebAuthn rows use profile `wa-json134` (134-byte JSON, 21-byte origin, 37-byte authenticator data, UP+UV). They are not general variable-length WebAuthn measurements.', '',
+  `**Scope.** The first two rows are standalone verifier-cost probes with a public digest/challenge output; the standalone WebAuthn probe retains profile \`${sizes.standaloneWebAuthnProbeProfile ?? 'wa-json134'}\`. The account rows measure the same \`rotate_enc_key\` operation with enrolment, rolling entry and nonce checks under the recorded profile \`${sizes.profile}\`. Recorded assertion input shape: \`${assertionInputShape}\` (canonical 134-byte JSON, 21-byte origin, 37-byte authenticator data, UP+UV); these samples do not measure a Chrome GREASE assertion. They are not general variable-length WebAuthn measurements.`, '',
   '**Timing.** Sequential `ProvingProvider.prove` wall time, including artifact lookup/load and local HTTP transfer; excluding signing, circuit execution/check, wallet balancing and inclusion. The first observation and two repeats are reported separately. No claim of OS/server cold-cache behaviour; key generation is excluded. These are three observations, not a latency distribution.', '',
   `**Hardware.** ${sizes.hardware.cpu}, ${sizes.hardware.logicalCpus} logical CPUs, ${sizes.hardware.memoryBytes / 2 ** 30} GiB host RAM (${sizes.hardware.platform}/${sizes.hardware.arch}). Native compiler/key generation on the host; proving in Docker: ${run.details.proverEnvironment.dockerVM}.`, '',
   `**Memory.** The first full-account proof OOM-killed the proof server in the approximately 8 GiB Docker VM ([failure evidence](evidence/p256-webauthn/prover-8gib-oom.json)). The measured run uses a 24 GiB VM. Container lifetime memory peak: ${run.details.containerPeakMemoryBytes ? (run.details.containerPeakMemoryBytes / 2 ** 30).toFixed(2) + ' GiB (cgroup memory.peak, includes caches)' : 'not available'}. This is not an exact minimum-memory requirement.`, '',

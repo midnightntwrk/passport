@@ -5,6 +5,7 @@ import { strict as assert } from 'node:assert';
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { p256Challenges } from '../wallet/signer-p256.js';
+import { WEBAUTHN_PROFILE } from '../wallet/webauthn.js';
 
 const target = new URL('../../evidence/p256-webauthn/browser-flow.json', import.meta.url);
 const args = process.argv.slice(2);
@@ -18,7 +19,7 @@ const bytes = (s: string) => {
 };
 const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest();
 assert.equal(evidence.verdict, 'PASS');
-assert.equal(evidence.profile, 'wa-json134');
+assert.ok(['wa-json134', WEBAUTHN_PROFILE].includes(evidence.profile), 'supported recorded WebAuthn profile');
 assert.equal(evidence.rpId, 'localhost');
 assert.equal(evidence.origin, 'http://localhost:8973');
 assert.equal(evidence.operation, 'rotate_enc_key_with_p256');
@@ -42,11 +43,20 @@ for (const a of evidence.assertions) {
     continue;
   }
   const client = bytes(a.clientDataJSON), auth = bytes(a.authenticatorData);
-  assert.equal(client.length, 134); assert.equal(auth.length, 37);
-  assert.deepEqual(client, Buffer.from(JSON.stringify({
+  assert.equal(auth.length, 37);
+  const fields = {
     type: 'webauthn.get', challenge: bytes(a.challenge).toString('base64url'),
     origin: evidence.origin, crossOrigin: false,
-  })));
+  };
+  const normal = Buffer.from(JSON.stringify(fields));
+  const grease = Buffer.from(JSON.stringify({ ...fields,
+    other_keys_can_be_added_here: 'do not compare clientDataJSON against a template. See https://goo.gl/yabPex',
+  }));
+  // Historical wa-json134 recordings only permit the original shape. New
+  // recordings permit the exact Chromium variant too; the received bytes,
+  // rather than either reconstruction, are hashed for OpenSSL below.
+  assert.ok(client.equals(normal) || (evidence.profile === WEBAUTHN_PROFILE && client.equals(grease)),
+    'clientDataJSON must match a byte shape allowed by the recorded profile');
   assert.deepEqual(auth.subarray(0, 32), sha256(Buffer.from(evidence.rpId)));
   assert.ok([5, 13, 29].includes(auth[32]), 'UP+UV and supported backup/extension flags');
   const message = Buffer.concat([auth, sha256(client)]);

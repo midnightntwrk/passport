@@ -1,0 +1,36 @@
+
+━━━ toolchain-offline ━━━
+
+── SDK constructs account and scaffolding deployments from checked artifacts
+(node:13943) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Error: Unexpected error: ZKConfigurationReadError: Failed to read verifier key for account#activate_initial_device_with_p256
+    at Module.make (<checkout>/contract/node_modules/@midnight-ntwrk/compact-js/src/effect/ZKConfigurationReadError.ts:72:3)
+    at catch (<checkout>/contract/node_modules/@midnight-ntwrk/midnight-js-types/src/contract.ts:43:61)
+    at <checkout>/contract/node_modules/effect/src/internal/core-effect.ts:1683:29
+    at <anonymous> (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)
+    at body (<checkout>/contract/node_modules/effect/src/Utils.ts:786:14)
+    at FiberRuntime.Sync (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)
+    at <anonymous> (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)
+    at Object.f (<checkout>/contract/node_modules/effect/src/internal/tracer.ts:101:19)
+    at FiberRuntime.runLoop (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)
+    at FiberRuntime.evaluateEffect (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)
+    at onFailure (<checkout>/contract/node_modules/@midnight-ntwrk/midnight-js-types/src/contract.ts:117:13)
+    at <anonymous> (<checkout>/contract/node_modules/effect/src/internal/core.ts:2663:14)
+    at Module.<anonymous> (<checkout>/contract/node_modules/effect/src/Function.ts:245:18)
+    at exitResultOrError (<checkout>/contract/node_modules/@midnight-ntwrk/midnight-js-types/src/contract.ts:113:18)
+    at createUnprovenDeployTxFromVerifierKeys (<checkout>/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/unproven-deploy-tx.ts:137:9)
+    at async <anonymous> (<checkout>/contract/src/tests/toolchain-offline.ts:27:19)
+    at async runScenario (<checkout>/contract/src/tests/runner.ts:7:5)
+
+◆ toolchain-offline: FAIL — Unexpected error: ZKConfigurationReadError: Failed to read verifier key for account#activate_initial_device_with_p256
+    at Module.make (<checkout>/contract/node_modules/@midnight-ntwrk/compact-js/src/effect/ZKConfigurationReadError.ts:72:3)
+    at catch (<checkout>/contract/node_modules/@midnight-ntwrk/midnight-js-types/src/contract.ts:43:61)
+    at <checkout>/contract/node_modules/effect/src/internal/core-effect.ts:1683:29
+    at <anonymous> (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)
+    at body (<checkout>/contract/node_modules/effect/src/Utils.ts:786:14)
+    at FiberRuntime.Sync (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)
+    at <anonymous> (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)
+    at Object.f (<checkout>/contract/node_modules/effect/src/internal/tracer.ts:101:19)
+    at FiberRuntime.runLoop (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)
+    at FiberRuntime.evaluateEffect (<checkout>/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)

@@ -38,6 +38,7 @@ for name in account control faucet probe-block-time probe-p256 probe-grant-calle
   active_stage=module
   stage_name="$name"
   stage_started=$SECONDS
+  printf 'ci-compile-start mode=%s stage=module name=%s\n' "$mode" "$name"
   rm -rf "contracts/managed/$name"
   flags=()
   if [[ "$name" != probe-grant-caller ]]; then flags+=(--feature-zkir-v3); fi

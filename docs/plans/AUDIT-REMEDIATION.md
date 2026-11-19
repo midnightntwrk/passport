@@ -1,6 +1,6 @@
 # Audit remediation queue
 
-Updated: 2026/11/11. Review baseline: Passport `e0e4e0e6272399d71dfaaa7cae0689ab4e2363f3`.
+Updated: 2026/11/17. Review baseline: Passport `e0e4e0e6272399d71dfaaa7cae0689ab4e2363f3`.
 
 This is the agreed order for four bounded improvements following the repository
 audit. It tracks implementation and merge state separately. Closing a finding
@@ -9,19 +9,19 @@ requires regression evidence; it does not automatically establish a complete
 
 ## Current work and immediate successor
 
-**Current: pinned reference regression CI, TODO-CI-01.** The user authorised
-starting this milestone before [#207](https://github.com/midnightntwrk/passport/pull/207)
-merged. That merge is now verified at `dc57bcc43ab57bd73c2d37407ad3cbbfb3be37a6`,
-and [#208](https://github.com/midnightntwrk/passport/pull/208) is rebased onto it
-and targets `main`. Following the user's CI-duration feedback, routine checks
-generate no keys; keyed SDK assembly, full proving, and localnet are manual.
+**Completed: pinned reference regression CI, TODO-CI-01.**
+[#208](https://github.com/midnightntwrk/passport/pull/208) merged on 2026/11/11
+at `99062671d939641cb9ed9274d3d18fce764d539a`. On 2026/11/17 the user made
+`Reference regression` a required check on `main`; the branch-protection API
+and an open PR's required-check list confirm it. Routine checks generate no
+keys; keyed SDK assembly, full proving, and localnet remain manual. See the
+[configuration receipt](../../contract/evidence/reference-ci-required-checks-2026-11-17.json).
 
 **Completed: restore and persist current viewing capability, REC-WRAP-001
 and REC-WALLET-001.** #207 merged on 2026/11/11 at 15:57:35 UTC. Its merge tree
 matches the reviewed head `3b2f6ed4c70d117f3595a25cc763e09f9879a738` exactly.
 
-**After #208 merges:** configure and verify required-check enforcement as a
-separate acceptance step. Compromised-credential
+**Required-check acceptance is complete.** Compromised-credential
 containment, partial transaction-outcome repair, production-scale discovery,
 and complete guardian transport remain separate open work.
 
@@ -37,7 +37,7 @@ background merge watcher or establish that any later task has started.
 | 5 | Durable change capture and recovery backfill | `CUST-02`; `TODO-CUST-02` | Merged in #205 | Merge `c87933d`, 2026/11/11 |
 | 6 | Chain-verified holdings reconstruction | `CUST-03`; `TODO-CUST-03` | Merged in #206 | Merge `617f256`, 2026/11/11 |
 | 7 | Restore and persist current viewing capability | `REC-WRAP-001`; `REC-WALLET-001` | Merged in #207 | Merge `dc57bcc`, 2026/11/11 |
-| 8 | Pinned reference regression and manual proof/localnet validation | `TODO-CI-01` | Implemented in #208; validation notes below | Rebased onto merged priority 7 |
+| 8 | Pinned reference regression and manual proof/localnet validation | `TODO-CI-01` | Completed: #208 merged; required check verified 2026/11/17 | Merged after priority 7 |
 
 ## 1. Reliable device reconnection
 
@@ -328,13 +328,21 @@ manual keyed SDK/proof/recovery tier, and retained evidence. See the
 - [x] Verify #207's merge, then rebase and retarget this implementation onto main.
 - [x] Remove full key generation from routine PR checks; keep the single keyed
   SDK assembly case explicit in the manual tier, with no silent skipped tests.
-- [ ] Merge this workflow and separately configure/verify the required check.
+- [x] Merge the workflow: #208, commit `99062671d939641cb9ed9274d3d18fce764d539a`.
+- [x] Separately configure and verify `Reference regression` as a required
+  check on `main` (2026/11/17).
 
 The implementation uses Sol for workflow/helpers, Astra for independent review,
 and Luna for test-inventory extraction. The primary agent owns integration,
 the heavy lane, live execution, documentation, and evidence reconciliation.
-The main branch protection read on 2026/11/11 required only `scan` and `DCO`;
-the new regression job is not yet a merge requirement.
+The initial branch-protection read on 2026/11/11 required only `scan` and
+`DCO`. The 2026/11/17 read now requires both plus `Reference regression`,
+bound to GitHub Actions (app ID 15368). Up-to-date branches and enforcement
+for administrators are enabled. `gh pr checks 210 --required` also lists the
+regression job, confirming that the policy applies to an open PR. This closes
+the separate configuration acceptance step; the
+[receipt](../../contract/evidence/reference-ci-required-checks-2026-11-17.json)
+records the observed settings and read-only verification commands.
 
 Initial validation on 2026/11/11: the clean local lane passed 492 TAP cases, 45 native
 Rust cases, and the additional script checks. Twelve subprocess controls test
@@ -362,9 +370,14 @@ user's duration constraint, routine CI now generates runtimes only, retaining
 491 TAP cases, 45 Rust tests, twelve runner controls, and additional script
 checks. The one unchanged keyed SDK assembly case moved to an explicit manual
 test. The full proof/localnet workflow has only a manual trigger, with no PR or
-scheduled run. Routine CI targets under ten minutes and has a fifteen-minute
-job limit; measured current results remain authoritative. No timeout increase
-was made to the expensive manual lane.
+scheduled run. The merged #208 baseline targeted under ten minutes with a
+fifteen-minute job limit. The Ledger profile in
+[#210](https://github.com/midnightntwrk/passport/pull/210) increased fresh
+compilation to 725 seconds in a
+[passing run](https://github.com/midnightntwrk/passport/actions/runs/44094728407).
+That PR therefore gives compilation a separate twenty-minute budget and the
+job thirty minutes; other commands retain ten-minute limits. Measured results
+remain authoritative. No timeout increase was made to the expensive manual lane.
 
 Use [#208's current checks](https://github.com/midnightntwrk/passport/pull/208/checks)
 and their retained artefacts for final-head routine results. Proof/localnet

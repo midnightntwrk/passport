@@ -1,0 +1,10 @@
+PASS captured initial.json: exact hash, native ES256, selector and challenge binding
+PASS captured reconnect.json: exact hash, native ES256, selector and challenge binding
+PASS profile normal: re-signed envelope/RP/flag refusals
+PASS profile Chrome GREASE: re-signed envelope/RP/flag refusals
+PASS compiled ACC device gate: normal rotation, selector refusal and replay refusal
+PASS compiled ACC device gate: Chrome GREASE rotation, selector refusal and replay refusal
+PASS compiled ACC grant gate: normal spend, selector/scope/amount/replay refusals
+PASS compiled ACC grant gate: Chrome GREASE spend, selector/scope/amount/replay refusals
+PASS compiled ACC grant gate: cumulative cap and post-revocation refusal
+PASS 9 Ledger/Chrome native-account test groups; evidence /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/ledger-flex-account/contract/evidence/ledger-flex-account/offline.json

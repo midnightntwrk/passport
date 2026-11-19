@@ -12,7 +12,7 @@ import { build } from 'esbuild';
 import { CustodyAccount } from '../wallet/account.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
 import { P256Device, p256Challenges } from '../wallet/signer-p256.js';
-import { type WebAuthnAssertion, type P256PublicKey, validateP256Key } from '../wallet/webauthn.js';
+import { type WebAuthnAssertion, type P256PublicKey, validateP256Key, WEBAUTHN_PROFILE } from '../wallet/webauthn.js';
 import { setupWallet, compiledAccountContract } from '../node/setup.js';
 import { serialiseError } from './evidence.js';
 import { assertNodeIndexerConsistent, bytes, confirmTransaction, installTimedProver } from './instrumentation.js';
@@ -35,7 +35,7 @@ const state: {
 } = { runId, phase: 'registration', message: 'Create a real passkey to begin.', origin, rpId, events: [] };
 const evidence: Record<string, any> = {
   testId: 'p256-browser', verdict: 'PARTIAL', runId, startedAt: new Date().toISOString(),
-  origin, rpId, profile: 'wa-json134', authenticator: 'interactive browser WebAuthn, userVerification=required',
+  origin, rpId, profile: WEBAUTHN_PROFILE, authenticator: 'interactive browser WebAuthn, userVerification=required',
   attestation: 'none; authenticator hardware and biometric method are not remotely attested',
   operation: 'rotate_enc_key_with_p256', samples: [], transactions: [], assertions: [], negatives: [], browserEvents: [],
   methodology: 'Prove timing includes key lookup/load and HTTP. Operation wall time starts when the server receives the assertion and includes local checks, proving, balancing and inclusion. Browser ceremony time is recorded separately.',

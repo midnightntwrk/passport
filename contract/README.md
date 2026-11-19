@@ -40,15 +40,27 @@ add on-chain operations. The deployment roster is in
 |---|---|---|
 | `jubjub` | Schnorr over JubJub; per-operation SHA-256 challenge with grinding; rolling single-use device entries | Normative MIP-0013 profile. Approval supplies a signature, not the device secret, to proving. |
 | `k256` | ECDSA over secp256k1; enrolled envelope selects `SHA-256(challenge)` or `SHA-256("midnight_signed_message:32:" \|\| challenge)` | Envelope 0 is direct software/HSM/MPC-style signing; envelope 1 models the connector prefix. Reference signers are TypeScript and Rust software implementations. |
-| `p256` | P-256 ECDSA over the WebAuthn envelope; RP hash and exact origin bound to the credential | Only the fixed `wa-json134` profile: 134-byte client-data JSON, 21-byte origin, 37-byte authenticator data, UP+UV required. |
+| `p256` | P-256 ECDSA over the WebAuthn envelope; RP hash and exact origin bound to the credential | `wa-json134-or-chrome243`: canonical 134-byte JSON or its exact Chromium GREASE variant; 21-byte origin, 37-byte authenticator data, UP+UV required. This remains a bounded profile. |
 
 [WEBAUTHN.md](WEBAUTHN.md) specifies the exact P-256 profile and exclusions.
+The Ledger pilot adds a Boolean selector to the P-256 authorisation ABI;
+the circuit reconstructs both supported signed byte shapes and verifies the
+selected digest. Recompile and use a fresh deployment for this experiment.
+Custody, grant-scope enforcement, device identity and policy commitments are
+unchanged. The older measurement records below retain their original profile.
 One real Safari account encryption-key rotation is recorded in the
 [passkey experiment](../experiments/passkey-account-flow/README.md); that
 is not general browser, authenticator-extension, variable-JSON, or PRF
 coverage. Per-arm circuits avoid paying the other arms' signature constraints
 in each proof. The [1 October measurements](P256-MEASUREMENTS.md) retain their
 original source/key attribution and are not fresh measurements of later fixes.
+
+**Ledger Flex grant key — passed on localnet, 17 November 2026.** A USB
+Ledger Security Key credential authorised a five-unit ACC grant withdrawal;
+scope, replay and post-revocation refusal checks passed, leaving 95 of the
+100 test units. The [experiment and evidence](../experiments/ledger-flex-account/README.md)
+record the exact profile and build. This is a live grant-key result;
+hardware device-key operations remain a separate test.
 
 **State and authority.** Device arms share the rolling-entry set,
 `device_count`, `device_epoch`, and `auth_nonce`. Cross-arm enrolment accepts
@@ -158,6 +170,7 @@ corresponding build outputs.
 | [23 October build/offline record](GRANTS-COMPLETION.md#reproduction-and-provenance) | TypeScript build, unit, toolchain, grants (127 checks), capability, caller, P-256, recovery simulator and independent Rust cross-implementation checks; ten-wave plans for all three initial arms | Simulator/client checks and saved run results; not an independent audit. |
 | [P-256 grants](evidence/grants-completion-20261023/p256-grants-conformance.json) | Full 52-circuit account; eleven successful funding/lifecycle transactions including three unshielded grant spends; balance 100 → 85; sixteen negative controls | OpenSSL software authenticator. Negatives abort during building against indexed state, with no proving/submission and unchanged serialised state. Successful shielded or forwarded P-256 grant calls are not covered. |
 | [P-256 refusal fixture](evidence/grants-completion-20261023/p256-grant-refusals.json) | Identity-key and fixed-profile authenticator-extension refusals; valid assertion reaches the unfunded custody guard | Restricted three-operation diagnostic deployment, not a full account. Refusals are native argument/profile/build checks. |
+| [Ledger Flex grant experiment](../experiments/ledger-flex-account/README.md) | Two fresh hardware assertions; one accepted five-unit withdrawal on a full 52-circuit account; scope, replay and revoked-grant controls; balance 100 → 95 | Both live assertions used the 134-byte layout; the 243-byte hardware capture passed native offline verification. Negative controls execute locally without proving/submission. No live hardware device-key claim. |
 | [Recovery and grant lifecycle](evidence/grants-completion-20261023/rec-1-9-recovery-conformance.json) | Full account; reconstruction/wrap opening, veto, cancel/resubmit, two recoveries; exactly the authorised successor retained each epoch; old grants stay unusable, reissued JubJub/k256 grants spend | Post-reset-fix proof/node evidence. Negative cases compare specified state fields, not a full state/UTXO snapshot. The explicit future-epoch, differing-counter, pending-device and all-scheme retirement matrix remains broader. |
 | [Caller-bound grants](GRANTS-CALLER.md) | Recorded forwarding and fabricated-caller proof admission checks for the earlier JubJub/k256 tranche | Earlier source/roster; not successful P-256 forwarding on the final combined account. |
 | [ECC adversarial tests](evidence/ecc-validation/README.md) and [review](../research/passport-ecc-validation.md) | 197 runtime cases (accepted and rejected expectations), native preprocessing/mutations, nine MockProver checks and two verifying local full proofs | The runtime record hashes account source `c6888fe` (before the reset); the P-256/WebAuthn and recorded client sources match the pinned baseline above. Client input checks have since changed as described below. The native runner later gained archive prevalidation. Local proofs use test parameters. Not a fresh full-account run or a complete malicious-witness or ECDSA proof audit. |
@@ -543,6 +556,7 @@ npm run test:grants-offline
 npm run test:grants-capability-offline
 npm run test:grants-caller-offline
 npm run test:p256-offline
+npm run test:ledger-flex-offline
 npm run test:recovery-offline
 npm run test:recovery-sim
 npm run test:crossimpl-offline
@@ -600,6 +614,7 @@ was actually exercised. In older reports, “both arms” means JubJub and k256.
 | `test:grants-offline`, `test:grants-conformance`, `test:grants-unshielded` | [E1](GRANTS-E1.md), [E2](GRANTS-E2.md), [E3](GRANTS-E3.md), and `evidence/grants-e4-*.json`; later additions are in [GRANTS-COMPLETION.md](GRANTS-COMPLETION.md). `GRANTS_E2_GROUPS` and `GRANTS_E4_GROUPS` truncate their own scenario sequences; they do not select recovery scenarios. |
 | `test:grants-capability-offline`, `test:grants-caller-offline`, `test:grants-caller` | Schema-v3 client gating and immediate caller checks. Capability fixtures do not replace deploying a real legacy account. |
 | `test:p256-offline`, `test:p256`, `test:p256-browser`, `verify:p256-browser` | Fixed WebAuthn profile, proving samples, interactive real-browser experiment and recorded-assertion verification; [profile and evidence](WEBAUTHN.md). |
+| `test:ledger-flex-offline`, `test:ledger-flex-grant` | Captured Ledger signature checks and an interactive localnet grant spend/revocation experiment; [setup and evidence boundaries](WEBAUTHN.md#ledger-flex-grant-experiment). |
 | `test:p256-grants`, `test:p256-grant-refusals` | Full-account spending and separate restricted refusal fixture from 23 October. |
 | `test:recovery-offline`, `test:recovery-sim`, `test:recovery` | Client scheme/codec, simulator and localnet recovery layers respectively; latest node evidence includes two finalisations and grant invalidation/reissue. |
 | `probe:revocation`, `probe:wave-ceiling`, `probe:block-time`, `probe:dismiss-cost` | Diagnostic probes; revocation reports the known defect, not a passing security guarantee. |

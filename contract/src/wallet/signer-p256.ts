@@ -9,6 +9,8 @@ import type { JubjubPoint, QualifiedCoin } from './contract.js';
 export interface P256GrantAuthorisation {
   arm: 'p256'; pk: P256PublicKey; policy: WebAuthnPolicy;
   authenticator_data: Uint8Array; sig: { r: bigint; s: bigint };
+  /** Selects one of two in-circuit reconstructed JSON shapes, not a digest. */
+  chrome_grease: boolean;
 }
 export interface P256Authorisation extends P256GrantAuthorisation { use_counter: bigint }
 

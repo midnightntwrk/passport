@@ -1,4 +1,5 @@
-// Node-backed identity and authenticator-extension controls for wa-json134.
+// Node-backed identity and authenticator-extension controls for the bounded
+// account profile, using canonical 134-byte clientDataJSON inputs.
 // Deploys only three ORIGINAL account operations, with the original constructor
 // and verifier keys and an unsatisfiable maintenance authority. This unfunded
 // diagnostic fixture is not a full conforming account deployment.
@@ -17,7 +18,7 @@ import { JubjubDevice, originHash, spendScope, openingOf, jubjubChallenges,
   scopeDigest, scopeArgs, authArgs, grantAuthArgs } from '../wallet/signer.js';
 import { ledger } from '../wallet/contract.js';
 import { p256GrantChallenges, type P256GrantAuthorisation } from '../wallet/signer-p256.js';
-import { parseES256Signature, type WebAuthnAssertion } from '../wallet/webauthn.js';
+import { parseES256Signature, WEBAUTHN_PROFILE, type WebAuthnAssertion } from '../wallet/webauthn.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
 import { emptyCoinStore } from '../wallet/witnesses.js';
 import { queryTxPosition } from '../wallet/capture.js';
@@ -157,18 +158,19 @@ await runScenario('P-256 grant identity and extension refusals', async () => {
     /type error:.*authenticator_data: Bytes<37>/, 'fixed-size-argument-encoding');
   // A valid ordinary assertion gets through the grant and signature checks,
   // reaching the unfunded custody guard. The fixture is not a vacuous verifier.
-  await reject('valid wa-json134 assertion reaches custody', auth, /no balance for color/, 'custody-positive-control', true);
+  await reject('valid canonical134 assertion reaches custody', auth, /no balance for color/, 'custody-positive-control', true);
   assert.equal((await readLedger()).grants.lookup(id).nonce, 0n);
   assert.deepEqual(captureProvenance(), provenance, 'sources or artifacts changed during the refusal run');
   writeEvidence({ testId: 'p256-grant-refusals', name: 'conformance', fileName: 'p256-grant-refusals.json', verdict: 'PASS',
-    description: 'Node-backed P-256 grant identity and bounded wa-json134 authenticator-extension refusals',
-    note: 'Three original account operations deployed with original source and verifier keys. The real issued grant is unfunded. Invalid inputs never reach proving/submission and leave serialized state unchanged; valid ordinary authentication reaches the expected custody guard. This restricted fixture does not establish full account conformance.',
-    details: { account: address, schema: 3, profile: 'wa-json134', deployedInterface: circuits,
+    description: `Node-backed P-256 grant identity and bounded ${WEBAUTHN_PROFILE} authenticator-extension refusals`,
+    note: 'Three original account operations deployed with original source and verifier keys. The real issued grant is unfunded. Canonical 134-byte clientDataJSON is used; Chrome GREASE is not sampled. Invalid inputs never reach proving/submission and leave serialized state unchanged; valid ordinary authentication reaches the expected custody guard. This restricted fixture does not establish full account conformance.',
+    details: { account: address, schema: 3, profile: WEBAUTHN_PROFILE,
+      assertionInputShape: 'canonical134', deployedInterface: circuits,
       maintenanceAuthority: { committeeSize: 0, threshold: 1 }, transactions, refusals, provenance,
       extensionAssertions: { fixedPrefixBytes: edPrefix.length, flags: edPrefix[32],
         extendedBytes: withExtension.authenticatorData.length, cborSuffixHex: hex(extensionMap),
         authenticatorDataHex: hex(withExtension.authenticatorData),
         signedClientDataSha256: hex(sha256(withExtension.clientDataJSON)),
         signatureDerSha256: hex(sha256(withExtension.signature)), signatureVerifiedIndependently: true },
-      limitation: 'The current wa-json134 profile excludes authenticator extensions. These controls do not claim that extension-bearing WebAuthn assertions are invalid in general.' } });
+      limitation: `The ${WEBAUTHN_PROFILE} profile excludes authenticator extensions. These controls do not claim that extension-bearing WebAuthn assertions are invalid in general.` } });
 });

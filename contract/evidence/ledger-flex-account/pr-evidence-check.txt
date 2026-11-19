@@ -1,0 +1,6 @@
+
+> midnight-account-custody@0.1.0 verify:ledger-flex
+> node --import tsx src/tests/ledger-flex-evidence.ts
+
+PASS Ledger evidence: 2 signatures verified with Node/OpenSSL; both grant challenges reconstructed; 5 recorded refusals and localnet outcome consistency checked.
+This offline check verifies cryptographic binding and recorded consistency, not a ledger proof or independent on-chain acceptance.

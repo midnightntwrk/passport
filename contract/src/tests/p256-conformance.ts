@@ -17,7 +17,7 @@ import { CustodyAccount } from '../wallet/account.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
 import { JubjubDevice, K256Device, originHash, readOnlyScope } from '../wallet/signer.js';
 import { p256Challenges } from '../wallet/signer-p256.js';
-import { parseES256Signature, webauthnPolicy } from '../wallet/webauthn.js';
+import { parseES256Signature, webauthnPolicy, WEBAUTHN_PROFILE } from '../wallet/webauthn.js';
 import { queryTxPosition } from '../wallet/capture.js';
 import { setupWallet, compiledAccountContract } from '../node/setup.js';
 import { CONFIG, managedPath, createProviders } from '../node/wallet.js';
@@ -124,8 +124,9 @@ await runScenario('P-256/WebAuthn on-node', async () => {
     } catch { /* cgroup v1 and remote proof servers need another memory observer */ }
   }
   writeEvidence({ testId: 'p256-webauthn', name: 'conformance-and-proving', fileName: 'conformance-and-proving.json',
-    description: 'P-256 WebAuthn profile wa-json134: enrolled account, cross-arm calls, lifecycle, real-assertion verifier probes',
-    verdict: 'PASS', note: 'Account calls: OpenSSL software authenticator. Verifier probes: captured real WebAuthn assertion. Negatives rejected at build stage.',
-    details: { account: account.address, transactions, samples, profile: 'wa-json134', proverEnvironment, containerPeakMemoryBytes,
+    description: `P-256 WebAuthn profile ${WEBAUTHN_PROFILE}: enrolled account, cross-arm calls, lifecycle, real-assertion verifier probes`,
+    verdict: 'PASS', note: 'Account calls: OpenSSL software authenticator. Verifier probes: captured real WebAuthn assertion. Accepted assertions use canonical 134-byte JSON only; Chrome GREASE is not sampled. Negatives rejected at build stage.',
+    details: { account: account.address, transactions, samples, profile: WEBAUTHN_PROFILE,
+      assertionInputShape: 'canonical134', proverEnvironment, containerPeakMemoryBytes,
       methodology: 'Sequential per-circuit ProvingProvider.prove wall time, including key lookup/load and local HTTP transfer; excludes signing, circuit execution/check, wallet balancing and node inclusion. First observation + two repeats per circuit; no claim of OS/server cold caches. Key generation excluded.' } });
 });

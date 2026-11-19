@@ -15,6 +15,8 @@ for (const name of ['unit', 'recovery-offline', 'recovery-sim', 'grants-capabili
   npm(`test:${name}`, 'scenario', name === 'unit' ? 'unit-offline' : name);
 }
 npm('test:p256-offline', 'pattern', '^PASS P-256/WebAuthn:');
+npm('test:ledger-flex-offline', 'pattern', '^PASS 9 Ledger/Chrome native-account test groups;');
+npm('verify:ledger-flex', 'pattern', '^PASS Ledger evidence:');
 npm('test:grants-offline', 'pattern', '^\\s*[1-9]\\d* passed, 0 failed\\s*$');
 npm('test:grants-caller-offline', 'pattern', '^PASS caller scope:');
 npm('test:view-envelope-offline', 'pattern', '^PASS: 192-byte envelope,');

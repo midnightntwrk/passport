@@ -207,7 +207,7 @@ async function main() {
         : arm === 'k256'
           ? { arm: 'k256' as const, pk: v.pk, use_counter: 0n, sig: { r: 1n, s: 1n }, envelope: 0n }
           : { arm: 'p256' as const, pk: v.pk, use_counter: 0n, policy,
-            authenticator_data: zero(37), sig: { r: 1n, s: 1n } };
+            authenticator_data: zero(37), sig: { r: 1n, s: 1n }, chrome_grease: false };
       await check(`device/authorise ${arm}`, v.name,
         () => s.call(`rotate_enc_key_with_${arm}`, salt, ...authArgs(auth as any)), v.expected, s);
       if (!v.expected) assert.match(rows.at(-1)!.error!, /type error|cannot extract/, 'must reject the key before membership/signature checks');
@@ -380,7 +380,8 @@ async function extendedChecks() {
       const opening = [origin, 0n, salt, 0n, zero(), scope.maxCoinValue, 0n];
       await check(`grant/spend ${arm}`, v.name, () => s.call(`withdraw_unshielded_with_grant_${arm}`,
         ...prefix, ...(arm === 'k256' ? [auth.pk, 0n, ...opening, auth.sig] : [...opening, {
-          pk: auth.pk, policy: auth.policy, authenticator_data: auth.authenticator_data, sig: auth.sig }])), v.expected, s);
+          pk: auth.pk, policy: auth.policy, authenticator_data: auth.authenticator_data,
+          sig: auth.sig, chrome_grease: auth.chrome_grease }])), v.expected, s);
       if (!v.expected) assert.match(rows.at(-1)!.error!, /type error|cannot extract/);
     }
   }

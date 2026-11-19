@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { arch, cpus, homedir, platform, totalmem } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { WEBAUTHN_PROFILE } from '../wallet/webauthn.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const zkir = process.env.ZKIR_BIN ?? path.join(homedir(), '.compact/versions/0.35.0/aarch64-darwin/zkir-v3');
@@ -40,7 +41,7 @@ const result = {
   measuredAt: new Date().toISOString(), compiler: JSON.parse(readFileSync(path.join(root, 'contracts/managed/account/compiler/contract-info.json'), 'utf8'))['compiler-version'],
   zkirVersion: execFileSync(zkir, ['--version'], { encoding: 'utf8' }).trim(),
   hardware: { platform: platform(), arch: arch(), cpu: cpus()[0].model, logicalCpus: cpus().length, memoryBytes: totalmem() },
-  profile: 'wa-json134', sources, circuits,
+  profile: WEBAUTHN_PROFILE, standaloneWebAuthnProbeProfile: 'wa-json134', sources, circuits,
 };
 const out = path.join(root, 'evidence/p256-webauthn');
 mkdirSync(out, { recursive: true });

@@ -14,7 +14,7 @@ import {
   type GrantOpening, type PlainScope,
 } from '../wallet/signer.js';
 import { p256Challenges, p256GrantChallenges, type P256GrantAuthorisation } from '../wallet/signer-p256.js';
-import { parseES256Signature } from '../wallet/webauthn.js';
+import { parseES256Signature, WEBAUTHN_PROFILE } from '../wallet/webauthn.js';
 import { pureCircuits } from '../wallet/contract.js';
 import { queryTxPosition } from '../wallet/capture.js';
 import { runScenario, step, sleep } from './runner.js';
@@ -124,13 +124,13 @@ await runScenario('P-256 scoped-grant spends on node', async () => {
   const wrongOrigin = new TextEncoder().encode('http://localhost:8974');
   await reject('policy origin mismatch', () => spend({ ...first.auth,
     policy: { ...first.auth.policy, origin: wrongOrigin } }), /grant origin mismatch/);
-  // This is a valid ES256 assertion over JSON outside the fixed wa-json134
+  // This is a valid ES256 assertion over JSON outside the bounded account
   // profile. Omit the client adapter and pass its real signature directly.
   const extraJSON = new TextEncoder().encode(JSON.stringify({ type: 'webauthn.get',
     challenge: Buffer.from(first.challenge).toString('base64url'), origin: TEST_ORIGIN,
     crossOrigin: false, tokenBinding: { status: 'supported' } }));
   const extraAssertion = await delegate.assertion(first.challenge, { clientDataJSON: extraJSON });
-  await reject('valid ES256 assertion outside wa-json134', () => spend({ ...first.auth,
+  await reject(`valid ES256 assertion outside ${WEBAUTHN_PROFILE}`, () => spend({ ...first.auth,
     authenticator_data: extraAssertion.authenticatorData, sig: parseES256Signature(extraAssertion.signature) }), /invalid grant signature/);
   await reject('modified signature scalar', () => spend({ ...first.auth,
     sig: { ...first.auth.sig, s: 1n } }), /invalid grant signature/);
@@ -195,9 +195,10 @@ await runScenario('P-256 scoped-grant spends on node', async () => {
 
   assert.deepEqual(captureProvenance(), provenance, 'sources or artifacts changed during the conformance run');
   writeEvidence({ testId: 'p256-grants', name: 'conformance', fileName: 'p256-grants-conformance.json', verdict: 'PASS',
-    description: 'P-256 wa-json134 owner and grantee: real unshielded spends, grant restrictions, freshness, and revocation',
-    note: 'Accepted operations proved and included on node. Negative cases bypass the client WebAuthn adapter and fail during circuit build, with zero prover/submission calls and byte-identical contract state. OpenSSL software authenticator; no browser or PRF ceremony claim.',
-    details: { account: account.address, schema: 3, profile: 'wa-json134', transactions, negatives, provenance,
+    description: `P-256 ${WEBAUTHN_PROFILE} owner and grantee: real unshielded spends, grant restrictions, freshness, and revocation`,
+    note: 'Accepted operations proved and included on node using canonical 134-byte clientDataJSON; Chrome GREASE is not sampled. Negative cases bypass the client WebAuthn adapter and fail during circuit build, with zero prover/submission calls and byte-identical contract state. OpenSSL software authenticator; no browser or PRF ceremony claim.',
+    details: { account: account.address, schema: 3, profile: WEBAUTHN_PROFILE,
+      acceptedAssertionInputShape: 'canonical134', transactions, negatives, provenance,
       finalBalance: (await account.ledgerState()).unshielded_balances.lookup(color),
       originalIssuedAt: originalRecord.issued_at, reissuedAt: reissued.issued_at,
       limitations: ['Non-native unshielded assets only; no P-256 shielded grant spend in this suite.',

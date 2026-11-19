@@ -1,0 +1,21 @@
+{
+  "format": "p256-gate-webauthn-v1",
+  "pk_x_hex": "acadbc4cad15a7ae09804aa5bbd846e78120432529899002ac0a7637076bb534",
+  "pk_y_hex": "09f0f3bbbe916795f04e1db0e178edb6be388546e697f022d26fb0e53cc24ba9",
+  "signature_der_hex": "30440220366656fbf780ade0d114b089289fd5af054077273746d66118aa9048de90e7fc02207b4cff0d38e95a75188ad3ec92524e544018cbc2541f120f102bada89a43a8c2",
+  "authenticator_data_hex": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763056afc3c1c",
+  "client_data_json_b64url": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoidGczSkJCSjMzd2dwMHpVc3daaEdldjlfZWNDbkJkVWUwSlhEQWlwYlYtWSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODk3MyIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+  "challenge_hex": "b60dc9041277df0829d3352cc198467aff7f79c0a705d51ed095c3022a5b57e6",
+  "capture": {
+    "captured_at": "2026-11-17T11:36:53.733Z",
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    "origin": "http://localhost:8973",
+    "requested_authenticator": "security-key",
+    "reported_transports": [],
+    "user_verification": "required",
+    "device_os": "1.7.0",
+    "security_key_app": "1.7.8",
+    "browser_signature_verified": true,
+    "hardware_attestation_verified": false
+  }
+}

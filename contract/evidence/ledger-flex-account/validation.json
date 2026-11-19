@@ -1,0 +1,98 @@
+{
+  "ranAt": "2026-11-17T12:23:45.680Z",
+  "upstreamBase": "99062671d939641cb9ed9274d3d18fce764d539a",
+  "checks": [
+    {
+      "command": "npm run build",
+      "log": "build.txt",
+      "exitCode": 0,
+      "sha256": "fa6795b82da576b0d7182352f3a24a61db0a693a9f22d0eb05800594b9266282",
+      "sourceLogSha256": "2a945964d3b8ee21c3534fdffc5f04e509072b5442881601e449fc8e258e6209",
+      "publication": "Local checkout paths replaced with <checkout>; raw log retained locally. Trailing blank lines removed."
+    },
+    {
+      "command": "node --import tsx src/tests/ledger-flex-offline.ts",
+      "log": "native-offline.txt",
+      "groupsPassed": 9,
+      "exitCode": 0,
+      "sha256": "3782c1b82ad8f5c13935cd0b194157b96aa0389997e6836dba3a599121a5ca23",
+      "sourceLogSha256": "6a22bd670f9606cbc44b1e15d524c06e2b676a6488d3c50b1938d9608b33f0e2",
+      "publication": "Local checkout paths replaced with <checkout>; raw log retained locally."
+    },
+    {
+      "command": "node --import tsx src/tests/p256-offline.ts",
+      "log": "p256-offline.txt",
+      "exitCode": 0,
+      "sha256": "26a8204a647a19dc54a7ba01f82942bbef542aa5e582ff7ed9f2146ee3c14a11",
+      "sourceLogSha256": "26a8204a647a19dc54a7ba01f82942bbef542aa5e582ff7ed9f2146ee3c14a11",
+      "publication": "Local checkout paths replaced with <checkout>; raw log retained locally."
+    },
+    {
+      "command": "node --import tsx src/tests/grants-offline.ts",
+      "log": "grants-offline.txt",
+      "assertionsPassed": 127,
+      "exitCode": 0,
+      "sha256": "acb95a55716cd0aba95e48ed2d1c8730cd7decb3b27af4caa37b5d4fdf180d55",
+      "sourceLogSha256": "acb95a55716cd0aba95e48ed2d1c8730cd7decb3b27af4caa37b5d4fdf180d55",
+      "publication": "Local checkout paths replaced with <checkout>; raw log retained locally."
+    },
+    {
+      "command": "node --import tsx src/tests/toolchain-offline.ts",
+      "log": "toolchain-offline-before-keyed-manifest.txt",
+      "exitCode": 1,
+      "sha256": "03d3eaa78afcf5a9d38abd5ddb80d60adca6e6b7524f31d96f0f39385f5e4265",
+      "reason": "The initial --skip-zk build omitted key entries from the compiler manifest and verifier-key bindings from generated JS. A compiler-native keyed build is required before deployment.",
+      "sourceLogSha256": "b057cbc8d46a59e40444d6fd81e564a8df546ca01b71db62eb76bef591a0108a",
+      "publication": "Local checkout paths replaced with <checkout>; raw log retained locally."
+    },
+    {
+      "command": "node --import tsx src/tests/toolchain-offline.ts",
+      "log": "toolchain-offline.txt",
+      "exitCode": 0,
+      "sha256": "f54adf9d0e611bbf4231b610673b6b3243894c07353195a63dfaf2b7bcb1fadd",
+      "artifactStage": "Compiler-native keyed build; 52 circuits, 10 deployment waves for every key type.",
+      "sourceLogSha256": "f54adf9d0e611bbf4231b610673b6b3243894c07353195a63dfaf2b7bcb1fadd",
+      "publication": "Local checkout paths replaced with <checkout>; raw log retained locally."
+    },
+    {
+      "command": "node --import tsx src/tests/ledger-flex-offline.ts",
+      "log": "pr-native-offline.txt",
+      "exitCode": 0,
+      "sha256": "6a22bd670f9606cbc44b1e15d524c06e2b676a6488d3c50b1938d9608b33f0e2",
+      "stage": "PR publication: projected fixtures and independent evidence verifier"
+    },
+    {
+      "command": "CI_EVIDENCE_DIR=/tmp/passport-ledger-pr-ci-20261117 node scripts/ci-run.mjs verify-ledger-flex pattern '^PASS Ledger evidence:' -- npm run verify:ledger-flex",
+      "log": "pr-evidence-check.txt",
+      "exitCode": 0,
+      "sha256": "a1d77c148c9aabb9f9ca7eb74cd44557579be8067c4da94a0f02c59b2c6a02b9",
+      "stage": "PR publication: projected fixtures and independent evidence verifier"
+    }
+  ],
+  "notes": [
+    "node --import tsx avoids the tsx CLI Unix-socket listener blocked by the sandbox.",
+    "Account/probe runtime bindings compiled using Compact 0.35.0 --skip-zk; these tests do not establish ZK proof or node-transaction success."
+  ],
+  "finalizedArtifacts": "keygen/finalized-artifacts.json",
+  "liveRun": {
+    "file": "grant-flow.json",
+    "sha256": "30189c6a4438f524095564c82dc8d0e0ec25187f5cfb51ddd2f5a3b7763df16e",
+    "verdict": "PASS",
+    "completedAt": "2026-11-17T13:00:26.089Z",
+    "hardwareAssertions": 2,
+    "acceptedSpendTxId": "0021a7483505d3b6529eabb91b2e0e7782e0a5fec66071ab527813c0d8993bf289",
+    "finalAccountBalance": "95",
+    "grantRevoked": true,
+    "negativeControls": 5,
+    "sourceRunSha256": "7b012804aa267ca804acc05e9990e47674df57cb8805029051e8f81f8107d09b"
+  },
+  "upstreamReverifiedAfterLiveRun": {
+    "origin": "git@github.com:midnightntwrk/passport.git",
+    "main": "99062671d939641cb9ed9274d3d18fce764d539a",
+    "recordedAt": "2026-11-17T13:02:34.881396+00:00"
+  },
+  "publication": {
+    "sourceValidationSha256": "f48cb848af7c6a0ad4f96ba3b6b80cfe417d909526c17ed9e0c8e5be10e81df8",
+    "note": "Published log and live-run references point to documented projections; original hashes are retained."
+  }
+}
