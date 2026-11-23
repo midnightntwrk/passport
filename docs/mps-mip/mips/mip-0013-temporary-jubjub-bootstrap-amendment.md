@@ -185,13 +185,19 @@ credential ID, key, policy, and account mapping. `userHandle` is a locator,
 not a substitute for signature verification or proof that the registration
 used that handle; the circuit does not attest registration metadata.
 
-WebAuthn identifies a discoverable credential by RP ID and user handle, so a
-second registration under the same `user.id` on the same authenticator or
-synced provider replaces the first and destroys its private key. Clients
-MUST list the account's known credential IDs in `excludeCredentials`, MUST
-check for a persisted credential before registering, and MUST NOT register
-again after signing an intent over a target key while that signature can
-still be submitted.
+WebAuthn identifies a discoverable credential by RP ID and user handle. A
+second registration under the same `user.id` on an authenticator that already
+holds a credential for it replaces that credential there and destroys its
+private key; with a synced passkey provider, the replacement may propagate to
+the provider's other devices. `excludeCredentials` only makes the selected
+authenticator refuse when it holds one of the listed credential IDs. It does
+not stop registration on another authenticator, or when the earlier
+credential ID was never recorded. The registration prohibition is therefore
+the SDK's onboarding-state guard: before registering, it MUST check the
+onboarding record for a persisted credential for the account, and it MUST
+NOT register again after signing an intent over a target key while that
+signature can still be submitted. It SHOULD also list the account's known
+credential IDs in `excludeCredentials`.
 
 Let `A = kernel.self()` and `B = boot` read from the account. The circuit
 checks `device_epoch = 0`, `auth_nonce = 0` and uses those actual values as
@@ -226,7 +232,13 @@ challenge and needs a fresh `r`; a signer that retries MUST resubmit the
 complete retained `(R, s, grind_nonce)` or sign afresh with a new `r`.
 Exhausting the grinding counter fails;
 it MUST NOT wrap silently. Neither signature depends on the other signature's
-bytes, so the ceremony introduces no new circular dependency.
+bytes, so the ceremony introduces no new circular dependency. Because
+`passkey_challenge` depends only on `I`, the client MUST obtain the assertion
+and validate it locally against profile 1 (RP hash, exact origin, accepted
+JSON shape, authenticator-data length, flags, and signature) before producing
+the temporary signature. An authenticator whose assertion fails the profile
+therefore never becomes an approved target; the client may discard that
+credential and register another while no approval exists.
 
 Both `Q` and `R` MUST be valid nonidentity prime-subgroup Jubjub points;
 the exact coordinates hashed MUST be bound to the curve operands. Native
@@ -303,8 +315,10 @@ committed policy/network configuration, deployment identity, and subsequently
 the credential metadata and approved
 target. Do not log `b` or send it to an indexer, relayer, prover, or sponsor.
 Only signatures and required nonsecret witnesses cross the proving boundary.
-Durably retain the approved intent and temporary signature, followed by the
-passkey assertion/proof when available, with the protected onboarding record.
+Validate the passkey assertion before signing (§3.3), then durably retain
+the approved intent, the validated assertion, and the complete temporary
+signature with the protected onboarding record, followed by the proof when
+available.
 After an uncertain submission, inspect confirmed state before retrying;
 reuse the same target and reconstruct the same intent only while dormant.
 Do not create replacement credentials or approve a different key implicitly.
@@ -357,7 +371,7 @@ implementation/review plan, not a claim that these tests have run.
 | B08 | Deposits/inbox updates between approval and submission do not invalidate the intent or lose their state changes. |
 | B09 | Recovery finalises before activation: old bootstrap rejects. Activation during pending recovery preserves the deadline/record and permits ordinary veto; without veto finalisation retires the device and bootstrap permanently. |
 | B10 | Both signer private keys are absent from proof preimages/logs. A modified proof request cannot install a different target under the original approvals. |
-| B11 | Interrupted deployment/registration/submission resumes the same account and credential safely; duplicate credential creation is not an automatic retry, and a second registration under the same `user.id` is refused via `excludeCredentials`. Retained approval allows the same target to complete after loss of the temporary key; loss of both key and approval, and unusable-recovery outcomes, are explicit. |
+| B11 | Interrupted deployment/registration/submission resumes the same account and credential safely; duplicate credential creation is not an automatic retry. A known credential listed in `excludeCredentials` makes the same authenticator refuse re-registration; the SDK's onboarding-state guard refuses a second registration once a credential is persisted or an intent signed, whichever authenticator is offered. An assertion that fails the profile is rejected before any temporary signature exists. Retained approval allows the same target to complete after loss of the temporary key; loss of both key and approval, and unusable-recovery outcomes, are explicit. |
 | B12 | Independent signature/encoding vectors cover every typed hash, canonical scalar checks and the installed entry. Every published vector pins its compiler/runtime and source revision. |
 | B13 | Real proofs verify and the complete flow executes on-node; record fresh artefact provenance, `k`, rows, proving timings and relevant custody/device/recovery regressions. Distinguish host-side rejection from proof/ledger enforcement. |
 

@@ -52,12 +52,12 @@ sequenceDiagram
     Bearer-->>Auth: Approve
     Auth-->>Client: Public key and credential metadata
     Client->>Client: Persist credential metadata, compute activation intent I
-    Client->>Client: Sign I with the temporary Jubjub key and retain the signature
     Client->>Auth: Get assertion for the proof-of-possession challenge over I
     Auth-->>Bearer: Require user verification
     Bearer-->>Auth: Approve
     Auth-->>Client: WebAuthn assertion under the agreed policy
-    Client->>Client: Check the assertion locally
+    Client->>Client: Validate the assertion against profile 1 before any approval
+    Client->>Client: Sign I with the temporary Jubjub key, retain signature and assertion
     Client->>Prover: Q, target key/policy, Jubjub signature and WebAuthn assertion
     Note over Client,Prover: Neither temporary scalar b nor passkey private key is sent
     Prover-->>Client: Activation proof
@@ -99,8 +99,9 @@ instance and the actual deployed verifier relations before approving.
 |---|---|
 | Before deployment | Protect temporary keypair (`b` and `Q`), exact commitment, committed policy and network configuration, viewing and recovery material, and intended artefact identity. |
 | Deployment submitted | Retain transaction identity; discover its confirmed outcome before retrying. Complete verifier waves and verify the returned address/state. |
-| Credential created | Immediately persist credential ID, public key, RP and origin, network, and account mapping. Resume this credential; a second registration under the same `user.id` replaces it, so list it in `excludeCredentials`. |
-| Activation signed or submitted | Protect the exact intent, the complete temporary signature, any assertion or proof, and the transaction identity. Inspect state before retrying, keep the same dormant account and target, and resubmit the retained signature rather than re-signing with the same nonce. |
+| Credential created | Immediately persist credential ID, public key, RP and origin, network, and account mapping. Resume this credential. Re-registering under the same `user.id` on the same authenticator replaces it, and `excludeCredentials` only guards the authenticator holding a listed ID, so the onboarding record is what blocks a second registration. |
+| Assertion validated | Only now sign `I`. If the assertion failed profile 1, no approval exists: the credential may be discarded and another registered. |
+| Activation signed or submitted | Protect the exact intent, the complete temporary signature, the validated assertion, any proof, and the transaction identity. Inspect state before retrying, keep the same dormant account and target, and resubmit the retained signature rather than re-signing with the same nonce. |
 | Intended activation confirmed | Verify the installed entry and consumed boot state; erase the temporary key, and retain device, viewing, and recovery metadata. |
 | Recovery consumed bootstrap | Stop activation retries, erase temporary key, and resume the recovery/device flow rather than claiming initial-passkey activation succeeded. |
 
