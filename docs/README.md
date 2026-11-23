@@ -39,8 +39,9 @@ or site summary cannot override the protocol or establish implementation.
   single-seed designs are not the current account-contract architecture.
   `RESEARCH.md` explicitly reserves edits to humans. Consult current
   requirements and architecture when historical designs differ.
-- Local standards files are either historical copies, canonical pointers, or
-  working drafts, as labelled in the local standards index. Historical copies
+- Local standards files are historical copies, canonical pointers, proposed
+  local amendments to numbered standards, or working drafts, as labelled in
+  the local standards index. Historical copies
   are not synchronised mirrors; use upstream for normative interpretation.
 - Untracked drafts, `tmp/`, and private planning directories are working
   material, not publishable evidence. Do not make a committed document depend

@@ -58,13 +58,13 @@ recipes. For mode 1, require a nonzero network domain `N` and nonzero `boot`.
 The initial device set MUST be empty, with `booted = false`, `device_count = 0`,
 `device_epoch = 0`, and `auth_nonce = 0` in either mode.
 
-Every old activation entry point in the new artifact MUST require mode 0;
+Every old activation entry point in the new artefact MUST require mode 0;
 the new `activate_initial_passkey` entry point MUST require mode 1. A mode-1
 commitment MUST NOT be accepted as a legacy commitment. There is no mode
 switch, replacement of `boot`, or bootstrap reset after deployment.
 
 Existing schema-3 deployments and their keys/addresses remain unchanged.
-Clients MUST select the artifact and constructor ABI explicitly. A deployment
+Clients MUST select the artefact and constructor ABI explicitly. A deployment
 whose maintenance authority has been retired cannot acquire the new verifier
 through a documentation or SDK update. In-place migration of existing accounts
 is outside this amendment; #213 targets new deployments and tests mode isolation.
@@ -90,7 +90,7 @@ MUST describe actual recovery readiness, not merely the presence of fields.
 
 `H<T>(v)` means Compact `persistentHash<T>(v)`, including its typed encoding;
 it is not JSON hashing or string concatenation. Integer widths, tuple order,
-point coordinate encoding and casts are consensus-relevant. Independent
+point coordinate encoding, and casts are consensus-relevant. Independent
 signers MUST reproduce the pinned compiler's bytes, with cross-implementation
 vectors supplied by #213. Hash outputs are `Bytes<32>`. P-256 coordinates
 `x,y` below are the canonical little-endian `Bytes<32>` values returned by
@@ -98,7 +98,9 @@ the existing `secp256r1PointX/Y(pk) as Bytes<32>` recipe.
 
 New tags follow MIP-0021: exact ASCII, no NUL padding, no hash of a padded
 tag, and no length prefix before the tag. These are proposed additions under
-the existing MIP-0013 namespace; upstream adoption remains #214. No old tag
+the `mip-0013:` namespace that MIP-0021 reserves for MIP-0013's
+constructions. Existing MIP-0013 tags still use `midnight:account:*`;
+upstream adoption remains #214. No old tag
 or device-entry encoding is silently rewritten.
 
 | Symbol | Exact tag | Compact type |
@@ -153,9 +155,9 @@ Profile 1 fixes the reference `wa-json134-or-chrome243` policy:
 The exact origin is not padded. The verifier accepts only the two complete
 JSON shapes in [the pinned profile](https://github.com/midnightntwrk/passport/blob/449de16d33679db8646408d5e4e804591d77228b/contract/WEBAUTHN.md),
 `type=webauthn.get`, `crossOrigin=false`, 37-byte authenticator data,
-RP-hash equality, and flags 5, 13 or 29 (UP+UV, with the specified backup-bit
+RP-hash equality, and flags 5, 13, or 29 (UP+UV, with the specified backup-bit
 rules). No extensions or alternate origins are accepted. `chrome_grease`
-selects a verified serialization of the same policy, not another identity.
+selects a verified serialisation of the same policy, not another identity.
 The client MUST validate the RP ID/origin relationship and origin syntax
 before deployment; the circuit MUST enforce the profile's byte constraints.
 
@@ -179,9 +181,17 @@ opening alone MUST NOT authorise installation.
 After deployment, obtain the passkey public key `pk`. For registration,
 `user.id` is the contract address's **raw 32 bytes**, not its display string.
 This fits WebAuthn's 64-byte user-handle limit. The SDK MUST persist the
-credential ID, key, policy and account mapping. `userHandle` is a locator,
+credential ID, key, policy, and account mapping. `userHandle` is a locator,
 not a substitute for signature verification or proof that the registration
 used that handle; the circuit does not attest registration metadata.
+
+WebAuthn identifies a discoverable credential by RP ID and user handle, so a
+second registration under the same `user.id` on the same authenticator or
+synced provider replaces the first and destroys its private key. Clients
+MUST list the account's known credential IDs in `excludeCredentials`, MUST
+check for a persisted credential before registering, and MUST NOT register
+again after signing an intent over a target key while that signature can
+still be submitted.
 
 Let `A = kernel.self()` and `B = boot` read from the account. The circuit
 checks `device_epoch = 0`, `auth_nonce = 0` and uses those actual values as
@@ -209,8 +219,12 @@ For the temporary signature, sample a fresh nonzero nonce `r < r_J`, set
 Compute `s = (r + c*b) mod r_J`. The circuit MUST enforce `LE(h) < r_J` and
 `0 <= s < r_J` before scalar casts and check `sG = R + cQ`.
 Compact scalar casts may reduce modulo `r_J`; a cast alone is not the range
-check. Use MIP-0013's subgroup order and generator. Nonces MUST NOT repeat
-across distinct signed messages. Exhausting the grinding counter fails;
+check. Use MIP-0013's subgroup order and generator. As in MIP-0013 §5.3,
+`r` MUST be unpredictable and MUST NOT be used for more than one challenge
+`c`. Signing the same `I` again with another `grind_nonce` is a different
+challenge and needs a fresh `r`; a signer that retries MUST resubmit the
+complete retained `(R, s, grind_nonce)` or sign afresh with a new `r`.
+Exhausting the grinding counter fails;
 it MUST NOT wrap silently. Neither signature depends on the other signature's
 bytes, so the ceremony introduces no new circular dependency.
 
@@ -218,7 +232,7 @@ Both `Q` and `R` MUST be valid nonidentity prime-subgroup Jubjub points;
 the exact coordinates hashed MUST be bound to the curve operands. Native
 subgroup assignment may discharge membership if established for the pinned
 backend. `[8]P != O` alone excludes small-order points but does not establish
-full subgroup membership. P-256 keys MUST be canonical, on-curve and
+full subgroup membership. P-256 keys MUST be canonical, on-curve, and
 nonidentity; signature scalars follow the profile's canonical nonzero range.
 High-S ECDSA remains accepted as in the reference; state consumption, not
 signature-byte uniqueness, prevents replay.
@@ -251,7 +265,7 @@ Format, scheme and profile are fixed constants for this entry point. It MUST:
 4. Atomically insert that one entry, set `device_count = 1`, set
    `booted = true`, clear `boot` to 32 zero bytes, and increment `round`
    exactly once. Leave `auth_nonce = 0`, `device_epoch = 0`, viewing,
-   recovery, balances, grants and sealed configuration unchanged.
+   recovery, balances, grants, and sealed configuration unchanged.
 
 Failure MUST leave state unchanged. The entry permits only the same enforced
 WebAuthn profile on all reachable accepting verifiers; future optional profile
@@ -271,7 +285,7 @@ Preserve the reference's **recovery-before-activation** behaviour:
   after its window unless vetoed, retiring the installed device under the
   existing recovery rules. Bootstrap can never reintroduce it afterward.
 
-This does not grant the temporary key any recovery, withdrawal or device
+This does not grant the temporary key any recovery, withdrawal, or device
 operation. Recovery remains a separate authority and threat assumption.
 
 ## 5. Client lifecycle and security boundary
@@ -279,7 +293,7 @@ operation. Recovery remains a separate authority and threat assumption.
 The [proposed protocol flow](../../protocol-flows/02-temporary-jubjub-bootstrap.md)
 defines the messages and durable checkpoints. Before either signing approval,
 the client MUST check the intended account, network configuration, stored
-commitment, profile, and deployed verifier roster against trusted artifacts.
+commitment, profile, and deployed verifier roster against trusted artefacts.
 Incomplete verifier-wave deployment is not a ready account. A retained
 maintenance authority can replace verifiers; disclose that separate trust
 assumption or retire it according to the deployment policy before approval.
@@ -298,6 +312,12 @@ After confirmed intended activation (or recovery retirement), erase the
 temporary key and stop retries. Retain ordinary device/viewing/recovery data.
 If the installed state is unexpected, surface the mismatch; do not report
 successful onboarding merely because `booted` is true.
+
+Using the account address as the WebAuthn user handle discloses it to the
+authenticator, any passkey sync provider, and any credential listing, which
+links the provider-side identity to the account's on-chain activity.
+WebAuthn recommends non-identifying user handles; this profile trades that
+for address-based credential lookup, and clients SHOULD disclose it.
 
 If `b` is lost, a retained valid temporary signature may still complete
 activation of its exact approved target, provided the account remains dormant
@@ -332,25 +352,25 @@ implementation/review plan, not a claim that these tests have run.
 | B03 | Substituting the target key, RP hash, origin, profile/scheme or any intent field rejects; a prover-supplied opaque entry/digest cannot bypass recomputation. |
 | B04 | Missing/invalid passkey assertion, wrong challenge/RP/origin, absent UP/UV, invalid flags/lengths/JSON and wrong GREASE selection reject. Both allowed shapes and high/low-S forms are covered. |
 | B05 | Different accounts, configured network domains, instance anchors, and operation domains reject replay. Client tests reject chain/configuration mismatch; document identical-context clone limitations separately. |
-| B06 | Mode-0/mode-1 crossover and unknown constructor modes reject. Commitments/challenges encoded with unsupported versions/profiles do not match the fixed entry-point constants; clients reject unsupported artifacts. Do not add a runtime profile selector just for this test. Legacy vectors stay unchanged in the supported artifact. |
+| B06 | Mode-0/mode-1 crossover and unknown constructor modes reject. Commitments/challenges encoded with unsupported versions/profiles do not match the fixed entry-point constants; clients reject unsupported artefacts. Do not add a runtime profile selector just for this test. Legacy vectors stay unchanged in the supported artifact. |
 | B07 | Repeated activation and two competing valid activations cannot install a second device. Rejected calls preserve state. Success has exactly §4's effects. |
 | B08 | Deposits/inbox updates between approval and submission do not invalidate the intent or lose their state changes. |
 | B09 | Recovery finalises before activation: old bootstrap rejects. Activation during pending recovery preserves the deadline/record and permits ordinary veto; without veto finalisation retires the device and bootstrap permanently. |
 | B10 | Both signer private keys are absent from proof preimages/logs. A modified proof request cannot install a different target under the original approvals. |
-| B11 | Interrupted deployment/registration/submission resumes the same account and credential safely; duplicate credential creation is not an automatic retry. Retained approval allows the same target to complete after loss of the temporary key; loss of both key and approval, and unusable-recovery outcomes, are explicit. |
+| B11 | Interrupted deployment/registration/submission resumes the same account and credential safely; duplicate credential creation is not an automatic retry, and a second registration under the same `user.id` is refused via `excludeCredentials`. Retained approval allows the same target to complete after loss of the temporary key; loss of both key and approval, and unusable-recovery outcomes, are explicit. |
 | B12 | Independent signature/encoding vectors cover every typed hash, canonical scalar checks and the installed entry. Every published vector pins its compiler/runtime and source revision. |
-| B13 | Real proofs verify and the complete flow executes on-node; record fresh artifact provenance, `k`, rows, proving timings and relevant custody/device/recovery regressions. Distinguish host-side rejection from proof/ledger enforcement. |
+| B13 | Real proofs verify and the complete flow executes on-node; record fresh artefact provenance, `k`, rows, proving timings and relevant custody/device/recovery regressions. Distinguish host-side rejection from proof/ledger enforcement. |
 
 Before upstream consolidation, map each MUST to code and evidence, document
 review findings and remaining assumptions, and reconcile this draft with the
 validated implementation. Passing tests is not a formal cryptographic
 soundness proof. #214 must update canonical §3, affected invariants/rationale,
-challenge/domain recipes, compatibility and conformance text only after #213.
+challenge/domain recipes, compatibility, and conformance text only after #213.
 
 ## 7. Local review record
 
 The 2026/11/23 local design review checked the hash/signature bindings,
-constructor dependencies, mode isolation, activation/recovery ordering and
+constructor dependencies, mode isolation, activation/recovery ordering, and
 retry lifecycle against the pinned sources. It resulted in explicit scalar
 range checks, a qualified network-replay guarantee, retention of signed
 approvals for interrupted onboarding, and separate host/proof enforcement

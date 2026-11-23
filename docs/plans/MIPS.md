@@ -3,7 +3,7 @@
 This is the single local register of standards Passport authors, adopts, or
 depends on. Upstream owns normative text and lifecycle; [arc42](../arc42.md)
 owns the architectural overview. [Local file roles](../mps-mip/README.md)
-distinguish pointers, historical copies, and working drafts.
+distinguish pointers, historical copies, local amendments, and working drafts.
 
 **Verified 2026/11/06:** canonical headers were read from a fresh checkout of
 [midnight-improvement-proposals at `02fce36`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/02fce36cfa44541305310dc25fd38f399dbe8d92).
@@ -69,9 +69,11 @@ complete product remain separate claims.
   Canonical boot/device tags are `k1:v2` / `r1:v2`; operation tags use v1.
   The former local v1 boot/device registry is superseded, not an alternative
   interoperable encoding.
-- **Domain separation:** MIP-0021 is verified Proposed. Its `midnight:`
-  convention, version syntax and no-trailing-zero rule require explicit
-  compatibility work for existing Passport domain bytes. The old central
+- **Domain separation:** MIP-0021 is verified Proposed. Since 2026/11/18
+  (upstream `eb626647`) its convention reserves `mip-NNNN:` for MIP-defined
+  constructions, and the #212 amendment uses it for its new tags. That
+  namespace, the version syntax, and the no-trailing-zero rule require
+  explicit compatibility work for existing Passport domain bytes. The old central
   registry design in C8 is not adopted upstream. See
   [ADR-0001](../adrs/0001-domain-separation-registry.md); do not silently
   change cryptographic constants to make prose appear conformant.
