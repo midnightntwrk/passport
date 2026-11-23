@@ -3,7 +3,7 @@
 This is the single local register of standards Passport authors, adopts, or
 depends on. Upstream owns normative text and lifecycle; [arc42](../arc42.md)
 owns the architectural overview. [Local file roles](../mps-mip/README.md)
-distinguish pointers, historical copies, and working drafts.
+distinguish pointers, historical copies, working copies, and working drafts.
 
 **Verified 2026/11/06:** canonical headers were read from a fresh checkout of
 [midnight-improvement-proposals at `02fce36`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/02fce36cfa44541305310dc25fd38f399dbe8d92).
