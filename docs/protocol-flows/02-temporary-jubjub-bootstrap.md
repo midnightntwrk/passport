@@ -1,11 +1,11 @@
 # Proposed account creation with temporary Jubjub authority
 
-**Proposed, not implemented.** This flow accompanies the
-[local MIP-0013 amendment](../mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md)
-for [Passport #212](https://github.com/midnightntwrk/passport/issues/212).
-Its pinned specification and reference-code baselines are recorded there.
-It does not replace the [historical reference flow](01-first-account-creation.md)
-or claim the implementation/evidence required by
+**Proposed, not implemented.** This flow accompanies
+[signed bootstrap, MIP-0013 section 3.2](../mps-mip/mips/mip-xxxx-account-authorisation.md#32-signed-bootstrap-mode-1), proposed in the local
+working copy of MIP-0013 for
+[Passport #212](https://github.com/midnightntwrk/passport/issues/212).
+It does not replace the [current reference flow](01-first-account-creation.md)
+or claim the implementation and evidence required by
 [#213](https://github.com/midnightntwrk/passport/issues/213).
 
 The outcome is an account whose **first installed device is the passkey**,
@@ -15,17 +15,17 @@ only authorises this installation; it is never enrolled as a device.
 ## Preconditions and participants
 
 - **Bearer:** approves passkey creation and use.
-- **Client / local signer:** verifies network/artifact configuration, holds
+- **Client / local signer:** verifies network and artefact configuration, holds
   the temporary private key, and manages durable onboarding metadata.
 - **Authenticator:** creates the ES256 credential and signs its WebAuthn
   proof of possession. It never receives the temporary Jubjub key.
 - **Prover:** proves activation from public-key/policy inputs and signatures,
   without either signing private key. It may be local or delegated under
-  the privacy/trust assumptions of the amendment.
+  the privacy and trust assumptions of MIP-0013 S6 and S12.
 - **Ledger:** records deployment and verifies activation/recovery transitions.
 
 The client needs a supported profile-1 RP/origin, a verified chain-instance
-configuration, complete target artifacts, independent viewing and retained
+configuration, complete target artefacts, independent viewing and retained
 recovery material, and a real fee-funding/sponsorship path. The bounded
 21-byte-origin profile is not general WebAuthn browser compatibility.
 
@@ -41,47 +41,48 @@ sequenceDiagram
     participant Ledger
 
     Bearer->>Client: Create account
-    Client->>Client: Verify network configuration; generate temporary b,Q
+    Client->>Client: Verify network configuration, generate temporary b and Q
     Note over Client: Prepare viewing/recovery inputs independently of passkey<br/>Commit Q, network and predetermined policy into B<br/>Protect onboarding record locally
     Client->>Client: Run constructor locally (no constructor ZK proof)
-    Client->>Ledger: Fund and deploy; finish verifier installation waves
+    Client->>Ledger: Fund and deploy, then finish verifier installation waves
     Ledger-->>Client: Confirm address A, initial state and verifier roster
-    Client->>Client: Check trusted artifacts, B, network, maintenance posture
+    Client->>Client: Check trusted artefacts, B, network, and maintenance posture
     Client->>Auth: Create ES256 passkey with user.id = raw 32 bytes of A
     Auth-->>Bearer: Request approval
     Bearer-->>Auth: Approve
     Auth-->>Client: Public key and credential metadata
-    Client->>Client: Persist credential metadata; recompute activation intent I
-    Client->>Auth: Get assertion for domain-separated proof-of-possession challenge
+    Client->>Client: Persist credential metadata, compute activation intent I
+    Client->>Client: Sign I with the temporary Jubjub key and retain the signature
+    Client->>Auth: Get assertion for the proof-of-possession challenge over I
     Auth-->>Bearer: Require user verification
     Bearer-->>Auth: Approve
     Auth-->>Client: WebAuthn assertion under the agreed policy
-    Client->>Client: Check assertion; sign I locally with temporary Jubjub key
+    Client->>Client: Check the assertion locally
     Client->>Prover: Q, target key/policy, Jubjub signature and WebAuthn assertion
     Note over Client,Prover: Neither temporary scalar b nor passkey private key is sent
     Prover-->>Client: Activation proof
     Client->>Ledger: Fund and submit activate_initial_passkey
     Ledger->>Ledger: Check dormant mode, commitment and both signatures<br/>Install epoch-0/counter-0 passkey entry<br/>Set booted, clear B, increment round once
     Ledger-->>Client: Confirmed state transition
-    Client->>Client: Verify intended device installed; erase temporary key
-    Client-->>Bearer: Account active; report actual recovery readiness
+    Client->>Client: Verify the intended device is installed, erase temporary key
+    Client-->>Bearer: Account active, with actual recovery readiness reported
 ```
 
 Wallet balancing and fee proofs are separate from constructor execution and
 the contract's activation proof. The diagram's deployment step does not
-promise that creation, verifier installation and activation fit one transaction.
+promise that creation, verifier installation, and activation fit one transaction.
 
 ## What is signed and enforced
 
-The amendment's typed recipes are authoritative. Both signatures bind one
+The typed recipes of MIP-0013 section 3.2 are authoritative. Both signatures bind one
 activation intent containing account address, stored bootstrap commitment,
-configured network domain, target public key and complete profile/policy,
+configured network domain, target public key, and complete profile and policy,
 with the fixed initial epoch/nonce. The circuit recomputes the intent and
 device entry; the prover cannot supply unchecked replacements.
 
 The temporary Jubjub signature authorises the target; the WebAuthn assertion
 proves target-key possession. The assertion's RP hash, exact origin, challenge,
-UP/UV flags and complete accepted JSON shape are verified in-circuit. Neither
+UP and UV flags, and complete accepted JSON shape are verified in-circuit. Neither
 hardware attestation nor correctness of the registered `user.id` follows from
 that assertion: the SDK sets the user handle during registration and treats
 its later return as a locator, not authority.
@@ -96,11 +97,11 @@ instance and the actual deployed verifier relations before approving.
 
 | Checkpoint | Persist / next action |
 |---|---|
-| Before deployment | Protect temporary keypair (`b` and `Q`), exact commitment and committed policy/network configuration, viewing/recovery material and intended artifact identity. |
+| Before deployment | Protect temporary keypair (`b` and `Q`), exact commitment, committed policy and network configuration, viewing and recovery material, and intended artefact identity. |
 | Deployment submitted | Retain transaction identity; discover its confirmed outcome before retrying. Complete verifier waves and verify the returned address/state. |
-| Credential created | Immediately persist credential ID, public key, RP/origin, network and account mapping; resume this credential rather than silently registering another. |
-| Activation approved/submitted | Protect the exact intent, temporary signature, available assertion/proof and transaction identity. Inspect state before retrying; retain the same dormant account and target. |
-| Intended activation confirmed | Verify the installed entry and consumed boot state; erase the temporary key, retain device/viewing/recovery metadata. |
+| Credential created | Immediately persist credential ID, public key, RP and origin, network, and account mapping. Resume this credential; a second registration under the same `user.id` replaces it, so list it in `excludeCredentials`. |
+| Activation signed or submitted | Protect the exact intent, the complete temporary signature, any assertion or proof, and the transaction identity. Inspect state before retrying, keep the same dormant account and target, and resubmit the retained signature rather than re-signing with the same nonce. |
+| Intended activation confirmed | Verify the installed entry and consumed boot state, erase the temporary key, and retain device, viewing, and recovery metadata. |
 | Recovery consumed bootstrap | Stop activation retries, erase temporary key, and resume the recovery/device flow rather than claiming initial-passkey activation succeeded. |
 
 If the temporary key is lost while the account is dormant, a retained valid
@@ -127,8 +128,11 @@ approvals unusable. The temporary key cannot veto recovery or reopen bootstrap.
 
 ## Validation hand-off
 
-The amendment's B01–B13 matrix is the acceptance baseline for #213: typed
-vectors and independent signing, private-input inspection, adversarial and
-recovery/race tests, actual proofs/on-node execution, and new circuit-size and
-proving measurements. This diagram supplies no measured `k` or latency.
-After those results reconcile with the draft, #214 takes the change upstream.
+The signed-bootstrap cases of MIP-0013 Testing item 10 are the acceptance
+baseline for #213: typed vectors and independent signing, private-input
+inspection, adversarial, recovery, and race tests, real proofs with on-node
+execution, and new circuit-size and proving measurements. This diagram
+supplies no measured `k` or latency. The reference implements the proposal
+as a new schema version (`spec_version = 4`, subject to reconciliation with
+concurrent schema work). After the results reconcile with the working copy,
+#214 submits its diff upstream.

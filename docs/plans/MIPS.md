@@ -69,8 +69,10 @@ complete product remain separate claims.
   Canonical boot/device tags are `k1:v2` / `r1:v2`; operation tags use v1.
   The former local v1 boot/device registry is superseded, not an alternative
   interoperable encoding.
-- **Domain separation:** MIP-0021 is verified Proposed. Its `midnight:`
-  convention, version syntax and no-trailing-zero rule require explicit
+- **Domain separation:** MIP-0021 is verified Proposed. At `eb626647` its
+  convention reserves `mip-NNNN:` for MIP-defined constructions, and the
+  MIP-0013 working copy uses it for its new bootstrap tags. That namespace,
+  the version syntax, and the no-trailing-zero rule require explicit
   compatibility work for existing Passport domain bytes. The old central
   registry design in C8 is not adopted upstream. See
   [ADR-0001](../adrs/0001-domain-separation-registry.md); do not silently
@@ -88,15 +90,18 @@ cryptographic review, or safety of an existing deployment.
 
 ### Temporary Jubjub bootstrap authority
 
-**Proposed locally, 2026/11/23:** [the #212 amendment](../mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md)
-pins MIP-0013 and companion specifications at upstream
-[`eb626647`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/eb626647515e1b66916869052fc8e5d23744004c).
-It specifies deployment under a temporary Jubjub authority followed by signed
-passkey installation, with an in-circuit WebAuthn proof of possession. The
-[proposed flow](../protocol-flows/02-temporary-jubjub-bootstrap.md) addresses
-[SDK #140](https://github.com/midnightntwrk/midnight-passport-sdk/issues/140).
+**Proposed locally, 2026/11/23:** the
+[MIP-0013 working copy](../mps-mip/mips/mip-xxxx-account-authorisation.md)
+starts from upstream
+[`eb626647`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/eb626647515e1b66916869052fc8e5d23744004c)
+and adds signed bootstrap (section 3.2) for #212: deployment under a temporary
+Jubjub authority followed by signed passkey installation, with an in-circuit
+WebAuthn proof of possession. It also adds AUTH-11, R10, S12, and bootstrap
+conformance cases. Its diff against the pinned revision is the upstream
+proposal. The [proposed flow](../protocol-flows/02-temporary-jubjub-bootstrap.md)
+addresses [SDK #140](https://github.com/midnightntwrk/midnight-passport-sdk/issues/140).
 This is a focused new baseline, not a re-review of the entire register above.
-Canonical bootstrap remains unchanged. [#213](https://github.com/midnightntwrk/passport/issues/213)
+Canonical bootstrap remains unchanged until upstream merges the edits. [#213](https://github.com/midnightntwrk/passport/issues/213)
 must implement and validate it before [#214](https://github.com/midnightntwrk/passport/issues/214)
 consolidates it upstream; no new circuit cost or conformance result is claimed.
 

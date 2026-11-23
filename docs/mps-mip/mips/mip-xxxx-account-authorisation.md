@@ -158,6 +158,11 @@ interpreted as described in RFC 2119.
   seam semantics.
 - **Challenge**: the scalar a signature is verified against, computed
   in-circuit over the call it authorises (section 5).
+- **Bootstrap mode**: the constructor-fixed choice between fixed-key
+  bootstrap (mode 0) and signed bootstrap (mode 1) of section 3.
+- **Temporary bootstrap key**: in mode 1, a fresh JubJub keypair
+  `(b, Q)` whose only authority is to approve the installation of the
+  account's first device. It is never a device key.
 
 ### 2. Curve and hash
 
@@ -246,7 +251,10 @@ address is derived from the deploy transaction's content, so no
 deploy-time code can know it, and `kernel.self()` evaluates to the
 zero address inside a constructor. The initial entry therefore cannot
 be computed at deploy time. An account is deployed dormant and
-activated by its first call:
+activated by its first call. Two bootstrap modes are defined. The
+constructor fixes one, and the mode cannot change after deployment.
+
+#### 3.1 Fixed-key bootstrap (mode 0)
 
 - The constructor takes a **boot commitment**
 
@@ -274,6 +282,239 @@ activated by its first call:
 
 Deployment and activation SHOULD be submitted back to back; the
 account is usable once both are final.
+
+Mode 0 requires the final device key before deployment. A WebAuthn
+passkey registered with the account address as its user handle cannot
+supply its public key until the address exists. Section 3.2 serves that
+case.
+
+#### 3.2 Signed bootstrap (mode 1)
+
+In mode 1 the constructor commits to a fresh **temporary bootstrap
+key** rather than to the final device key. After deployment, that key
+signs an authorisation to install one later-created P-256 passkey, and
+the passkey proves possession with a WebAuthn assertion. Activation
+requires both signatures; neither alone is sufficient. The temporary
+key is not a device, recovery, viewing, or maintenance key, and it
+never enters the device set. Its private scalar MUST remain outside
+proving (AUTH-4).
+
+The constructor carries no bootstrap signature. The client computes
+the commitment and the initial state locally, and the activation call
+proves the checks below.
+
+**State and mode selection.** An implementation supporting mode 1
+takes two further constructor arguments and stores both as sealed
+ledger fields:
+
+```compact
+export sealed ledger bootstrap_mode: Uint<8>;
+// 0: fixed-key bootstrap (section 3.1). 1: signed bootstrap. Others reject.
+
+export sealed ledger bootstrap_network: Bytes<32>;
+// Mode 0: all zero bytes. Mode 1: the nonzero network domain N below.
+```
+
+In either mode, the constructor stores an empty device set,
+`device_epoch = 0`, `device_count = 0`, and `auth_nonce = 0`. In mode 1
+it additionally requires a nonzero `bootstrap_network` and a nonzero
+boot commitment. Every mode-0 activation circuit MUST require mode 0,
+and the mode-1 activation circuit MUST require mode 1, so a commitment
+made under one mode is never opened under the other. There is no mode
+switch, replacement of the boot commitment, or bootstrap reset after
+deployment.
+
+Every other constructor input, including the custody encryption key
+of the custody MIP and the recovery configuration of the recovery
+MIP, MUST be obtainable before the passkey exists. A later passkey
+PRF output MAY protect a copy of viewing material, but MUST NOT be
+needed to derive any constructor input.
+
+**Encodings.** `H<T>(v)` denotes `persistentHash<T>(v)`, including its
+typed encoding, which is consensus-relevant: integer widths, tuple
+order, point coordinate encoding, and casts. Hash outputs are
+`Bytes<32>`. P-256 coordinates `x` and `y` are the canonical
+little-endian `Bytes<32>` values of MIP-0030 section 2. Tags of this
+section follow MIP-0021: exact ASCII, no padding, no tag hash, and no
+length prefix. Tags of sections 3.1 and 5 predate MIP-0021 and are
+unchanged here; aligning them with MIP-0021 is separate work.
+
+| Symbol | Tag | Compact type |
+|---|---|---|
+| `D_NET` | `mip-0013:boot:net[v1]` | `Bytes<21>` |
+| `D_KEY` | `mip-0013:boot:key[v1]` | `Bytes<21>` |
+| `D_ACT` | `mip-0013:boot:activate[v1]` | `Bytes<26>` |
+| `D_SIG` | `mip-0013:boot:sig[v1]` | `Bytes<21>` |
+| `D_POP` | `mip-0013:boot:pop[v1]` | `Bytes<21>` |
+
+**Network domain.** The deployment configuration names the network by
+its lowercase CAIP-2 identifier `id` (MIP-0008), of ASCII length `L`
+between 10 and 41 with no NUL byte, carried as `id41: Bytes<41>`
+zero-filled after `L` bytes. It also names the genesis block hash
+`genesis` and a fixed chain-instance anchor `(anchor_height,
+anchor_hash)`: height 0 and the genesis hash by default, or a published
+checkpoint where genesis alone does not distinguish instances (such as
+the Preview relaunch noted in MIP-0008). The anchor MUST NOT be a moving
+latest block. Block hashes are the raw 32 bytes decoded from their RPC
+hexadecimal form, without byte-order reversal.
+
+```text
+N = H<[Bytes<21>, Uint<8>, Bytes<41>, Bytes<32>, Uint<64>, Bytes<32>]>(
+  [D_NET, L, id41, genesis, anchor_height, anchor_hash])
+```
+
+The client MUST verify this configuration against the intended chain
+before deployment and before signing. Activation reads `N` from
+`bootstrap_network`, never from a witness. The binding rejects replay
+between differently configured networks; it does not prove which
+physical chain hosts the contract (S12).
+
+**Boot commitment.** Bootstrap format `v: Uint<16> = 1` admits only
+target scheme `scheme: Uint<8> = 2` (r1, MIP-0030) and WebAuthn profile
+`profile: Uint<16> = 1`. These identifiers are scoped to this format,
+not a scheme registry; unknown values reject and are never a fallback
+the prover can select. Profile 1 is the bounded reference profile
+`wa-json134-or-chrome243`, a profile in the sense of MIP-0030 section 3,
+with policy `policy = { rp_id_hash: Bytes<32>, origin: Bytes<21> }` in
+that field order and the origin unpadded. It accepts exactly the two
+client-data shapes of the
+[reference profile](https://github.com/midnightntwrk/passport/blob/449de16d33679db8646408d5e4e804591d77228b/contract/WEBAUTHN.md),
+`type` `webauthn.get`, `crossOrigin` false, 37-byte authenticator
+data, an equal RP hash, and flags 5, 13, or 29 (UP and UV, with the
+profile's backup-bit rules), with no extensions or alternative origins. The `chrome_grease` input
+selects between the two accepted serialisations of the same policy.
+The client MUST validate the RP ID and origin before deployment.
+
+The deployer samples a nonzero scalar `b < r_J` independently and
+derives `Q = b·G`. `Q` MUST be fresh per deployment and MUST NOT be
+derived from, or reused as, any other authority. Because `Q` is fresh,
+the commitment needs no salt to avoid linking accounts:
+
+```text
+B = H<[Bytes<21>, Uint<16>, Bytes<32>, JubjubPoint,
+       Uint<8>, Uint<16>, WebAuthnPolicy]>(
+  [D_KEY, v, N, Q, scheme, profile, policy])
+```
+
+The constructor stores `B` as the boot commitment. `Q` and `policy` are
+undisclosed activation inputs; the prover sees them, but they confer
+no authority. Knowledge of the opening of `B` MUST NOT suffice to
+install a device.
+
+**Passkey registration.** After deployment, the client registers the
+passkey with WebAuthn `user.id` set to the 32 raw bytes of the account
+address, not its display string, and persists the credential ID,
+public key `pk`, policy, and account mapping. The user handle is a
+locator: the circuit does not attest registration metadata. WebAuthn
+identifies a discoverable credential by RP ID and user handle, so a
+second registration under the same `user.id` on the same authenticator
+or synced provider replaces the first and destroys its private key.
+Clients MUST list the account's known credential IDs in
+`excludeCredentials`, MUST check for a persisted credential before
+registering, and MUST NOT register again after signing an intent over
+a target key while that signature can still be submitted.
+
+**Activation intent.** Let `A = kernel.self()` and `B` the stored boot
+commitment. The circuit requires `device_epoch = 0` and `auth_nonce = 0`
+and uses those ledger values as `epoch: Uint<32>` and `nonce: Uint<64>`:
+
+```text
+I = H<[Bytes<26>, Uint<16>, Bytes<32>, ContractAddress, Bytes<32>,
+       Uint<8>, Uint<16>, Bytes<32>, Bytes<32>, WebAuthnPolicy,
+       Uint<32>, Uint<64>]>(
+  [D_ACT, v, N, A, B, scheme, profile, x, y, policy, epoch, nonce])
+
+passkey_challenge = H<[Bytes<21>, Bytes<32>]>([D_POP, I])
+
+h = H<[Bytes<21>, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>]>(
+  [D_SIG, R, Q, I, grind_nonce])
+```
+
+`round` is deliberately absent, so permissionless deposits and inbox
+updates cannot invalidate the intent (AUTH-8). Every value that
+affects the installed device is in `I` or fixed by format 1.
+
+**Temporary signature.** The holder of `b` signs `I` per section 5.3:
+it samples `r`, sets `R = r·G`, grinds `grind_nonce` per section 5.2
+until `c = LE(h) < r_J`, and computes `s = r + c·b mod r_J`. A nonce `r`
+MUST NOT be used for more than one challenge `c`. Signing the same `I`
+again with another `grind_nonce` is a different challenge and needs a
+fresh `r`; a signer that retries MUST resubmit the complete retained
+`(R, s, grind_nonce)` or sign afresh with a new `r`. The client SHOULD
+sign `I` and retain the signature before requesting the passkey
+assertion, so that losing `b` afterwards does not lose the approval.
+
+**Possession proof.** The passkey signs `passkey_challenge` as its
+WebAuthn challenge under profile 1. The circuit verifies the complete
+assertion in-circuit per MIP-0030 section 3, against `pk` and the
+committed policy; a caller-supplied digest or a client-side check is
+insufficient. The assertion proves possession, not hardware
+attestation. Neither signature covers the other's bytes, so the
+ceremony has no circular dependency.
+
+**Validation.** `Q` and `R` MUST be nonidentity points of the
+prime-order subgroup, and the coordinates hashed MUST be those of the
+curve operands. Native subgroup assignment MAY discharge membership
+where established for the backend; `[8]P ≠ O` alone excludes
+small-order points but does not establish subgroup membership (S2). The
+circuit MUST enforce `LE(h) < r_J` and `0 ≤ s < r_J` before any scalar
+cast: a cast may reduce modulo `r_J` and is not a range check. Grinding
+that exhausts its counter fails and MUST NOT wrap. P-256 keys MUST be
+canonical, on-curve, and nonidentity, and signature scalars follow
+MIP-0030 section 2, including acceptance of high-S.
+
+**Activation.** The mode-1 activation circuit takes:
+
+```text
+activate_initial_passkey(Q, pk, policy, R, s: Field, grind_nonce: Uint<64>,
+                        authenticator_data: Bytes<37>,
+                        passkey_sig: Secp256r1EcdsaSignature,
+                        chrome_grease: Boolean) -> []
+```
+
+Format, scheme, and profile are constants of this circuit. It MUST:
+
+1. require mode 1, an account not yet activated, a nonzero boot
+   commitment, an empty device set, `device_count = 0`,
+   `device_epoch = 0`, and `auth_nonce = 0`;
+2. validate points, scalars, and policy; recompute `B` from
+   `bootstrap_network` and the inputs and require it to equal the stored
+   commitment; recompute `I` from the inputs and ledger state; and
+   verify both signatures;
+3. compute the MIP-0030 `r1_device` entry of `(A, pk, policy)` at epoch
+   0 and use counter 0, never accepting an opaque entry; and
+4. atomically insert that entry, set `device_count = 1`, mark the
+   account activated, clear the boot commitment to zero bytes, and
+   increment `round` once, leaving `auth_nonce`, `device_epoch`,
+   balances, and every other configuration field unchanged.
+
+Failure leaves state unchanged. Of two competing valid activations, at
+most one commits. Relaying an observed proof installs only the
+authorised target, and authorising another target requires `b`.
+
+**Recovery before activation.** Activation is permitted while recovery
+is pending and leaves the pending record and its deadline untouched,
+so the installed device can use the ordinary veto. If recovery
+finalises first, finalisation MUST mark the account activated and
+clear the boot commitment, so every prepared activation fails. If
+activation commits first, a pending recovery that is not vetoed may
+still finalise and retire the installed device under section 8. The
+temporary key grants no recovery, withdrawal, or device operation.
+
+**Retention and loss.** The client keeps `b`, `Q`, `B`, the policy,
+the network configuration, and the deployment identity in a protected
+onboarding record, adds the credential metadata and the signed intent
+as they arise, and never sends `b` to an indexer, relayer, prover, or
+sponsor. After an uncertain submission it inspects confirmed state
+before retrying, and retries only the same target while the account is
+dormant. After the intended activation, or after recovery consumes the
+bootstrap, it erases `b` and stops retrying. If `b` is lost, a retained
+temporary signature still activates its exact target while the account
+is dormant. If both are lost, neither `Q`, the passkey, nor the
+commitment recreates authority: usable recovery may regain control, and
+otherwise the dormant deployment is abandoned. There is no
+permissionless reset or timeout takeover; clients SHOULD NOT fund
+dormant accounts.
 
 ### 4. Seam instantiation
 
@@ -539,6 +780,12 @@ addition to the custody MIP's INV-1 through INV-8.
   a private state that differs, in any consumed value, from the state
   the signer approved cannot satisfy the verification equation: the
   signature authorises an execution, not a call shape.
+- **AUTH-11 (bootstrap authority).** The first device entry is installed
+  only by opening the mode-0 boot commitment, or by a mode-1 activation
+  carrying a valid temporary-key signature over the activation intent
+  and a valid possession proof from the installed key. After the first
+  installation, or after recovery finalises, no bootstrap path can
+  install an entry.
 
 ### 10. Versioning
 
@@ -554,6 +801,10 @@ addition to the custody MIP's INV-1 through INV-8.
 - Implementations MAY record a scheme tag alongside the epoch in the
   device map to support future per-device scheme agility; under this
   MIP alone, all devices use the v1 scheme.
+- Signed bootstrap carries its own format number (`v = 1`, section
+  3.2), whose tags end in `[v1]`. Another target scheme, WebAuthn
+  profile, or possession policy is a new format with new tags, not a
+  runtime selector.
 
 ## Rationale
 
@@ -779,6 +1030,23 @@ custody-class circuits consume few, small witness values, and a
 circuit whose witness data is large pays proportionally and should
 weigh a digest-carrying design under a successor scheme.
 
+**R10. A temporary authority for signed bootstrap.** Mode 0 is safe
+without any activation signature because opening its commitment can
+install only the committed key. That requires the key before the
+address exists, which a passkey registered under the account address
+cannot provide. Committing only a salt and letting activation choose
+the key would hand target selection to whoever proves, contrary to R5.
+Mode 1 instead commits a fresh JubJub key that never enters proving:
+the prover can relay or withhold the approved activation, but cannot
+choose another target without forging the temporary signature. The
+temporary signature authorises the target, and the WebAuthn assertion
+proves the target's key is held, so a typo, a substituted key, or a key
+nobody controls cannot become the account's only device. The possession
+proof adds in-circuit P-256 verification to activation, a one-off cost
+per account; the reference's mode-0 activation size does not measure
+it. A short-lived key is not automatically a safe key: a compromised
+temporary signer can authorise an attacker's own passkey (S12).
+
 ## Path to Active
 
 ### Acceptance Criteria
@@ -793,7 +1061,12 @@ weigh a digest-carrying design under a successor scheme.
       addressed.
 - [ ] Domain-separation tags (`midnight:account:device:v1`,
       `midnight:account:auth:v1:*`) registered under the MPS-0027
-      registry once it ratifies.
+      registry once it ratifies; the `mip-0013:boot:*[v1]` tags of
+      section 3.2 follow MIP-0021.
+- [ ] Signed bootstrap (section 3.2) implemented in the reference
+      contract, with cross-implementation vectors for every typed hash
+      of that section and the measured size and proving cost of the
+      mode-1 activation circuit.
 - [ ] A specified and reviewed FROST ciphersuite for JubJub with the
       section 5 challenge (section 7), with a demonstration that a
       `t`-of-`n` committee's aggregated signature verifies against an
@@ -839,6 +1112,14 @@ that do not satisfy it require a corrected recovery verifier where
 maintenance is available, or migration to a corrected deployment
 where maintenance authority has been retired. Updating this document
 does not alter an installed verifier or clear existing account state.
+
+Signed bootstrap (section 3.2) is additive. Fixed-key bootstrap and its
+recipes are unchanged, and existing deployments keep their addresses,
+keys, and behaviour. Mode 1 adds constructor arguments and ledger
+fields, so it is available only to new deployments of an artefact that
+supports it; a deployment whose maintenance authority has been retired
+cannot acquire it. Clients MUST select the artefact and constructor
+interface explicitly.
 
 ## Security Considerations
 
@@ -912,7 +1193,9 @@ does not alter an installed verifier or clear existing account state.
   and across accounts and circuits. Residual contexts are deployments
   sharing a contract address across networks; the network-identifier
   binding of section 5.1 is the mitigation and SHOULD be adopted
-  wherever multi-network deployment is plausible.
+  wherever multi-network deployment is plausible. Signed bootstrap
+  always binds its network domain (section 3.2), within the limit
+  stated in S12.
 - **S10. Toolchain hazards.** The reference experiment exposed a
   compact-runtime defect in which `JubjubPoint` equality compiled to
   reference rather than structural equality, silently breaking the
@@ -934,6 +1217,27 @@ does not alter an installed verifier or clear existing account state.
   last-known counters): it is what keeps `remove_device` executable
   against a lost device (section 6) and what prevents duplicate
   registration of an active key.
+- **S12. Signed bootstrap.** The temporary key holds full authority
+  over the first device until activation: whoever holds `b` can
+  authorise their own passkey and assertion. Clients MUST protect `b`
+  as a signing key, keep it out of logs and every proving input, and
+  erase it once activation or recovery consumes the bootstrap. Before
+  signing, the client MUST check the account, network configuration,
+  stored commitment, policy, and deployed verifiers against trusted
+  artefacts; a deployment whose verifiers are only partly installed is
+  not ready, and a retained maintenance authority, which can replace
+  verifiers, is a separate trust assumption the client MUST disclose.
+  The network domain `N` is configuration the client verifies and the
+  circuit binds; the kernel does not authenticate the chain, so a clone
+  with the same configured `N` is outside the replay guarantee, and
+  client and outer transaction network checks remain necessary. Using
+  the account address as the WebAuthn user handle discloses it to the
+  authenticator, any passkey sync provider, and any credential listing,
+  linking the provider-side identity to the account's on-chain
+  activity; WebAuthn recommends non-identifying handles, and this
+  profile trades that for address-based credential lookup, which
+  clients SHOULD disclose. A user handle reused across registrations
+  replaces the earlier credential (section 3.2).
 
 ## Implementation
 
@@ -969,6 +1273,11 @@ does not alter an installed verifier or clear existing account state.
   clears the reference device set at finalisation before installing the
   successor. The merged correction and its evidence limits are recorded
   in [MIP-0022's implementation section](./mip-0022-account-recovery.md#implementation).
+- **Signed bootstrap.** Section 3.2 is not yet implemented. The
+  reference implementation and its validation are tracked in
+  [Passport #213](https://github.com/midnightntwrk/passport/issues/213);
+  the size of the mode-0 r1 activation (k=14 in the reference) is not a
+  measurement of the two-signature mode-1 circuit.
 - This MIP contains no implementation code; the artefacts above are
   its evidence base, and the reference implementation is an acceptance
   criterion, to be linked at its public location on submission.
@@ -1029,7 +1338,42 @@ Conformance is demonstrated by a suite exercising, against a real node:
 10. **Bootstrap**: activation with the committed `(pk, salt)` succeeds
     and installs the entry at epoch 0 and use counter 0; a second
     activation aborts; an activation whose arguments do not match the
-    commitment aborts (section 3).
+    commitment aborts (section 3.1). For signed bootstrap (section 3.2,
+    AUTH-11):
+    - deployment without a passkey, registration with the raw address
+      as `user.id`, and activation installing exactly the epoch-0,
+      counter-0 entry of that passkey;
+    - rejection of a wrong temporary key or signature, a changed `R` or
+      `grind_nonce`, identity, off-curve, torsion, or noncanonical
+      inputs, `s + r_J`, and an out-of-range challenge, exercised as
+      raw witnesses at the proof boundary rather than only by host
+      validation;
+    - rejection of a substituted target key, RP hash, origin, profile,
+      scheme, or any other intent field, and of a prover-supplied
+      opaque entry or digest;
+    - rejection of a missing or invalid assertion, a wrong challenge,
+      RP hash, or origin, absent UP or UV, invalid flags, lengths, or
+      client data, and a wrong `chrome_grease` selection, with both
+      accepted shapes and both high-S and low-S forms covered;
+    - rejection of replay across accounts, configured network domains,
+      instance anchors, and operation domains;
+    - rejection of mode-0 and mode-1 crossover and of unknown modes,
+      with the mode-0 vectors unchanged;
+    - a repeated or competing activation installing no second device,
+      and a rejected call changing no state;
+    - a deposit or inbox update between signing and submission leaving
+      the intent valid (AUTH-8);
+    - recovery finalising first making activation fail, and activation
+      during pending recovery preserving its deadline and veto path;
+    - neither signing key appearing in any proving input (AUTH-4);
+    - an interrupted deployment, registration, or submission resuming
+      the same account and credential, a second registration under the
+      same `user.id` refused, and activation from a retained signature
+      after loss of `b`; and
+    - independent vectors for every typed hash of section 3.2, pinned to
+      their compiler and source revision, and on-node execution with
+      real proofs, recording artefact provenance, `k`, rows, and
+      proving time.
 
 ## References (Optional)
 
@@ -1055,7 +1399,10 @@ Conformance is demonstrated by a suite exercising, against a real node:
   Domain Separation for Midnight Hash Constructions (tag registry).
 - MIP-0003: ECDSA support (ledger-level wallet keys; positions JubJub
   as the in-circuit curve); MIP-0008: CAIP-2 network identifiers (the
-  network binding of 5.1); MIP-0011: Native Shielded Token Standard
+  network binding of 5.1 and 3.2); MIP-0021: Domain-Separation
+  Convention (the tags of 3.2); MIP-0030: ECDSA Authorisation for
+  Custody Accounts (the r1 device entry and WebAuthn verification of
+  3.2); MIP-0011: Native Shielded Token Standard
   (the `ownPublicKey()` caller-authentication prohibition).
 - [RFC 9591](https://www.rfc-editor.org/rfc/rfc9591): The Flexible
   Round-Optimized Schnorr Threshold (FROST) Protocol; RFC 6979:

@@ -7,9 +7,10 @@ demonstrated separately in the prototype. Direct P-256 WebAuthn is another
 arm with different key custody and bounded profile requirements.
 
 For the proposed deployment-before-passkey sequence, see
-[temporary Jubjub bootstrap](02-temporary-jubjub-bootstrap.md) and its local
-MIP amendment. That #212 proposal is not implemented by the historical flow
-below and does not alter this flow's evidence claims.
+[temporary Jubjub bootstrap](02-temporary-jubjub-bootstrap.md) and
+[MIP-0013 section 3.2](../mps-mip/mips/mip-xxxx-account-authorisation.md#32-signed-bootstrap-mode-1). That #212 proposal is not
+implemented by the current reference flow below and does not alter this
+flow's evidence claims.
 
 **Preconditions.** A PRF-capable authenticator for this client path, a client
 able to derive the JubJub key, a proving path, and transaction fee funding or
