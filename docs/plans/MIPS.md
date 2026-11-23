@@ -86,6 +86,20 @@ cryptographic review, or safety of an existing deployment.
 
 ## Local drafts and evidence
 
+### Temporary Jubjub bootstrap authority
+
+**Proposed locally, 2026/11/23:** [the #212 amendment](../mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md)
+pins MIP-0013 and companion specifications at upstream
+[`eb626647`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/eb626647515e1b66916869052fc8e5d23744004c).
+It specifies deployment under a temporary Jubjub authority followed by signed
+passkey installation, with an in-circuit WebAuthn proof of possession. The
+[proposed flow](../protocol-flows/02-temporary-jubjub-bootstrap.md) addresses
+[SDK #140](https://github.com/midnightntwrk/midnight-passport-sdk/issues/140).
+This is a focused new baseline, not a re-review of the entire register above.
+Canonical bootstrap remains unchanged. [#213](https://github.com/midnightntwrk/passport/issues/213)
+must implement and validate it before [#214](https://github.com/midnightntwrk/passport/issues/214)
+consolidates it upstream; no new circuit cost or conformance result is claimed.
+
 ### Scoped grants and dApp connection
 
 The [grant draft](../mps-mip/mips/mip-xxxx-scoped-grants.md) covers C10–C12 and

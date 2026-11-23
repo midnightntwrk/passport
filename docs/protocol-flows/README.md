@@ -15,6 +15,9 @@ and [architecture reference](../arc42.md) to distinguish the two.
 
 1. [First-time account creation](./01-first-account-creation.md) — a new
    bearer turns a passkey into an on-chain Passport account.
+2. [Temporary Jubjub bootstrap](./02-temporary-jubjub-bootstrap.md) — proposed
+   address-before-passkey flow for #212; awaits reference implementation and
+   validation in #213, then upstream consolidation in #214.
 
 More to follow (adding a device, issuing a grant, lost-device and
 total-loss recovery, spending under custody).

@@ -25,5 +25,15 @@ The boot-commitment activation design (erratum 2, upstream #250) is now in
 canonical §3. See the [standards register](../../plans/MIPS.md) for the pinned
 upstream revision and remaining compatibility/review work.
 
+## Proposed local bootstrap amendment
+
+[Temporary Jubjub bootstrap authority](mip-0013-temporary-jubjub-bootstrap-amendment.md)
+is the proposed local amendment for [Passport #212](https://github.com/midnightntwrk/passport/issues/212).
+It permits deployment before passkey registration by committing to a temporary
+authority and requiring signed activation of the later passkey. The proposal
+pins its current upstream baseline separately; it does not change the canonical
+§3 or claim implementation. Reference validation follows in #213 and upstream
+consolidation in #214.
+
 See the [standards pipeline](../../plans/MIPS.md) and
 [development status](../../plans/STATUS.md) for remaining work.
