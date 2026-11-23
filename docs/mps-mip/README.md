@@ -1,7 +1,7 @@
 # Local MPS and MIP documents
 
 The [standards register](../plans/MIPS.md) owns the publication/status inventory
-and canonical links. This directory preserves working drafts, working copies, pointers, and
+and canonical links. This directory preserves working drafts, pointers and
 historical copies; it does not maintain a second lifecycle register.
 
 ## File roles
@@ -12,7 +12,8 @@ historical copies; it does not maintain a second lifecycle register.
 | [Domain separation MPS](mps/mps-domain-separation.md) | Historical copy; upstream MPS-0027 / MIP-0021. |
 | [Call provenance MPS](mps/mps-call-provenance.md) | Canonical pointer; upstream MPS-0040. |
 | [Native asset custody MIP](mips/mip-xxxx-native-asset-custody.md) | Historical copy; upstream MIP-0012. |
-| [Account authorisation](mips/mip-xxxx-account-authorisation.md) | Working copy of upstream MIP-0013 at [`eb626647`](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/eb626647515e1b66916869052fc8e5d23744004c/mips/mip-0013-account-authorisation.md). |
+| [Account authorisation](mips/mip-xxxx-account-authorisation.md) | Canonical pointer; upstream MIP-0013. |
+| [Temporary Jubjub bootstrap amendment](mips/mip-0013-temporary-jubjub-bootstrap-amendment.md) | Proposed local amendment to MIP-0013 for Passport #212; implementation/validation #213, then upstream consolidation #214. |
 | [Account recovery](mips/mip-xxxx-account-recovery.md) | Canonical pointer; upstream MIP-0022. |
 | [Signature schemes](mips/mip-xxxx-signature-schemes.md) | Canonical pointer; upstream MIP-0030 supersedes the former general registry draft. |
 | [Prover-key regeneration](mips/mip-xxxx-prover-key-regeneration.md) | Canonical pointer; upstream MIP-0020 under MPS-0039. |
@@ -32,13 +33,8 @@ full snapshots and must not be cited for sections they no longer contain.
 
 Unnumbered drafts remain editable. Preserve explicit open questions and
 evidence limits. A draft header does not establish publication, acceptance,
-implementation or deployment.
-
-A working copy starts as a verbatim copy of a numbered upstream document at a
-pinned revision, and carries proposed edits destined for an upstream pull
-request. Its diff against the pinned revision is the proposal. Before editing,
-confirm the pinned revision is still upstream's latest for that document, and
-rebase the copy if it is not. Until upstream merges the edits, the upstream
-text stays canonical and the working copy is not evidence of acceptance or
-implementation. Adoption of normative changes belongs upstream; record local implementation differences in the reference
+implementation or deployment. Local amendments may stage proposed changes to
+numbered standards with an explicit pinned upstream base and validation plan;
+they do not supersede canonical text. Adoption of normative changes belongs
+upstream; record local implementation differences in the reference
 README and arc42. Consult the standards register and MIP-0001 before submission.
