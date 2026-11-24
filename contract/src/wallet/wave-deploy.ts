@@ -453,15 +453,21 @@ export async function deployAccountInWaves(
   const address = String(deploy.address);
   const ttl = new Date(Date.now() + Number(process.env.TX_TTL_MS ?? '60000'));
   const deploymentIntent = Intent.new(ttl).addDeploy(deploy);
-  // Persist before submission: a crash after the first accepted deploy must
-  // not lose the only key capable of completing its verifier roster.
-  if (typeof providers.privateStateProvider.setContractAddress === 'function') {
-    await providers.privateStateProvider.setContractAddress(address);
+  const persistDeployment = async () => {
+    if (typeof providers.privateStateProvider.setContractAddress === 'function') {
+      await providers.privateStateProvider.setContractAddress(address);
+    }
+    await providers.privateStateProvider.setSigningKey(address, deployData.private.signingKey);
+    await providers.privateStateProvider.set(options.privateStateId, deployData.private.initialPrivateState);
+  };
+  // Only checkpointed deployments retain recovery material before submission.
+  // A crash after submission must leave that flow able to finish its roster;
+  // callers without a checkpoint retain the legacy post-acceptance writes.
+  if (options.onPrepared) {
+    await persistDeployment();
+    await options.onPrepared({ version: 1, address, initialState: wave1.serialize(), deploymentIntent: deploymentIntent.serialize(), privateStateId: options.privateStateId,
+      firstArm: options.firstArm, retireAuthority: retire });
   }
-  await providers.privateStateProvider.setSigningKey(address, deployData.private.signingKey);
-  await providers.privateStateProvider.set(options.privateStateId, deployData.private.initialPrivateState);
-  await options.onPrepared?.({ version: 1, address, initialState: wave1.serialize(), deploymentIntent: deploymentIntent.serialize(), privateStateId: options.privateStateId,
-    firstArm: options.firstArm, retireAuthority: retire });
   const unprovenTx = Transaction.fromParts(
     getNetworkId(), undefined, undefined, deploymentIntent,
   );
@@ -475,6 +481,7 @@ export async function deployAccountInWaves(
   if (finalized.status && String(finalized.status).toLowerCase().includes('fail')) {
     throw new Error(`wave-1 deploy failed: ${JSON.stringify(finalized.status)}`);
   }
+  if (!options.onPrepared) await persistDeployment();
 
   // The maintenance waves: each carries its batch of verifier keys in ONE
   // hand-built maintenance update, signed with the stored authority key.

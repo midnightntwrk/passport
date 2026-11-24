@@ -56,7 +56,8 @@ async function fixture() {
     history.push({ data: sim.state }); sim.advanceTime(1); await call('recover_finalise');
   };
   const resume = (stream?: () => Observable<unknown>, persist?: SignedBootstrapClientOptions['persist'],
-    assertionProvider?: SignedBootstrapClientOptions['assertionProvider']) => {
+    assertionProvider?: SignedBootstrapClientOptions['assertionProvider'],
+    submitActivation?: (...args: unknown[]) => Promise<unknown>) => {
     const record = deserializeSignedBootstrapRecord(savedBeforeSubmission);
     const seen = { histories: 0, registered: 0, persisted: 0, submitted: 0, erased: 0 };
     const providers = { publicDataProvider: {
@@ -67,7 +68,11 @@ async function fixture() {
     }, privateStateProvider: { get: async () => emptyCoinStore(), set: async () => {} } };
     const account = Reflect.construct(CustodyAccount, [sim.addressHex, sim.address, providers, 'resume-test', {
       callTx: {
-        activate_initial_passkey: () => { seen.submitted++; throw new Error('must not resubmit activation'); },
+        activate_initial_passkey: (...args: unknown[]) => {
+          seen.submitted++;
+          if (submitActivation) return submitActivation(...args);
+          throw new Error('must not resubmit activation');
+        },
         rotate_enc_key_with_p256: async (...args: unknown[]) => {
           seen.submitted++; await call('rotate_enc_key_with_p256', ...args); return { public: { txId: 'simulated-rotation' } };
         },
@@ -84,6 +89,90 @@ async function fixture() {
   };
   return { sim, passkey, temporary, history, call, activate, activateDifferentTarget, addDevice, withdraw, recover, resume };
 }
+
+for (const outcome of ['lost inclusion reply', 'relayer wins'] as const) {
+  test(`activation completes after ${outcome} without a second submission`, async () => {
+    const f = await fixture();
+    const r = f.resume(undefined, undefined, f.passkey.assertion, async (...args) => {
+      await f.activate();
+      if (outcome === 'lost inclusion reply') throw new Error('SubmissionError: connection closed after inclusion');
+      // The same approval was included between the initial check and our
+      // build. The generated runtime rejects our duplicate as already booted.
+      await f.call('activate_initial_passkey', ...args);
+    });
+    assert.equal(await r.session.activate(), r.account);
+    assert.equal(r.seen.submitted, 1);
+    assert.equal(r.record.retired, true);
+    assert.equal(r.record.transactionId, undefined, 'a lost reply cannot supply a trustworthy transaction ID');
+    assert.ok(r.session.device);
+    const viewingKey = bytes();
+    await r.account.rotateEncKey(r.session.device, viewingKey);
+    assert.deepEqual(f.sim.ledger().enc_key, viewingKey);
+  });
+}
+
+test('ambiguous activation completion still checks original installation after intervening use', async () => {
+  const f = await fixture();
+  const r = f.resume(undefined, undefined, f.passkey.assertion, async () => {
+    await f.activate(); await f.withdraw(); throw new Error('SubmissionError: reply lost');
+  });
+  assert.equal(await r.session.activate(), r.account);
+  assert.equal(r.seen.submitted, 1); assert.equal(r.seen.histories, 1);
+  assert.equal(r.record.retired, true); assert.ok(r.session.device);
+});
+
+test('activation failure is preserved while the intended account remains dormant', async () => {
+  const f = await fixture(), refusal = new Error('proof construction refused');
+  const r = f.resume(undefined, undefined, undefined, async () => { throw refusal; });
+  await assert.rejects(() => r.session.activate(), error => error === refusal);
+  assert.equal(r.seen.submitted, 1); assert.equal(r.record.retired, undefined);
+  assert.equal(r.session.device, undefined); assert.equal(f.sim.ledger().booted, false);
+});
+
+test('a failed activation cannot conceal a competing initial device', async () => {
+  const f = await fixture();
+  const r = f.resume(undefined, undefined, undefined, async () => {
+    await f.activateDifferentTarget(); throw new Error('SubmissionError: reply lost');
+  });
+  await assert.rejects(() => r.session.activate(), /unexpected initial device/);
+  assert.equal(r.seen.submitted, 1); assert.equal(r.seen.registered, 0);
+  assert.equal(r.session.device, undefined);
+});
+
+test('a failed activation reports recovery replacement separately', async () => {
+  const f = await fixture();
+  const r = f.resume(undefined, undefined, undefined, async () => {
+    await f.recover(); throw new Error('SubmissionError: reply lost');
+  });
+  await assert.rejects(() => r.session.activate(), BootstrapRecoveryReplacedError);
+  assert.equal(r.seen.submitted, 1); assert.equal(r.seen.registered, 0);
+  assert.equal(r.record.retired, true); assert.equal(r.session.device, undefined);
+});
+
+for (const failure of ['network', 'deployment', 'activation', 'recovery'] as const) {
+  test(`external credential retention rejects after ${failure} preflight failure`, async () => {
+    const f = await fixture(), r = f.resume();
+    const credential = r.record.credential!;
+    delete r.record.credential; delete r.record.approval;
+    if (failure === 'network') r.options.observeNetwork = async () => ({ ...r.options.network, genesisHash: bytes() });
+    if (failure === 'deployment') r.options.verifyDeployment = async () => { throw new Error('untrusted deployment'); };
+    if (failure === 'activation') await f.activate();
+    if (failure === 'recovery') await f.recover();
+    await assert.rejects(() => r.session.retainCredential(credential), /mismatch|untrusted deployment|dormant bootstrap/);
+    assert.equal(r.record.credential, undefined); assert.equal(r.seen.persisted, 0);
+  });
+}
+
+test('external credential retention verifies the dormant deployment before persisting', async () => {
+  const f = await fixture(), r = f.resume(), credential = r.record.credential!;
+  delete r.record.credential; delete r.record.approval;
+  let observations = 0, verifications = 0;
+  r.options.observeNetwork = async () => { observations++; return r.options.network; };
+  r.options.verifyDeployment = async () => { verifications++; };
+  await r.session.retainCredential(credential);
+  assert.equal(observations, 1); assert.equal(verifications, 1); assert.equal(r.seen.persisted, 1);
+  assert.deepEqual(r.record.credential, credential);
+});
 
 test('fresh approval retains its provider for the completed device and its next account operation', async () => {
   const f = await fixture(), r = f.resume();

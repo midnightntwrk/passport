@@ -99,8 +99,8 @@ export circuit activate_initial_passkey(
   assert(ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(temporary_pk, c as JubjubScalar)),
          "invalid bootstrap signature");
   // Coordinate extraction in the intent rejects P-256 identity. The native
-  // curve type, ECDSA verifier and profiled WebAuthn reconstruction check the
-  // exact key, canonical signature scalars, RP, origin, flags and signed JSON.
+  // curve type, ECDSA verifier, and profiled WebAuthn reconstruction check the
+  // exact key, canonical signature scalars, RP, origin, flags, and signed JSON.
   assert(webauthn_verify_profiled(
     challenge_signed_boot_passkey(intent), policy, authenticator_data,
     passkey_sig, pk, chrome_grease

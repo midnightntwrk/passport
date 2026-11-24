@@ -22,9 +22,9 @@ Measured 2026-10-01T11:09:03.133Z. Compact 0.35.0, midnight-zkir 3.1.0-rc.1; run
 
 **Evidence.** [Circuit sizes and exact key/ZKIR hashes](evidence/p256-webauthn/circuit-sizes.json); [proving samples, image identity and accepted transactions](evidence/p256-webauthn/conformance-and-proving.json). Account calls use an OpenSSL software authenticator; the two verifier probes prove the captured real high-S WebAuthn assertion. Negative assertions abort during local building. These results are separate from the earlier custom Rust proof-stack experiment.
 
-## Full account inventory
+## Recorded account inventory
 
-All 52 circuits are compiled on the same stack. Sizes below are exact uncompressed bytes. A dash in other reports must not be interpreted as a measured proving time: only the comparison above has repeated timings.
+This historical capture contains 52 account circuits compiled on the same stack. The current schema-4 roster has 53 circuits, including `activate_initial_passkey`; its measurements are recorded separately in [signed-bootstrap evidence](evidence/signed-bootstrap/README.md). Sizes below are exact uncompressed bytes. A dash in other reports must not be interpreted as a measured proving time: only the comparison above has repeated timings.
 
 | Circuit | k | Rows | Prover bytes | Verifier bytes |
 |---|---:|---:|---:|---:|

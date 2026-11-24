@@ -234,7 +234,7 @@ export sealed ledger bootstrap_mode: Uint<8>;
 export sealed ledger bootstrap_network: Bytes<32>;
 // Deploy-time bootstrap (MIP-0013 §3 and the temporary-Jubjub amendment).
 // Mode 0 keeps the salted fixed-key commitment and per-arm activation.
-// Mode 1 commits an independent temporary key, network domain and WebAuthn
+// Mode 1 commits an independent temporary key, network domain, and WebAuthn
 // policy; after deployment, that key signs the address-bound passkey intent
 // and the passkey proves possession. The final passkey is absent from every
 // constructor input, so registration can use the deployed address as user.id.
@@ -345,7 +345,7 @@ export ledger veto_window: Uint<64>;
 // MIP-0013 §3 semantics via the mode-selected boot commitment (see `boot`).
 // The two configuration arguments extend the old five-argument ABI. Clients
 // must explicitly select this schema-4 artefact; existing deployments retain
-// their own schema, constructor ABI and verifier.
+// their own schema, constructor ABI, and verifier.
 
 constructor(
   initial_device_boot: Bytes<32>,

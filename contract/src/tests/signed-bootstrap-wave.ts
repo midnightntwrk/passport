@@ -2,14 +2,16 @@
 // transport/proving seams are mocks; these checks do not establish finality.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import test from 'node:test';
 import { createConstructorContext } from '@midnight-ntwrk/compact-runtime';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import {
   ContractDeploy, ContractMaintenanceAuthority, ContractOperation, ContractState, Intent,
-  sampleSigningKey, signatureVerifyingKey,
+  sampleSigningKey, signatureVerifyingKey, sampleEncryptionPublicKey, MaintenanceUpdate, ReplaceAuthority, VerifierKeyInsert,
 } from '@midnightntwrk/ledger-v9';
-import { allCircuits, armCircuits, planWaves, resumeAccountInWaves, VERIFIER_BYTE_BUDGET, type WaveDeploymentCheckpoint } from '../wallet/wave-deploy.js';
+import { allCircuits, armCircuits, deployAccountInWaves, planWaves, resumeAccountInWaves, VERIFIER_BYTE_BUDGET, type WaveDeploymentCheckpoint } from '../wallet/wave-deploy.js';
 import { Contract, pureCircuits } from '../wallet/contract.js';
 import { emptyCoinStore, makeWitnesses } from '../wallet/witnesses.js';
 
@@ -190,4 +192,105 @@ test('B11: a duplicate rejection cannot conceal an unexpected deployed verifier'
   f.setSubmit(async () => { throw new Error('SubmissionError: contract already exists'); });
   await assert.rejects(() => resumeAccountInWaves(f.providers, f.checkpoint, immediate), /unexpected deployed verifier/);
   assert.equal(f.submitted.length, 1);
+});
+
+
+// The constructor, verifier loading, deployment identity, and SDK submission
+// pipeline are real. This transport records when private persistence occurs.
+function deploymentFixture(mode = 0n) {
+  const managed = new URL('../../contracts/managed/account/', import.meta.url);
+  const compiled = CompiledContract.make('account', Contract).pipe(
+    CompiledContract.withWitnesses(makeWitnesses()), CompiledContract.withCompiledFileAssets(fileURLToPath(managed)));
+  const events: string[] = [], submissions: any[] = [];
+  const existingKey = sampleSigningKey(), existingState = { preserved: true };
+  const keys = new Map([['existing-account', existingKey]]);
+  const states = new Map<string, unknown>([['deployment-test-state', existingState]]);
+  let live: ContractState | undefined;
+  const providers: any = {
+    zkConfigProvider: { getVerifierKey: async (id: string) => new Uint8Array(readFileSync(new URL(`keys/${id}.verifier`, managed))) },
+    privateStateProvider: {
+      setContractAddress: async () => { events.push('scope'); },
+      setSigningKey: async (address: string, key: typeof existingKey) => { events.push('key'); keys.set(address, key); },
+      set: async (id: string, value: unknown) => { events.push('state'); states.set(id, value); },
+    },
+    proofProvider: { supportedEras: ['v9'], proveTx: async (payload: any) => payload },
+    walletProvider: { supportedEras: ['v9'], getCoinPublicKey: () => '00'.repeat(32),
+      getEncryptionPublicKey: () => sampleEncryptionPublicKey(), balanceTx: async (payload: any) => payload },
+    publicDataProvider: {
+      queryContractState: async () => live,
+      watchForTxData: async () => { events.push('accepted'); return { version: 'v9', status: 'SucceedEntirely' }; },
+    },
+    midnightProvider: { supportedEras: ['v9'], submitTx: async (payload: any) => {
+      events.push('submit'); submissions.push(payload);
+      for (const intent of payload.tx.intents.values()) for (const action of intent.actions) {
+        if (action instanceof ContractDeploy) live = action.initialState;
+        else {
+          assert.ok(action instanceof MaintenanceUpdate); assert.ok(live);
+          assert.equal(action.counter, live.maintenanceAuthority.counter);
+          const before = live.maintenanceAuthority;
+          live.maintenanceAuthority = new ContractMaintenanceAuthority(before.committee, before.threshold, before.counter + 1n);
+          for (const update of action.updates) {
+            if (update instanceof VerifierKeyInsert) {
+              // The versioned wrapper exposes untagged VK payloads; the state
+              // setter takes the tagged artefact, as the actual ledger does.
+              assert.equal(typeof update.operation, 'string');
+              live.setOperation(update.operation, operation(new Uint8Array(readFileSync(new URL(`keys/${update.operation}.verifier`, managed)))));
+            }
+            else { assert.ok(update instanceof ReplaceAuthority); live.maintenanceAuthority = update.authority; }
+          }
+        }
+      }
+      return 'deployment-test';
+    } },
+  };
+  const options = { firstArm: 'p256' as const, privateStateId: 'deployment-test-state', initialPrivateState: emptyCoinStore(),
+    args: [new Uint8Array(32).fill(1), new Uint8Array(32), pureCircuits.compute_public_point_with_jubjub(1n),
+      new Uint8Array(64), 60n, mode, new Uint8Array(32).fill(Number(mode))] };
+  return { providers, compiled, options, events, keys, states, existingKey, existingState, submissions, live: () => live };
+}
+
+for (const failure of ['refused status', 'thrown rejection'] as const) test(`non-checkpointed wave 1 ${failure} leaves retained data unchanged`, async () => {
+  const f = deploymentFixture();
+  if (failure === 'refused status') {
+    f.providers.midnightProvider.submitTx = async (payload: any) => {
+      f.events.push('submit'); f.submissions.push(payload); return 'deployment-test';
+    };
+    f.providers.publicDataProvider.watchForTxData = async () => ({ version: 'v9', status: 'FailEntirely' });
+  } else {
+    f.providers.midnightProvider.submitTx = async () => { f.events.push('submit'); throw new Error('transport refused deployment'); };
+  }
+  await assert.rejects(() => deployAccountInWaves(f.providers, f.compiled, f.options), /wave-1 deploy failed|transport refused deployment/);
+  assert.deepEqual(f.events, ['submit']);
+  assert.equal(f.live(), undefined);
+  assert.deepEqual([...f.keys], [['existing-account', f.existingKey]]);
+  assert.deepEqual([...f.states], [['deployment-test-state', f.existingState]]);
+});
+
+test('non-checkpointed deployment persists after wave 1 acceptance and before maintenance', async () => {
+  const f = deploymentFixture();
+  const address = await deployAccountInWaves(f.providers, f.compiled, f.options);
+  assert.deepEqual(f.events.slice(0, 6), ['submit', 'accepted', 'scope', 'key', 'state', 'submit']);
+  assert.equal(f.keys.get('existing-account'), f.existingKey);
+  assert.ok(f.keys.has(address));
+  assert.notEqual(f.states.get(f.options.privateStateId), f.existingState);
+  assert.deepEqual(f.live()!.operations().sort(), allCircuits().sort());
+  assert.equal(f.live()!.maintenanceAuthority.committee.length, 0);
+});
+
+test('checkpointed deployment persists recovery material before its pre-submission interruption', async () => {
+  const f = deploymentFixture(1n), interruption = new Error('checkpoint saved; interrupted before submit');
+  let checkpoint: WaveDeploymentCheckpoint | undefined;
+  await assert.rejects(() => deployAccountInWaves(f.providers, f.compiled, { ...f.options,
+    onPrepared: async value => {
+      checkpoint = value; f.events.push('prepared');
+      assert.ok(f.keys.has(value.address));
+      assert.notEqual(f.states.get(value.privateStateId), f.existingState);
+      throw interruption;
+    },
+  }), error => error === interruption);
+  assert.ok(checkpoint);
+  assert.deepEqual(f.events, ['scope', 'key', 'state', 'prepared']);
+  assert.equal(f.submissions.length, 0);
+  assert.ok(f.keys.has(checkpoint.address));
+  assert.equal(f.keys.get('existing-account'), f.existingKey);
 });

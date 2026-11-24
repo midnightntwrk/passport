@@ -19,13 +19,13 @@ import { allCircuits } from '../wallet/wave-deploy.js';
 import { setupWallet, compiledAccountContract, deployFaucet } from '../node/setup.js';
 import { CONFIG, managedPath, userAddressBytes } from '../node/wallet.js';
 import { runScenario, step, sleep } from './runner.js';
-import { writeEvidence } from './evidence.js';
+import { evidenceDirectory, writeEvidence } from './evidence.js';
 import { softwarePasskey, sha256, TEST_ORIGIN } from './p256-fixtures.js';
 
 const bytes = (n = 32) => new Uint8Array(randomBytes(n));
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 await runScenario('signed bootstrap: fresh proofs and on-node activation', async () => {
-  const directory = process.env.EVIDENCE_DIR ?? 'evidence/signed-bootstrap';
+  const directory = evidenceDirectory('evidence/signed-bootstrap');
   mkdirSync(directory, { recursive: true });
   const journal = path.join(directory, `on-node-${Date.now()}.jsonl`);
   const log = (kind: string, value: unknown) => appendFileSync(journal, JSON.stringify({ kind, value },
@@ -216,11 +216,11 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
     log('result', details);
     writeEvidence({ testId: 'signed-bootstrap', name: 'conformance', fileName: 'signed-bootstrap-conformance.json',
       description: 'Signed-bootstrap proof, interrupted deployment and approval resume, deposits, recovery veto, custody and device lifecycle on node',
-      verdict: 'PASS', note: 'Fresh generated artifacts and accepted transactions. OpenSSL software passkey; mocked/host negatives are identified separately. Not a formal proof of soundness.', details });
+      verdict: 'PASS', note: 'Fresh generated artifacts and accepted transactions. OpenSSL software passkey; mocked/host negatives are identified separately. Not a formal proof of soundness.', details }, directory);
   } catch (error) {
     writeEvidence({ testId: 'signed-bootstrap', name: 'conformance', fileName: 'signed-bootstrap-conformance.json',
       description: 'Signed-bootstrap on-node conformance attempt', verdict: 'FAIL', note: String(error),
-      details: { account: accountAddress, provenance, samples, transactions } });
+      details: { account: accountAddress, provenance, samples, transactions } }, directory);
     throw error;
   }
 });

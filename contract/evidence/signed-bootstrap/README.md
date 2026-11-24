@@ -7,6 +7,12 @@ with `<checkout>` and `<home>`. This redacts 161 lines across 48 files;
 error details, test outcomes, source revisions, and cryptographic hashes
 are retained. The redaction changes the current files, not earlier Git commits.
 
+## Review fixes for `f522b5a`
+
+[Third-review validation](review-f522b5a/README.md) records a passing TypeScript build, 102 combined regressions, and the source-archive capture check. Seven selected regressions fail against the reviewed implementation. Activation now reconciles submission failures with trusted state before retrying; registration and approval share the same ceremony reservation, and external credential retention checks the dormant deployment. Legacy deployment failures do not leave newly stored maintenance keys, while checkpointed deployment remains recoverable.
+
+Conformance receipts now share the journal and onboarding-record directory. Current roster documentation states 53 circuits; the earlier 52-circuit measurement capture is explicitly historical, and the report derives its count from captured data. Compact edits are comments only, verified against the prior source; no new proofs were generated.
+
 ## Review fixes for `6802395`
 
 [Second-review validation](review-6802395/README.md) records a passing TypeScript build, 83 targeted regressions, one source-archive capture test, and four Python safety tests under optimisation. The final 14 wave tests also passed after increasing their delayed-visibility timing allowance. The new tooling checks run through `ci:reference`.

@@ -692,20 +692,28 @@ export class CustodyAccount {
       /** For an external registration service or software conformance fixture. */
       retainCredential: async (credential: BootstrapCredential) => {
         if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
+        dormant(await check());
+        if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
         retainBootstrapCredential(record, credential); await options.persist(record);
       },
       approve: async (provider?: AssertionProvider) => {
-        dormant(await check());
-        if (!record.credential) throw new Error('persist a credential before approval');
-        const selectedProvider = provider ?? assertionProvider ?? browserAssertionProvider(record.credential.credentialId, options.rpId);
-        if (record.approval) validateRetainedApproval(record);
-        else {
-          if (!temporaryKey) throw new Error('temporary key or retained approval is required');
-          await prepareSignedBootstrapActivation(record, temporaryKey, selectedProvider);
-        }
-        assertionProvider = selectedProvider;
-        await options.persist(record);
-        return record.approval!;
+        if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
+        // Share the reservation through chain checks and signing, including
+        // the browser registration's outstanding trial assertion.
+        bootstrapRegistrations.add(record);
+        try {
+          dormant(await check());
+          if (!record.credential) throw new Error('persist a credential before approval');
+          const selectedProvider = provider ?? assertionProvider ?? browserAssertionProvider(record.credential.credentialId, options.rpId);
+          if (record.approval) validateRetainedApproval(record);
+          else {
+            if (!temporaryKey) throw new Error('temporary key or retained approval is required');
+            await prepareSignedBootstrapActivation(record, temporaryKey, selectedProvider);
+          }
+          assertionProvider = selectedProvider;
+          await options.persist(record);
+          return record.approval!;
+        } finally { bootstrapRegistrations.delete(record); }
       },
       activate: async () => {
         const state = await check();
@@ -715,9 +723,19 @@ export class CustodyAccount {
         await options.persist(record);
         validateRetainedApproval(record);
         const args = signedBootstrapActivationArgs(record.approval!);
-        const result = await submitWithDustRetry('activate_initial_passkey', () =>
-          this.dispatch('activate_initial_passkey', ...args));
-        record.transactionId = txId(result); await options.persist(record);
+        const submitted = await submitWithDustRetry('activate_initial_passkey', async () => {
+          try { return { result: await this.dispatch('activate_initial_passkey', ...args) }; }
+          catch (error) {
+            // Inclusion can win a race with the reply, another tab, or a
+            // relayer. Inspect before attempting another proof/submission.
+            if (await complete(await check())) return { completed: true };
+            throw error;
+          }
+        });
+        // A lost reply supplies no trustworthy transaction ID. The verified
+        // state is sufficient for completion; never manufacture an ID.
+        if ('completed' in submitted) return this;
+        record.transactionId = txId(submitted.result); await options.persist(record);
         if (!await complete(await check())) throw new Error('activation not yet confirmed; retain approval and inspect state before retry');
         return this;
       },

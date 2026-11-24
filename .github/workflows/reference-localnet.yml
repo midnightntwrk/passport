@@ -73,7 +73,7 @@ jobs:
         run: node scripts/ci-run.mjs test-durable-change-sdk-keyed tap - -- npm run test:durable-change-sdk-keyed
       - name: Verify interrupted bootstrap deployment inspection
         run: node scripts/ci-run.mjs test-signed-bootstrap-keyed tap - -- npm run test:signed-bootstrap-keyed
-      - name: Run proof controls, recovery and signed bootstrap
+      - name: Run proof controls, recovery, and signed bootstrap
         run: node scripts/ci-localnet.mjs
       - name: Stop only this run's localnet and remove its volumes
         if: always()

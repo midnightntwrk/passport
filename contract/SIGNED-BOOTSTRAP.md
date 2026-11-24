@@ -91,10 +91,18 @@ After approval, retries must retain the same target and complete signature
 tuple; they do not need the temporary secret. Signing again samples a fresh
 nonce instead of reusing a nonce with a different challenge.
 
-Sessions sharing one in-memory record share a registration reservation and
-recheck the record immediately before contacting the authenticator. Integrators
+Sessions sharing one in-memory record share a reservation across browser
+registration, its trial assertion, and approval signing. External credential
+retention also verifies the network, deployment, and dormant state before
+accepting metadata. Integrators
 must also atomically reserve onboarding per account in durable storage when
 multiple tabs, processes, or separately deserialised records can operate on it.
+
+A submission error triggers another trusted state check before a retry. If
+the intended activation already landed, the session completes without another
+submission, including when a relayer submitted the approval first. A lost
+reply can leave `transactionId` unavailable; verified state still establishes
+completion, and the client does not invent a receipt identifier.
 
 Completion can be recovered after another session has used the account. Once
 the bootstrap commitment is consumed, the client verifies the original
@@ -155,7 +163,9 @@ For proving, compile real keys with `npm run compile`, start the local stack
 described in the [reference README](README.md), and run
 `npm run test:signed-bootstrap-keyed` and `npm run test:signed-bootstrap`.
 The keyed test uses real verifier decoding with mocked provider reads; the
-conformance test submits transactions. Set `EVIDENCE_DIR=/tmp/passport-bootstrap-evidence`
+conformance test submits transactions. Its receipts, journals, and onboarding
+record use the same directory, defaulting to `evidence/signed-bootstrap`.
+Set `EVIDENCE_DIR=/tmp/passport-bootstrap-evidence`
 to keep this run separate from committed evidence. `npm run measure:signed-bootstrap`
 checks every compiler-manifest artefact and runtime verifier-key hash before
 recording circuit sizes and key identities. `ZKIR_BIN` selects the pinned

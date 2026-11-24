@@ -8,9 +8,10 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EVIDENCE_DIR = process.env.EVIDENCE_DIR
-  ? path.resolve(process.env.EVIDENCE_DIR)
-  : path.resolve(__dirname, '..', '..', 'evidence');
+export function evidenceDirectory(fallback = path.resolve(__dirname, '..', '..', 'evidence')): string {
+  return path.resolve(process.env.EVIDENCE_DIR || fallback);
+}
+const EVIDENCE_DIR = evidenceDirectory();
 
 export type Verdict = 'PASS' | 'FAIL' | 'PARTIAL';
 
@@ -34,8 +35,9 @@ export interface Evidence {
   stack?: Record<string, string>;
 }
 
-export function writeEvidence(e: Omit<Evidence, 'ranAt' | 'stack'>): void {
-  fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+/** A caller with companion artefacts can pass their already-selected directory. */
+export function writeEvidence(e: Omit<Evidence, 'ranAt' | 'stack'>, directory = EVIDENCE_DIR): void {
+  fs.mkdirSync(directory, { recursive: true });
   const full: Evidence = {
     ...e,
     ranAt: new Date().toISOString(),
@@ -47,7 +49,7 @@ export function writeEvidence(e: Omit<Evidence, 'ranAt' | 'stack'>): void {
       proofServer: process.env.MIDNIGHT_PROOF_TAG ?? 'midnightntwrk/proof-server:9.0.0-rc.8',
     },
   };
-  const file = path.join(EVIDENCE_DIR, e.fileName ?? `${e.testId.toLowerCase()}-${e.name}.json`);
+  const file = path.join(directory, e.fileName ?? `${e.testId.toLowerCase()}-${e.name}.json`);
   fs.writeFileSync(
     file,
     JSON.stringify(full, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2),
