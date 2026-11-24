@@ -46,7 +46,7 @@ function fixture(arm: typeof arms[number] = 'jubjub') {
   account.ledgerState = async () => {
     state.ledgerReads++;
     const record = { ...state.record, scope: { ...state.record.scope } };
-    return { spec_version: 3n, auth_nonce: 0n, device_epoch: state.epoch,
+    return { spec_version: 4n, auth_nonce: 0n, device_epoch: state.epoch,
       grant_generation: state.generation, enc_key: new Uint8Array(state.encKey),
       grants: { member: () => state.present, lookup: () => record } } as any;
   };

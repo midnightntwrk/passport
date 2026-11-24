@@ -1,0 +1,111 @@
+// Signed initial-passkey bootstrap, format 1 of the local MIP-0013 amendment.
+// No signing secret is an input to these circuits. Network configuration is
+// checked by the client against its intended chain, then sealed at deployment;
+// Compact currently has no authenticated network-ID primitive.
+
+export pure circuit derive_bootstrap_network(
+  id_length: Uint<8>, id41: Bytes<41>, genesis: Bytes<32>,
+  anchor_height: Uint<64>, anchor_hash: Bytes<32>
+): Bytes<32> {
+  return persistentHash<[Bytes<21>, Uint<8>, Bytes<41>, Bytes<32>, Uint<64>, Bytes<32>]>([
+    pad(21, "mip-0013:boot:net[v1]"), id_length, id41, genesis, anchor_height, anchor_hash
+  ]);
+}
+
+export pure circuit derive_signed_boot_commitment(
+  network: Bytes<32>, temporary_pk: JubjubPoint, policy: WebAuthnPolicy
+): Bytes<32> {
+  // Exact-length tags have no NUL suffix. Version 1 fixes scheme 2 (P-256)
+  // and profile 1 (wa-json134-or-chrome243); callers cannot select fallbacks.
+  return persistentHash<[Bytes<21>, Uint<16>, Bytes<32>, JubjubPoint, Uint<8>, Uint<16>, WebAuthnPolicy]>([
+    pad(21, "mip-0013:boot:key[v1]"), 1 as Uint<16>, network, temporary_pk,
+    2 as Uint<8>, 1 as Uint<16>, policy
+  ]);
+}
+
+export pure circuit derive_signed_boot_intent(
+  network: Bytes<32>, self_addr: ContractAddress, boot_commitment: Bytes<32>,
+  pk: Secp256r1Point, policy: WebAuthnPolicy, epoch: Uint<32>, nonce_value: Uint<64>
+): Bytes<32> {
+  return persistentHash<[Bytes<26>, Uint<16>, Bytes<32>, ContractAddress, Bytes<32>, Uint<8>, Uint<16>, Bytes<32>, Bytes<32>, WebAuthnPolicy, Uint<32>, Uint<64>]>([
+    pad(26, "mip-0013:boot:activate[v1]"), 1 as Uint<16>, network, self_addr,
+    boot_commitment, 2 as Uint<8>, 1 as Uint<16>,
+    secp256r1PointX(pk) as Bytes<32>, secp256r1PointY(pk) as Bytes<32>,
+    policy, epoch, nonce_value
+  ]);
+}
+
+export pure circuit challenge_signed_boot_passkey(intent: Bytes<32>): Bytes<32> {
+  return persistentHash<[Bytes<21>, Bytes<32>]>([
+    pad(21, "mip-0013:boot:pop[v1]"), intent
+  ]);
+}
+
+export pure circuit challenge_signed_boot_jubjub(
+  sig_r: JubjubPoint, temporary_pk: JubjubPoint, intent: Bytes<32>, grind_nonce: Uint<64>
+): Bytes<32> {
+  return persistentHash<[Bytes<21>, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>]>([
+    pad(21, "mip-0013:boot:sig[v1]"), sig_r, temporary_pk, intent, grind_nonce
+  ]);
+}
+
+circuit require_bootstrap_jubjub_point(point: JubjubPoint): [] {
+  // The native curve operation assigns this exact point to the prime-order
+  // subgroup on the pinned backend (as for require_live_jubjub_point). The
+  // identity is in that subgroup and needs an explicit rejection. The [8]
+  // check is defence in depth; by itself it does not prove subgroup membership.
+  assert(point != ecMulGenerator(0 as JubjubScalar), "bootstrap point is the identity");
+  assert(ecMul(point, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
+         "bootstrap point has small order");
+}
+
+pure circuit canonical_bootstrap_scalar(encoded: Bytes<32>): Boolean {
+  // Compact Uint is limited to 248 bits; compare the two little-endian
+  // 128-bit limbs against r_J =
+  // 0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7.
+  const low = slice<16>(encoded, 0) as Uint<128>;
+  const high = slice<16>(encoded, 16) as Uint<128>;
+  const order_high = 0x0e7db4ea6533afa906673b0101343b00;
+  const order_low = 0xa6682093ccc81082d0970e5ed6f72cb7;
+  return high < order_high || (high == order_high && low < order_low);
+}
+
+export circuit activate_initial_passkey(
+  temporary_pk: JubjubPoint, pk: Secp256r1Point, policy: WebAuthnPolicy,
+  sig_r: JubjubPoint, sig_s: Field, grind_nonce: Uint<64>,
+  authenticator_data: Bytes<37>, passkey_sig: Secp256r1EcdsaSignature,
+  chrome_grease: Boolean
+): [] {
+  assert(bootstrap_mode == 1, "signed bootstrap mode required");
+  assert(!booted, "already activated");
+  assert(boot != pad(32, ""), "boot commitment already consumed");
+  assert(devices.isEmpty(), "bootstrap requires an empty device set");
+  assert(device_count == 0, "bootstrap requires zero devices");
+  assert(device_epoch == 0, "bootstrap requires epoch zero");
+  assert(auth_nonce == 0, "bootstrap requires nonce zero");
+  require_bootstrap_jubjub_point(temporary_pk);
+  require_bootstrap_jubjub_point(sig_r);
+  assert(derive_signed_boot_commitment(bootstrap_network, temporary_pk, policy) == boot,
+         "boot commitment mismatch");
+  const intent = derive_signed_boot_intent(
+    bootstrap_network, kernel.self(), boot, pk, policy, device_epoch, auth_nonce
+  );
+  const challenge = challenge_signed_boot_jubjub(sig_r, temporary_pk, intent, grind_nonce);
+  // Enforce the integer subgroup bound before scalar casts, which otherwise
+  // reduce modulo the order. Field -> Bytes gives the canonical LE encoding.
+  assert(canonical_bootstrap_scalar(challenge), "bootstrap challenge is not a canonical scalar");
+  assert(canonical_bootstrap_scalar(sig_s as Bytes<32>), "bootstrap response is not a canonical scalar");
+  const c = challenge as Field;
+  assert(ecMulGenerator(sig_s as JubjubScalar) == ecAdd(sig_r, ecMul(temporary_pk, c as JubjubScalar)),
+         "invalid bootstrap signature");
+  // Coordinate extraction in the intent rejects P-256 identity. The native
+  // curve type, ECDSA verifier and profiled WebAuthn reconstruction check the
+  // exact key, canonical signature scalars, RP, origin, flags and signed JSON.
+  assert(webauthn_verify_profiled(
+    challenge_signed_boot_passkey(intent), policy, authenticator_data,
+    passkey_sig, pk, chrome_grease
+  ), "invalid initial passkey signature");
+  do_activate_initial_device(derive_device_entry_with_p256(
+    kernel.self(), pk, policy, device_epoch, 0 as Uint<64>
+  ));
+}

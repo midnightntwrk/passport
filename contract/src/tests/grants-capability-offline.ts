@@ -23,7 +23,7 @@ void runScenario('grants-capability-offline', async () => {
     callContext: async () => { signingContexts++; throw new Error('unexpected signing context'); },
     handle: { callTx: { issue_grant_with_jubjub: async () => {
       submissions++;
-      return { public: { txId: 'accepted-v3' } };
+      return { public: { txId: 'accepted-v4' } };
     } } },
   });
 
@@ -36,8 +36,10 @@ void runScenario('grants-capability-offline', async () => {
   assert.equal(signingContexts, 0);
   assert.equal(submissions, 0);
 
-  step('current schema permits an externally signed grant to reach submission');
-  Object.assign(account, { ledgerState: async () => ({ spec_version: 3n }) });
-  assert.deepEqual(await account.issueGrantWithAuth(bytes, scope, bytes, auth), { txId: 'accepted-v3' });
-  assert.equal(submissions, 1);
+  step('schema 3 and current schema 4 permit externally signed grants to reach submission');
+  for (const version of [3n, 4n]) {
+    Object.assign(account, { ledgerState: async () => ({ spec_version: version }) });
+    assert.deepEqual(await account.issueGrantWithAuth(bytes, scope, bytes, auth), { txId: 'accepted-v4' });
+  }
+  assert.equal(submissions, 2);
 });

@@ -19,7 +19,7 @@ const contractCaller = (bytes: Uint8Array): PublicAddress => ({ tag: 'contract',
 const goodCaller = contractCaller(pinned);
 const badCallers = [undefined, { tag: 'user', address: hex(pinned) } as PublicAddress, contractCaller(wrong)];
 const sim = await AccountSim.create({ initialRecoveryPk: JubjubDevice.generate().pk, initialWrap: rnd(64), vetoWindowSeconds: 60n });
-assert.equal(sim.ledger().spec_version, 3n);
+assert.equal(sim.ledger().spec_version, 4n);
 
 async function invoke(caller: PublicAddress | undefined, circuit: string, args: unknown[]) {
   const ctx = createCircuitContext({ circuitId: circuit, contractAddress: sim.addressHex,

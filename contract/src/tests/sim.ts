@@ -16,6 +16,7 @@ import {
   createConstructorContext,
   createCircuitContext,
   sampleContractAddress,
+  proofDataIntoSerializedPreimage,
 } from '@midnight-ntwrk/compact-runtime';
 
 import { Contract, ledger, type Ledger, type JubjubPoint } from '../wallet/contract.js';
@@ -39,6 +40,8 @@ export interface SimOptions {
   initialWrap: Uint8Array;
   /** Simulated wall clock at deploy, seconds since epoch. */
   time?: number;
+  bootstrapMode?: bigint;
+  bootstrapNetwork?: Uint8Array;
 }
 
 export class AccountSim {
@@ -52,6 +55,7 @@ export class AccountSim {
   state: any;
   privateState: CoinStorePrivateState;
   now: number;
+  lastProofPreimage?: Uint8Array;
   private counters = new Map<JubjubDevice, bigint>();
 
   private constructor(opts: SimOptions) {
@@ -83,6 +87,8 @@ export class AccountSim {
       opts.initialRecoveryPk,
       opts.initialWrap,
       opts.vetoWindowSeconds,
+      opts.bootstrapMode ?? 0n,
+      opts.bootstrapNetwork ?? new Uint8Array(32),
     );
     sim.state = init.currentContractState.data;
     return sim;
@@ -103,6 +109,10 @@ export class AccountSim {
       time: this.now,
     });
     const r = await this.impure[circuit](ctx, ...args);
+    const proof = r.context.callProofDataTrace.at(-1);
+    if (proof) this.lastProofPreimage = proofDataIntoSerializedPreimage(
+      proof.input, proof.output, proof.publicTranscript, proof.privateTranscriptOutputs, circuit,
+    );
     this.state = r.context.callContext.currentQueryContext.state;
     if (r.context.callContext.currentPrivateState !== undefined) {
       this.privateState = r.context.callContext.currentPrivateState;

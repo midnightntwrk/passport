@@ -1,4 +1,4 @@
-// Off-node execution of the scoped-grants seam (`spec_version = 3`) through
+// Off-node execution of the scoped-grants seam (`spec_version = 4`) through
 // the compact-runtime local simulator: no node, no docker, no proof, no
 // zswap. Block time is the simulator's `time` parameter, which is what
 // makes the `expires_at` items expressible here at all.
@@ -236,6 +236,7 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
     JubjubDevice.generate().pk, // birth recovery key (opaque here)
     new Uint8Array(64),  // birth wrap
     259_200n,            // veto window, seconds
+    0n, new Uint8Array(32), // legacy bootstrap mode and zero network
   );
 
   let state: any = init.currentContractState.data;
@@ -396,7 +397,7 @@ async function scenario(deviceArm: Arm, granteeArm: Arm): Promise<void> {
   const acc = await openAccount(deviceArm);
   const L = () => acc.L() as any;
 
-  ok(L().spec_version === 3n, `${tag} spec_version is 3`);
+  ok(L().spec_version === 4n, `${tag} spec_version is 4`);
   ok(L().grant_generation === 0n && L().grants.isEmpty(), `${tag} grant state starts empty at generation 0`);
 
   const grantee: AnyGrantee = granteeArm === 'jubjub' ? JubjubGrantee.generate() : K256Grantee.generate();

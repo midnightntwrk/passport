@@ -34,7 +34,7 @@ await runScenario('caller-bound scoped grants', async () => {
   const ctx = await setupWallet();
   const owner = JubjubDevice.generate();
   const account = await CustodyAccount.deploy(ctx.providers, compiledAccountContract(), owner, generateEncKeyPair());
-  assert.equal((await account.ledgerState()).spec_version, 3n);
+  assert.equal((await account.ledgerState()).spec_version, 4n);
   const proxyPath = path.join(managedPath, 'probe-grant-caller');
   const modules = new Map<string, typeof Proxy | typeof AccountModule>([[account.address, AccountModule]]);
   const contractModuleProvider = { resolve: (address: string) => {

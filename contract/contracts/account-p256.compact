@@ -52,6 +52,7 @@ export pure circuit derive_device_entry_with_p256(
 export circuit activate_initial_device_with_p256(
   pk: Secp256r1Point, salt: Bytes<32>, policy: WebAuthnPolicy
 ): [] {
+  assert(bootstrap_mode == 0, "legacy bootstrap mode required");
   assert(!booted, "already activated");
   // Point-coordinate extraction rejects identity; foreign point inputs are
   // constrained by the native curve type. P-256 has cofactor one.

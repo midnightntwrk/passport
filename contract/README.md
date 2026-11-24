@@ -18,19 +18,27 @@ outstanding initial-device bootstrap commitment, including recovery before
 first activation. See [dormant recovery](DORMANT-RECOVERY.md) for the scope,
 validation status, and required handling of existing deployments.
 
+**Signed bootstrap preparation (issue [#213](https://github.com/midnightntwrk/passport/issues/213)):**
+fresh schema-4 accounts can commit to a temporary Jubjub key before creating
+their first passkey. The resulting address is available for WebAuthn `user.id`;
+activation requires both a temporary-key approval and the passkey's assertion.
+See [the implementation and validation notes](SIGNED-BOOTSTRAP.md). The local
+MIP amendment remains under review; this does not upgrade existing deployments.
+
 ## Contract structure and scope
 
 [`contracts/account.compact`](contracts/account.compact) is the compilation
 root. It imports `CompactStandardLibrary`, includes
 [`webauthn.compact`](contracts/webauthn.compact), imports `WebAuthn<21>`, and
-includes [`account-p256.compact`](contracts/account-p256.compact).
+includes [`account-p256.compact`](contracts/account-p256.compact) and
+[`account-bootstrap.compact`](contracts/account-bootstrap.compact).
 JubJub and secp256k1 authorisation remain inline in `account.compact`;
 P-256's arm is in the included file. The arms share one ledger and internal
 custody/lifecycle functions. They are not separately deployed contracts.
 
-The constructor sets **`spec_version = 3`**. The source exports **52 non-pure
-circuits**: four shared circuits (two deposits, `recover_submit`, and
-`recover_finalise`) and sixteen per arm. Each gated device operation has a
+The constructor sets **`spec_version = 4`**. The source exports **53 non-pure
+circuits**: five shared circuits (two deposits, `recover_submit`,
+`recover_finalise`, and `activate_initial_passkey`) and sixteen per arm. Each gated device operation has a
 `_with_<arm>` entry point; each of the three withdrawal operations also has
 `_with_grant_<arm>` entry points. Exported pure derivation functions do not
 add on-chain operations. The deployment roster is in
@@ -645,7 +653,10 @@ text. Item 7 is corrected in this source; item 8 remains an open design defect.
    address-bound entry, and burns the commitment. See
    [upstream #250](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/250)
    and the source's per-arm commitment recipes, which include additional
-   envelope/policy fields where required.
+   envelope/policy fields where required. This remains schema-4 mode 0.
+   The [temporary-key amendment](../docs/mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md)
+   adds mode 1, whose constructor commitment does not depend on the final
+   passkey. Its signature-based activation uses a separate ABI and tag family.
 3. **MIP-0012 §6.3 direct-transfer return.** The contract-recipient spend
    returns `[ShieldedCoinInfo, Maybe<ShieldedCoinInfo>]`: the sent coin as
    well as change, so the composing client can construct the payee's claim

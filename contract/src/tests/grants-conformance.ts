@@ -1080,14 +1080,14 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   const l0 = await account.ledgerState();
   deployDetails.specVersion = l0.spec_version.toString();
   deployDetails.initialLedger = await snapshot(account);
-  if (l0.spec_version !== 3n) {
+  if (l0.spec_version !== 4n) {
     setVerdict('deploy', 'FAIL');
-    throw new Error(`spec_version ${l0.spec_version}, expected 3`);
+    throw new Error(`spec_version ${l0.spec_version}, expected 4`);
   }
   deployDetails.specVersion1Control =
     'NOT RUN. Testing item 6 also asks that a spec_version = 1 account be shown unable to gain grants. ' +
     'That control needs a compiled v1 (pre-grants) build of the contract, which this tree does not carry: ' +
-    'contracts/account.compact is the spec_version = 3 source with caller-bound grants. ' +
+    'contracts/account.compact is the spec_version = 4 source with caller-bound grants. ' +
     'The control is therefore outstanding, and the deploy leg of item 6 is reported without it.';
   setVerdict('deploy', 'PARTIAL');
 
@@ -1572,7 +1572,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   rejectDetails.capExhaustingSpendTx = a3.txId;
   if (recA3.nonce !== '3') {
     setVerdict('spend', 'PARTIAL');
-    rejectDetails.note = `grant A nonce ${recA3.nonce} after the third call, expected 3`;
+    rejectDetails.note = `grant A nonce ${recA3.nonce} after the third call, expected 4`;
   }
   await reject('over cap (grant A at 500 of 500, asks 100 within the per-call cap)', ['cumulative cap exceeded'], () =>
     rawGrantSpend({ grant: grantA, recipient: userCpk, amount: 100n }));

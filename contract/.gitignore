@@ -16,3 +16,5 @@ evidence/webauthn-variable-json/*.preimage
 evidence/webauthn-variable-json/*.unproven
 evidence/webauthn-variable-json/*.proven
 evidence/ecc-validation/preimages/
+evidence/signed-bootstrap/preimages/
+evidence/signed-bootstrap/onboarding-record.json

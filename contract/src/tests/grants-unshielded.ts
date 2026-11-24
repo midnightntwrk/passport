@@ -891,9 +891,9 @@ await runScenario('grants-unshielded (GRANTS-E4: the unshielded grant twins on n
 
   const l0 = await account.ledgerState();
   fundDetails.specVersion = l0.spec_version.toString();
-  if (l0.spec_version !== 3n) {
+  if (l0.spec_version !== 4n) {
     setVerdict('funding', 'FAIL');
-    throw new Error(`spec_version ${l0.spec_version}, expected 3`);
+    throw new Error(`spec_version ${l0.spec_version}, expected 4`);
   }
   fundDetails.initialLedger = snapshotOf(l0, color);
 
@@ -1352,7 +1352,7 @@ await runScenario('grants-unshielded (GRANTS-E4: the unshielded grant twins on n
       note: 'Submitted through the low-level *WithGrantAuth path so the authorisation itself is retained for row A11.',
       problems: [] as string[],
     };
-    if (rec.nonce !== '3') row.problems.push(`record nonce ${rec.nonce}, expected 3`);
+    if (rec.nonce !== '3') row.problems.push(`record nonce ${rec.nonce}, expected 4`);
     if (!row.spentCommitMatchesCumulative) row.problems.push('spent_commit does not match the cumulative 350');
     spends.push(row);
     if (row.problems.length) {

@@ -139,12 +139,26 @@ export function browserAssertionProvider(credentialId: Uint8Array, rpId: string)
 }
 
 export interface CreateCredentialOptions {
+  /** Raw user handle. Signed bootstrap uses the account address's 32 bytes. */
+  userId?: Uint8Array;
+  /** Authenticator-local duplicate safeguard; also check onboarding metadata. */
+  excludeCredentials?: readonly Uint8Array[];
+  /** Persist metadata before the trial assertion, which may be cancelled. */
+  onCreated?: (credential: BrowserCredentialMetadata) => Promise<void> | void;
   /** Request the WebAuthn PRF extension at creation (default: not requested). */
   prf?: boolean;
   /** Default 'preferred'. */
   residentKey?: ResidentKeyRequirement;
   /** Default 'Midnight account'. */
   rpName?: string;
+}
+
+export interface BrowserCredentialMetadata {
+  credentialId: Uint8Array;
+  pk: P256PublicKey;
+  rpId: string;
+  origin: string;
+  prfEnabledAtCreation: boolean | null | undefined;
 }
 
 /** Local credential creation, attestation=none. Only the public key leaves
@@ -154,10 +168,13 @@ export async function createBrowserCredential(rpId: string, origin: string, user
   options: CreateCredentialOptions = {}) {
   const policy = webauthnPolicy(rpId, origin);
   if (location.origin !== origin) throw new Error('registration origin mismatch');
+  const userId = options.userId === undefined ? crypto.getRandomValues(new Uint8Array(32)) : new Uint8Array(options.userId);
+  if (userId.length < 1 || userId.length > 64) throw new Error('WebAuthn user handle must contain 1–64 bytes');
   const credential = await navigator.credentials.create({ publicKey: {
     challenge: crypto.getRandomValues(new Uint8Array(32)),
     rp: { id: rpId, name: options.rpName ?? 'Midnight account' },
-    user: { id: crypto.getRandomValues(new Uint8Array(32)), name: userName, displayName: userName },
+    user: { id: userId.buffer, name: userName, displayName: userName },
+    excludeCredentials: (options.excludeCredentials ?? []).map(id => ({ type: 'public-key' as const, id: new Uint8Array(id).buffer })),
     pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
     authenticatorSelection: { userVerification: 'required', residentKey: options.residentKey ?? 'preferred' },
     attestation: 'none',
@@ -172,10 +189,12 @@ export async function createBrowserCredential(rpId: string, origin: string, user
   const pk = { x: integer(fromBase64url(jwk.x!)), y: integer(fromBase64url(jwk.y!)), identity: false };
   validateP256Key(pk);
   const credentialId = new Uint8Array(credential.rawId);
+  const prfEnabledAtCreation: boolean | null | undefined = options.prf
+    ? ((credential.getClientExtensionResults() as { prf?: { enabled?: boolean } }).prf?.enabled ?? null) : undefined;
+  const metadata = { credentialId, pk, rpId, origin, prfEnabledAtCreation };
+  await options.onCreated?.(metadata);
   const assertionProvider = browserAssertionProvider(credentialId, rpId);
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   assertionMaterial(challenge, policy, pk, await assertionProvider(challenge));
-  const prfEnabledAtCreation: boolean | null | undefined = options.prf
-    ? ((credential.getClientExtensionResults() as { prf?: { enabled?: boolean } }).prf?.enabled ?? null) : undefined;
-  return { credentialId, pk, rpId, origin, prfEnabledAtCreation };
+  return metadata;
 }
