@@ -3,7 +3,7 @@
 This is the single local register of standards Passport authors, adopts, or
 depends on. Upstream owns normative text and lifecycle; [arc42](../arc42.md)
 owns the architectural overview. [Local file roles](../mps-mip/README.md)
-distinguish pointers, historical copies, and working drafts.
+distinguish pointers, historical copies, local amendments, and working drafts.
 
 **Verified 2026/11/06:** canonical headers were read from a fresh checkout of
 [midnight-improvement-proposals at `02fce36`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/02fce36cfa44541305310dc25fd38f399dbe8d92).
@@ -69,9 +69,11 @@ complete product remain separate claims.
   Canonical boot/device tags are `k1:v2` / `r1:v2`; operation tags use v1.
   The former local v1 boot/device registry is superseded, not an alternative
   interoperable encoding.
-- **Domain separation:** MIP-0021 is verified Proposed. Its `midnight:`
-  convention, version syntax and no-trailing-zero rule require explicit
-  compatibility work for existing Passport domain bytes. The old central
+- **Domain separation:** MIP-0021 is verified Proposed. Since 2026/11/18
+  (upstream `eb626647`) its convention reserves `mip-NNNN:` for MIP-defined
+  constructions, and the #212 amendment uses it for its new tags. That
+  namespace, the version syntax, and the no-trailing-zero rule require
+  explicit compatibility work for existing Passport domain bytes. The old central
   registry design in C8 is not adopted upstream. See
   [ADR-0001](../adrs/0001-domain-separation-registry.md); do not silently
   change cryptographic constants to make prose appear conformant.
@@ -85,6 +87,20 @@ publication and a passing reference test do not establish full conformance,
 cryptographic review, or safety of an existing deployment.
 
 ## Local drafts and evidence
+
+### Temporary Jubjub bootstrap authority
+
+**Proposed locally, 2026/11/23:** [the #212 amendment](../mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md)
+pins MIP-0013 and companion specifications at upstream
+[`eb626647`](https://github.com/midnightntwrk/midnight-improvement-proposals/tree/eb626647515e1b66916869052fc8e5d23744004c).
+It specifies deployment under a temporary Jubjub authority followed by signed
+passkey installation, with an in-circuit WebAuthn proof of possession. The
+[proposed flow](../protocol-flows/02-temporary-jubjub-bootstrap.md) addresses
+[SDK #140](https://github.com/midnightntwrk/midnight-passport-sdk/issues/140).
+This is a focused new baseline, not a re-review of the entire register above.
+Canonical bootstrap remains unchanged. [#213](https://github.com/midnightntwrk/passport/issues/213)
+must implement and validate it before [#214](https://github.com/midnightntwrk/passport/issues/214)
+consolidates it upstream; no new circuit cost or conformance result is claimed.
 
 ### Scoped grants and dApp connection
 
