@@ -1445,7 +1445,7 @@ PASS compiled ACC device gate: Chrome GREASE rotation, selector refusal and repl
 PASS compiled ACC grant gate: normal spend, selector/scope/amount/replay refusals
 PASS compiled ACC grant gate: Chrome GREASE spend, selector/scope/amount/replay refusals
 PASS compiled ACC grant gate: cumulative cap and post-revocation refusal
-PASS 9 Ledger/Chrome native-account test groups; evidence /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/evidence/ledger-flex-account/offline.json
+PASS 9 Ledger/Chrome native-account test groups; evidence <checkout>/contract/evidence/ledger-flex-account/offline.json
 
 > midnight-account-custody@0.1.0 test:p256-offline
 > tsx src/tests/p256-offline.ts

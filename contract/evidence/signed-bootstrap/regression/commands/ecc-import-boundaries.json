@@ -2,12 +2,12 @@
   "label": "ecc-import-boundaries",
   "kind": "pattern",
   "command": [
-    "/Users/nicolasdiprima/.nvm/versions/node/v22.22.2/bin/node",
+    "<home>/.nvm/versions/node/v22.22.2/bin/node",
     "--import",
     "tsx",
     "src/tests/ecc-import-boundaries.ts"
   ],
-  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "cwd": "<checkout>/contract",
   "startedAt": "2026-11-24T08:00:07.347Z",
   "timeoutMs": 600000,
   "status": "passed",

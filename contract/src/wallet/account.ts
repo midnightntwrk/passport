@@ -185,6 +185,10 @@ export interface SignedBootstrapClientOptions {
   network: BootstrapNetworkConfig;
   rpId: string;
   origin: string;
+  /** Used for approval and the installed device's later signatures. Supply it
+   * again after reconnecting; callbacks are never part of the saved record.
+   * Defaults to the browser provider for the retained credential ID. */
+  assertionProvider?: AssertionProvider;
   /** Read chain identity/genesis and the configured fixed checkpoint from a
    * trusted chain adapter. Called before deployment and every approval/retry. */
   observeNetwork: () => Promise<BootstrapNetworkConfig>;
@@ -206,8 +210,13 @@ export interface SignedBootstrapSession {
   address: string;
   userId: Uint8Array;
   record: SignedBootstrapRecord;
+  /** Available after successful activation/inspection. Normal account calls
+   * still check current device membership; a later failed inspection clears it. */
+  readonly device: P256Device | undefined;
   registerBrowserCredential(userName: string, creation?: Omit<CreateCredentialOptions, 'userId' | 'onCreated'>): Promise<BrowserCredentialMetadata>;
   retainCredential(credential: BootstrapCredential): Promise<void>;
+  /** An explicit provider becomes the session's device signer, including when
+   * an existing approval is reused without requesting another assertion. */
   approve(provider?: AssertionProvider): Promise<RetainedSignedBootstrapApproval>;
   activate(): Promise<CustodyAccount>;
   inspect(): Promise<boolean>;
@@ -587,7 +596,10 @@ export class CustodyAccount {
     if (!equalBytes(record.address, this.addressBytes)) throw new Error('onboarding record belongs to another account');
     const policy = signedBootstrapPolicy(options.rpId, options.origin);
     if (!equalBytes(policy.origin, record.policy.origin) || !equalBytes(policy.rp_id_hash, record.policy.rp_id_hash)) throw new Error('bootstrap RP policy mismatch');
+    let assertionProvider = options.assertionProvider;
+    let completedDevice: P256Device | undefined;
     const check = async () => {
+      completedDevice = undefined;
       const network = assertBootstrapNetwork(options.network, await options.observeNetwork());
       if (!equalBytes(network, record.network)) throw new Error('bootstrap record network mismatch');
       await options.verifyDeployment(this);
@@ -653,12 +665,15 @@ export class CustodyAccount {
       }
       // This registers metadata/a counter hint, not spending authority. Normal
       // counter discovery still checks the current roster before any use.
-      this.registerDevice(new P256Device(record.credential!.pk, options.rpId, options.origin,
-        browserAssertionProvider(record.credential!.credentialId, options.rpId)), 0n);
+      const device = new P256Device(record.credential!.pk, options.rpId, options.origin,
+        assertionProvider ?? browserAssertionProvider(record.credential!.credentialId, options.rpId));
+      this.registerDevice(device, 0n);
+      completedDevice = device;
       return true;
     };
     return {
       account: this, address: this.address, userId: new Uint8Array(this.addressBytes), record,
+      get device() { return completedDevice; },
       registerBrowserCredential: async (userName: string, creation: Omit<CreateCredentialOptions, 'userId' | 'onCreated'> = {}) => {
         if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
         bootstrapRegistrations.add(record);
@@ -682,12 +697,13 @@ export class CustodyAccount {
       approve: async (provider?: AssertionProvider) => {
         dormant(await check());
         if (!record.credential) throw new Error('persist a credential before approval');
+        const selectedProvider = provider ?? assertionProvider ?? browserAssertionProvider(record.credential.credentialId, options.rpId);
         if (record.approval) validateRetainedApproval(record);
         else {
           if (!temporaryKey) throw new Error('temporary key or retained approval is required');
-          await prepareSignedBootstrapActivation(record, temporaryKey,
-            provider ?? browserAssertionProvider(record.credential.credentialId, options.rpId));
+          await prepareSignedBootstrapActivation(record, temporaryKey, selectedProvider);
         }
+        assertionProvider = selectedProvider;
         await options.persist(record);
         return record.approval!;
       },

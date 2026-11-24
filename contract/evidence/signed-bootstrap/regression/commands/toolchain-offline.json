@@ -7,7 +7,7 @@
     "tsx",
     "src/tests/toolchain-offline.ts"
   ],
-  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "cwd": "<checkout>/contract",
   "startedAt": "2026-11-24T08:21:16.821Z",
   "timeoutMs": 600000,
   "status": "passed",

@@ -10,7 +10,8 @@ const runner = resolve(contract, 'scripts/ci-run.mjs');
 const tasks = [];
 const npm = (script, kind = 'tap', pattern = '-') => tasks.push([script.replaceAll(':', '-'), kind, pattern, '--', 'npm', 'run', script]);
 for (const name of ['device-reconnection', 'grant-preflight', 'recovery-bootstrap', 'multi-coin',
-  'durable-change', 'chain-recovery', 'viewing-recovery', 'input-validation', 'signed-bootstrap-offline']) npm(`test:${name}`);
+  'durable-change', 'chain-recovery', 'viewing-recovery', 'input-validation', 'signed-bootstrap-offline', 'signed-bootstrap-evidence']) npm(`test:${name}`);
+npm('test:signed-bootstrap-runner', 'command');
 for (const name of ['unit', 'recovery-offline', 'recovery-sim', 'grants-capability-offline']) {
   npm(`test:${name}`, 'scenario', name === 'unit' ? 'unit-offline' : name);
 }

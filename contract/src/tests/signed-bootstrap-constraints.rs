@@ -41,7 +41,8 @@ fn inputs_only(ir: &IrSource, prep: &Preprocessed) -> Preprocessed {
 #[test]
 fn passport_signed_bootstrap_constraints() {
     let root = PathBuf::from(std::env::var("PASSPORT_CONTRACT_ROOT").unwrap());
-    let evidence = root.join("evidence/signed-bootstrap");
+    let evidence = std::env::var_os("PASSPORT_BOOTSTRAP_EVIDENCE_DIR")
+        .map(PathBuf::from).unwrap_or_else(|| root.join("evidence/signed-bootstrap"));
     let manifest: Json = serde_json::from_slice(&fs::read(evidence.join("runtime-preimage.json")).unwrap()).unwrap();
     let ir = IrSource::load(fs::File::open(root.join("contracts/managed/account/zkir/activate_initial_passkey.zkir")).unwrap()).unwrap();
     let preimage: ProofPreimage = serialize::tagged_deserialize(

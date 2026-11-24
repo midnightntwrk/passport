@@ -12,6 +12,8 @@
     "test:signed-bootstrap-offline": "node --import tsx --test src/tests/signed-bootstrap-offline.ts src/tests/signed-bootstrap-client.ts src/tests/signed-bootstrap-registration.ts src/tests/signed-bootstrap-resume.ts",
     "test:signed-bootstrap": "tsx src/tests/signed-bootstrap-conformance.ts",
     "test:signed-bootstrap-keyed": "node --import tsx --test src/tests/signed-bootstrap-wave.ts",
+    "test:signed-bootstrap-evidence": "node --test scripts/signed-bootstrap-evidence.test.mjs",
+    "test:signed-bootstrap-runner": "python3 -B -O scripts/test-signed-bootstrap-constraints-runner.py",
     "measure:signed-bootstrap": "node scripts/measure-signed-bootstrap.mjs",
     "test:input-validation": "tsx --test src/tests/input-validation.ts src/tests/signer-input-validation.ts",
     "test:device-reconnection": "node --import tsx --test src/tests/device-reconnection.ts",

@@ -8,7 +8,7 @@
     "--manifest-path",
     "signer-rs/Cargo.toml"
   ],
-  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "cwd": "<checkout>/contract",
   "startedAt": "2026-11-24T08:00:34.298Z",
   "timeoutMs": 600000,
   "status": "passed",

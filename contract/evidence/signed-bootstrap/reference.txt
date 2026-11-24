@@ -14,10 +14,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -1511,7 +1511,7 @@ not ok 14 - SDK uses an indexed finalised snapshot, real inbox bytes, checked me
   ---
   duration_ms: 131.006625
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:6423'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:6423'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1526,7 +1526,7 @@ not ok 15 - SDK excludes externally spent coins even though the filtered tree st
   ---
   duration_ms: 96.514416
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:7438'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:7438'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1541,7 +1541,7 @@ not ok 16 - SDK rejects incomplete, unrelated, and errored nullifier streams
   ---
   duration_ms: 90.227
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:7836'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:7836'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1556,7 +1556,7 @@ not ok 17 - SDK completion before connection acknowledgement cannot establish em
   ---
   duration_ms: 89.308875
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:8851'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:8851'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1571,7 +1571,7 @@ not ok 18 - SDK rejects nullifier scope, exact identity, and receipt inconsisten
   ---
   duration_ms: 89.15275
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:9342'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:9342'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1586,7 +1586,7 @@ not ok 19 - SDK refuses wrong genesis, stale snapshots, missing indexer anchors,
   ---
   duration_ms: 89.91
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:10341'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:10341'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1601,7 +1601,7 @@ not ok 20 - SDK keeps evidence unknown if its snapshot becomes stale during a fi
   ---
   duration_ms: 87.745875
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:11582'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:11582'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1616,7 +1616,7 @@ not ok 21 - SDK never turns check rejection or check transport failure into a li
   ---
   duration_ms: 91.027
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:11884'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:11884'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1631,7 +1631,7 @@ not ok 22 - SDK refuses unrelated, malformed, stale, and noncanonical output eve
   ---
   duration_ms: 92.179041
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:12201'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:12201'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1646,7 +1646,7 @@ not ok 23 - SDK bounded commitment search resumes without skipping a lower posit
   ---
   duration_ms: 90.781667
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:13190'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:13190'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1661,7 +1661,7 @@ not ok 24 - SDK sorts nonmonotonic output ranges before issuing a resumable curs
   ---
   duration_ms: 87.48425
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:13973'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:13973'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1676,7 +1676,7 @@ not ok 25 - SDK bounds event history and refuses to infer absence from a truncat
   ---
   duration_ms: 87.93775
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:14636'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:14636'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1691,7 +1691,7 @@ not ok 26 - SDK can qualify within a bounded event window and resume its unfinis
   ---
   duration_ms: 86.423167
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:15098'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:15098'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1706,7 +1706,7 @@ not ok 27 - SDK later event windows can contain lower tree indices without being
   ---
   duration_ms: 87.893084
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:15917'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:15917'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1721,7 +1721,7 @@ not ok 28 - SDK starts at an indexed finalised anchor when the indexer lags the 
   ---
   duration_ms: 86.867166
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:16842'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:16842'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1736,7 +1736,7 @@ not ok 29 - SDK honours a pinned older snapshot and rejects a cursor beyond node
   ---
   duration_ms: 89.126125
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:17366'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:17366'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1751,7 +1751,7 @@ not ok 30 - SDK output page transport failure remains unknown rather than an emp
   ---
   duration_ms: 88.3405
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:17977'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:17977'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1766,7 +1766,7 @@ not ok 31 - SDK changing the event-page budget on continuation cannot skip lower
   ---
   duration_ms: 86.280083
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:18369'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:18369'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1781,7 +1781,7 @@ not ok 32 - SDK empty event history falls back to the bounded complete commitmen
   ---
   duration_ms: 87.76825
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:19313'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:19313'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1796,7 +1796,7 @@ not ok 33 - SDK tree fallback resumes its own cursor without repeating the event
   ---
   duration_ms: 89.826542
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:19820'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:19820'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1811,7 +1811,7 @@ not ok 34 - SDK completed tree search never imports an authenticated but unquali
   ---
   duration_ms: 88.327375
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:20611'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:20611'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1826,7 +1826,7 @@ not ok 35 - SDK tree fallback verifier failure remains unknown without a false l
   ---
   duration_ms: 89.440833
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:21129'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:21129'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1841,7 +1841,7 @@ not ok 36 - SDK an empty complete commitment tree cannot establish a live coin
   ---
   duration_ms: 87.649
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:21624'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:21624'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -1856,7 +1856,7 @@ not ok 37 - SDK changing the commitment frontier during a nullifier scan invalid
   ---
   duration_ms: 87.497125
   type: 'test'
-  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:21933'
+  location: '<checkout>/contract/src/tests/chain-recovery-sdk.ts:1:21933'
   failureType: 'testCodeFailure'
   error: 'listen EPERM: operation not permitted 127.0.0.1'
   code: 'EPERM'
@@ -2789,10 +2789,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -2820,10 +2820,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -2846,10 +2846,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -2872,10 +2872,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -2946,10 +2946,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -2972,10 +2972,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -3133,10 +3133,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -3163,10 +3163,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -3185,10 +3185,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',
@@ -3584,7 +3584,7 @@ ACCEPT ledger-WASM/encryption: zero secret and identity recipient output
 ACCEPT ledger-WASM/encryption: normal recipient not detected by zero secret
 REJECT ledger-WASM/encryption: invalid compressed subgroup point — Error: invalid group element encoding
 
-Recorded 197 rows in /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/evidence/ecc-validation/runtime.json
+Recorded 197 rows in <checkout>/contract/evidence/ecc-validation/runtime.json
 # Subtest: fresh pages cover 4095, 4096, and 20000, and survive a client restart
 ok 1 - fresh pages cover 4095, 4096, and 20000, and survive a client restart
   ---
@@ -3880,7 +3880,7 @@ ok 10 - local and external recovery reset a reused successor in the existing cli
    Compiling midnight-circuits v6.2.1
    Compiling midnight-zk-stdlib v1.2.1
    Compiling midnight-transient-crypto v2.1.0
-   Compiling account-custody-signer v0.1.0 (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/signer-rs)
+   Compiling account-custody-signer v0.1.0 (<checkout>/contract/signer-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 11.29s
      Running unittests src/main.rs (signer-rs/target/debug/build/account-custody-signer/39728666cadc7b79/out/account_custody_signer-39728666cadc7b79)
 
@@ -4002,7 +4002,7 @@ test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
    Compiling p256 v0.13.2
    Compiling midnight-curves v0.3.1
    Compiling arc-pleiades v0.1.0 (https://github.com/input-output-hk/arc-pleiades.git?rev=ae179e7e6dde546409c37f3de2c69d077e4d6e84#ae179e7e)
-   Compiling passport-buss v0.1.0 (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/buss-rs)
+   Compiling passport-buss v0.1.0 (<checkout>/contract/buss-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 4.54s
      Running unittests src/lib.rs (buss-rs/target/debug/build/passport-buss/bf176c5ede813ffe/out/passport_buss-bf176c5ede813ffe)
 
@@ -4026,7 +4026,7 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-   Compiling account-custody-signer v0.1.0 (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/signer-rs)
+   Compiling account-custody-signer v0.1.0 (<checkout>/contract/signer-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.84s
 
 > midnight-account-custody@0.1.0 test:crossimpl-offline
@@ -4040,10 +4040,10 @@ Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17
     at Server.setupListenHandle [as _listen2] (node:net:1918:21)
     at listenInCluster (node:net:1997:12)
     at Server.listen (node:net:2119:5)
-    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31537
     at new Promise (<anonymous>)
-    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
-    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+    at createIpcServer (file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file://<checkout>/contract/node_modules/tsx/dist/cli.mjs:55:459 {
   code: 'EPERM',
   errno: -1,
   syscall: 'listen',

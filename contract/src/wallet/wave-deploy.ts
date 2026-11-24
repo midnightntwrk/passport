@@ -198,9 +198,9 @@ export interface Wave {
  *
  * Pack every wave under `VERIFIER_BYTE_BUDGET`, starting with the deposits
  * and initial device's arm, then the other device arms, grants, and recovery.
- * Only signed-bootstrap mode prioritises its activation circuit before the
- * first arm. Legacy accounts retain the full roster but install that circuit
- * later, so it cannot displace usable first-arm operations in wave 1.
+ * Each mode prioritises only its usable activation circuit. The full roster
+ * is retained, but activation circuits disabled by that mode are deferred
+ * so they cannot displace usable first-arm operations in wave 1.
  * The deploy may carry only a prefix of the first arm. Activation happens
  * after all waves complete. Authority retirement rides on the last
  * maintenance wave, which is the last operation that needs the authority.
@@ -223,7 +223,10 @@ export function planWaves(
   }
 
   const others = ARMS.filter(arm => arm !== firstArm);
-  const first = [...SHARED_CIRCUITS, ...(bootstrapMode === 1n ? SIGNED_BOOTSTRAP_CIRCUITS : []), ...armCircuits(firstArm)];
+  const usableArm = (arm: Arm) => bootstrapMode === 1n ? armCircuits(arm).slice(1) : armCircuits(arm);
+  const deferredActivation = bootstrapMode === 1n
+    ? ARMS.map(arm => armCircuits(arm)[0]) : SIGNED_BOOTSTRAP_CIRCUITS;
+  const first = [...SHARED_CIRCUITS, ...(bootstrapMode === 1n ? SIGNED_BOOTSTRAP_CIRCUITS : []), ...usableArm(firstArm)];
   const waveOne: string[] = [];
   for (const id of first) {
     if (total(waveOne) + sizeOf(id) > VERIFIER_BYTE_BUDGET) break;
@@ -240,11 +243,11 @@ export function planWaves(
 
   const remaining = [
     ...first.slice(waveOne.length),
-    ...others.flatMap(armCircuits),
+    ...others.flatMap(usableArm),
     ...grantTwins(firstArm),
     ...lifecycleCircuits(firstArm),
     ...others.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
-    ...(bootstrapMode === 0n ? SIGNED_BOOTSTRAP_CIRCUITS : []),
+    ...deferredActivation,
     // Recovery last: the gate and the first arm's session and cancel, then
     // the other arm's. An account is functional without them; they are the
     // last thing the authority installs before retiring.
@@ -534,10 +537,22 @@ export async function deployAccountInWaves(
   return address;
 }
 
+export interface WaveResumeOptions {
+  /** Grace period for pending deployment/indexer propagation, before and after
+   * a possible re-submission. A timed-out resume retains its checkpoint. */
+  observationTimeoutMs?: number;
+  pollIntervalMs?: number;
+}
+
 /** Resume an interrupted deployment, including an uncertain first submission.
  * Inspect actual verifier keys instead of trusting a saved wave counter. Keys
  * that exist but differ from trusted local artefacts abort recovery. */
-export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeploymentCheckpoint): Promise<string> {
+export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeploymentCheckpoint,
+  options: WaveResumeOptions = {}): Promise<string> {
+  const observationTimeoutMs = options.observationTimeoutMs ?? 15_000;
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+  if (!Number.isFinite(observationTimeoutMs) || observationTimeoutMs < 0 ||
+      !Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) throw new Error('invalid deployment observation timing');
   if (checkpoint.version !== 1 || !ARMS.includes(checkpoint.firstArm) || !checkpoint.privateStateId ||
       typeof checkpoint.retireAuthority !== 'boolean') throw new Error('invalid deployment checkpoint');
   const retainedIntent = Intent.deserialize('signature', 'pre-proof', 'pre-binding', checkpoint.deploymentIntent);
@@ -555,6 +570,16 @@ export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeplo
   const read = async (): Promise<ContractState | undefined> => {
     const state = await providers.publicDataProvider.queryContractState(checkpoint.address);
     return state ? ContractState.deserialize(state.serialize()) : undefined;
+  };
+  const observe = async (): Promise<ContractState | undefined> => {
+    const deadline = Date.now() + observationTimeoutMs;
+    for (;;) {
+      const state = await read();
+      if (state) return state;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return undefined;
+      await new Promise(resolve => setTimeout(resolve, Math.min(pollIntervalMs, remaining)));
+    }
   };
   if (typeof providers.privateStateProvider.setContractAddress === 'function') await providers.privateStateProvider.setContractAddress(checkpoint.address);
   const signingKey = await providers.privateStateProvider.getSigningKey(checkpoint.address);
@@ -589,18 +614,33 @@ export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeplo
     }
   };
   verify(initial);
-  let state = await read();
+  // A missing indexer result does not establish that the original deploy
+  // failed. Give an in-flight transaction time to appear before re-submitting.
+  let state = await observe();
   if (!state) {
     if (!signingKey) throw new Error('missing retained maintenance key; cannot resume deployment');
     const ttl = new Date(Date.now() + Number(process.env.TX_TTL_MS ?? '60000'));
     const unprovenTx = Transaction.fromParts(getNetworkId(), undefined, undefined, Intent.new(ttl).addDeploy(deploy));
-    const result: any = await withDustRetry('resume deploy', () => (submitTx as any)(providers, { unprovenTx }));
-    if (result.status && String(result.status).toLowerCase().includes('fail')) throw new Error('resumed deployment failed');
-    state = await read();
-    if (!state) throw new Error('deployment not yet observed; retain checkpoint and retry');
+    let submissionFailure: unknown;
+    try {
+      // Do not blindly retry duplicate-deploy rejections as dust races. The
+      // original transaction can settle while this attempt is being built.
+      const result: any = await (submitTx as any)(providers, { unprovenTx });
+      if (result.status && String(result.status).toLowerCase().includes('fail')) {
+        submissionFailure = new Error(`resumed deployment failed: ${String(result.status)}`);
+      }
+    } catch (error) { submissionFailure = error; }
+    // A duplicate rejection or a failed duplicate transaction is harmless
+    // only if the intended address appears and passes the checks below.
+    state = await observe();
+    if (!state) {
+      if (submissionFailure !== undefined) throw submissionFailure;
+      throw new Error('deployment not yet observed; retain checkpoint and retry');
+    }
+    verify(state);
   }
   for (let index = 0; index < waves.length; index++) {
-    state = (await read())!;
+    state = (await observe())!;
     if (!state) throw new Error('deployed state unavailable');
     verify(state);
     const missing = waves[index].circuits.filter(id => !state!.operation(id));
@@ -623,7 +663,7 @@ export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeplo
     if (result.status && String(result.status).toLowerCase().includes('fail')) throw new Error('resumed maintenance failed');
     await awaitAuthorityCounter(providers, checkpoint.address, authority.counter + 1n);
   }
-  state = await read();
+  state = await observe();
   if (!state) throw new Error('resumed deployment state unavailable');
   verify(state);
   if (allCircuits().some(id => !state!.operation(id))) throw new Error('resumed verifier roster is incomplete');

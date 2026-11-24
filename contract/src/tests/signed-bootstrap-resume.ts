@@ -55,7 +55,8 @@ async function fixture() {
     await sim.recoverSubmit(recovery, JubjubDevice.generate(), JubjubDevice.generate().pk, BigInt(sim.now));
     history.push({ data: sim.state }); sim.advanceTime(1); await call('recover_finalise');
   };
-  const resume = (stream?: () => Observable<unknown>, persist?: SignedBootstrapClientOptions['persist']) => {
+  const resume = (stream?: () => Observable<unknown>, persist?: SignedBootstrapClientOptions['persist'],
+    assertionProvider?: SignedBootstrapClientOptions['assertionProvider']) => {
     const record = deserializeSignedBootstrapRecord(savedBeforeSubmission);
     const seen = { histories: 0, registered: 0, persisted: 0, submitted: 0, erased: 0 };
     const providers = { publicDataProvider: {
@@ -63,21 +64,68 @@ async function fixture() {
         assert.equal(address, sim.addressHex); assert.deepEqual(config, { type: 'all' }); seen.histories++;
         return stream ? stream() : of(...history);
       },
-    }, privateStateProvider: { get: async () => emptyCoinStore() } };
+    }, privateStateProvider: { get: async () => emptyCoinStore(), set: async () => {} } };
     const account = Reflect.construct(CustodyAccount, [sim.addressHex, sim.address, providers, 'resume-test', {
-      callTx: { activate_initial_passkey: () => { seen.submitted++; throw new Error('must not resubmit activation'); } },
+      callTx: {
+        activate_initial_passkey: () => { seen.submitted++; throw new Error('must not resubmit activation'); },
+        rotate_enc_key_with_p256: async (...args: unknown[]) => {
+          seen.submitted++; await call('rotate_enc_key_with_p256', ...args); return { public: { txId: 'simulated-rotation' } };
+        },
+      },
     }]) as CustodyAccount;
     account.ledgerState = async () => sim.ledger();
     const register = account.registerDevice.bind(account);
     account.registerDevice = (...args) => { seen.registered++; register(...args); };
-    const options: SignedBootstrapClientOptions = { network: config, rpId: TEST_RP, origin: TEST_ORIGIN,
+    const options: SignedBootstrapClientOptions = { network: config, rpId: TEST_RP, origin: TEST_ORIGIN, assertionProvider,
       observeNetwork: async () => config, verifyDeployment: async () => {},
       eraseTemporaryKey: async () => { seen.erased++; },
       persist: async r => { seen.persisted++; await persist?.(r); } };
-    return { record, seen, account, session: account.signedBootstrapSession(record, options) };
+    return { record, seen, account, options, session: account.signedBootstrapSession(record, options) };
   };
-  return { sim, passkey, history, call, activate, activateDifferentTarget, addDevice, withdraw, recover, resume };
+  return { sim, passkey, temporary, history, call, activate, activateDifferentTarget, addDevice, withdraw, recover, resume };
 }
+
+test('fresh approval retains its provider for the completed device and its next account operation', async () => {
+  const f = await fixture(), r = f.resume();
+  delete r.record.approval;
+  let assertions = 0;
+  const session = r.account.signedBootstrapSession(r.record, { ...r.options,
+    assertionProvider: async () => { throw new Error('explicit approval provider must override this default'); },
+  }, f.temporary);
+  assert.equal(session.device, undefined);
+  const approval = await session.approve(async challenge => { assertions++; return f.passkey.assertion(challenge); });
+  assert.equal(assertions, 1); assert.equal(session.device, undefined);
+  await f.call('activate_initial_passkey', ...signedBootstrapActivationArgs(approval));
+  assert.equal(await session.activate(), r.account);
+  assert.ok(session.device);
+  const viewingKey = bytes();
+  await r.account.rotateEncKey(session.device, viewingKey);
+  assert.equal(assertions, 2);
+  assert.deepEqual(f.sim.ledger().enc_key, viewingKey);
+  assert.equal(f.sim.ledger().auth_nonce, 1n);
+});
+
+test('a reconnected retained approval uses its supplied provider without prompting for approval again', async () => {
+  const f = await fixture(); let assertions = 0;
+  const r = f.resume(undefined, undefined, async challenge => { assertions++; return f.passkey.assertion(challenge); });
+  assert.equal(r.session.device, undefined);
+  await r.session.approve(); assert.equal(assertions, 0);
+  await f.activate(); await r.session.activate(); assert.ok(r.session.device);
+  const viewingKey = bytes(); await r.account.rotateEncKey(r.session.device, viewingKey);
+  assert.equal(assertions, 1); assert.deepEqual(f.sim.ledger().enc_key, viewingKey);
+});
+
+test('historical completion restores the supplied signer and recovery inspection clears it', async () => {
+  const f = await fixture(); await f.activate(); await f.withdraw(); let assertions = 0;
+  const r = f.resume(undefined, undefined, async challenge => { assertions++; return f.passkey.assertion(challenge); });
+  assert.equal(await r.session.inspect(), true); assert.ok(r.session.device);
+  const viewingKey = bytes(); await r.account.rotateEncKey(r.session.device, viewingKey);
+  assert.equal(assertions, 1); assert.deepEqual(f.sim.ledger().enc_key, viewingKey);
+  assert.equal(f.sim.ledger().auth_nonce, 2n);
+  await f.recover();
+  await assert.rejects(() => r.session.inspect(), BootstrapRecoveryReplacedError);
+  assert.equal(r.session.device, undefined);
+});
 
 for (const activity of ['withdrawal', 'device enrolment'] as const) {
   test(`resume a pre-submission record after activation and another session's ${activity}`, async () => {

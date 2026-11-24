@@ -53,7 +53,12 @@ the deployment context, credential metadata, and complete validated approvals.
 `CustodyAccount.deployPasskeyDormant` deploys mode 1 without a passkey; the
 resulting session exposes `userId` and a browser-registration helper. The
 caller supplies trusted chain observation, deployment verification, and durable
-storage callbacks. Deployment verification must check the intended verifier
+storage callbacks. A custom assertion provider passed to `approve(provider)`
+is retained for the completed session's `device`, which callers can use for
+subsequent account operations. After a process restart, supply
+`assertionProvider` in the session options again; callbacks are never stored
+in the serialised onboarding record. Browser assertions remain the default.
+Deployment verification must check the intended verifier
 roster and maintenance authority before signing.
 
 The reference mode-1 client accepts an RP ID equal to the origin hostname,
@@ -70,6 +75,11 @@ maintenance signing key and private viewing state stay in the protected
 `privateStateProvider`, which must be durable for recovery across processes.
 `CustodyAccount.resumePasskeyDeployment` compares installed verifiers with the
 trusted artefacts, completes missing waves, and checks the retirement policy.
+If wave 1 is still settling or the indexer is behind, resume waits for the
+address before retrying submission. A rejected submission is followed by
+another bounded observation; only a matching verified deployment can satisfy
+that check. Signed-bootstrap deployments defer legacy activation verifiers
+so usable operations receive priority in their first wave.
 
 The browser adapter persists the created credential before its trial assertion.
 Known credential IDs can be passed through `excludeCredentials`; that safeguard
@@ -135,13 +145,18 @@ Use the pinned dependencies and Compact 0.35.0 / ZKIR 3.1.0-rc.1 toolchain.
 For offline checks, generate runtime outputs with `npm run ci:compile`, then
 run `npm run build` and `npm run test:signed-bootstrap-offline`.
 `npm run ci:reference` includes the new offline suite and existing regressions.
+Offline tests do not write evidence by default and also run from source
+archives without Git metadata. To capture native-test inputs deliberately,
+set `WRITE_EVIDENCE=1 EVIDENCE_DIR=/tmp/passport-bootstrap-evidence` when
+running `npm run test:signed-bootstrap-offline`. Use the same evidence
+directory for the native constraint runner.
 
 For proving, compile real keys with `npm run compile`, start the local stack
 described in the [reference README](README.md), and run
 `npm run test:signed-bootstrap-keyed` and `npm run test:signed-bootstrap`.
 The keyed test uses real verifier decoding with mocked provider reads; the
-conformance test submits transactions. Set `EVIDENCE_DIR=evidence/signed-bootstrap`
-to keep this run separate from earlier evidence. `npm run measure:signed-bootstrap`
+conformance test submits transactions. Set `EVIDENCE_DIR=/tmp/passport-bootstrap-evidence`
+to keep this run separate from committed evidence. `npm run measure:signed-bootstrap`
 checks every compiler-manifest artefact and runtime verifier-key hash before
 recording circuit sizes and key identities. `ZKIR_BIN` selects the pinned
 native binary. Shape measurement uses `mock-compile`; it is distinct from

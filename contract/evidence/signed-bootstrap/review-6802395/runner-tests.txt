@@ -1,0 +1,8 @@
+> midnight-account-custody@0.1.0 test:signed-bootstrap-runner
+> python3 -B -O scripts/test-signed-bootstrap-constraints-runner.py
+
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.008s
+
+OK

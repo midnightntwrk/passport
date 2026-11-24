@@ -8,7 +8,7 @@
     "--",
     "src/tests/vectors/grants-v3.json"
   ],
-  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "cwd": "<checkout>/contract",
   "startedAt": "2026-11-24T07:59:59.942Z",
   "timeoutMs": 600000,
   "status": "passed",

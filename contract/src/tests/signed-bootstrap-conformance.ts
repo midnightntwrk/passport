@@ -127,8 +127,13 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
     const saved = deserializeSignedBootstrapRecord(readFileSync(recordPath, 'utf8'));
     assert.deepEqual(saved.approval, approval);
     key.erase();
-    const resumed = account.signedBootstrapSession(saved, options);
-    await resumed.approve(async () => { throw new Error('saved approval must not prompt again'); });
+    let resumedAssertions = 0;
+    const resumedOptions = { ...options, assertionProvider: async (challenge: Uint8Array) => {
+      resumedAssertions++; return passkey.assertion(challenge);
+    } };
+    const resumed = account.signedBootstrapSession(saved, resumedOptions);
+    await resumed.approve();
+    assert.equal(resumedAssertions, 0, 'saved approval must not prompt again');
 
     step('modified proof request rejects before proving and preserves the dormant state');
     const before = (await publicState(account)).data.toString(false), sampleCount = samples.length;
@@ -170,23 +175,24 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
     assert.equal(await resumed.inspect(), true, 'ambiguous prior submission resolves from exact intended state');
     const proved = samples.length; await resumed.activate(); assert.equal(samples.length, proved, 'retry does not generate a second activation proof');
     await assert.rejects(() => account.callTx.activate_initial_passkey(...signedBootstrapActivationArgs(approval)));
-    account.registerDevice(passkey.device, 0n);
-    label = 'recover_cancel_with_p256'; await recordTx(label, await account.recoverCancel(passkey.device));
+    const installedDevice = resumed.device; assert.ok(installedDevice);
+    label = 'recover_cancel_with_p256'; await recordTx(label, await account.recoverCancel(installedDevice));
+    assert.equal(resumedAssertions, 1, 'the resumed device uses its supplied assertion provider');
     assert.equal((await account.ledgerState()).pending_recovery, false);
     label = 'rotate_enc_key_with_p256'; const viewingKey = bytes();
-    await recordTx(label, await account.rotateEncKey(passkey.device, viewingKey));
+    await recordTx(label, await account.rotateEncKey(installedDevice, viewingKey));
     assert.deepEqual((await account.ledgerState()).enc_key, viewingKey);
 
     step('the activated passkey controls custody and cross-arm device lifecycle');
     label = 'withdraw_unshielded_with_p256';
-    await recordTx(label, await account.withdrawUnshielded(passkey.device, color, 100n, recipient));
+    await recordTx(label, await account.withdrawUnshielded(installedDevice, color, 100n, recipient));
     const secondDevice = JubjubDevice.generate();
     label = 'add_device_with_p256';
-    await recordTx(label, await account.addDevice(passkey.device, secondDevice));
+    await recordTx(label, await account.addDevice(installedDevice, secondDevice));
     label = 'withdraw_unshielded_with_jubjub';
     await recordTx(label, await account.withdrawUnshielded(secondDevice, color, 100n, recipient));
     label = 'remove_device_with_p256';
-    await recordTx(label, await account.removeDevice(passkey.device, secondDevice));
+    await recordTx(label, await account.removeDevice(installedDevice, secondDevice));
     const afterLifecycle = await account.ledgerState();
     assert.equal(afterLifecycle.device_count, 1n);
     assert.equal(afterLifecycle.unshielded_balances.lookup(color), 800n);
@@ -195,7 +201,7 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
     step('a lost completion receipt resumes after the account has been used');
     const lostReceipt = deserializeSignedBootstrapRecord(serializeSignedBootstrapRecord(saved));
     delete lostReceipt.retired; delete lostReceipt.transactionId;
-    const afterUse = account.signedBootstrapSession(lostReceipt, options), beforeResume = samples.length;
+    const afterUse = account.signedBootstrapSession(lostReceipt, resumedOptions), beforeResume = samples.length;
     assert.equal(await afterUse.inspect(), true);
     assert.equal(await afterUse.activate(), account);
     assert.equal(lostReceipt.retired, true);

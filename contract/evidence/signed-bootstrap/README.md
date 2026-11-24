@@ -2,6 +2,17 @@
 
 This directory records validation of the schema-4 reference implementation of the [temporary JubJub bootstrap amendment](../../../docs/mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md), including its B01–B13 evidence requirements. The original captures cover implementation `c24b1e9`; `9e14998` changes the on-node funding fixture to a faucet-issued, non-native asset. Source and generated-artefact hashes identify the exact code used by each capture.
 
+Personal checkout/home prefixes in captured diagnostics have been replaced
+with `<checkout>` and `<home>`. This redacts 161 lines across 48 files;
+error details, test outcomes, source revisions, and cryptographic hashes
+are retained. The redaction changes the current files, not earlier Git commits.
+
+## Review fixes for `6802395`
+
+[Second-review validation](review-6802395/README.md) records a passing TypeScript build, 83 targeted regressions, one source-archive capture test, and four Python safety tests under optimisation. The final 14 wave tests also passed after increasing their delayed-visibility timing allowance. The new tooling checks run through `ci:reference`.
+
+Normal offline execution preserves the committed captures. Evidence writes require `WRITE_EVIDENCE=1`, and `EVIDENCE_DIR` selects the capture directory shared with the native runner. Deployment resume waits for delayed address visibility and verifies state after duplicate submission failures. Completed sessions expose the retained assertion provider through `session.device`; reconnecting callers can supply `assertionProvider` again. No Compact sources changed, and no new proofs were generated for these fixes.
+
 ## Review fixes for `a38ee96`
 
 The PR review fixes passed **72 targeted tests**, with no failures, cancellations, or skipped tests; see [review-a38ee96/tests.txt](review-a38ee96/tests.txt). The [TypeScript build](review-a38ee96/build.txt) also passed. These checks cover the updated onboarding-resumption and deployment-planning behaviour alongside device-reconnection and recovery regressions.
