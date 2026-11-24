@@ -1,0 +1,4057 @@
+
+> midnight-account-custody@0.1.0 ci:reference
+> node scripts/ci-reference.mjs
+
+
+> midnight-account-custody@0.1.0 test:unit
+> tsx src/tests/unit-offline.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/43750.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/43750.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-unit: failed (exit=1, completion=false, timeout=false)
+test-unit failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:grant-preflight
+> node --import tsx --test src/tests/grant-preflight.ts
+
+
+> midnight-account-custody@0.1.0 test:recovery-bootstrap
+> node --import tsx --test src/tests/recovery-bootstrap.ts
+
+
+> midnight-account-custody@0.1.0 test:multi-coin
+> node --import tsx --test src/tests/multi-coin.ts
+
+
+> midnight-account-custody@0.1.0 test:device-reconnection
+> node --import tsx --test src/tests/device-reconnection.ts
+
+TAP version 13
+TAP version 13
+TAP version 13
+TAP version 13
+#   (withdraw_shielded_with_jubjub: submission rejected — dust-state race; retrying in 10s)
+# (node:43945) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: independent same-colour deposits remain distinct, including equal-value coins
+ok 1 - independent same-colour deposits remain distinct, including equal-value coins
+  ---
+  duration_ms: 1.487666
+  type: 'test'
+  ...
+# Subtest: identity excludes the candidate index, while different coin descriptions stay distinct
+ok 2 - identity excludes the candidate index, while different coin descriptions stay distinct
+  ---
+  duration_ms: 0.186125
+  type: 'test'
+  ...
+# Subtest: exact removal preserves neighbouring coins and a replay cannot revive a spent identity
+ok 3 - exact removal preserves neighbouring coins and a replay cannot revive a spent identity
+  ---
+  duration_ms: 0.308042
+  type: 'test'
+  ...
+# Subtest: legacy migration preserves every surviving description, viewing key, and input object
+ok 4 - legacy migration preserves every surviving description, viewing key, and input object
+  ---
+  duration_ms: 0.180583
+  type: 'test'
+  ...
+# Subtest: JSON persistence preserves same-colour inventory and spent state through restart
+ok 5 - JSON persistence preserves same-colour inventory and spent state through restart
+  ---
+  duration_ms: 0.20875
+  type: 'test'
+  ...
+# Subtest: migration refuses malformed retained descriptions instead of silently discarding holdings
+ok 6 - migration refuses malformed retained descriptions instead of silently discarding holdings
+  ---
+  duration_ms: 0.157541
+  type: 'test'
+  ...
+# Subtest: spent identities must be canonical and take precedence over stale live records
+ok 7 - spent identities must be canonical and take precedence over stale live records
+  ---
+  duration_ms: 0.229167
+  type: 'test'
+  ...
+# Subtest: coin selection and pinning detach their snapshots from caller-owned arrays
+ok 8 - coin selection and pinning detach their snapshots from caller-owned arrays
+  ---
+  duration_ms: 0.16525
+  type: 'test'
+  ...
+# Subtest: recovery inbox deduplicates descriptions without combining same-colour holdings
+ok 9 - recovery inbox deduplicates descriptions without combining same-colour holdings
+  ---
+  duration_ms: 3.595
+  type: 'test'
+  ...
+# Subtest: witness consumes only the pinned coin and leaves the caller snapshot unchanged
+ok 10 - witness consumes only the pinned coin and leaves the caller snapshot unchanged
+  ---
+  duration_ms: 0.415416
+  type: 'test'
+  ...
+# Subtest: witness refuses an ambiguous store and a selected description changed after pinning
+ok 11 - witness refuses an ambiguous store and a selected description changed after pinning
+  ---
+  duration_ms: 0.240584
+  type: 'test'
+  ...
+# Subtest: owner jubjub user: explicit selection signs and consumes either same-colour coin
+ok 12 - owner jubjub user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 9.851875
+  type: 'test'
+  ...
+# Subtest: owner jubjub contract: explicit selection signs and consumes either same-colour coin
+ok 13 - owner jubjub contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 4.843458
+  type: 'test'
+  ...
+# Subtest: owner k256 user: explicit selection signs and consumes either same-colour coin
+ok 14 - owner k256 user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 16.914667
+  type: 'test'
+  ...
+# Subtest: owner k256 contract: explicit selection signs and consumes either same-colour coin
+ok 15 - owner k256 contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 2.831
+  type: 'test'
+  ...
+# Subtest: owner connector user: explicit selection signs and consumes either same-colour coin
+ok 16 - owner connector user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 2.24875
+  type: 'test'
+  ...
+# Subtest: owner connector contract: explicit selection signs and consumes either same-colour coin
+ok 17 - owner connector contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 1.475209
+  type: 'test'
+  ...
+# Subtest: owner p256 user: explicit selection signs and consumes either same-colour coin
+ok 18 - owner p256 user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 24.907208
+  type: 'test'
+  ...
+# Subtest: owner p256 contract: explicit selection signs and consumes either same-colour coin
+ok 19 - owner p256 contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 3.985584
+  type: 'test'
+  ...
+# Subtest: grant jubjub user: explicit selection signs and consumes either same-colour coin
+ok 20 - grant jubjub user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 7.261709
+  type: 'test'
+  ...
+# Subtest: grant jubjub contract: explicit selection signs and consumes either same-colour coin
+ok 21 - grant jubjub contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 4.468333
+  type: 'test'
+  ...
+# Subtest: grant k256 user: explicit selection signs and consumes either same-colour coin
+ok 22 - grant k256 user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 2.085791
+  type: 'test'
+  ...
+# Subtest: grant k256 contract: explicit selection signs and consumes either same-colour coin
+ok 23 - grant k256 contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 2.005333
+  type: 'test'
+  ...
+# Subtest: grant p256 user: explicit selection signs and consumes either same-colour coin
+ok 24 - grant p256 user: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 4.541958
+  type: 'test'
+  ...
+# Subtest: grant p256 contract: explicit selection signs and consumes either same-colour coin
+ok 25 - grant p256 contract: explicit selection signs and consumes either same-colour coin
+  ---
+  duration_ms: 3.99775
+  type: 'test'
+  ...
+# Subtest: finite grant user: selecting a coin still requires complete timing before signing
+ok 26 - finite grant user: selecting a coin still requires complete timing before signing
+  ---
+  duration_ms: 2.456041
+  type: 'test'
+  ...
+# Subtest: finite grant contract: selecting a coin still requires complete timing before signing
+ok 27 - finite grant contract: selecting a coin still requires complete timing before signing
+  ---
+  duration_ms: 2.014709
+  type: 'test'
+  ...
+# Subtest: owner user: ambiguity and insufficient selected value never reach signing
+ok 28 - owner user: ambiguity and insufficient selected value never reach signing
+  ---
+  duration_ms: 0.39025
+  type: 'test'
+  ...
+# Subtest: owner user: failed submission retains the exact selected coin and its neighbour
+ok 29 - owner user: failed submission retains the exact selected coin and its neighbour
+  ---
+  duration_ms: 6.119375
+  type: 'test'
+  ...
+# Subtest: owner user: pre-signed raw calls bind the explicit coin and preserve neighbours
+ok 30 - owner user: pre-signed raw calls bind the explicit coin and preserve neighbours
+  ---
+  duration_ms: 4.600458
+  type: 'test'
+  ...
+# Subtest: owner user: a unique coin still works without an explicit identity
+ok 31 - owner user: a unique coin still works without an explicit identity
+  ---
+  duration_ms: 5.886667
+  type: 'test'
+  ...
+# Subtest: owner contract: ambiguity and insufficient selected value never reach signing
+ok 32 - owner contract: ambiguity and insufficient selected value never reach signing
+  ---
+  duration_ms: 0.489333
+  type: 'test'
+  ...
+# Subtest: owner contract: failed submission retains the exact selected coin and its neighbour
+ok 33 - owner contract: failed submission retains the exact selected coin and its neighbour
+  ---
+  duration_ms: 2.533833
+  type: 'test'
+  ...
+# Subtest: owner contract: pre-signed raw calls bind the explicit coin and preserve neighbours
+ok 34 - owner contract: pre-signed raw calls bind the explicit coin and preserve neighbours
+  ---
+  duration_ms: 4.261625
+  type: 'test'
+  ...
+# Subtest: owner contract: a unique coin still works without an explicit identity
+ok 35 - owner contract: a unique coin still works without an explicit identity
+  ---
+  duration_ms: 3.725708
+  type: 'test'
+  ...
+# Subtest: grant user: ambiguity and insufficient selected value never reach signing
+ok 36 - grant user: ambiguity and insufficient selected value never reach signing
+  ---
+  duration_ms: 0.363666
+  type: 'test'
+  ...
+# Subtest: grant user: failed submission retains the exact selected coin and its neighbour
+ok 37 - grant user: failed submission retains the exact selected coin and its neighbour
+  ---
+  duration_ms: 6.123708
+  type: 'test'
+  ...
+# Subtest: grant user: pre-signed raw calls bind the explicit coin and preserve neighbours
+ok 38 - grant user: pre-signed raw calls bind the explicit coin and preserve neighbours
+  ---
+  duration_ms: 3.852
+  type: 'test'
+  ...
+# Subtest: grant user: a unique coin still works without an explicit identity
+ok 39 - grant user: a unique coin still works without an explicit identity
+  ---
+  duration_ms: 3.034166
+  type: 'test'
+  ...
+# Subtest: grant contract: ambiguity and insufficient selected value never reach signing
+ok 40 - grant contract: ambiguity and insufficient selected value never reach signing
+  ---
+  duration_ms: 0.326125
+  type: 'test'
+  ...
+# Subtest: grant contract: failed submission retains the exact selected coin and its neighbour
+ok 41 - grant contract: failed submission retains the exact selected coin and its neighbour
+  ---
+  duration_ms: 2.961709
+  type: 'test'
+  ...
+# Subtest: grant contract: pre-signed raw calls bind the explicit coin and preserve neighbours
+ok 42 - grant contract: pre-signed raw calls bind the explicit coin and preserve neighbours
+  ---
+  duration_ms: 6.370958
+  type: 'test'
+  ...
+# Subtest: grant contract: a unique coin still works without an explicit identity
+ok 43 - grant contract: a unique coin still works without an explicit identity
+  ---
+  duration_ms: 3.987542
+  type: 'test'
+  ...
+# Subtest: a competing account cannot replace the selected candidate while a signer is awaiting approval
+ok 44 - a competing account cannot replace the selected candidate while a signer is awaiting approval
+  ---
+  duration_ms: 2.169792
+  type: 'test'
+  ...
+# Subtest: overlapping writes from two accounts fail explicitly and can be retried without losing deposits
+ok 45 - overlapping writes from two accounts fail explicitly and can be retried without losing deposits
+  ---
+  duration_ms: 0.771417
+  type: 'test'
+  ...
+# Subtest: restart discards an abandoned pin and allows an explicitly selected neighbour
+ok 46 - restart discards an abandoned pin and allows an explicitly selected neighbour
+  ---
+  duration_ms: 1.318625
+  type: 'test'
+  ...
+#   (withdraw_shielded_with_jubjub: submission rejected — dust-state race; retrying in 10s)
+#   (withdraw_shielded_with_jubjub: submission rejected — dust-state race; retrying in 10s)
+#   (withdraw_shielded_with_jubjub: submission rejected — dust-state race; retrying in 10s)
+#   (withdraw_shielded_with_grant_jubjub: submission rejected — dust-state race; retrying in 10s)
+#   (withdraw_shielded_with_grant_jubjub: submission rejected — dust-state race; retrying in 10s)
+# Subtest: jubjub unshielded: unusable grants never request a signature or submit
+ok 1 - jubjub unshielded: unusable grants never request a signature or submit
+  ---
+  duration_ms: 7.021416
+  type: 'test'
+  ...
+# Subtest: jubjub unshielded: valid finite grants sign and dispatch once
+ok 2 - jubjub unshielded: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 2.58825
+  type: 'test'
+  ...
+# Subtest: jubjub shielded: unusable grants never request a signature or submit
+ok 3 - jubjub shielded: unusable grants never request a signature or submit
+  ---
+  duration_ms: 5.512917
+  type: 'test'
+  ...
+# Subtest: jubjub shielded: valid finite grants sign and dispatch once
+ok 4 - jubjub shielded: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 7.770709
+  type: 'test'
+  ...
+# Subtest: jubjub contract: unusable grants never request a signature or submit
+ok 5 - jubjub contract: unusable grants never request a signature or submit
+  ---
+  duration_ms: 6.529667
+  type: 'test'
+  ...
+# Subtest: jubjub contract: valid finite grants sign and dispatch once
+ok 6 - jubjub contract: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 1.835875
+  type: 'test'
+  ...
+# Subtest: k256 unshielded: unusable grants never request a signature or submit
+ok 7 - k256 unshielded: unusable grants never request a signature or submit
+  ---
+  duration_ms: 13.850834
+  type: 'test'
+  ...
+# Subtest: k256 unshielded: valid finite grants sign and dispatch once
+ok 8 - k256 unshielded: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 1.971667
+  type: 'test'
+  ...
+# Subtest: k256 shielded: unusable grants never request a signature or submit
+ok 9 - k256 shielded: unusable grants never request a signature or submit
+  ---
+  duration_ms: 2.237375
+  type: 'test'
+  ...
+# Subtest: k256 shielded: valid finite grants sign and dispatch once
+ok 10 - k256 shielded: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 1.267083
+  type: 'test'
+  ...
+# Subtest: k256 contract: unusable grants never request a signature or submit
+ok 11 - k256 contract: unusable grants never request a signature or submit
+  ---
+  duration_ms: 2.701625
+  type: 'test'
+  ...
+# Subtest: k256 contract: valid finite grants sign and dispatch once
+ok 12 - k256 contract: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 1.161791
+  type: 'test'
+  ...
+# Subtest: p256 unshielded: unusable grants never request a signature or submit
+ok 13 - p256 unshielded: unusable grants never request a signature or submit
+  ---
+  duration_ms: 2.067708
+  type: 'test'
+  ...
+# Subtest: p256 unshielded: valid finite grants sign and dispatch once
+ok 14 - p256 unshielded: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 22.861625
+  type: 'test'
+  ...
+# Subtest: p256 shielded: unusable grants never request a signature or submit
+ok 15 - p256 shielded: unusable grants never request a signature or submit
+  ---
+  duration_ms: 1.695042
+  type: 'test'
+  ...
+# Subtest: p256 shielded: valid finite grants sign and dispatch once
+ok 16 - p256 shielded: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 1.937166
+  type: 'test'
+  ...
+# Subtest: p256 contract: unusable grants never request a signature or submit
+ok 17 - p256 contract: unusable grants never request a signature or submit
+  ---
+  duration_ms: 1.264125
+  type: 'test'
+  ...
+# Subtest: p256 contract: valid finite grants sign and dispatch once
+ok 18 - p256 contract: valid finite grants sign and dispatch once
+  ---
+  duration_ms: 2.503708
+  type: 'test'
+  ...
+# Subtest: explicit never-expiring grants still check liveness, but never read clocks
+ok 19 - explicit never-expiring grants still check liveness, but never read clocks
+  ---
+  duration_ms: 10.346875
+  type: 'test'
+  ...
+# Subtest: finite expiry requires explicit timing and rejects invalid units or bounds
+ok 20 - finite expiry requires explicit timing and rejects invalid units or bounds
+  ---
+  duration_ms: 0.698667
+  type: 'test'
+  ...
+# Subtest: wall clock skew and the separate timing budgets constrain the horizon
+ok 21 - wall clock skew and the separate timing budgets constrain the horizon
+  ---
+  duration_ms: 0.484916
+  type: 'test'
+  ...
+# Subtest: head-read latency and awaited coin selection cannot age the pre-sign check
+ok 22 - head-read latency and awaited coin selection cannot age the pre-sign check
+  ---
+  duration_ms: 1.502667
+  type: 'test'
+  ...
+# Subtest: slow signing or changed grant state refuses dispatch without silently re-signing
+ok 23 - slow signing or changed grant state refuses dispatch without silently re-signing
+  ---
+  duration_ms: 30.124875
+  type: 'test'
+  ...
+# Subtest: shielded twins use snapshot encryption key and refuse key changes
+ok 24 - shielded twins use snapshot encryption key and refuse key changes
+  ---
+  duration_ms: 6.458958
+  type: 'test'
+  ...
+# Subtest: admission refusal dispatches once; a caller retry rereads current state and head
+ok 25 - admission refusal dispatches once; a caller retry rereads current state and head
+  ---
+  duration_ms: 12.092333
+  type: 'test'
+  ...
+# Subtest: scope constructors require an explicit expiry decision, including explicit zero
+ok 26 - scope constructors require an explicit expiry decision, including explicit zero
+  ---
+  duration_ms: 0.203416
+  type: 'test'
+  ...
+# Subtest: missing node data fails closed without a wall-clock or indexer fallback
+ok 27 - missing node data fails closed without a wall-clock or indexer fallback
+  ---
+  duration_ms: 0.504042
+  type: 'test'
+  ...
+# Subtest: finite grant issuance checks expiry before and after an owner signature
+ok 28 - finite grant issuance checks expiry before and after an owner signature
+  ---
+  duration_ms: 2.385042
+  type: 'test'
+  ...
+# Subtest: high-level issuance makes one dispatch and reevaluates expiry on caller retry
+ok 29 - high-level issuance makes one dispatch and reevaluates expiry on caller retry
+  ---
+  duration_ms: 3.078125
+  type: 'test'
+  ...
+# Subtest: finite grant issue, spend, and revocation exercise generated account circuits
+ok 30 - finite grant issue, spend, and revocation exercise generated account circuits
+  ---
+  duration_ms: 148.456917
+  type: 'test'
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 791.445042
+
+> midnight-account-custody@0.1.0 test:durable-change
+> node --import tsx --test src/tests/durable-change.ts src/tests/durable-change-account.ts src/tests/durable-change-sdk.ts src/tests/change-journal-store.ts
+
+TAP version 13
+# Subtest: dust rebuild retries retain the exact signed input and reject candidate changes
+ok 47 - dust rebuild retries retain the exact signed input and reject candidate changes
+  ---
+  duration_ms: 25.63675
+  type: 'test'
+  ...
+# Subtest: owner: direct provider mutation during signing refuses dispatch without substituting a coin
+ok 48 - owner: direct provider mutation during signing refuses dispatch without substituting a coin
+  ---
+  duration_ms: 2.035042
+  type: 'test'
+  ...
+# Subtest: owner: mutation after dispatch is refused by the witness without persisting consumption
+ok 49 - owner: mutation after dispatch is refused by the witness without persisting consumption
+  ---
+  duration_ms: 1.764875
+  type: 'test'
+  ...
+# Subtest: grant: direct provider mutation during signing refuses dispatch without substituting a coin
+ok 50 - grant: direct provider mutation during signing refuses dispatch without substituting a coin
+  ---
+  duration_ms: 1.815
+  type: 'test'
+  ...
+# Subtest: grant: mutation after dispatch is refused by the witness without persisting consumption
+ok 51 - grant: mutation after dispatch is refused by the witness without persisting consumption
+  ---
+  duration_ms: 1.749958
+  type: 'test'
+  ...
+# Subtest: an out-of-band same-colour arrival cannot silently replace a signed selection
+ok 52 - an out-of-band same-colour arrival cannot silently replace a signed selection
+  ---
+  duration_ms: 1.743333
+  type: 'test'
+  ...
+# Subtest: generated runtime user: deposits and spends two same-colour coin fixtures individually
+ok 53 - generated runtime user: deposits and spends two same-colour coin fixtures individually
+  ---
+  duration_ms: 119.764916
+  type: 'test'
+  ...
+# Subtest: generated runtime contract: deposits and spends two same-colour coin fixtures individually
+ok 54 - generated runtime contract: deposits and spends two same-colour coin fixtures individually
+  ---
+  duration_ms: 101.884708
+  type: 'test'
+  ...
+# Subtest: generated runtime refuses authorisation signed over a different qualified coin
+ok 55 - generated runtime refuses authorisation signed over a different qualified coin
+  ---
+  duration_ms: 64.226334
+  type: 'test'
+  ...
+# Actual AUTH-10 refusal: CompactError: failed assert: invalid signature
+1..55
+# tests 55
+# suites 0
+# pass 55
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 972.431792
+
+> midnight-account-custody@0.1.0 test:chain-recovery
+> node --import tsx --test src/tests/chain-recovery.ts src/tests/chain-recovery-account.ts src/tests/chain-recovery-ledger.ts src/tests/chain-recovery-sdk.ts
+
+TAP version 13
+# Subtest: encrypted journal persists privately and reopens in a fresh process
+ok 1 - encrypted journal persists privately and reopens in a fresh process
+  ---
+  duration_ms: 143.913708
+  type: 'test'
+  ...
+# Subtest: wrong key, truncated tags, altered ciphertext, and cross-scope transplant are refused
+ok 2 - wrong key, truncated tags, altered ciphertext, and cross-scope transplant are refused
+  ---
+  duration_ms: 35.275084
+  type: 'test'
+  ...
+# Subtest: private directory and file permissions are required, and symlink reads fail closed
+ok 3 - private directory and file permissions are required, and symlink reads fail closed
+  ---
+  duration_ms: 18.892083
+  type: 'test'
+  ...
+# Subtest: invalid snapshots preserve committed state and canonical path instances serialise replacement
+ok 4 - invalid snapshots preserve committed state and canonical path instances serialise replacement
+  ---
+  duration_ms: 50.7965
+  type: 'test'
+  ...
+# Subtest: caller must supply a key of the required size and an explicit directory
+ok 5 - caller must supply a key of the required size and an explicit directory
+  ---
+  duration_ms: 0.249417
+  type: 'test'
+  ...
+# Subtest: account recovery is read-only by default and needs no signing or transaction adapter
+ok 1 - account recovery is read-only by default and needs no signing or transaction adapter
+  ---
+  duration_ms: 4.310667
+  type: 'test'
+  ...
+# Subtest: apply imports verified live siblings, tombstones spent coins absent locally, and retains unknown inventory
+ok 2 - apply imports verified live siblings, tombstones spent coins absent locally, and retains unknown inventory
+  ---
+  duration_ms: 1.599625
+  type: 'test'
+  ...
+# Subtest: a stale live observation never resurrects a local spent tombstone
+ok 3 - a stale live observation never resurrects a local spent tombstone
+  ---
+  duration_ms: 1.1875
+  type: 'test'
+  ...
+# Subtest: restart and repeated application preserve exact state without duplication
+ok 4 - restart and repeated application preserve exact state without duplication
+  ---
+  duration_ms: 1.497666
+  type: 'test'
+  ...
+# Subtest: application merges provider updates made during inspection instead of restoring a stale snapshot
+ok 5 - application merges provider updates made during inspection instead of restoring a stale snapshot
+  ---
+  duration_ms: 0.993208
+  type: 'test'
+  ...
+# Subtest: shared-provider recovery refuses overlapping account mutation and releases its guard after failure
+ok 6 - shared-provider recovery refuses overlapping account mutation and releases its guard after failure
+  ---
+  duration_ms: 0.894167
+  type: 'test'
+  ...
+# Subtest: holdings evidence cannot resolve a submitting intended payment
+ok 7 - holdings evidence cannot resolve a submitting intended payment
+  ---
+  duration_ms: 1.087417
+  type: 'test'
+  ...
+# Subtest: holdings evidence cannot resolve a partial intended payment
+ok 8 - holdings evidence cannot resolve a partial intended payment
+  ---
+  duration_ms: 1.02125
+  type: 'test'
+  ...
+# Subtest: recovery then completed-journal replay cannot resurrect externally spent change
+ok 9 - recovery then completed-journal replay cannot resurrect externally spent change
+  ---
+  duration_ms: 1.380041
+  type: 'test'
+  ...
+# Subtest: native unspent predicate leaves its snapshot unchanged and rejects the consumed nullifier
+ok 10 - native unspent predicate leaves its snapshot unchanged and rejects the consumed nullifier
+  ---
+  duration_ms: 31.034834
+  type: 'test'
+  ...
+# Subtest: contract-filtered state cannot establish unspentness, even after registering its root locally
+ok 11 - contract-filtered state cannot establish unspentness, even after registering its root locally
+  ---
+  duration_ms: 20.42475
+  type: 'test'
+  ...
+# Subtest: local unproven application does not qualify an occupied commitment position
+ok 12 - local unproven application does not qualify an occupied commitment position
+  ---
+  duration_ms: 18.859041
+  type: 'test'
+  ...
+# Subtest: native nullifiers are bound to the owning contract
+ok 13 - native nullifiers are bound to the owning contract
+  ---
+  duration_ms: 16.603083
+  type: 'test'
+  ...
+# (node:44052) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+# (Use `node --trace-deprecation ...` to show where the warning was created)
+# Subtest: runtime receive, partial spend, restart, inbox recovery, and later exact spend preserve neighbours
+ok 6 - runtime receive, partial spend, restart, inbox recovery, and later exact spend preserve neighbours
+  ---
+  duration_ms: 188.76025
+  type: 'test'
+  ...
+# Subtest: runtime generated next private state is not committed for a partial transaction
+ok 7 - runtime generated next private state is not committed for a partial transaction
+  ---
+  duration_ms: 99.695292
+  type: 'test'
+  ...
+# Subtest: runtime accepted spend with a lost response resumes capture and backfill on a fresh account
+ok 8 - runtime accepted spend with a lost response resumes capture and backfill on a fresh account
+  ---
+  duration_ms: 123.656333
+  type: 'test'
+  ...
+# Subtest: completed journal restores lost private adoption and never resurrects subsequently spent change
+ok 9 - completed journal restores lost private adoption and never resurrects subsequently spent change
+  ---
+  duration_ms: 144.9635
+  type: 'test'
+  ...
+# Subtest: unknown spend quarantine permits key management while refusing another shielded spend
+ok 10 - unknown spend quarantine permits key management while refusing another shielded spend
+  ---
+  duration_ms: 121.284542
+  type: 'test'
+  ...
+# (node:43999) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+# (Use `node --trace-deprecation ...` to show where the warning was created)
+# Subtest: SDK maps authoritative SUCCESS without treating inclusion as complete success
+ok 11 - SDK maps authoritative SUCCESS without treating inclusion as complete success
+  ---
+  duration_ms: 7.948666
+  type: 'test'
+  ...
+# Subtest: SDK maps authoritative PARTIAL_SUCCESS without treating inclusion as complete success
+ok 12 - SDK maps authoritative PARTIAL_SUCCESS without treating inclusion as complete success
+  ---
+  duration_ms: 0.259125
+  type: 'test'
+  ...
+# Subtest: SDK maps authoritative FAILURE without treating inclusion as complete success
+ok 13 - SDK maps authoritative FAILURE without treating inclusion as complete success
+  ---
+  duration_ms: 0.232125
+  type: 'test'
+  ...
+# Subtest: SDK maps authoritative PENDING without treating inclusion as complete success
+ok 14 - SDK maps authoritative PENDING without treating inclusion as complete success
+  ---
+  duration_ms: 0.227417
+  type: 'test'
+  ...
+# Subtest: SDK selects the matching identifier from offset results and normalises hexadecimal identity
+ok 15 - SDK selects the matching identifier from offset results and normalises hexadecimal identity
+  ---
+  duration_ms: 0.274041
+  type: 'test'
+  ...
+# Subtest: SDK contradictory segment outcome prevents successful adoption
+ok 16 - SDK contradictory segment outcome prevents successful adoption
+  ---
+  duration_ms: 0.484958
+  type: 'test'
+  ...
+# Subtest: SDK contradictory rejection and malformed segment evidence remain unknown
+    # Subtest: failure includes a successful segment
+    ok 1 - failure includes a successful segment
+      ---
+      duration_ms: 0.893375
+      type: 'test'
+      ...
+    # Subtest: failure includes mixed segments
+    ok 2 - failure includes mixed segments
+      ---
+      duration_ms: 0.362541
+      type: 'test'
+      ...
+    # Subtest: segments is an object
+    ok 3 - segments is an object
+      ---
+      duration_ms: 0.287708
+      type: 'test'
+      ...
+    # Subtest: segment is null
+    ok 4 - segment is null
+      ---
+      duration_ms: 0.187583
+      type: 'test'
+      ...
+    # Subtest: segment success is a string
+    ok 5 - segment success is a string
+      ---
+      duration_ms: 0.135834
+      type: 'test'
+      ...
+    # Subtest: segment success is missing
+    ok 6 - segment success is missing
+      ---
+      duration_ms: 0.167125
+      type: 'test'
+      ...
+    1..6
+ok 17 - SDK contradictory rejection and malformed segment evidence remain unknown
+  ---
+  duration_ms: 2.468584
+  type: 'test'
+  ...
+# Subtest: SDK absent, unrelated, wrong-era, malformed, and unavailable receipts remain unknown
+    # Subtest: absent
+    ok 1 - absent
+      ---
+      duration_ms: 0.101792
+      type: 'test'
+      ...
+    # Subtest: unrelated
+    ok 2 - unrelated
+      ---
+      duration_ms: 0.07675
+      type: 'test'
+      ...
+    # Subtest: wrong era
+    ok 3 - wrong era
+      ---
+      duration_ms: 0.084
+      type: 'test'
+      ...
+    # Subtest: unknown era
+    ok 4 - unknown era
+      ---
+      duration_ms: 0.112041
+      type: 'test'
+      ...
+    # Subtest: malformed body
+    ok 5 - malformed body
+      ---
+      duration_ms: 0.086166
+      type: 'test'
+      ...
+    # Subtest: GraphQL error
+    ok 6 - GraphQL error
+      ---
+      duration_ms: 0.100125
+      type: 'test'
+      ...
+    # Subtest: HTTP error
+    ok 7 - HTTP error
+      ---
+      duration_ms: 0.095208
+      type: 'test'
+      ...
+    # Subtest: transport failure
+    ok 8 - transport failure
+      ---
+      duration_ms: 0.059625
+      type: 'test'
+      ...
+    1..8
+ok 18 - SDK absent, unrelated, wrong-era, malformed, and unavailable receipts remain unknown
+  ---
+  duration_ms: 0.88775
+  type: 'test'
+  ...
+# Subtest: SDK refuses malformed or excessive qualification windows before querying private state
+    # Subtest: no outputs
+    ok 1 - no outputs
+      ---
+      duration_ms: 0.166375
+      type: 'test'
+      ...
+    # Subtest: reversed
+    ok 2 - reversed
+      ---
+      duration_ms: 0.142041
+      type: 'test'
+      ...
+    # Subtest: negative
+    ok 3 - negative
+      ---
+      duration_ms: 0.110167
+      type: 'test'
+      ...
+    # Subtest: unsafe number
+    ok 4 - unsafe number
+      ---
+      duration_ms: 0.099125
+      type: 'test'
+      ...
+    # Subtest: excessive
+    ok 5 - excessive
+      ---
+      duration_ms: 0.082584
+      type: 'test'
+      ...
+    # Subtest: missing start
+    ok 6 - missing start
+      ---
+      duration_ms: 0.084
+      type: 'test'
+      ...
+    1..6
+ok 19 - SDK refuses malformed or excessive qualification windows before querying private state
+  ---
+  duration_ms: 0.811542
+  type: 'test'
+  ...
+# Subtest: SDK missing historical commitment snapshot cannot qualify returned change
+ok 20 - SDK missing historical commitment snapshot cannot qualify returned change
+  ---
+  duration_ms: 0.158417
+  type: 'test'
+  ...
+# Subtest: owner partial spend captures exact change, survives JSON restart, and backfills once
+ok 21 - owner partial spend captures exact change, survives JSON restart, and backfills once
+  ---
+  duration_ms: 6.570334
+  type: 'test'
+  ...
+# Subtest: an exact spend retires only its input and never seals, qualifies, or appends change
+ok 22 - an exact spend retires only its input and never seals, qualifies, or appends change
+  ---
+  duration_ms: 0.595208
+  type: 'test'
+  ...
+# Subtest: partial spend evidence never creates speculative change or loses a sibling
+ok 23 - partial spend evidence never creates speculative change or loses a sibling
+  ---
+  duration_ms: 0.998834
+  type: 'test'
+  ...
+# Subtest: rejected spend evidence never creates speculative change or loses a sibling
+ok 24 - rejected spend evidence never creates speculative change or loses a sibling
+  ---
+  duration_ms: 0.568459
+  type: 'test'
+  ...
+# Subtest: unknown spend evidence never creates speculative change or loses a sibling
+ok 25 - unknown spend evidence never creates speculative change or loses a sibling
+  ---
+  duration_ms: 0.599833
+  type: 'test'
+  ...
+# Subtest: lost spend response is reconciled by retained transaction identity without resubmission
+ok 26 - lost spend response is reconciled by retained transaction identity without resubmission
+  ---
+  duration_ms: 1.596792
+  type: 'test'
+  ...
+# Subtest: a delayed unknown outcome stays quarantined until exact successful evidence arrives
+ok 27 - a delayed unknown outcome stays quarantined until exact successful evidence arrives
+  ---
+  duration_ms: 1.095583
+  type: 'test'
+  ...
+# Subtest: private-state adoption failure before commit recovers by idempotent merge
+ok 28 - private-state adoption failure before commit recovers by idempotent merge
+  ---
+  duration_ms: 1.242459
+  type: 'test'
+  ...
+# Subtest: private-state adoption failure after commit recovers by idempotent merge
+ok 29 - private-state adoption failure after commit recovers by idempotent merge
+  ---
+  duration_ms: 1.752292
+  type: 'test'
+  ...
+# Subtest: lost owner append acknowledgement finds the exact existing entry without duplicate append
+ok 30 - lost owner append acknowledgement finds the exact existing entry without duplicate append
+  ---
+  duration_ms: 1.5615
+  type: 'test'
+  ...
+# Subtest: an unknown owner append outcome is never rebuilt or blindly retried
+ok 31 - an unknown owner append outcome is never rebuilt or blindly retried
+  ---
+  duration_ms: 1.204333
+  type: 'test'
+  ...
+# Subtest: grant atomic entry is never duplicated (verified viewing key)
+ok 32 - grant atomic entry is never duplicated (verified viewing key)
+  ---
+  duration_ms: 0.886375
+  type: 'test'
+  ...
+# Subtest: grant atomic entry is never duplicated (unavailable viewing key)
+ok 33 - grant atomic entry is never duplicated (unavailable viewing key)
+  ---
+  duration_ms: 0.720375
+  type: 'test'
+  ...
+# Subtest: recovery verification lost during append cannot reuse a stale verified result
+ok 34 - recovery verification lost during append cannot reuse a stale verified result
+  ---
+  duration_ms: 1.076458
+  type: 'test'
+  ...
+# Subtest: successful evidence for another transaction cannot authorise local adoption
+ok 35 - successful evidence for another transaction cannot authorise local adoption
+  ---
+  duration_ms: 0.375125
+  type: 'test'
+  ...
+# Subtest: qualification for a different coin cannot authorise adoption or recovery completion
+ok 36 - qualification for a different coin cannot authorise adoption or recovery completion
+  ---
+  duration_ms: 0.411208
+  type: 'test'
+  ...
+# Subtest: an available viewing key refuses a poisoned grant entry before submission
+ok 37 - an available viewing key refuses a poisoned grant entry before submission
+  ---
+  duration_ms: 0.420375
+  type: 'test'
+  ...
+# Subtest: preparation failure cancels an intent without sending or consuming an input
+ok 38 - preparation failure cancels an intent without sending or consuming an input
+  ---
+  duration_ms: 0.3335
+  type: 'test'
+  ...
+# Subtest: caller and inspection mutations cannot rewrite the retained input or transaction identity
+ok 39 - caller and inspection mutations cannot rewrite the retained input or transaction identity
+  ---
+  duration_ms: 1.401042
+  type: 'test'
+  ...
+# Subtest: malformed persisted journals fail closed before exposing availability
+    # Subtest: version
+    ok 1 - version
+      ---
+      duration_ms: 0.296417
+      type: 'test'
+      ...
+    # Subtest: scope
+    ok 2 - scope
+      ---
+      duration_ms: 0.252875
+      type: 'test'
+      ...
+    # Subtest: negative value
+    ok 3 - negative value
+      ---
+      duration_ms: 0.233792
+      type: 'test'
+      ...
+    # Subtest: non-canonical value
+    ok 4 - non-canonical value
+      ---
+      duration_ms: 0.275167
+      type: 'test'
+      ...
+    # Subtest: missing qualification
+    ok 5 - missing qualification
+      ---
+      duration_ms: 0.235541
+      type: 'test'
+      ...
+    # Subtest: out-of-range index
+    ok 6 - out-of-range index
+      ---
+      duration_ms: 0.225667
+      type: 'test'
+      ...
+    # Subtest: duplicate identity
+    ok 7 - duplicate identity
+      ---
+      duration_ms: 0.241333
+      type: 'test'
+      ...
+    # Subtest: missing transaction identity
+    ok 8 - missing transaction identity
+      ---
+      duration_ms: 0.220417
+      type: 'test'
+      ...
+    1..8
+ok 40 - malformed persisted journals fail closed before exposing availability
+  ---
+  duration_ms: 3.11825
+  type: 'test'
+  ...
+# Subtest: overlapping coordinators sharing one store refuse a second spend before preparation
+ok 41 - overlapping coordinators sharing one store refuse a second spend before preparation
+  ---
+  duration_ms: 0.81025
+  type: 'test'
+  ...
+# Subtest: every durable journal write tolerates interruption before or after persistence
+    # Subtest: before write 1
+    ok 1 - before write 1
+      ---
+      duration_ms: 0.511375
+      type: 'test'
+      ...
+    # Subtest: after write 1
+    ok 2 - after write 1
+      ---
+      duration_ms: 0.921
+      type: 'test'
+      ...
+    # Subtest: before write 2
+    ok 3 - before write 2
+      ---
+      duration_ms: 0.70375
+      type: 'test'
+      ...
+    # Subtest: after write 2
+    ok 4 - after write 2
+      ---
+      duration_ms: 0.391709
+      type: 'test'
+      ...
+    # Subtest: before write 3
+    ok 5 - before write 3
+      ---
+      duration_ms: 0.364959
+      type: 'test'
+      ...
+    # Subtest: after write 3
+    ok 6 - after write 3
+      ---
+      duration_ms: 0.337917
+      type: 'test'
+      ...
+    # Subtest: before write 4
+    ok 7 - before write 4
+      ---
+      duration_ms: 1.416167
+      type: 'test'
+      ...
+    # Subtest: after write 4
+    ok 8 - after write 4
+      ---
+      duration_ms: 0.861
+      type: 'test'
+      ...
+    # Subtest: before write 5
+    ok 9 - before write 5
+      ---
+      duration_ms: 1.19075
+      type: 'test'
+      ...
+    # Subtest: after write 5
+    ok 10 - after write 5
+      ---
+      duration_ms: 0.931334
+      type: 'test'
+      ...
+    # Subtest: before write 6
+    ok 11 - before write 6
+      ---
+      duration_ms: 0.888708
+      type: 'test'
+      ...
+    # Subtest: after write 6
+    ok 12 - after write 6
+      ---
+      duration_ms: 0.904958
+      type: 'test'
+      ...
+    # Subtest: before write 7
+    ok 13 - before write 7
+      ---
+      duration_ms: 1.385917
+      type: 'test'
+      ...
+    # Subtest: after write 7
+    ok 14 - after write 7
+      ---
+      duration_ms: 1.035208
+      type: 'test'
+      ...
+    # Subtest: before write 8
+    ok 15 - before write 8
+      ---
+      duration_ms: 0.989875
+      type: 'test'
+      ...
+    # Subtest: after write 8
+    ok 16 - after write 8
+      ---
+      duration_ms: 0.991459
+      type: 'test'
+      ...
+    # Subtest: before write 9
+    ok 17 - before write 9
+      ---
+      duration_ms: 0.990208
+      type: 'test'
+      ...
+    # Subtest: after write 9
+    ok 18 - after write 9
+      ---
+      duration_ms: 0.94075
+      type: 'test'
+      ...
+    # Subtest: before write 10
+    ok 19 - before write 10
+      ---
+      duration_ms: 1.321375
+      type: 'test'
+      ...
+    # Subtest: after write 10
+    ok 20 - after write 10
+      ---
+      duration_ms: 1.060292
+      type: 'test'
+      ...
+    # Subtest: before write 11
+    ok 21 - before write 11
+      ---
+      duration_ms: 1.044375
+      type: 'test'
+      ...
+    # Subtest: after write 11
+    ok 22 - after write 11
+      ---
+      duration_ms: 0.887292
+      type: 'test'
+      ...
+    1..22
+ok 42 - every durable journal write tolerates interruption before or after persistence
+  ---
+  duration_ms: 21.679916
+  type: 'test'
+  ...
+1..42
+# tests 92
+# suites 0
+# pass 92
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1166.116917
+
+> midnight-account-custody@0.1.0 test:viewing-recovery
+> node --import tsx --test src/tests/viewing-recovery.ts src/tests/viewing-recovery-account.ts src/tests/viewing-key-store.ts
+
+TAP version 13
+# Subtest: viewing vault encrypts private material and reopens it in a fresh process
+ok 1 - viewing vault encrypts private material and reopens it in a fresh process
+  ---
+  duration_ms: 175.295875
+  type: 'test'
+  ...
+# Subtest: wrong encryption key and cross-network or cross-account ciphertext transplants are refused
+ok 2 - wrong encryption key and cross-network or cross-account ciphertext transplants are refused
+  ---
+  duration_ms: 39.106958
+  type: 'test'
+  ...
+# Subtest: malformed and modified encrypted envelopes fail closed
+ok 3 - malformed and modified encrypted envelopes fail closed
+  ---
+  duration_ms: 16.7275
+  type: 'test'
+  ...
+# Subtest: private permissions and no-follow file handling protect stored viewing material
+ok 4 - private permissions and no-follow file handling protect stored viewing material
+  ---
+  duration_ms: 28.018292
+  type: 'test'
+  ...
+# Subtest: invalid private-key records cannot replace the last acknowledged value
+ok 5 - invalid private-key records cannot replace the last acknowledged value
+  ---
+  duration_ms: 16.235125
+  type: 'test'
+  ...
+# Subtest: scope separation and canonical directory instances preserve independently acknowledged records
+ok 6 - scope separation and canonical directory instances preserve independently acknowledged records
+  ---
+  duration_ms: 33.390834
+  type: 'test'
+  ...
+# Subtest: viewing vault requires an explicit private directory and a 32-byte encryption key
+ok 7 - viewing vault requires an explicit private directory and a 32-byte encryption key
+  ---
+  duration_ms: 0.1755
+  type: 'test'
+  ...
+# Subtest: a failed file flush before replacement preserves the previous acknowledged vault record
+ok 8 - a failed file flush before replacement preserves the previous acknowledged vault record
+  ---
+  duration_ms: 28.962208
+  type: 'test'
+  ...
+# Subtest: a failed directory flush after replacement is unacknowledged but remains recoverable
+ok 9 - a failed directory flush after replacement is unacknowledged but remains recoverable
+  ---
+  duration_ms: 34.725375
+  type: 'test'
+  ...
+# Subtest: current wrap restoration acknowledges vault and private state before returning readiness
+ok 10 - current wrap restoration acknowledges vault and private state before returning readiness
+  ---
+  duration_ms: 5.875583
+  type: 'test'
+  ...
+# Subtest: guardian restoration requires a valid quorum and persists only viewing material
+ok 11 - guardian restoration requires a valid quorum and persists only viewing material
+  ---
+  duration_ms: 3.592042
+  type: 'test'
+  ...
+# Subtest: authentic stale and incorrect wraps cannot replace the local key or vault
+ok 12 - authentic stale and incorrect wraps cannot replace the local key or vault
+  ---
+  duration_ms: 2.496042
+  type: 'test'
+  ...
+# Subtest: restoration retains same-colour siblings and spent tombstones
+ok 13 - restoration retains same-colour siblings and spent tombstones
+  ---
+  duration_ms: 2.755417
+  type: 'test'
+  ...
+# Subtest: a fresh client can load the vault without retaining the ephemeral recovery secret
+ok 14 - a fresh client can load the vault without retaining the ephemeral recovery secret
+  ---
+  duration_ms: 2.446542
+  type: 'test'
+  ...
+# Subtest: direct current-key import does not assert that an opaque recovery wrap is current
+ok 15 - direct current-key import does not assert that an opaque recovery wrap is current
+  ---
+  duration_ms: 1.68875
+  type: 'test'
+  ...
+# Subtest: persistence failure at beforeVaultSet cannot produce a ready result
+ok 16 - persistence failure at beforeVaultSet cannot produce a ready result
+  ---
+  duration_ms: 3.831708
+  type: 'test'
+  ...
+# Subtest: persistence failure at afterVaultSet cannot produce a ready result
+ok 17 - persistence failure at afterVaultSet cannot produce a ready result
+  ---
+  duration_ms: 2.157375
+  type: 'test'
+  ...
+# Subtest: persistence failure at beforeVaultGet cannot produce a ready result
+ok 18 - persistence failure at beforeVaultGet cannot produce a ready result
+  ---
+  duration_ms: 2.17625
+  type: 'test'
+  ...
+# Subtest: persistence failure at beforePrivateSet cannot produce a ready result
+ok 19 - persistence failure at beforePrivateSet cannot produce a ready result
+  ---
+  duration_ms: 2.3065
+  type: 'test'
+  ...
+# Subtest: persistence failure at afterPrivateSet cannot produce a ready result
+ok 20 - persistence failure at afterPrivateSet cannot produce a ready result
+  ---
+  duration_ms: 1.99825
+  type: 'test'
+  ...
+# Subtest: persistence failure at beforePrivateGet cannot produce a ready result
+ok 21 - persistence failure at beforePrivateGet cannot produce a ready result
+  ---
+  duration_ms: 2.275541
+  type: 'test'
+  ...
+# Subtest: a store that acknowledges but cannot read back the key is not durable recovery
+ok 22 - a store that acknowledges but cannot read back the key is not durable recovery
+  ---
+  duration_ms: 1.736209
+  type: 'test'
+  ...
+# Subtest: vault readback must retain the exact scope and key that was acknowledged
+ok 23 - vault readback must retain the exact scope and key that was acknowledged
+  ---
+  duration_ms: 1.648125
+  type: 'test'
+  ...
+# Subtest: encryption rotation at beforeVaultSet prevents a successful restoration result
+ok 24 - encryption rotation at beforeVaultSet prevents a successful restoration result
+  ---
+  duration_ms: 1.816166
+  type: 'test'
+  ...
+# Subtest: encryption rotation at afterVaultSet prevents a successful restoration result
+ok 25 - encryption rotation at afterVaultSet prevents a successful restoration result
+  ---
+  duration_ms: 1.782208
+  type: 'test'
+  ...
+# Subtest: encryption rotation at beforePrivateSet prevents a successful restoration result
+ok 26 - encryption rotation at beforePrivateSet prevents a successful restoration result
+  ---
+  duration_ms: 1.855667
+  type: 'test'
+  ...
+# Subtest: encryption rotation at afterPrivateSet prevents a successful restoration result
+ok 27 - encryption rotation at afterPrivateSet prevents a successful restoration result
+  ---
+  duration_ms: 2.264875
+  type: 'test'
+  ...
+# Subtest: pending-recovery changes during persistence prevent a successful snapshot result
+ok 28 - pending-recovery changes during persistence prevent a successful snapshot result
+  ---
+  duration_ms: 1.875125
+  type: 'test'
+  ...
+# Subtest: a pending recovery does not hide stale viewing material or erase pending status
+ok 29 - a pending recovery does not hide stale viewing material or erase pending status
+  ---
+  duration_ms: 3.881958
+  type: 'test'
+  ...
+# Subtest: raw publication and cleared public vector cannot reuse an earlier freshness marker
+ok 30 - raw publication and cleared public vector cannot reuse an earlier freshness marker
+  ---
+  duration_ms: 2.016958
+  type: 'test'
+  ...
+# Subtest: a stale vault after external encryption rotation is refused on restart
+ok 31 - a stale vault after external encryption rotation is refused on restart
+  ---
+  duration_ms: 2.107541
+  type: 'test'
+  ...
+# Subtest: the shared provider guard rejects concurrent mutations and releases after failure
+ok 32 - the shared provider guard rejects concurrent mutations and releases after failure
+  ---
+  duration_ms: 2.607667
+  type: 'test'
+  ...
+# Subtest: safe session publication seals the current key and marks only its confirmed generated state current
+ok 33 - safe session publication seals the current key and marks only its confirmed generated state current
+  ---
+  duration_ms: 172.190583
+  type: 'test'
+  ...
+# Subtest: typed rotation marks the unchanged wrap stale, and same-key rotation preserves valid history
+ok 34 - typed rotation marks the unchanged wrap stale, and same-key rotation preserves valid history
+  ---
+  duration_ms: 201.310125
+  type: 'test'
+  ...
+# Subtest: opaque raw publication cannot claim its new recovery wrap has been verified
+ok 35 - opaque raw publication cannot claim its new recovery wrap has been verified
+  ---
+  duration_ms: 170.644
+  type: 'test'
+  ...
+# Subtest: lost publication acknowledgement preserves uncertainty even when generated state changed
+ok 36 - lost publication acknowledgement preserves uncertainty even when generated state changed
+  ---
+  duration_ms: 131.747625
+  type: 'test'
+  ...
+# Subtest: publication refuses pending recovery or missing current viewing material before submitting
+ok 37 - publication refuses pending recovery or missing current viewing material before submitting
+  ---
+  duration_ms: 87.638125
+  type: 'test'
+  ...
+# Subtest: publication refuses a changed encryption key observed after signing and before submission
+ok 38 - publication refuses a changed encryption key observed after signing and before submission
+  ---
+  duration_ms: 94.505833
+  type: 'test'
+  ...
+# Subtest: loading an acknowledged vault never rewrites its durable record
+ok 39 - loading an acknowledged vault never rewrites its durable record
+  ---
+  duration_ms: 2.799708
+  type: 'test'
+  ...
+# Subtest: a private provider that acknowledges and discards the key cannot return success
+ok 40 - a private provider that acknowledges and discards the key cannot return success
+  ---
+  duration_ms: 2.059834
+  type: 'test'
+  ...
+# Subtest: restoration merges provider inventory changes observed before its private write
+ok 41 - restoration merges provider inventory changes observed before its private write
+  ---
+  duration_ms: 1.823125
+  type: 'test'
+  ...
+# Subtest: the raw call surface also records stale wrapping before a lost rotation acknowledgement
+ok 42 - the raw call surface also records stale wrapping before a lost rotation acknowledgement
+  ---
+  duration_ms: 162.837542
+  type: 'test'
+  ...
+# Subtest: status refuses a rotation observed while the private key read was in flight
+ok 43 - status refuses a rotation observed while the private key read was in flight
+  ---
+  duration_ms: 1.451291
+  type: 'test'
+  ...
+# Subtest: SDK uses an indexed finalised snapshot, real inbox bytes, checked membership, and completed nullifier absence
+not ok 14 - SDK uses an indexed finalised snapshot, real inbox bytes, checked membership, and completed nullifier absence
+  ---
+  duration_ms: 131.006625
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:6423'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK excludes externally spent coins even though the filtered tree still contains their commitments
+not ok 15 - SDK excludes externally spent coins even though the filtered tree still contains their commitments
+  ---
+  duration_ms: 96.514416
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:7438'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK rejects incomplete, unrelated, and errored nullifier streams
+not ok 16 - SDK rejects incomplete, unrelated, and errored nullifier streams
+  ---
+  duration_ms: 90.227
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:7836'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK completion before connection acknowledgement cannot establish empty history
+not ok 17 - SDK completion before connection acknowledgement cannot establish empty history
+  ---
+  duration_ms: 89.308875
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:8851'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK rejects nullifier scope, exact identity, and receipt inconsistencies
+not ok 18 - SDK rejects nullifier scope, exact identity, and receipt inconsistencies
+  ---
+  duration_ms: 89.15275
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:9342'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK refuses wrong genesis, stale snapshots, missing indexer anchors, and unknown protocol eras
+not ok 19 - SDK refuses wrong genesis, stale snapshots, missing indexer anchors, and unknown protocol eras
+  ---
+  duration_ms: 89.91
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:10341'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK keeps evidence unknown if its snapshot becomes stale during a finite stream
+not ok 20 - SDK keeps evidence unknown if its snapshot becomes stale during a finite stream
+  ---
+  duration_ms: 87.745875
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:11582'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK never turns check rejection or check transport failure into a live coin
+not ok 21 - SDK never turns check rejection or check transport failure into a live coin
+  ---
+  duration_ms: 91.027
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:11884'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK refuses unrelated, malformed, stale, and noncanonical output event evidence
+not ok 22 - SDK refuses unrelated, malformed, stale, and noncanonical output event evidence
+  ---
+  duration_ms: 92.179041
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:12201'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK bounded commitment search resumes without skipping a lower position behind a bogus hint
+not ok 23 - SDK bounded commitment search resumes without skipping a lower position behind a bogus hint
+  ---
+  duration_ms: 90.781667
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:13190'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK sorts nonmonotonic output ranges before issuing a resumable cursor
+not ok 24 - SDK sorts nonmonotonic output ranges before issuing a resumable cursor
+  ---
+  duration_ms: 87.48425
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:13973'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK bounds event history and refuses to infer absence from a truncated full page
+not ok 25 - SDK bounds event history and refuses to infer absence from a truncated full page
+  ---
+  duration_ms: 87.93775
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:14636'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK can qualify within a bounded event window and resume its unfinished range
+not ok 26 - SDK can qualify within a bounded event window and resume its unfinished range
+  ---
+  duration_ms: 86.423167
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:15098'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK later event windows can contain lower tree indices without being skipped by an old cursor
+not ok 27 - SDK later event windows can contain lower tree indices without being skipped by an old cursor
+  ---
+  duration_ms: 87.893084
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:15917'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK starts at an indexed finalised anchor when the indexer lags the node
+not ok 28 - SDK starts at an indexed finalised anchor when the indexer lags the node
+  ---
+  duration_ms: 86.867166
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:16842'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK honours a pinned older snapshot and rejects a cursor beyond node finality
+not ok 29 - SDK honours a pinned older snapshot and rejects a cursor beyond node finality
+  ---
+  duration_ms: 89.126125
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:17366'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK output page transport failure remains unknown rather than an empty history
+not ok 30 - SDK output page transport failure remains unknown rather than an empty history
+  ---
+  duration_ms: 88.3405
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:17977'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK changing the event-page budget on continuation cannot skip lower positions in a later page
+not ok 31 - SDK changing the event-page budget on continuation cannot skip lower positions in a later page
+  ---
+  duration_ms: 86.280083
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:18369'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK empty event history falls back to the bounded complete commitment tree
+not ok 32 - SDK empty event history falls back to the bounded complete commitment tree
+  ---
+  duration_ms: 87.76825
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:19313'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK tree fallback resumes its own cursor without repeating the event query
+not ok 33 - SDK tree fallback resumes its own cursor without repeating the event query
+  ---
+  duration_ms: 89.826542
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:19820'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK completed tree search never imports an authenticated but unqualified description
+not ok 34 - SDK completed tree search never imports an authenticated but unqualified description
+  ---
+  duration_ms: 88.327375
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:20611'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK tree fallback verifier failure remains unknown without a false live subtotal
+not ok 35 - SDK tree fallback verifier failure remains unknown without a false live subtotal
+  ---
+  duration_ms: 89.440833
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:21129'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK an empty complete commitment tree cannot establish a live coin
+not ok 36 - SDK an empty complete commitment tree cannot establish a live coin
+  ---
+  duration_ms: 87.649
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:21624'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: SDK changing the commitment frontier during a nullifier scan invalidates its snapshot
+not ok 37 - SDK changing the commitment frontier during a nullifier scan invalidates its snapshot
+  ---
+  duration_ms: 87.497125
+  type: 'test'
+  location: '/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/chain-recovery-sdk.ts:1:21933'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    listenInCluster (node:net:1997:12)
+    node:net:2206:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...
+# Subtest: one full pass distinguishes live, spent elsewhere, and unknown without trial submission
+ok 38 - one full pass distinguishes live, spent elsewhere, and unknown without trial submission
+  ---
+  duration_ms: 4.078
+  type: 'test'
+  ...
+# Subtest: separately encrypted duplicates are deduplicated without losing same-colour siblings
+ok 39 - separately encrypted duplicates are deduplicated without losing same-colour siblings
+  ---
+  duration_ms: 2.010583
+  type: 'test'
+  ...
+# Subtest: candidate sources and index hints merge into one exact identity inspection
+ok 40 - candidate sources and index hints merge into one exact identity inspection
+  ---
+  duration_ms: 0.719042
+  type: 'test'
+  ...
+# Subtest: authenticated bogus inbox plaintext remains unknown and is excluded from subtotal
+ok 41 - authenticated bogus inbox plaintext remains unknown and is excluded from subtotal
+  ---
+  duration_ms: 0.561917
+  type: 'test'
+  ...
+# Subtest: missing current viewing capability is explicit even when historical entries decrypt
+ok 42 - missing current viewing capability is explicit even when historical entries decrypt
+  ---
+  duration_ms: 0.748333
+  type: 'test'
+  ...
+# Subtest: several viewing keys open historical and current entries without duplicate classification
+ok 43 - several viewing keys open historical and current entries without duplicate classification
+  ---
+  duration_ms: 0.942417
+  type: 'test'
+  ...
+# Subtest: wrong viewing keys and invalid encrypted entries cannot become holdings
+ok 44 - wrong viewing keys and invalid encrypted entries cannot become holdings
+  ---
+  duration_ms: 0.548708
+  type: 'test'
+  ...
+# Subtest: a missing inbox member stops the page at a resumable gap
+ok 45 - a missing inbox member stops the page at a resumable gap
+  ---
+  duration_ms: 0.955083
+  type: 'test'
+  ...
+# Subtest: inspection transport failure leaves a candidate unknown
+ok 46 - inspection transport failure leaves a candidate unknown
+  ---
+  duration_ms: 0.489333
+  type: 'test'
+  ...
+# Subtest: bounded inbox continuation reopens the same snapshot and does not claim a complete balance
+ok 47 - bounded inbox continuation reopens the same snapshot and does not claim a complete balance
+  ---
+  duration_ms: 2.707875
+  type: 'test'
+  ...
+# Subtest: candidate budget retains each uninspected description with its own continuation
+ok 48 - candidate budget retains each uninspected description with its own continuation
+  ---
+  duration_ms: 1.43175
+  type: 'test'
+  ...
+# Subtest: a bounded coin search emits a scope-bound cursor and resumes only that coin
+ok 49 - a bounded coin search emits a scope-bound cursor and resumes only that coin
+  ---
+  duration_ms: 0.585959
+  type: 'test'
+  ...
+# Subtest: snapshot scope cannot be silently replaced while continuing
+    # Subtest: networkId
+    ok 1 - networkId
+      ---
+      duration_ms: 0.308959
+      type: 'test'
+      ...
+    # Subtest: address
+    ok 2 - address
+      ---
+      duration_ms: 0.197458
+      type: 'test'
+      ...
+    # Subtest: blockHash
+    ok 3 - blockHash
+      ---
+      duration_ms: 0.190209
+      type: 'test'
+      ...
+    # Subtest: blockHeight
+    ok 4 - blockHeight
+      ---
+      duration_ms: 0.189209
+      type: 'test'
+      ...
+    1..4
+ok 50 - snapshot scope cannot be silently replaced while continuing
+  ---
+  duration_ms: 1.064125
+  type: 'test'
+  ...
+# Subtest: malformed budgets fail before opening a snapshot
+    # Subtest: maxEntries=0
+    ok 1 - maxEntries=0
+      ---
+      duration_ms: 0.213125
+      type: 'test'
+      ...
+    # Subtest: maxEntries=-1
+    ok 2 - maxEntries=-1
+      ---
+      duration_ms: 0.1855
+      type: 'test'
+      ...
+    # Subtest: maxEntries=4097
+    ok 3 - maxEntries=4097
+      ---
+      duration_ms: 0.179
+      type: 'test'
+      ...
+    # Subtest: maxEntries=1.5
+    ok 4 - maxEntries=1.5
+      ---
+      duration_ms: 0.188042
+      type: 'test'
+      ...
+    # Subtest: maxEntries=NaN
+    ok 5 - maxEntries=NaN
+      ---
+      duration_ms: 0.255
+      type: 'test'
+      ...
+    # Subtest: maxEntries=3
+    ok 6 - maxEntries=3
+      ---
+      duration_ms: 0.183709
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=0
+    ok 7 - maxCandidates=0
+      ---
+      duration_ms: 0.181833
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=-1
+    ok 8 - maxCandidates=-1
+      ---
+      duration_ms: 0.181375
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=4097
+    ok 9 - maxCandidates=4097
+      ---
+      duration_ms: 0.177959
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=1.5
+    ok 10 - maxCandidates=1.5
+      ---
+      duration_ms: 0.216375
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=NaN
+    ok 11 - maxCandidates=NaN
+      ---
+      duration_ms: 0.181583
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=3
+    ok 12 - maxCandidates=3
+      ---
+      duration_ms: 0.179541
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=0
+    ok 13 - maxCoinIndices=0
+      ---
+      duration_ms: 0.177625
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=-1
+    ok 14 - maxCoinIndices=-1
+      ---
+      duration_ms: 0.175666
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=4097
+    ok 15 - maxCoinIndices=4097
+      ---
+      duration_ms: 0.177458
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=1.5
+    ok 16 - maxCoinIndices=1.5
+      ---
+      duration_ms: 0.180333
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=NaN
+    ok 17 - maxCoinIndices=NaN
+      ---
+      duration_ms: 0.195
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=3
+    ok 18 - maxCoinIndices=3
+      ---
+      duration_ms: 0.189458
+      type: 'test'
+      ...
+    1..18
+ok 51 - malformed budgets fail before opening a snapshot
+  ---
+  duration_ms: 3.704833
+  type: 'test'
+  ...
+# Subtest: forged coin-search cursors are rejected instead of skipping arbitrary positions
+    # Subtest: {"coinId":"0202020202020202020202020202020202020202020202020202020202020202:0808080808080808080808080808080808080808080808080808080808080808:70"}
+    ok 1 - {"coinId":"0202020202020202020202020202020202020202020202020202020202020202:0808080808080808080808080808080808080808080808080808080808080808:70"}
+      ---
+      duration_ms: 0.229959
+      type: 'test'
+      ...
+    # Subtest: {"nextIndex":"-1"}
+    ok 2 - {"nextIndex":"-1"}
+      ---
+      duration_ms: 0.841042
+      type: 'test'
+      ...
+    # Subtest: {"nextIndex":"1e3"}
+    ok 3 - {"nextIndex":"1e3"}
+      ---
+      duration_ms: 0.2305
+      type: 'test'
+      ...
+    # Subtest: {"version":2}
+    ok 4 - {"version":2}
+      ---
+      duration_ms: 0.205958
+      type: 'test'
+      ...
+    # Subtest: {"scope":{"networkId":"fixture-network","address":"1111111111111111111111111111111111111111111111111111111111111111","blockHash":"5555555555555555555555555555555555555555555555555555555555555555","blockHeight":"42"}}
+    ok 5 - {"scope":{"networkId":"fixture-network","address":"1111111111111111111111111111111111111111111111111111111111111111","blockHash":"5555555555555555555555555555555555555555555555555555555555555555","blockHeight":"42"}}
+      ---
+      duration_ms: 0.1995
+      type: 'test'
+      ...
+    1..5
+ok 52 - forged coin-search cursors are rejected instead of skipping arbitrary positions
+  ---
+  duration_ms: 1.863209
+  type: 'test'
+  ...
+# Subtest: malformed caller coin descriptions cannot become candidates
+    # Subtest: 100
+    ok 1 - 100
+      ---
+      duration_ms: 0.106625
+      type: 'test'
+      ...
+    # Subtest: 100
+    ok 2 - 100
+      ---
+      duration_ms: 0.0775
+      type: 'test'
+      ...
+    # Subtest: -1
+    ok 3 - -1
+      ---
+      duration_ms: 0.072875
+      type: 'test'
+      ...
+    # Subtest: 340282366920938463463374607431768211456
+    ok 4 - 340282366920938463463374607431768211456
+      ---
+      duration_ms: 0.071917
+      type: 'test'
+      ...
+    1..4
+ok 53 - malformed caller coin descriptions cannot become candidates
+  ---
+  duration_ms: 0.445958
+  type: 'test'
+  ...
+# Subtest: invalid positive observations remain unknown instead of changing coin identity or position
+    # Subtest: live
+    ok 1 - live
+      ---
+      duration_ms: 0.363542
+      type: 'test'
+      ...
+    # Subtest: spent
+    ok 2 - spent
+      ---
+      duration_ms: 0.311458
+      type: 'test'
+      ...
+    # Subtest: live
+    ok 3 - live
+      ---
+      duration_ms: 0.295042
+      type: 'test'
+      ...
+    # Subtest: live
+    ok 4 - live
+      ---
+      duration_ms: 0.291625
+      type: 'test'
+      ...
+    # Subtest: confirmed
+    ok 5 - confirmed
+      ---
+      duration_ms: 0.33425
+      type: 'test'
+      ...
+    # Subtest: unknown
+    ok 6 - unknown
+      ---
+      duration_ms: 0.290833
+      type: 'test'
+      ...
+    1..6
+ok 54 - invalid positive observations remain unknown instead of changing coin identity or position
+  ---
+  duration_ms: 2.012542
+  type: 'test'
+  ...
+# Subtest: an inspection continuation cannot move backwards or make no progress
+    # Subtest: 8
+    ok 1 - 8
+      ---
+      duration_ms: 0.354
+      type: 'test'
+      ...
+    # Subtest: 9
+    ok 2 - 9
+      ---
+      duration_ms: 0.304625
+      type: 'test'
+      ...
+    # Subtest: -1
+    ok 3 - -1
+      ---
+      duration_ms: 0.317042
+      type: 'test'
+      ...
+    # Subtest: 1e3
+    ok 4 - 1e3
+      ---
+      duration_ms: 0.300292
+      type: 'test'
+      ...
+    1..4
+ok 55 - an inspection continuation cannot move backwards or make no progress
+  ---
+  duration_ms: 1.367416
+  type: 'test'
+  ...
+# Subtest: snapshot changes during asynchronous reads or inspection abort the scan
+    # Subtest: read
+    ok 1 - read
+      ---
+      duration_ms: 0.342125
+      type: 'test'
+      ...
+    # Subtest: inspect
+    ok 2 - inspect
+      ---
+      duration_ms: 0.321042
+      type: 'test'
+      ...
+    1..2
+ok 56 - snapshot changes during asynchronous reads or inspection abort the scan
+  ---
+  duration_ms: 0.724583
+  type: 'test'
+  ...
+# Subtest: inbox transport failure retains the exact unread cursor
+ok 57 - inbox transport failure retains the exact unread cursor
+  ---
+  duration_ms: 0.447792
+  type: 'test'
+  ...
+# Subtest: caller candidates can be checked without a viewing key but cannot imply full recovery
+ok 58 - caller candidates can be checked without a viewing key but cannot imply full recovery
+  ---
+  duration_ms: 0.1235
+  type: 'test'
+  ...
+# Subtest: scan copies caller coin descriptions and viewing keys before awaiting the adapter
+ok 59 - scan copies caller coin descriptions and viewing keys before awaiting the adapter
+  ---
+  duration_ms: 0.171375
+  type: 'test'
+  ...
+# Subtest: event-window continuation permits a lower tree index only when its event offset advances
+ok 60 - event-window continuation permits a lower tree index only when its event offset advances
+  ---
+  duration_ms: 0.341166
+  type: 'test'
+  ...
+# Subtest: invalid event-window progress stays unknown with the original usable cursor
+    # Subtest: 0/99
+    ok 1 - 0/99
+      ---
+      duration_ms: 0.396417
+      type: 'test'
+      ...
+    # Subtest: 0/100
+    ok 2 - 0/100
+      ---
+      duration_ms: 0.36375
+      type: 'test'
+      ...
+    # Subtest: 1000/99
+    ok 3 - 1000/99
+      ---
+      duration_ms: 0.309584
+      type: 'test'
+      ...
+    # Subtest: 0/-1
+    ok 4 - 0/-1
+      ---
+      duration_ms: 0.30425
+      type: 'test'
+      ...
+    # Subtest: 0/1.5
+    ok 5 - 0/1.5
+      ---
+      duration_ms: 0.312708
+      type: 'test'
+      ...
+    # Subtest: 0/-2147483648
+    ok 6 - 0/-2147483648
+      ---
+      duration_ms: 0.302083
+      type: 'test'
+      ...
+    # Subtest: 0/200
+    ok 7 - 0/200
+      ---
+      duration_ms: 0.301917
+      type: 'test'
+      ...
+    1..7
+ok 61 - invalid event-window progress stays unknown with the original usable cursor
+  ---
+  duration_ms: 2.445042
+  type: 'test'
+  ...
+# Subtest: malformed event offsets are rejected before reading a snapshot
+    # Subtest: -1
+    ok 1 - -1
+      ---
+      duration_ms: 0.25525
+      type: 'test'
+      ...
+    # Subtest: 1.5
+    ok 2 - 1.5
+      ---
+      duration_ms: 0.194791
+      type: 'test'
+      ...
+    # Subtest: 2147483648
+    ok 3 - 2147483648
+      ---
+      duration_ms: 0.188084
+      type: 'test'
+      ...
+    # Subtest: NaN
+    ok 4 - NaN
+      ---
+      duration_ms: 0.213417
+      type: 'test'
+      ...
+    # Subtest: 100
+    ok 5 - 100
+      ---
+      duration_ms: 0.185209
+      type: 'test'
+      ...
+    1..5
+ok 62 - malformed event offsets are rejected before reading a snapshot
+  ---
+  duration_ms: 1.143292
+  type: 'test'
+  ...
+# Subtest: candidate overflow preserves both dimensions of its prior continuation
+ok 63 - candidate overflow preserves both dimensions of its prior continuation
+  ---
+  duration_ms: 1.046583
+  type: 'test'
+  ...
+# Subtest: an undefined inbox record is a retriable gap rather than an unreadable ciphertext
+ok 64 - an undefined inbox record is a retriable gap rather than an unreadable ciphertext
+  ---
+  duration_ms: 0.285875
+  type: 'test'
+  ...
+# Subtest: transient unknown evidence preserves both dimensions of an existing candidate cursor
+ok 65 - transient unknown evidence preserves both dimensions of an existing candidate cursor
+  ---
+  duration_ms: 0.362708
+  type: 'test'
+  ...
+# Subtest: event search can transition to a complete-tree search from index zero
+ok 66 - event search can transition to a complete-tree search from index zero
+  ---
+  duration_ms: 0.360792
+  type: 'test'
+  ...
+# Subtest: tree continuations reject backwards modes, indices, and event offsets
+    # Subtest: events/0/0
+    ok 1 - events/0/0
+      ---
+      duration_ms: 0.449
+      type: 'test'
+      ...
+    # Subtest: tree/8/0
+    ok 2 - tree/8/0
+      ---
+      duration_ms: 0.320625
+      type: 'test'
+      ...
+    # Subtest: tree/9/0
+    ok 3 - tree/9/0
+      ---
+      duration_ms: 0.303792
+      type: 'test'
+      ...
+    # Subtest: tree/10/100
+    ok 4 - tree/10/100
+      ---
+      duration_ms: 0.299875
+      type: 'test'
+      ...
+    # Subtest: invalid/10/0
+    ok 5 - invalid/10/0
+      ---
+      duration_ms: 0.73275
+      type: 'test'
+      ...
+    1..5
+ok 67 - tree continuations reject backwards modes, indices, and event offsets
+  ---
+  duration_ms: 3.551625
+  type: 'test'
+  ...
+# Subtest: tree mode and retry position survive a transient unknown response
+ok 68 - tree mode and retry position survive a transient unknown response
+  ---
+  duration_ms: 0.459625
+  type: 'test'
+  ...
+# Subtest: malformed search modes and nonzero tree event offsets reject before snapshot reads
+    # Subtest: invalid/0
+    ok 1 - invalid/0
+      ---
+      duration_ms: 0.912625
+      type: 'test'
+      ...
+    # Subtest: tree/100
+    ok 2 - tree/100
+      ---
+      duration_ms: 0.213792
+      type: 'test'
+      ...
+    # Subtest: 1/0
+    ok 3 - 1/0
+      ---
+      duration_ms: 0.197458
+      type: 'test'
+      ...
+    1..3
+ok 69 - malformed search modes and nonzero tree event offsets reject before snapshot reads
+  ---
+  duration_ms: 1.444834
+  type: 'test'
+  ...
+# Subtest: candidate overflow preserves the tree search mode
+ok 70 - candidate overflow preserves the tree search mode
+  ---
+  duration_ms: 0.5195
+  type: 'test'
+  ...
+1..70
+# tests 133
+# suites 0
+# pass 109
+# fail 24
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2710.11725
+test-chain-recovery: failed (exit=1, completion=false, timeout=false)
+test-chain-recovery failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:input-validation
+> tsx --test src/tests/input-validation.ts src/tests/signer-input-validation.ts
+
+# Subtest: real pending recovery can rotate encryption and finalise authority without restoring current viewing capability
+ok 44 - real pending recovery can rotate encryption and finalise authority without restoring current viewing capability
+  ---
+  duration_ms: 263.529833
+  type: 'test'
+  ...
+# Subtest: current wrap restores the exact viewing key without mutating caller material
+ok 45 - current wrap restores the exact viewing key without mutating caller material
+  ---
+  duration_ms: 4.58525
+  type: 'test'
+  ...
+# Subtest: an authentic old wrap after encryption rotation is stale rather than recovered
+ok 46 - an authentic old wrap after encryption rotation is stale rather than recovered
+  ---
+  duration_ms: 2.312584
+  type: 'test'
+  ...
+# Subtest: a signing-public-key alias cannot bypass exact-secret wrap authentication
+ok 47 - a signing-public-key alias cannot bypass exact-secret wrap authentication
+  ---
+  duration_ms: 2.249458
+  type: 'test'
+  ...
+# Subtest: wrong recovery authority and foreign account context cannot open a current wrap
+ok 48 - wrong recovery authority and foreign account context cannot open a current wrap
+  ---
+  duration_ms: 3.101542
+  type: 'test'
+  ...
+# Subtest: malformed, future-version, padded, and altered wrap containers are refused
+    # Subtest: short
+    ok 1 - short
+      ---
+      duration_ms: 1.816166
+      type: 'test'
+      ...
+    # Subtest: long
+    ok 2 - long
+      ---
+      duration_ms: 1.645667
+      type: 'test'
+      ...
+    # Subtest: version
+    ok 3 - version
+      ---
+      duration_ms: 1.69
+      type: 'test'
+      ...
+    # Subtest: suite
+    ok 4 - suite
+      ---
+      duration_ms: 1.787625
+      type: 'test'
+      ...
+    # Subtest: reserved first
+    ok 5 - reserved first
+      ---
+      duration_ms: 1.790209
+      type: 'test'
+      ...
+    # Subtest: reserved last
+    ok 6 - reserved last
+      ---
+      duration_ms: 1.60475
+      type: 'test'
+      ...
+    # Subtest: ciphertext
+    ok 7 - ciphertext
+      ---
+      duration_ms: 1.659125
+      type: 'test'
+      ...
+    # Subtest: tag
+    ok 8 - tag
+      ---
+      duration_ms: 1.539375
+      type: 'test'
+      ...
+    1..8
+ok 49 - malformed, future-version, padded, and altered wrap containers are refused
+  ---
+  duration_ms: 14.113792
+  type: 'test'
+  ...
+# Subtest: malformed recovery secret short is refused
+ok 50 - malformed recovery secret short is refused
+  ---
+  duration_ms: 1.081583
+  type: 'test'
+  ...
+# Subtest: malformed recovery secret long is refused
+ok 51 - malformed recovery secret long is refused
+  ---
+  duration_ms: 1.041667
+  type: 'test'
+  ...
+# Subtest: malformed recovery secret noncanonical is refused
+ok 52 - malformed recovery secret noncanonical is refused
+  ---
+  duration_ms: 1.049791
+  type: 'test'
+  ...
+# Subtest: supported guardian quorums recover current viewing capability and retain caller shares
+ok 53 - supported guardian quorums recover current viewing capability and retain caller shares
+  ---
+  duration_ms: 4.704709
+  type: 'test'
+  ...
+# Subtest: unavailable guardians and incorrect shares cannot return a viewing key
+ok 54 - unavailable guardians and incorrect shares cannot return a viewing key
+  ---
+  duration_ms: 2.622083
+  type: 'test'
+  ...
+# Subtest: guardian geometry and canonical fields are validated before interpolation
+    # Subtest: fractional roster
+    ok 1 - fractional roster
+      ---
+      duration_ms: 0.054417
+      type: 'test'
+      ...
+    # Subtest: oversized roster
+    ok 2 - oversized roster
+      ---
+      duration_ms: 0.027833
+      type: 'test'
+      ...
+    # Subtest: zero roster
+    ok 3 - zero roster
+      ---
+      duration_ms: 0.023167
+      type: 'test'
+      ...
+    # Subtest: negative threshold
+    ok 4 - negative threshold
+      ---
+      duration_ms: 0.023125
+      type: 'test'
+      ...
+    # Subtest: fractional threshold
+    ok 5 - fractional threshold
+      ---
+      duration_ms: 0.021042
+      type: 'test'
+      ...
+    # Subtest: threshold above roster
+    ok 6 - threshold above roster
+      ---
+      duration_ms: 0.02075
+      type: 'test'
+      ...
+    # Subtest: public vector overflow
+    ok 7 - public vector overflow
+      ---
+      duration_ms: 0.019875
+      type: 'test'
+      ...
+    # Subtest: too many shares
+    ok 8 - too many shares
+      ---
+      duration_ms: 0.021833
+      type: 'test'
+      ...
+    # Subtest: duplicate indices
+    ok 9 - duplicate indices
+      ---
+      duration_ms: 0.026667
+      type: 'test'
+      ...
+    # Subtest: zero index
+    ok 10 - zero index
+      ---
+      duration_ms: 0.021292
+      type: 'test'
+      ...
+    # Subtest: out of roster
+    ok 11 - out of roster
+      ---
+      duration_ms: 0.02325
+      type: 'test'
+      ...
+    # Subtest: fractional index
+    ok 12 - fractional index
+      ---
+      duration_ms: 0.019084
+      type: 'test'
+      ...
+    # Subtest: negative share
+    ok 13 - negative share
+      ---
+      duration_ms: 0.02825
+      type: 'test'
+      ...
+    # Subtest: noncanonical share
+    ok 14 - noncanonical share
+      ---
+      duration_ms: 0.022625
+      type: 'test'
+      ...
+    1..14
+ok 55 - guardian geometry and canonical fields are validated before interpolation
+  ---
+  duration_ms: 1.732375
+  type: 'test'
+  ...
+# Subtest: guardian success does not conceal a stale recovered viewing key
+ok 56 - guardian success does not conceal a stale recovered viewing key
+  ---
+  duration_ms: 2.305584
+  type: 'test'
+  ...
+# Subtest: status distinguishes possession, verified wrapping, stale wrapping, and absent backup
+ok 57 - status distinguishes possession, verified wrapping, stale wrapping, and absent backup
+  ---
+  duration_ms: 1.854542
+  type: 'test'
+  ...
+# Subtest: changed session, public vector, or wrap bytes invalidate old freshness observations
+    # Subtest: session
+    ok 1 - session
+      ---
+      duration_ms: 0.120584
+      type: 'test'
+      ...
+    # Subtest: phi
+    ok 2 - phi
+      ---
+      duration_ms: 0.064084
+      type: 'test'
+      ...
+    # Subtest: wrap padding
+    ok 3 - wrap padding
+      ---
+      duration_ms: 0.061125
+      type: 'test'
+      ...
+    # Subtest: authority
+    ok 4 - authority
+      ---
+      duration_ms: 0.05725
+      type: 'test'
+      ...
+    1..4
+ok 58 - changed session, public vector, or wrap bytes invalidate old freshness observations
+  ---
+  duration_ms: 1.864333
+  type: 'test'
+  ...
+# Subtest: pending recovery fields and device epoch are part of snapshot stability
+    # Subtest: epoch
+    ok 1 - epoch
+      ---
+      duration_ms: 0.057208
+      type: 'test'
+      ...
+    # Subtest: pending flag
+    ok 2 - pending flag
+      ---
+      duration_ms: 0.040917
+      type: 'test'
+      ...
+    # Subtest: pending entry
+    ok 3 - pending entry
+      ---
+      duration_ms: 0.042667
+      type: 'test'
+      ...
+    # Subtest: pending authority
+    ok 4 - pending authority
+      ---
+      duration_ms: 0.044291
+      type: 'test'
+      ...
+    # Subtest: deadline
+    ok 5 - deadline
+      ---
+      duration_ms: 0.042791
+      type: 'test'
+      ...
+    1..5
+ok 59 - pending recovery fields and device epoch are part of snapshot stability
+  ---
+  duration_ms: 1.780166
+  type: 'test'
+  ...
+# Subtest: preparing a fresh viewing recovery session needs the complete supported roster and no pending recovery
+ok 60 - preparing a fresh viewing recovery session needs the complete supported roster and no pending recovery
+  ---
+  duration_ms: 5.051458
+  type: 'test'
+  ...
+# Subtest: vault records enforce exact scope, canonical encodings, and key-pair correspondence
+ok 61 - vault records enforce exact scope, canonical encodings, and key-pair correspondence
+  ---
+  duration_ms: 1.350792
+  type: 'test'
+  ...
+# Subtest: ledger snapshot copies caller arrays and refuses unsupported or malformed ledger fields
+ok 62 - ledger snapshot copies caller arrays and refuses unsupported or malformed ledger fields
+  ---
+  duration_ms: 1.187208
+  type: 'test'
+  ...
+1..62
+# tests 93
+# suites 0
+# pass 93
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1758.020042
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44154.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44154.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-input-validation: failed (exit=1, completion=false, timeout=false)
+test-input-validation failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:signed-bootstrap-offline
+> node --import tsx --test src/tests/signed-bootstrap-offline.ts src/tests/signed-bootstrap-client.ts
+
+
+> midnight-account-custody@0.1.0 test:recovery-offline
+> tsx src/tests/recovery-offline.ts
+
+TAP version 13
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44242.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44242.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-recovery-offline: failed (exit=1, completion=false, timeout=false)
+test-recovery-offline failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:recovery-sim
+> tsx src/tests/recovery-sim.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44289.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44289.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-recovery-sim: failed (exit=1, completion=false, timeout=false)
+test-recovery-sim failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:grants-capability-offline
+> tsx src/tests/grants-capability-offline.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44333.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44333.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-grants-capability-offline: failed (exit=1, completion=false, timeout=false)
+test-grants-capability-offline failed: {"code":1,"signal":null}
+# Subtest: B05: client validates canonical network and independently observed genesis/checkpoint before approval
+ok 1 - B05: client validates canonical network and independently observed genesis/checkpoint before approval
+  ---
+  duration_ms: 3.02275
+  type: 'test'
+  ...
+# Subtest: B11: resume each persisted stage and reuse the exact approval after temporary-key loss
+ok 2 - B11: resume each persisted stage and reuse the exact approval after temporary-key loss
+  ---
+  duration_ms: 63.2565
+  type: 'test'
+  ...
+# Subtest: B11: invalid assertion fails before temporary signing and permits explicit unapproved replacement
+ok 3 - B11: invalid assertion fails before temporary signing and permits explicit unapproved replacement
+  ---
+  duration_ms: 9.295625
+  type: 'test'
+  ...
+# Subtest: B11: losing both approval and temporary key prevents completion; unrelated key cannot replace it
+ok 4 - B11: losing both approval and temporary key prevents completion; unrelated key cannot replace it
+  ---
+  duration_ms: 6.77325
+  type: 'test'
+  ...
+# Subtest: B11: concurrent approval and target changes during the assertion cannot produce a second approval
+ok 5 - B11: concurrent approval and target changes during the assertion cannot produce a second approval
+  ---
+  duration_ms: 11.88825
+  type: 'test'
+  ...
+# Subtest: B10: serializer whitelists public metadata and drops injected secret properties
+ok 6 - B10: serializer whitelists public metadata and drops injected secret properties
+  ---
+  duration_ms: 26.629208
+  type: 'test'
+  ...
+# Subtest: B03/B06/B10: imported records reject altered context, target and noncanonical approvals
+ok 7 - B03/B06/B10: imported records reject altered context, target and noncanonical approvals
+  ---
+  duration_ms: 83.530875
+  type: 'test'
+  ...
+# Subtest: B01/B11: browser transport uses raw address user.id and passes known IDs as exclusions
+ok 8 - B01/B11: browser transport uses raw address user.id and passes known IDs as exclusions
+  ---
+  duration_ms: 0.363042
+  type: 'test'
+  ...
+
+> midnight-account-custody@0.1.0 test:p256-offline
+> tsx src/tests/p256-offline.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44377.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44377.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-p256-offline: failed (exit=1, completion=false, timeout=false)
+test-p256-offline failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:ledger-flex-offline
+> tsx src/tests/ledger-flex-offline.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44421.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44421.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-ledger-flex-offline: failed (exit=1, completion=false, timeout=false)
+test-ledger-flex-offline failed: {"code":1,"signal":null}
+# Subtest: JubJub: dormant recovery admits only the successor across later operations and recovery
+ok 1 - JubJub: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 423.582959
+  type: 'test'
+  ...
+# Subtest: JubJub: only the committed key and salt can perform normal activation
+ok 2 - JubJub: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 212.000541
+  type: 'test'
+  ...
+# Subtest: JubJub: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 3 - JubJub: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 145.984
+  type: 'test'
+  ...
+# Subtest: JubJub: activation during pending recovery permits cancellation and normal operation
+ok 4 - JubJub: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 150.45475
+  type: 'test'
+  ...
+# Subtest: JubJub: finalisation retires a device activated while recovery was pending
+ok 5 - JubJub: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 207.039166
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: dormant recovery admits only the successor across later operations and recovery
+ok 6 - K256, raw envelope: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 398.809291
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: only the committed key and salt can perform normal activation
+ok 7 - K256, raw envelope: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 201.827333
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 8 - K256, raw envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 152.259
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: activation during pending recovery permits cancellation and normal operation
+ok 9 - K256, raw envelope: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 153.413416
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: finalisation retires a device activated while recovery was pending
+ok 10 - K256, raw envelope: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 200.250959
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: dormant recovery admits only the successor across later operations and recovery
+ok 11 - K256, connector envelope: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 418.6115
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: only the committed key and salt can perform normal activation
+ok 12 - K256, connector envelope: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 209.33525
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 13 - K256, connector envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 158.886792
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: activation during pending recovery permits cancellation and normal operation
+ok 14 - K256, connector envelope: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 154.13275
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: finalisation retires a device activated while recovery was pending
+ok 15 - K256, connector envelope: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 197.797208
+  type: 'test'
+  ...
+# Subtest: P256: dormant recovery admits only the successor across later operations and recovery
+ok 16 - P256: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 416.056375
+  type: 'test'
+  ...
+# Subtest: P256: only the committed key and salt can perform normal activation
+ok 17 - P256: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 219.592959
+  type: 'test'
+  ...
+# Subtest: P256: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 18 - P256: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 186.853333
+  type: 'test'
+  ...
+# Subtest: P256: activation during pending recovery permits cancellation and normal operation
+ok 19 - P256: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 177.138666
+  type: 'test'
+  ...
+# Subtest: P256: finalisation retires a device activated while recovery was pending
+ok 20 - P256: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 230.254083
+  type: 'test'
+  ...
+
+> midnight-account-custody@0.1.0 verify:ledger-flex
+> node --import tsx src/tests/ledger-flex-evidence.ts
+
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4887.477167
+
+> midnight-account-custody@0.1.0 test:grants-offline
+> tsx src/tests/grants-offline.ts
+
+PASS Ledger evidence: 2 signatures verified with Node/OpenSSL; both grant challenges reconstructed; 5 recorded refusals and localnet outcome consistency checked.
+This offline check verifies cryptographic binding and recorded consistency, not a ledger proof or independent on-chain acceptance.
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44510.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44510.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-grants-offline: failed (exit=1, completion=false, timeout=false)
+test-grants-offline failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:grants-caller-offline
+> tsx src/tests/grants-caller-offline.ts
+
+
+> midnight-account-custody@0.1.0 test:view-envelope-offline
+> tsx src/tests/inbox-view-envelope/offline.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44568.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44568.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-grants-caller-offline: failed (exit=1, completion=false, timeout=false)
+test-grants-caller-offline failed: {"code":1,"signal":null}
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44600.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/44600.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-view-envelope-offline: failed (exit=1, completion=false, timeout=false)
+test-view-envelope-offline failed: {"code":1,"signal":null}
+
+> midnight-account-custody@0.1.0 test:ecc
+> node --import tsx src/tests/ecc-validation.ts
+
+
+> midnight-account-custody@0.1.0 test:ecc-wallet
+> node --import tsx src/tests/ecc-wallet.ts
+
+ACCEPT bootstrap/jubjub: valid subgroup key
+REJECT bootstrap/jubjub: identity (0,1) — CompactError: failed assert: device key has small order
+REJECT bootstrap/jubjub: order two (0,-1) — RuntimeError: unreachable
+REJECT bootstrap/jubjub: mixed torsion P+(0,-1) — RuntimeError: unreachable
+REJECT bootstrap/jubjub: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+REJECT bootstrap/jubjub: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT bootstrap/jubjub: altered x+2, same y
+REJECT bootstrap/jubjub: noncanonical x=FQ — CompactError: type error: activate_initial_device_with_jubjub argument 1 (argument 2 as invoked from Typescript) at account.compact line 415 char 1; expected va
+ACCEPT bootstrap/k256: valid subgroup key
+REJECT bootstrap/k256: flagged identity — CompactError: cannot extract the x-coordinate of the secp256k1 identity point
+REJECT bootstrap/k256: unflagged zero coordinates — CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 426 char 1; expected valu
+REJECT bootstrap/k256: identity flag with generator coordinates — CompactError: cannot extract the x-coordinate of the secp256k1 identity point
+REJECT bootstrap/k256: off curve (1,1) — CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 426 char 1; expected valu
+REJECT bootstrap/k256: other curve generator — CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 426 char 1; expected valu
+REJECT bootstrap/k256: invalid-curve twin y²=x³+2 — CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 426 char 1; expected valu
+REJECT bootstrap/k256: noncanonical x=p — CompactError: type error: activate_initial_device_with_k256 argument 1 (argument 2 as invoked from Typescript) at account.compact line 426 char 1; expected valu
+ACCEPT bootstrap/p256: valid subgroup key
+REJECT bootstrap/p256: flagged identity — CompactError: cannot extract the x-coordinate of the secp256r1 identity point
+REJECT bootstrap/p256: unflagged zero coordinates — CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 52 char 1; expected
+REJECT bootstrap/p256: identity flag with generator coordinates — CompactError: cannot extract the x-coordinate of the secp256r1 identity point
+# Subtest: B12: independent unpadded typed-hash recipes match every generated helper and r1:v2 entry
+ok 9 - B12: independent unpadded typed-hash recipes match every generated helper and r1:v2 entry
+  ---
+  duration_ms: 3.871583
+  type: 'test'
+  ...
+# Subtest: B01/B07/B08: deploy first, deposit before activation, install exactly one target and preserve unrelated state
+ok 10 - B01/B07/B08: deploy first, deposit before activation, install exactly one target and preserve unrelated state
+  ---
+  duration_ms: 166.968916
+  type: 'test'
+  ...
+# Subtest: B02/B03: modified public keys, policies, nonce points and signatures fail without state changes
+ok 11 - B02/B03: modified public keys, policies, nonce points and signatures fail without state changes
+  ---
+  duration_ms: 142.316958
+  type: 'test'
+  ...
+# Subtest: B02: invalid native points are refused at the generated host/runtime boundary
+ok 12 - B02: invalid native points are refused at the generated host/runtime boundary
+  ---
+  duration_ms: 99.357708
+  type: 'test'
+  ...
+# Subtest: B03/B05/B06: account/network/epoch/nonce/format/scheme/profile and operation are signed
+ok 13 - B03/B05/B06: account/network/epoch/nonce/format/scheme/profile and operation are signed
+  ---
+  duration_ms: 419.392209
+  type: 'test'
+  ...
+# Subtest: B04: genuine signatures over unsupported assertion envelopes are rejected by activation
+ok 14 - B04: genuine signatures over unsupported assertion envelopes are rejected by activation
+  ---
+  duration_ms: 283.080167
+  type: 'test'
+  ...
+# Subtest: B04: canonical 134 assertion accepts low-S
+ok 15 - B04: canonical 134 assertion accepts low-S
+  ---
+  duration_ms: 82.497375
+  type: 'test'
+  ...
+# Subtest: B04: canonical 134 assertion accepts high-S
+ok 16 - B04: canonical 134 assertion accepts high-S
+  ---
+  duration_ms: 80.61375
+  type: 'test'
+  ...
+# Subtest: B04: Chrome 243 assertion accepts low-S
+ok 17 - B04: Chrome 243 assertion accepts low-S
+  ---
+  duration_ms: 83.077125
+  type: 'test'
+  ...
+# Subtest: B04: Chrome 243 assertion accepts high-S
+ok 18 - B04: Chrome 243 assertion accepts high-S
+  ---
+  duration_ms: 86.260834
+  type: 'test'
+  ...
+# Subtest: B06: constructor rejects unknown modes and incompatible network/boot configuration
+ok 19 - B06: constructor rejects unknown modes and incompatible network/boot configuration
+  ---
+  duration_ms: 215.696084
+  type: 'test'
+  ...
+# Subtest: B09: recovery finalised first consumes cached approvals permanently
+ok 20 - B09: recovery finalised first consumes cached approvals permanently
+  ---
+  duration_ms: 100.627708
+  type: 'test'
+  ...
+# Subtest: B09: activation preserves pending recovery; recovery retires passkey
+ok 21 - B09: activation preserves pending recovery; recovery retires passkey
+  ---
+  duration_ms: 151.131666
+  type: 'test'
+  ...
+# Subtest: B09: activation preserves pending recovery; passkey vetoes
+ok 22 - B09: activation preserves pending recovery; passkey vetoes
+  ---
+  duration_ms: 145.563792
+  type: 'test'
+  ...
+# Subtest: B10: prover inputs contain signatures and public keys, with neither signing secret
+ok 23 - B10: prover inputs contain signatures and public keys, with neither signing secret
+  ---
+  duration_ms: 70.347042
+  type: 'test'
+  ...
+REJECT bootstrap/p256: off curve (1,1) — CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 52 char 1; expected
+REJECT bootstrap/p256: other curve generator — CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 52 char 1; expected
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2351.87925
+REJECT bootstrap/p256: noncanonical x=p — CompactError: type error: activate_initial_device_with_p256 argument 1 (argument 2 as invoked from Typescript) at account-p256.compact line 52 char 1; expected
+
+> midnight-account-custody@0.1.0 test:ecc-nonces
+> node --import tsx src/tests/ecc-followups.ts nonces
+
+ACCEPT device/enrol commitment: valid subgroup key
+ACCEPT device/authorise jubjub: valid subgroup key
+PASS address encode/parse/decode: normal: accepted
+PASS address encode/parse/decode: identity: accepted
+PASS address encode/parse/decode: order-two: accepted
+PASS address encode/parse/decode: mixed-torsion: accepted
+PASS address encode/parse/decode: invalid-group-zero: accepted
+PASS address encode/parse/decode: noncanonical-field: accepted
+PASS address encode/parse/decode: empty: accepted
+PASS address encode/parse/decode: 31-bytes: accepted
+PASS address encode/parse/decode: 33-bytes: accepted
+PASS address network control: wrong-network: rejected
+PASS address checksum control: damaged-checksum: rejected
+PASS wallet secret-key codec: zero-secret import: accepted
+ACCEPT device/enrol commitment: identity (0,1)
+REJECT device/authorise jubjub: identity (0,1) — CompactError: failed assert: device key has small order
+PASS wallet makeTransfer: normal: accepted
+ACCEPT device/enrol commitment: order two (0,-1)
+REJECT device/authorise jubjub: order two (0,-1) — RuntimeError: unreachable
+PASS wallet makeTransfer: identity: accepted
+PASS wallet makeTransfer: order-two: rejected
+PASS wallet makeTransfer: mixed-torsion: rejected
+PASS wallet makeTransfer: invalid-group-zero: rejected
+PASS wallet makeTransfer: noncanonical-field: rejected
+PASS wallet makeTransfer: empty: rejected
+PASS wallet makeTransfer: 31-bytes: rejected
+ACCEPT device/enrol commitment: mixed torsion P+(0,-1)
+PASS wallet makeTransfer: 33-bytes: rejected
+REJECT device/authorise jubjub: mixed torsion P+(0,-1) — RuntimeError: unreachable
+PASS wallet identity transaction serialization: unproven round-trip retains zero-secret detection: accepted
+PASS local ledger (proofs/fees disabled): normal: accepted
+PASS local ledger native-proof control: normal: mock proof: rejected
+PASS local ledger (proofs/fees disabled): identity: accepted
+ACCEPT device/enrol commitment: off curve (1,1)
+PASS local ledger native-proof control: identity: mock proof: rejected
+Wallet checks complete: 26/26 expectations matched.
+REJECT device/authorise jubjub: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+PASS healthy RNG: 64 device + 64 grant + 128 recovery announcements: passed
+PASS 12 operation/device/grant/recovery challenge domains are distinct: passed
+PASS device challenges bind account, nonce, key, announcement, arguments and grind: passed
+PASS grant challenges bind grant ID, issuance counter and use nonce: passed
+PASS recovery challenge binds both roles, announcements, successor gate, epoch and time: passed
+PASS forced nonce reuse across device/grant domains recovers the signing secret: fault injection demonstrates key disclosure; no healthy-RNG reuse observed
+PASS forced equal recovery/successor nonces reveal recovery key to successor: fault injection only; independent recovery nonces remain essential
+nonces: 7/7 checks passed
+ACCEPT device/enrol commitment: P-256 generator as Jubjub
+REJECT device/authorise jubjub: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+
+> midnight-account-custody@0.1.0 test:ecc-encodings
+> node --import tsx src/tests/ecc-followups.ts encodings
+
+
+> midnight-account-custody@0.1.0 test:ecc-recovery
+> node --import tsx src/tests/ecc-followups.ts recovery
+
+ACCEPT device/enrol commitment: altered x+2, same y
+ACCEPT device/authorise jubjub: altered x+2, same y
+PASS altered-x alias: same effective arithmetic point, distinct commitments: JavaScript discrepancy; existing native tests reject noncanonical coordinates
+PASS device IDs bind account, epoch and counter: passed
+PASS grant IDs bind account, origin and slot: passed
+PASS ECDSA envelope IDs remain distinct for one public key: passed
+PASS device and grant commitments differ for the same signer: passed
+encodings: 5/5 checks passed
+ACCEPT device/authorise k256: valid subgroup key
+REJECT device/authorise k256: flagged identity — CompactError: cannot extract the x-coordinate of the secp256k1 identity point
+PASS invalid successor submission is atomic; original device still works: passed
+REJECT device/authorise k256: unflagged zero coordinates — CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+PASS X25519 sealing: 32-byte generated recipient: accepted
+PASS X25519 sealing: 31-byte truncated recipient: rejected
+PASS X25519 sealing: 33-byte recipient with trailing 0x63: rejected
+PASS X25519 opening: 33-byte secret with trailing 0x63 returns null: accepted
+PASS X25519 opening: 31-byte truncated secret returns null: accepted
+PASS X25519 opening: unrelated generated secret returns null: accepted
+PASS hex import: 00a1ff: accepted
+PASS hex import: 0x00a1ff: accepted
+PASS hex import: zz: rejected
+PASS hex import: 1z: rejected
+PASS hex import: z1: rejected
+PASS hex import: odd-length abc: rejected
+PASS secp256k1 secret import: K256Device: zero: rejected
+PASS secp256k1 commitment derivation: K256Device: identity: rejected
+PASS secp256k1 commitment derivation: K256Device: valid scalar 5: accepted
+PASS secp256k1 secret import: K256Grantee: zero: rejected
+PASS secp256k1 commitment derivation: K256Grantee: identity: rejected
+PASS secp256k1 commitment derivation: K256Grantee: valid scalar 5: accepted
+Import boundary checks complete: 18/18 expectations matched.
+Receipt: /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/passport-ecc-import-boundaries-8guzIo/import-boundaries.json
+PASS dead enrolled entry cannot let authoriser remove itself: passed
+REJECT device/authorise k256: identity flag with generator coordinates — CompactError: cannot extract the x-coordinate of the secp256k1 identity point
+REJECT device/authorise k256: off curve (1,1) — CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+PASS pending recovery permits encryption rotation and device veto: passed
+REJECT device/authorise k256: other curve generator — CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+REJECT device/authorise k256: invalid-curve twin y²=x³+2 — CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+PASS finalisation retires old device and successor repairs an unusable inbox key: passed
+REJECT device/authorise k256: noncanonical x=p — CompactError: type error: rotate_enc_key_with_k256 argument 2 (argument 3 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+PASS mismatched recovery wrap/key is accepted but fails subsequent inbox decryption: authorised inconsistent setup; no proof of wrap/key correspondence
+ACCEPT device/authorise p256: valid subgroup key
+PASS valid key rotation leaves a previously matching recovery wrap stale: authorised lifecycle inconsistency: old entries readable, new entries require the rotated secret
+recovery: 6/6 checks passed
+REJECT device/authorise p256: flagged identity — CompactError: cannot extract the x-coordinate of the secp256r1 identity point
+REJECT device/authorise p256: unflagged zero coordinates — CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 214 char 1; expected value of
+REJECT device/authorise p256: identity flag with generator coordinates — CompactError: cannot extract the x-coordinate of the secp256r1 identity point
+REJECT device/authorise p256: off curve (1,1) — CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 214 char 1; expected value of
+REJECT device/authorise p256: other curve generator — CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 214 char 1; expected value of
+REJECT device/authorise p256: noncanonical x=p — CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 214 char 1; expected value of
+ACCEPT grant/issue committed jubjub key: valid subgroup key
+ACCEPT grant/spend jubjub: valid subgroup key
+ACCEPT grant/issue committed jubjub key: identity (0,1)
+REJECT grant/spend jubjub: identity (0,1) — CompactError: failed assert: grantee key has small order
+ACCEPT grant/issue committed jubjub key: order two (0,-1)
+REJECT grant/spend jubjub: order two (0,-1) — RuntimeError: unreachable
+ACCEPT grant/issue committed jubjub key: mixed torsion P+(0,-1)
+REJECT grant/spend jubjub: mixed torsion P+(0,-1) — RuntimeError: unreachable
+ACCEPT grant/issue committed jubjub key: off curve (1,1)
+REJECT grant/spend jubjub: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT grant/issue committed jubjub key: P-256 generator as Jubjub
+REJECT grant/spend jubjub: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT grant/issue committed jubjub key: altered x+2, same y
+ACCEPT grant/spend jubjub: altered x+2, same y
+ACCEPT recovery/birth storage: valid subgroup key
+ACCEPT recovery/submit stored key: valid subgroup key
+ACCEPT recovery/birth storage: identity (0,1)
+REJECT recovery/submit stored key: identity (0,1) — CompactError: failed assert: recovery key is the identity
+ACCEPT recovery/birth storage: order two (0,-1)
+REJECT recovery/submit stored key: order two (0,-1) — RuntimeError: unreachable
+ACCEPT recovery/birth storage: mixed torsion P+(0,-1)
+REJECT recovery/submit stored key: mixed torsion P+(0,-1) — RuntimeError: unreachable
+ACCEPT recovery/birth storage: off curve (1,1)
+REJECT recovery/submit stored key: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT recovery/birth storage: P-256 generator as Jubjub
+REJECT recovery/submit stored key: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT recovery/birth storage: altered x+2, same y
+ACCEPT recovery/submit stored key: altered x+2, same y
+ACCEPT signature/announcement: valid announcement
+ACCEPT signature/announcement: identity R, valid owner key
+ACCEPT signature/announcement: altered x+2, same y
+REJECT signature/announcement: order two (0,-1) — RuntimeError: unreachable
+REJECT signature/announcement: mixed torsion P+(0,-1) — RuntimeError: unreachable
+REJECT signature/announcement: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+REJECT signature/announcement: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT recovery/successor device: valid subgroup key
+REJECT recovery/successor device: identity (0,1) — CompactError: failed assert: recovery key is the identity
+REJECT recovery/successor device: order two (0,-1) — RuntimeError: unreachable
+REJECT recovery/successor device: mixed torsion P+(0,-1) — RuntimeError: unreachable
+REJECT recovery/successor device: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+REJECT recovery/successor device: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT recovery/successor device: altered x+2, same y
+REJECT recovery/successor recovery: identity (0,1) — CompactError: failed assert: recovery key is the identity
+REJECT recovery/successor recovery: order two (0,-1) — RuntimeError: unreachable
+REJECT recovery/successor recovery: mixed torsion P+(0,-1) — RuntimeError: unreachable
+REJECT recovery/successor recovery: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+REJECT recovery/successor recovery: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT recovery/successor recovery: altered x+2, same y
+ACCEPT encryption/rotate key: zero
+REJECT encryption/seal inbox: zero — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/rotate key: one
+REJECT encryption/seal inbox: one — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/rotate key: valid X25519
+ACCEPT encryption/seal inbox: valid X25519
+ACCEPT signature/grant announcement: valid announcement
+ACCEPT signature/grant announcement: identity R
+ACCEPT signature/zero-nonce disclosure: grant key recoverable from response/challenge
+REJECT signature/recovery announcement: recovery nonce=7, successor nonce=7 — CompactError: failed assert: invalid recovery signature
+ACCEPT signature/recovery announcement: recovery nonce=7, successor nonce=7
+REJECT signature/recovery announcement: recovery nonce=0, successor nonce=7 — CompactError: failed assert: invalid recovery signature
+ACCEPT signature/recovery announcement: recovery nonce=0, successor nonce=7
+REJECT signature/recovery announcement: recovery nonce=7, successor nonce=0 — CompactError: failed assert: invalid recovery signature
+ACCEPT signature/recovery announcement: recovery nonce=7, successor nonce=0
+REJECT signature/recovery announcement: recovery nonce=0, successor nonce=0 — CompactError: failed assert: invalid recovery signature
+ACCEPT signature/recovery announcement: recovery nonce=0, successor nonce=0
+ACCEPT recovery/publish key: valid subgroup key
+REJECT recovery/publish key: identity (0,1) — CompactError: failed assert: recovery key is the identity
+REJECT recovery/publish key: order two (0,-1) — RuntimeError: unreachable
+REJECT recovery/publish key: mixed torsion P+(0,-1) — RuntimeError: unreachable
+REJECT recovery/publish key: off curve (1,1) — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+REJECT recovery/publish key: P-256 generator as Jubjub — Error: failed to decode for built-in type EmbeddedGroupAffine after successful typecheck
+ACCEPT recovery/publish key: altered x+2, same y
+ACCEPT grant/spend k256: valid subgroup key
+REJECT grant/spend k256: flagged identity — CompactError: cannot extract the x-coordinate of the secp256k1 identity point
+REJECT grant/spend k256: unflagged zero coordinates — CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2056 char 1; expected v
+REJECT grant/spend k256: identity flag with generator coordinates — CompactError: cannot extract the x-coordinate of the secp256k1 identity point
+REJECT grant/spend k256: off curve (1,1) — CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2056 char 1; expected v
+REJECT grant/spend k256: other curve generator — CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2056 char 1; expected v
+REJECT grant/spend k256: invalid-curve twin y²=x³+2 — CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2056 char 1; expected v
+REJECT grant/spend k256: noncanonical x=p — CompactError: type error: withdraw_unshielded_with_grant_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 2056 char 1; expected v
+ACCEPT grant/spend p256: valid subgroup key
+REJECT grant/spend p256: flagged identity — CompactError: cannot extract the x-coordinate of the secp256r1 identity point
+REJECT grant/spend p256: unflagged zero coordinates — CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 351 char 1; expe
+REJECT grant/spend p256: identity flag with generator coordinates — CompactError: cannot extract the x-coordinate of the secp256r1 identity point
+REJECT grant/spend p256: off curve (1,1) — CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 351 char 1; expe
+REJECT grant/spend p256: other curve generator — CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 351 char 1; expe
+REJECT grant/spend p256: noncanonical x=p — CompactError: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 351 char 1; expe
+ACCEPT signature/ECDSA k256: low s
+ACCEPT signature/ECDSA k256: high s
+REJECT signature/ECDSA k256: zero r — CompactError: failed assert: invalid signature
+REJECT signature/ECDSA k256: zero s — CompactError: secp256k1 scalar field has no inverse for 0
+REJECT signature/ECDSA k256: r=n — CompactError: type error: rotate_enc_key_with_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+REJECT signature/ECDSA k256: s=n — CompactError: type error: rotate_enc_key_with_k256 argument 4 (argument 5 as invoked from Typescript) at account.compact line 1256 char 1; expected value of typ
+ACCEPT signature/ECDSA p256: low s
+ACCEPT signature/ECDSA p256: high s
+REJECT signature/ECDSA p256: zero r — CompactError: failed assert: zero ECDSA r
+REJECT signature/ECDSA p256: zero s — CompactError: failed assert: zero ECDSA s
+REJECT signature/ECDSA p256: r=n — CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 214 char 1; expected value of
+REJECT signature/ECDSA p256: s=n — CompactError: type error: rotate_enc_key_with_p256 argument 2 (argument 3 as invoked from Typescript) at account-p256.compact line 214 char 1; expected value of
+ACCEPT encryption/constructor low-order key: 0000000000000000000000000000000000000000000000000000000000000000
+ACCEPT encryption/rotate low-order key: 0000000000000000000000000000000000000000000000000000000000000000
+REJECT encryption/seal low-order key: 0000000000000000000000000000000000000000000000000000000000000000 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: 0000000000000000000000000000000000000000000000000000000000000080
+ACCEPT encryption/rotate low-order key: 0000000000000000000000000000000000000000000000000000000000000080
+REJECT encryption/seal low-order key: 0000000000000000000000000000000000000000000000000000000000000080 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: 0100000000000000000000000000000000000000000000000000000000000000
+ACCEPT encryption/rotate low-order key: 0100000000000000000000000000000000000000000000000000000000000000
+REJECT encryption/seal low-order key: 0100000000000000000000000000000000000000000000000000000000000000 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: 0100000000000000000000000000000000000000000000000000000000000080
+ACCEPT encryption/rotate low-order key: 0100000000000000000000000000000000000000000000000000000000000080
+REJECT encryption/seal low-order key: 0100000000000000000000000000000000000000000000000000000000000080 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+ACCEPT encryption/rotate low-order key: ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+REJECT encryption/seal low-order key: ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+ACCEPT encryption/rotate low-order key: ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+REJECT encryption/seal low-order key: ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+ACCEPT encryption/rotate low-order key: edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+REJECT encryption/seal low-order key: edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+ACCEPT encryption/rotate low-order key: edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+REJECT encryption/seal low-order key: edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+ACCEPT encryption/rotate low-order key: eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f
+REJECT encryption/seal low-order key: eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+ACCEPT encryption/rotate low-order key: eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+REJECT encryption/seal low-order key: eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800
+ACCEPT encryption/rotate low-order key: e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800
+REJECT encryption/seal low-order key: e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880
+ACCEPT encryption/rotate low-order key: e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880
+REJECT encryption/seal low-order key: e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157
+ACCEPT encryption/rotate low-order key: 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157
+REJECT encryption/seal low-order key: 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/constructor low-order key: 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7
+ACCEPT encryption/rotate low-order key: 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7
+REJECT encryption/seal low-order key: 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7 — Error: error:1C8000A4:Provider routines::failed during derivation
+ACCEPT encryption/keypair mismatch: unrelated secret cannot read valid entry
+ACCEPT ledger-WASM/encryption: zero secret and identity recipient output
+ACCEPT ledger-WASM/encryption: normal recipient not detected by zero secret
+REJECT ledger-WASM/encryption: invalid compressed subgroup point — Error: invalid group element encoding
+
+Recorded 197 rows in /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/evidence/ecc-validation/runtime.json
+# Subtest: fresh pages cover 4095, 4096, and 20000, and survive a client restart
+ok 1 - fresh pages cover 4095, 4096, and 20000, and survive a client restart
+  ---
+  duration_ms: 590.057333
+  type: 'test'
+  ...
+# Subtest: missing entries report bounded exhaustion, not non-registration
+ok 2 - missing entries report bounded exhaustion, not non-registration
+  ---
+  duration_ms: 0.969208
+  type: 'test'
+  ...
+# Subtest: full K256 envelopes and both P256 policy fields isolate cached counters
+ok 3 - full K256 envelopes and both P256 policy fields isolate cached counters
+  ---
+  duration_ms: 16.24375
+  type: 'test'
+  ...
+# Subtest: stale high hints support both forward advancement and lower-counter resumption
+ok 4 - stale high hints support both forward advancement and lower-counter resumption
+  ---
+  duration_ms: 189.490833
+  type: 'test'
+  ...
+# Subtest: cursor and hint scope, epoch, and numeric bounds are checked
+ok 5 - cursor and hint scope, epoch, and numeric bounds are checked
+  ---
+  duration_ms: 1.587417
+  type: 'test'
+  ...
+# Subtest: Uint64 end is bounded and never produces an overflowing cursor
+ok 6 - Uint64 end is bounded and never produces an overflowing cursor
+  ---
+  duration_ms: 0.694583
+  type: 'test'
+  ...
+# Subtest: legacy registration resets hints without assigning a signing profile
+ok 7 - legacy registration resets hints without assigning a signing profile
+  ---
+  duration_ms: 106.634041
+  type: 'test'
+  ...
+# Subtest: fresh discovery authorises real simulated calls and resynchronises after another client acts
+ok 8 - fresh discovery authorises real simulated calls and resynchronises after another client acts
+  ---
+  duration_ms: 5608.947958
+  type: 'test'
+  ...
+# Subtest: lost-device removal works with independently restored high-counter owner and target
+ok 9 - lost-device removal works with independently restored high-counter owner and target
+  ---
+  duration_ms: 10030.484333
+  type: 'test'
+  ...
+# Subtest: local and external recovery reset a reused successor in the existing client
+ok 10 - local and external recovery reset a reused successor in the existing client
+  ---
+  duration_ms: 378.4195
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 17618.287709
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.186
+   Compiling cfg-if v1.0.4
+   Compiling subtle v2.6.1
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling serde_core v1.0.228
+   Compiling const-oid v0.9.6
+   Compiling shlex v2.0.1
+   Compiling pin-project-lite v0.2.17
+   Compiling find-msvc-tools v0.1.9
+   Compiling serde v1.0.228
+   Compiling zerocopy v0.8.54
+   Compiling stable_deref_trait v1.2.1
+   Compiling autocfg v1.5.1
+   Compiling radium v0.7.0
+   Compiling tap v1.0.1
+   Compiling once_cell v1.21.4
+   Compiling cc v1.2.67
+   Compiling wyz v0.5.1
+   Compiling memchr v2.8.3
+   Compiling funty v2.0.0
+   Compiling itoa v1.0.18
+   Compiling generic-array v0.14.9
+   Compiling futures-core v0.3.32
+   Compiling bytes v1.12.1
+   Compiling bitflags v2.13.1
+   Compiling smallvec v1.15.2
+   Compiling futures-sink v0.3.32
+   Compiling crossbeam-utils v0.8.22
+   Compiling syn v1.0.109
+   Compiling futures-channel v0.3.32
+   Compiling num-traits v0.2.19
+   Compiling tracing-core v0.1.36
+   Compiling writeable v0.6.3
+   Compiling litemap v0.8.2
+   Compiling crossbeam-epoch v0.9.20
+   Compiling utf8_iter v1.0.4
+   Compiling futures-task v0.3.32
+   Compiling icu_normalizer_data v2.2.0
+   Compiling slab v0.4.12
+   Compiling icu_properties_data v2.2.0
+   Compiling crossbeam-deque v0.8.7
+   Compiling futures-io v0.3.32
+   Compiling http v1.4.2
+   Compiling bitvec v1.1.1
+   Compiling ring v0.17.14
+   Compiling either v1.16.0
+   Compiling percent-encoding v2.3.2
+   Compiling rayon-core v1.13.0
+   Compiling lazy_static v1.5.0
+   Compiling blst v0.3.16
+   Compiling httparse v1.10.1
+   Compiling getrandom v0.2.17
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling cpufeatures v0.2.17
+   Compiling num-integer v0.1.46
+   Compiling rand_core v0.6.4
+   Compiling syn v2.0.119
+   Compiling http-body v1.1.0
+   Compiling num_cpus v1.17.0
+   Compiling rand_xorshift v0.3.0
+   Compiling tokio v1.53.0
+   Compiling zmij v1.0.23
+   Compiling paste v1.0.15
+   Compiling core-foundation-sys v0.8.7
+   Compiling untrusted v0.9.0
+   Compiling threadpool v1.8.1
+   Compiling num-bigint v0.4.8
+   Compiling base16ct v0.2.0
+   Compiling rustls v0.23.42
+   Compiling try-lock v0.2.5
+   Compiling ident_case v1.0.1
+   Compiling tower-service v0.3.3
+   Compiling serde_json v1.0.150
+   Compiling fnv v1.0.7
+   Compiling want v0.3.1
+   Compiling rayon v1.12.0
+   Compiling security-framework-sys v2.17.0
+   Compiling core-foundation v0.10.1
+   Compiling ff v0.13.1
+   Compiling form_urlencoded v1.2.2
+   Compiling byte-slice-cast v1.2.3
+   Compiling constant_time_eq v0.4.2
+   Compiling arrayvec v0.7.8
+   Compiling cfg_aliases v0.2.2
+   Compiling atomic-waker v1.1.2
+   Compiling arrayref v0.3.9
+   Compiling security-framework v3.7.0
+   Compiling nix v0.29.0
+   Compiling sync_wrapper v1.0.2
+   Compiling base64 v0.22.1
+   Compiling blake2b_simd v1.0.4
+   Compiling ipnet v2.12.0
+   Compiling tower-layer v0.3.3
+   Compiling crc32fast v1.5.0
+   Compiling typewit v1.15.2
+   Compiling konst_proc_macros v0.4.1
+   Compiling rustix v1.1.4
+   Compiling anyhow v1.0.103
+   Compiling const_panic v0.2.15
+   Compiling getrandom v0.4.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling parking_lot_core v0.9.12
+   Compiling ryu v1.0.23
+   Compiling simd-adler32 v0.3.10
+   Compiling adler2 v2.0.1
+   Compiling konst v0.4.3
+   Compiling rand_chacha v0.3.1
+   Compiling miniz_oxide v0.8.9
+   Compiling rand v0.8.7
+   Compiling serde_bytes v0.11.19
+   Compiling http-body-util v0.1.4
+   Compiling synstructure v0.13.2
+   Compiling darling_core v0.20.11
+   Compiling errno v0.3.14
+   Compiling log v0.4.33
+   Compiling allocator-api2 v0.2.21
+   Compiling scopeguard v1.2.0
+   Compiling deunicode v1.6.2
+   Compiling virtue v0.0.18
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.2
+   Compiling halo2derive v0.2.0
+   Compiling midnight-base-crypto-derive v1.0.0
+   Compiling group v0.13.0
+   Compiling lock_api v0.4.14
+   Compiling hashbrown v0.16.1
+   Compiling flate2 v1.1.9
+   Compiling pairing v0.23.0
+   Compiling atomic-write-file v0.2.3
+   Compiling hyper v1.10.1
+   Compiling tokio-util v0.7.18
+   Compiling bincode_derive v2.0.1
+   Compiling objc2-core-foundation v0.3.2
+   Compiling const-hex v1.19.1
+   Compiling rustc-hash v2.1.3
+   Compiling pastey v0.1.1
+   Compiling ethnum v1.5.3
+   Compiling unty v0.0.4
+   Compiling base64 v0.13.1
+   Compiling fastrand v2.4.1
+   Compiling lru v0.16.4
+   Compiling parking_lot v0.12.5
+   Compiling itertools v0.14.0
+   Compiling archery v1.2.2
+   Compiling tempfile v3.27.0
+   Compiling pastey v0.2.3
+   Compiling sysinfo v0.34.2
+   Compiling bincode v2.0.1
+   Compiling zeroize_derive v1.5.0
+   Compiling serde_derive v1.0.228
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling displaydoc v0.2.6
+   Compiling tracing-attributes v0.1.31
+   Compiling futures-macro v0.3.32
+   Compiling midnight-serialize-macros v1.0.0
+   Compiling darling_macro v0.20.11
+   Compiling derive-where v1.6.1
+   Compiling zeroize v1.9.0
+   Compiling futures-util v0.3.32
+   Compiling darling v0.20.11
+   Compiling midnight-storage-macros v1.0.0
+   Compiling zerofrom v0.1.8
+   Compiling rustls-pki-types v1.15.0
+   Compiling der v0.7.10
+   Compiling tracing v0.1.44
+   Compiling rustls-native-certs v0.8.4
+   Compiling dummy v0.8.0
+   Compiling yoke v0.8.3
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling crypto-bigint v0.5.5
+   Compiling rustls-webpki v0.103.13
+   Compiling digest v0.10.7
+   Compiling spki v0.7.3
+   Compiling sha2 v0.10.9
+   Compiling hmac v0.12.1
+   Compiling signature v2.2.0
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling crypto v0.5.1
+   Compiling pkcs8 v0.10.2
+   Compiling fake v2.10.0
+   Compiling rfc6979 v0.4.0
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling hex v0.4.3
+   Compiling serde_arrays v0.2.0
+   Compiling serdect v0.2.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling midnight-serialize v1.1.0
+   Compiling icu_collections v2.2.0
+   Compiling icu_locale_core v2.2.0
+   Compiling sec1 v0.7.3
+   Compiling midnight-curves v0.2.1
+   Compiling elliptic-curve v0.13.8
+   Compiling tower v0.5.3
+   Compiling hyper-util v0.1.20
+   Compiling futures-executor v0.3.32
+   Compiling futures v0.3.32
+   Compiling ecdsa v0.16.9
+   Compiling icu_provider v2.2.0
+   Compiling k256 v0.13.4
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling tokio-rustls v0.26.4
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling hyper-rustls v0.27.9
+   Compiling midnight-proofs v0.7.2
+   Compiling url v2.5.8
+   Compiling tower-http v0.6.11
+   Compiling reqwest v0.12.28
+   Compiling midnight-base-crypto v1.0.0
+   Compiling blake2b_halo2 v0.1.0
+   Compiling sha3-circuit v0.1.0
+   Compiling midnight-storage-core v1.2.0
+   Compiling midnight-circuits v6.2.1
+   Compiling midnight-zk-stdlib v1.2.1
+   Compiling midnight-transient-crypto v2.1.0
+   Compiling account-custody-signer v0.1.0 (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/signer-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.29s
+     Running unittests src/main.rs (signer-rs/target/debug/build/account-custody-signer/39728666cadc7b79/out/account_custody_signer-39728666cadc7b79)
+
+running 41 tests
+test grants::tests::a_field_atom_is_thirty_two_little_endian_bytes ... ok
+test grants::tests::origin_hash_prefixes_an_unpadded_client_id ... ok
+test grants::tests::object_commit_matches_the_by_hand_derivation_pinned_and_read_only ... ok
+test grants::tests::grant_id_v1_does_not_reject_the_jubjub_identity ... ok
+test grants::tests::grant_id_v1_over_a_real_point_matches_the_by_hand_derivation ... ok
+test grants::tests::grant_id_v1_binds_a_sixty_four_byte_key_element ... ok
+test grants::tests::rp_commit_matches_the_by_hand_derivation_for_an_r1_and_a_non_r1_grant ... ok
+test grants::tests::grant_challenge_dsts_are_hashed_from_a_sixty_four_byte_pad ... ok
+test grants::tests::scope_digest_matches_the_by_hand_derivation_with_flags_as_single_bytes ... ok
+test grants::tests::grant_id_k1_separates_key_origin_slot_and_envelope ... ok
+test grants::tests::grant_id_k1_matches_the_by_hand_derivation_over_both_envelopes_and_slots ... ok
+test grants::tests::spent_commit_matches_the_by_hand_derivation_at_zero_and_after_a_call ... ok
+test grants::tests::lifecycle_challenges_match_the_by_hand_derivation_in_the_device_family ... ok
+test grants::tests::shielded_grant_challenge_matches_the_by_hand_derivation ... ok
+test grants::tests::every_challenge_input_changes_the_challenge ... ok
+test grants::tests::unshielded_grant_challenge_matches_the_by_hand_derivation ... ok
+test grants::tests::grant_id_v1_from_wire_coordinates_agrees_with_the_point_path ... ok
+test tests::envelope_digests_match_by_hand_and_the_runtime ... ok
+test tests::dst_is_sha256_of_the_padded_tag_for_both_arms ... ok
+test grants::tests::shielded_witness_values_are_bound_element_by_element ... ok
+test tests::jubjub_sampling_retries_zero_before_returning_a_nonzero_scalar ... ok
+test grants::tests::scope_digest_separates_every_flag_pattern ... ok
+test tests::jubjub_secret_import_rejects_empty_zero_and_malformed_inputs ... ok
+test tests::jubjub_secret_import_rejects_the_subgroup_order ... ok
+test grants::tests::unshielded_v1_grant_challenge_matches_the_by_hand_derivation ... ok
+test grants::tests::shielded_v1_grant_challenge_matches_the_by_hand_derivation ... ok
+test grants::tests::v1_lifecycle_challenges_match_the_by_hand_derivation_in_the_device_family ... ok
+test tests::generator_coordinates_for_sk_one ... ok
+test tests::k256_device_entry_v2_matches_the_by_hand_derivation_for_both_envelopes ... ok
+test tests::k256_secret_import_rejects_empty_zero_and_malformed_inputs ... ok
+test tests::k256_boot_commitment_v2_matches_the_by_hand_derivation_for_both_envelopes ... ok
+test grants::tests::the_v1_lifecycle_and_grant_families_are_pairwise_distinct_under_equal_arguments ... ok
+test grants::tests::derive_grant_emits_the_lifecycle_challenges_and_the_v1_identity_over_both_paths ... ok
+test tests::k256_secret_import_rejects_the_subgroup_order ... ok
+test tests::k256_challenge_matches_the_by_hand_derivation_and_the_signature_verifies ... ok
+test grants::tests::sign_grant_refuses_incomplete_and_unsupported_requests ... ok
+test grants::tests::derive_grant_signs_the_three_lifecycle_calls_on_the_v1_arm ... ok
+test grants::tests::sign_grant_on_the_v1_arm_grinds_and_self_verifies_with_a_fixed_sk ... ok
+test grants::tests::typescript_vectors_reproduce_from_their_own_arguments ... ok
+test grants::tests::sign_grant_signs_the_envelope_digest_of_the_grant_challenge ... ok
+test tests::jubjub_signature_selfverifies_over_a_ground_challenge ... ok
+
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling libc v0.2.189
+   Compiling cfg-if v1.0.5
+   Compiling version_check v0.9.5
+   Compiling zerocopy v0.8.57
+   Compiling radium v0.7.0
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling tap v1.0.1
+   Compiling funty v2.0.0
+   Compiling const-oid v0.9.6
+   Compiling crossbeam-utils v0.8.23
+   Compiling autocfg v1.5.1
+   Compiling base16ct v0.2.0
+   Compiling crossbeam-epoch v0.9.21
+   Compiling wyz v0.5.1
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling semver v1.0.28
+   Compiling shlex v2.0.1
+   Compiling generic-array v0.14.9
+   Compiling find-msvc-tools v0.1.13
+   Compiling crossbeam-deque v0.8.8
+   Compiling num-traits v0.2.19
+   Compiling rustc_version v0.4.1
+   Compiling cc v1.4.7
+   Compiling rayon-core v1.13.0
+   Compiling paste v1.0.15
+   Compiling bitvec v1.1.1
+   Compiling thiserror v2.0.20
+   Compiling curve25519-dalek v4.1.3
+   Compiling either v1.18.0
+   Compiling byte-slice-cast v1.2.3
+   Compiling lazy_static v1.5.0
+   Compiling getrandom v0.2.17
+   Compiling num_cpus v1.17.0
+   Compiling cpufeatures v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling threadpool v1.8.1
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling blst v0.3.17
+   Compiling rand_xorshift v0.3.0
+   Compiling num-integer v0.1.47
+   Compiling rayon v1.12.0
+   Compiling num-bigint v0.4.8
+   Compiling ff v0.13.1
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.8
+   Compiling zeroize_derive v1.5.0
+   Compiling group v0.13.0
+   Compiling pairing v0.23.0
+   Compiling zeroize v1.9.0
+   Compiling der v0.7.10
+   Compiling serde_arrays v0.2.0
+   Compiling hex v0.4.3
+   Compiling crypto-bigint v0.5.5
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sec1 v0.7.3
+   Compiling sha2 v0.10.9
+   Compiling elliptic-curve v0.13.8
+   Compiling primeorder v0.13.6
+   Compiling k256 v0.13.4
+   Compiling p256 v0.13.2
+   Compiling midnight-curves v0.3.1
+   Compiling arc-pleiades v0.1.0 (https://github.com/input-output-hk/arc-pleiades.git?rev=ae179e7e6dde546409c37f3de2c69d077e4d6e84#ae179e7e)
+   Compiling passport-buss v0.1.0 (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/buss-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.54s
+     Running unittests src/lib.rs (buss-rs/target/debug/build/passport-buss/bf176c5ede813ffe/out/passport_buss-bf176c5ede813ffe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/v1_vectors.rs (buss-rs/target/debug/build/passport-buss/7e8fbebf2a0d0449/out/v1_vectors-7e8fbebf2a0d0449)
+
+running 4 tests
+test guardian_secret_matches_typescript ... ok
+test share_codec_round_trips ... ok
+test share_derivation_matches_typescript ... ok
+test v1_shares_reconstruct_through_upstream_buss ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests passport_buss
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling account-custody-signer v0.1.0 (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/signer-rs)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.84s
+
+> midnight-account-custody@0.1.0 test:crossimpl-offline
+> tsx src/tests/crossimpl-offline.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/51363.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/f5/xj69kyg10kngyq52n17x8bgm0000gn/T/tsx-501/51363.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+test-crossimpl-offline: failed (exit=1, completion=false, timeout=false)
+test-crossimpl-offline failed: {"code":1,"signal":null}
+12/30 reference commands failed

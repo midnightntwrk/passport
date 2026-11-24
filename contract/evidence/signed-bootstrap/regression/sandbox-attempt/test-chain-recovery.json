@@ -1,0 +1,18 @@
+{
+  "label": "test-chain-recovery",
+  "kind": "tap",
+  "command": [
+    "npm",
+    "run",
+    "test:chain-recovery"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T08:00:01.090Z",
+  "timeoutMs": 600000,
+  "status": "failed",
+  "code": 1,
+  "signal": null,
+  "completedAt": "2026-11-24T08:00:03.923Z",
+  "tests": 133,
+  "completionVerified": false
+}

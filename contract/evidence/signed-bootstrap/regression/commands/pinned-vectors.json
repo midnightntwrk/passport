@@ -1,0 +1,19 @@
+{
+  "label": "pinned-vectors",
+  "kind": "command",
+  "command": [
+    "git",
+    "diff",
+    "--exit-code",
+    "--",
+    "src/tests/vectors/grants-v3.json"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T07:59:59.942Z",
+  "timeoutMs": 600000,
+  "status": "passed",
+  "code": 0,
+  "signal": null,
+  "completedAt": "2026-11-24T07:59:59.955Z",
+  "completionVerified": true
+}

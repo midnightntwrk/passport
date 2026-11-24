@@ -1,0 +1,18 @@
+{
+  "label": "test-recovery-bootstrap",
+  "kind": "tap",
+  "command": [
+    "npm",
+    "run",
+    "test:recovery-bootstrap"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T07:59:59.981Z",
+  "timeoutMs": 600000,
+  "status": "passed",
+  "code": 0,
+  "signal": null,
+  "completedAt": "2026-11-24T08:00:04.978Z",
+  "tests": 20,
+  "completionVerified": true
+}

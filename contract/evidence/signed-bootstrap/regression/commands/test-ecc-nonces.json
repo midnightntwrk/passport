@@ -1,0 +1,17 @@
+{
+  "label": "test-ecc-nonces",
+  "kind": "pattern",
+  "command": [
+    "npm",
+    "run",
+    "test:ecc-nonces"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T08:00:06.587Z",
+  "timeoutMs": 600000,
+  "status": "passed",
+  "code": 0,
+  "signal": null,
+  "completedAt": "2026-11-24T08:00:07.092Z",
+  "completionVerified": true
+}

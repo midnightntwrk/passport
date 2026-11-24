@@ -1,0 +1,17 @@
+{
+  "label": "test-recovery-sim",
+  "kind": "scenario",
+  "command": [
+    "npm",
+    "run",
+    "test:recovery-sim"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T08:02:34.542Z",
+  "timeoutMs": 600000,
+  "status": "passed",
+  "code": 0,
+  "signal": null,
+  "completedAt": "2026-11-24T08:02:36.271Z",
+  "completionVerified": true
+}

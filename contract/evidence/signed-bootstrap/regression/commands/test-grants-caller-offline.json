@@ -1,0 +1,17 @@
+{
+  "label": "test-grants-caller-offline",
+  "kind": "pattern",
+  "command": [
+    "npm",
+    "run",
+    "test:grants-caller-offline"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T08:02:29.616Z",
+  "timeoutMs": 600000,
+  "status": "passed",
+  "code": 0,
+  "signal": null,
+  "completedAt": "2026-11-24T08:02:30.405Z",
+  "completionVerified": true
+}

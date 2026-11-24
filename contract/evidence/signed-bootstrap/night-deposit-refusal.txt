@@ -1,0 +1,134 @@
+
+━━━ signed bootstrap: fresh proofs and on-node activation ━━━
+(node:91094) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-24 08:22:17        RPC-CORE: subscribeRuntimeVersion(): RuntimeVersion:: disconnected from ws://localhost:9944/: 1000:: Normal Closure
+2026-11-24 08:22:17        RPC-CORE: subscribeRuntimeVersion(): RuntimeVersion:: disconnected from ws://localhost:9944/: 1000:: Normal Closure
+Syncing funding-wallet to network . .
+Wallet synced.
+
+── deploy before creating a passkey; verify the complete roster and retired maintenance authority
+  wave plan: 10 waves for 53 circuits (budget 15000 verifier bytes per wave)
+    wave 1 (deploy): 6 circuits, 14598 verifier bytes
+    wave 2 (maintenance): 5 circuits, 13725 verifier bytes
+    wave 3 (maintenance): 5 circuits, 13725 verifier bytes
+    wave 4 (maintenance): 5 circuits, 12861 verifier bytes
+    wave 5 (maintenance): 6 circuits, 13878 verifier bytes
+    wave 6 (maintenance): 5 circuits, 13725 verifier bytes
+    wave 7 (maintenance): 5 circuits, 13725 verifier bytes
+    wave 8 (maintenance): 6 circuits, 14742 verifier bytes
+    wave 9 (maintenance): 6 circuits, 14310 verifier bytes
+    wave 10 (maintenance): 4 circuits, 10404 verifier bytes, retires the maintenance authority
+
+── modified proof request rejects before proving and preserves the dormant state
+
+── a permissionless deposit after approval preserves the approved intent
+  proof {"label":"deposit_unshielded after approval","keyLocation":"contract:cb0dc5d5d24cfa2937b29f89319f52a387be0d417b48b9232af9f0a7e0e402c2/deposit_unshielded?vk=bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9","milliseconds":269.54691699999967,"proofBytes":3852}
+2026-11-24 08:25:47        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+2026-11-24 08:25:47        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+  (deposit_unshielded: submission rejected — dust-state race; retrying in 10s)
+  proof {"label":"deposit_unshielded after approval","keyLocation":"contract:cb0dc5d5d24cfa2937b29f89319f52a387be0d417b48b9232af9f0a7e0e402c2/deposit_unshielded?vk=bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9","milliseconds":115.5214580000029,"proofBytes":3852}
+2026-11-24 08:25:58        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+2026-11-24 08:25:58        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+  (deposit_unshielded: submission rejected — dust-state race; retrying in 10s)
+  proof {"label":"deposit_unshielded after approval","keyLocation":"contract:cb0dc5d5d24cfa2937b29f89319f52a387be0d417b48b9232af9f0a7e0e402c2/deposit_unshielded?vk=bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9","milliseconds":116.85787499998696,"proofBytes":3852}
+2026-11-24 08:26:10        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+2026-11-24 08:26:10        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+  (deposit_unshielded: submission rejected — dust-state race; retrying in 10s)
+  proof {"label":"deposit_unshielded after approval","keyLocation":"contract:cb0dc5d5d24cfa2937b29f89319f52a387be0d417b48b9232af9f0a7e0e402c2/deposit_unshielded?vk=bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9","milliseconds":99.94700000001467,"proofBytes":3852}
+2026-11-24 08:26:21        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+2026-11-24 08:26:21        RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 231
+
+■ evidence → evidence/signed-bootstrap/signed-bootstrap-conformance.json [FAIL]
+Error: Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279
+    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/core.ts:1078:35
+    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)
+    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/Utils.ts:786:14)
+    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)
+    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)
+    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/tracer.ts:101:19)
+    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)
+    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)
+    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {
+  [cause]: SubmissionError: Transaction submission failed
+      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:120:27
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    [cause]: RpcError: 1010: Invalid Transaction: Custom error: 231
+        at checkError (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)
+        at RpcCoder.decodeResponse (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/coder/index.js:35:9)
+        at #onSocketMessageResult (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/ws/index.js:429:40)
+        at #onSocketMessage (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/ws/index.js:418:42)
+        at [nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)
+        at WebSocket.dispatchEvent (node:internal/event_target:776:26)
+        at fireEvent (node:internal/deps/undici/undici:11883:14)
+        at websocketMessageReceived (node:internal/deps/undici/undici:11905:7)
+        at ByteParser.run (node:internal/deps/undici/undici:12573:19)
+        at ByteParser._write (node:internal/deps/undici/undici:12466:14)
+  }
+}
+    at runScope (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:434:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/wallet/account.ts:141:12)
+    at async withProviderLock (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/wallet/account.ts:135:16)
+    at async submitWithDustRetry (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/wallet/account.ts:315:14)
+    at async CustodyAccount.depositUnshielded (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/wallet/account.ts:1202:15)
+    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/signed-bootstrap-conformance.ts:144:27)
+    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/runner.ts:7:5)
+    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/src/tests/signed-bootstrap-conformance.ts:28:1) {
+  [cause]: (FiberFailure) SubmissionError: Transaction submission error
+      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279
+      at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/core.ts:1078:35
+      at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)
+      at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/Utils.ts:786:14)
+      at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)
+      at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)
+      at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/tracer.ts:101:19)
+      at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)
+      at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)
+      at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {
+    [cause]: SubmissionError: Transaction submission failed
+        at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:120:27
+        at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+      [cause]: RpcError: 1010: Invalid Transaction: Custom error: 231
+          at checkError (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)
+          at RpcCoder.decodeResponse (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/coder/index.js:35:9)
+          at #onSocketMessageResult (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/ws/index.js:429:40)
+          at #onSocketMessage (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/ws/index.js:418:42)
+          at [nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)
+          at WebSocket.dispatchEvent (node:internal/event_target:776:26)
+          at fireEvent (node:internal/deps/undici/undici:11883:14)
+          at websocketMessageReceived (node:internal/deps/undici/undici:11905:7)
+          at ByteParser.run (node:internal/deps/undici/undici:12573:19)
+          at ByteParser._write (node:internal/deps/undici/undici:12466:14)
+    }
+  }
+}
+
+◆ signed bootstrap: fresh proofs and on-node activation: FAIL — Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error
+    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279
+    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/core.ts:1078:35
+    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)
+    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/Utils.ts:786:14)
+    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)
+    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)
+    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/tracer.ts:101:19)
+    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)
+    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:950:27)
+    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {
+  [cause]: SubmissionError: Transaction submission failed
+      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:120:27
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    [cause]: RpcError: 1010: Invalid Transaction: Custom error: 231
+        at checkError (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)
+        at RpcCoder.decodeResponse (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/coder/index.js:35:9)
+        at #onSocketMessageResult (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/ws/index.js:429:40)
+        at #onSocketMessage (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/node_modules/@polkadot/rpc-provider/ws/index.js:418:42)
+        at [nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)
+        at WebSocket.dispatchEvent (node:internal/event_target:776:26)
+        at fireEvent (node:internal/deps/undici/undici:11883:14)
+        at websocketMessageReceived (node:internal/deps/undici/undici:11905:7)
+        at ByteParser.run (node:internal/deps/undici/undici:12573:19)
+        at ByteParser._write (node:internal/deps/undici/undici:12466:14)
+  }
+}

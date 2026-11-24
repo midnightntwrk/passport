@@ -1,0 +1,49 @@
+{
+  "completed": true,
+  "runAt": "2026-11-24T08:00:07.082Z",
+  "node": "v22.22.2",
+  "scope": "Generated JavaScript and real client signers; no new proof or live-node claims; RNG faults explicitly injected only in named tests",
+  "sourceSha256": "d1e4f9cbc5dbd85050ed461127047ea19122709f6b723957bd6e2fc424fde054",
+  "clientSourceSha256": {
+    "wallet/signer.ts": "c522354a53dd4b28e18d3ed306133af876fda1276c5503cd2e46abf736396d2d",
+    "wallet/signer-p256.ts": "dbdb8abf64f03e139a2d7f3614d510da7bb794237bee7f0ca5bb858e6c1c0c5e",
+    "wallet/recovery-gate.ts": "4367c68b64d12ab7216e4c9aabe4686a65835ca873b4f1d4842ff62398180389",
+    "wallet/recovery.ts": "8a92114a7d9c3e1b4f5188b8d660d1459c58b70b715992c4b5d144a1bf7baf2c",
+    "wallet/inbox.ts": "baf2e352dff794b45700d458d0f07b5471f42cb5581baf28350a894f119e9257",
+    "wallet/contract.ts": "1f7afef8d4fa921d5f2431e61d8cec7570c242c130435a4bfd894b88183eea66",
+    "wallet/witnesses.ts": "63dabab0a59dff9601442b281f63a131d6b312fd07deb06334c4ef3e490a6489",
+    "tests/sim.ts": "dd3dda56e514ce9c2b31749ad745a9bd1b1187c4c03b2540eaa5744c1520dc8b"
+  },
+  "generatedSha256": "68c01ef1a3850430db7e686d589d791150049f2d8029989cdc2c355cafd58a2d",
+  "lockfileSha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51",
+  "rows": [
+    {
+      "test": "healthy RNG: 64 device + 64 grant + 128 recovery announcements",
+      "result": "passed"
+    },
+    {
+      "test": "12 operation/device/grant/recovery challenge domains are distinct",
+      "result": "passed"
+    },
+    {
+      "test": "device challenges bind account, nonce, key, announcement, arguments and grind",
+      "result": "passed"
+    },
+    {
+      "test": "grant challenges bind grant ID, issuance counter and use nonce",
+      "result": "passed"
+    },
+    {
+      "test": "recovery challenge binds both roles, announcements, successor gate, epoch and time",
+      "result": "passed"
+    },
+    {
+      "test": "forced nonce reuse across device/grant domains recovers the signing secret",
+      "result": "fault injection demonstrates key disclosure; no healthy-RNG reuse observed"
+    },
+    {
+      "test": "forced equal recovery/successor nonces reveal recovery key to successor",
+      "result": "fault injection only; independent recovery nonces remain essential"
+    }
+  ]
+}

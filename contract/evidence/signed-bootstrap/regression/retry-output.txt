@@ -1,0 +1,1938 @@
+
+> midnight-account-custody@0.1.0 test:chain-recovery
+> node --import tsx --test src/tests/chain-recovery.ts src/tests/chain-recovery-account.ts src/tests/chain-recovery-ledger.ts src/tests/chain-recovery-sdk.ts
+
+TAP version 13
+# Subtest: account recovery is read-only by default and needs no signing or transaction adapter
+ok 1 - account recovery is read-only by default and needs no signing or transaction adapter
+  ---
+  duration_ms: 4.429125
+  type: 'test'
+  ...
+# Subtest: apply imports verified live siblings, tombstones spent coins absent locally, and retains unknown inventory
+ok 2 - apply imports verified live siblings, tombstones spent coins absent locally, and retains unknown inventory
+  ---
+  duration_ms: 1.595792
+  type: 'test'
+  ...
+# Subtest: a stale live observation never resurrects a local spent tombstone
+ok 3 - a stale live observation never resurrects a local spent tombstone
+  ---
+  duration_ms: 1.135958
+  type: 'test'
+  ...
+# Subtest: restart and repeated application preserve exact state without duplication
+ok 4 - restart and repeated application preserve exact state without duplication
+  ---
+  duration_ms: 1.453458
+  type: 'test'
+  ...
+# Subtest: application merges provider updates made during inspection instead of restoring a stale snapshot
+ok 5 - application merges provider updates made during inspection instead of restoring a stale snapshot
+  ---
+  duration_ms: 0.89425
+  type: 'test'
+  ...
+# Subtest: shared-provider recovery refuses overlapping account mutation and releases its guard after failure
+ok 6 - shared-provider recovery refuses overlapping account mutation and releases its guard after failure
+  ---
+  duration_ms: 0.849959
+  type: 'test'
+  ...
+# Subtest: holdings evidence cannot resolve a submitting intended payment
+ok 7 - holdings evidence cannot resolve a submitting intended payment
+  ---
+  duration_ms: 1.060958
+  type: 'test'
+  ...
+# Subtest: holdings evidence cannot resolve a partial intended payment
+ok 8 - holdings evidence cannot resolve a partial intended payment
+  ---
+  duration_ms: 0.833459
+  type: 'test'
+  ...
+# Subtest: recovery then completed-journal replay cannot resurrect externally spent change
+ok 9 - recovery then completed-journal replay cannot resurrect externally spent change
+  ---
+  duration_ms: 1.166916
+  type: 'test'
+  ...
+# Subtest: native unspent predicate leaves its snapshot unchanged and rejects the consumed nullifier
+ok 10 - native unspent predicate leaves its snapshot unchanged and rejects the consumed nullifier
+  ---
+  duration_ms: 31.561583
+  type: 'test'
+  ...
+# Subtest: contract-filtered state cannot establish unspentness, even after registering its root locally
+ok 11 - contract-filtered state cannot establish unspentness, even after registering its root locally
+  ---
+  duration_ms: 21.604083
+  type: 'test'
+  ...
+# Subtest: local unproven application does not qualify an occupied commitment position
+ok 12 - local unproven application does not qualify an occupied commitment position
+  ---
+  duration_ms: 17.073458
+  type: 'test'
+  ...
+# Subtest: native nullifiers are bound to the owning contract
+ok 13 - native nullifiers are bound to the owning contract
+  ---
+  duration_ms: 16.832833
+  type: 'test'
+  ...
+# (node:60133) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+# (Use `node --trace-deprecation ...` to show where the warning was created)
+# Subtest: SDK uses an indexed finalised snapshot, real inbox bytes, checked membership, and completed nullifier absence
+ok 14 - SDK uses an indexed finalised snapshot, real inbox bytes, checked membership, and completed nullifier absence
+  ---
+  duration_ms: 181.989416
+  type: 'test'
+  ...
+# Subtest: SDK excludes externally spent coins even though the filtered tree still contains their commitments
+ok 15 - SDK excludes externally spent coins even though the filtered tree still contains their commitments
+  ---
+  duration_ms: 111.1105
+  type: 'test'
+  ...
+# Subtest: SDK rejects incomplete, unrelated, and errored nullifier streams
+    # Subtest: normal close is not complete
+    ok 1 - normal close is not complete
+      ---
+      duration_ms: 15.531417
+      type: 'test'
+      ...
+    # Subtest: timeout is not empty history
+    ok 2 - timeout is not empty history
+      ---
+      duration_ms: 262.733667
+      type: 'test'
+      ...
+    # Subtest: unrelated operation completion
+    ok 3 - unrelated operation completion
+      ---
+      duration_ms: 13.339541
+      type: 'test'
+      ...
+    # Subtest: completion carrying payload errors
+    ok 4 - completion carrying payload errors
+      ---
+      duration_ms: 12.433458
+      type: 'test'
+      ...
+    # Subtest: GraphQL error
+    ok 5 - GraphQL error
+      ---
+      duration_ms: 13.652
+      type: 'test'
+      ...
+    # Subtest: next with errors
+    ok 6 - next with errors
+      ---
+      duration_ms: 12.190292
+      type: 'test'
+      ...
+    # Subtest: malformed JSON
+    ok 7 - malformed JSON
+      ---
+      duration_ms: 13.070833
+      type: 'test'
+      ...
+    # Subtest: missing nullifier row
+    ok 8 - missing nullifier row
+      ---
+      duration_ms: 12.377667
+      type: 'test'
+      ...
+    1..8
+ok 16 - SDK rejects incomplete, unrelated, and errored nullifier streams
+  ---
+  duration_ms: 444.781917
+  type: 'test'
+  ...
+# Subtest: SDK completion before connection acknowledgement cannot establish empty history
+ok 17 - SDK completion before connection acknowledgement cannot establish empty history
+  ---
+  duration_ms: 101.987667
+  type: 'test'
+  ...
+# Subtest: SDK rejects nullifier scope, exact identity, and receipt inconsistencies
+    # Subtest: same prefix wrong full nullifier
+    ok 1 - same prefix wrong full nullifier
+      ---
+      duration_ms: 13.98775
+      type: 'test'
+      ...
+    # Subtest: future block
+    ok 2 - future block
+      ---
+      duration_ms: 11.551875
+      type: 'test'
+      ...
+    # Subtest: transaction mismatch
+    ok 3 - transaction mismatch
+      ---
+      duration_ms: 13.906834
+      type: 'test'
+      ...
+    # Subtest: block hash mismatch
+    ok 4 - block hash mismatch
+      ---
+      duration_ms: 11.995833
+      type: 'test'
+      ...
+    # Subtest: block height mismatch
+    ok 5 - block height mismatch
+      ---
+      duration_ms: 11.068667
+      type: 'test'
+      ...
+    # Subtest: noncanonical block
+    ok 6 - noncanonical block
+      ---
+      duration_ms: 11.489208
+      type: 'test'
+      ...
+    # Subtest: unsafe height
+    ok 7 - unsafe height
+      ---
+      duration_ms: 11.2775
+      type: 'test'
+      ...
+    1..7
+ok 18 - SDK rejects nullifier scope, exact identity, and receipt inconsistencies
+  ---
+  duration_ms: 172.179042
+  type: 'test'
+  ...
+# Subtest: SDK refuses wrong genesis, stale snapshots, missing indexer anchors, and unknown protocol eras
+    # Subtest: wrong genesis
+    ok 1 - wrong genesis
+      ---
+      duration_ms: 2.403125
+      type: 'test'
+      ...
+    # Subtest: reorganised finalised hash
+    ok 2 - reorganised finalised hash
+      ---
+      duration_ms: 2.613625
+      type: 'test'
+      ...
+    # Subtest: indexer behind upper bound
+    ok 3 - indexer behind upper bound
+      ---
+      duration_ms: 2.31875
+      type: 'test'
+      ...
+    # Subtest: wrong indexed hash
+    ok 4 - wrong indexed hash
+      ---
+      duration_ms: 1.656792
+      type: 'test'
+      ...
+    # Subtest: wrong indexed height
+    ok 5 - wrong indexed height
+      ---
+      duration_ms: 1.786292
+      type: 'test'
+      ...
+    # Subtest: future protocol era
+    ok 6 - future protocol era
+      ---
+      duration_ms: 1.754625
+      type: 'test'
+      ...
+    # Subtest: malformed contract state
+    ok 7 - malformed contract state
+      ---
+      duration_ms: 1.887792
+      type: 'test'
+      ...
+    # Subtest: missing commitment frontier
+    ok 8 - missing commitment frontier
+      ---
+      duration_ms: 1.783875
+      type: 'test'
+      ...
+    # Subtest: negative commitment frontier
+    ok 9 - negative commitment frontier
+      ---
+      duration_ms: 4.471958
+      type: 'test'
+      ...
+    # Subtest: out-of-range commitment frontier
+    ok 10 - out-of-range commitment frontier
+      ---
+      duration_ms: 1.592
+      type: 'test'
+      ...
+    1..10
+ok 19 - SDK refuses wrong genesis, stale snapshots, missing indexer anchors, and unknown protocol eras
+  ---
+  duration_ms: 109.506291
+  type: 'test'
+  ...
+# Subtest: SDK keeps evidence unknown if its snapshot becomes stale during a finite stream
+ok 20 - SDK keeps evidence unknown if its snapshot becomes stale during a finite stream
+  ---
+  duration_ms: 100.464458
+  type: 'test'
+  ...
+# Subtest: SDK never turns check rejection or check transport failure into a live coin
+    # Subtest: HTTP 400
+    ok 1 - HTTP 400
+      ---
+      duration_ms: 15.258084
+      type: 'test'
+      ...
+    # Subtest: HTTP 404
+    ok 2 - HTTP 404
+      ---
+      duration_ms: 9.82
+      type: 'test'
+      ...
+    1..2
+ok 21 - SDK never turns check rejection or check transport failure into a live coin
+  ---
+  duration_ms: 111.707083
+  type: 'test'
+  ...
+# Subtest: SDK refuses unrelated, malformed, stale, and noncanonical output event evidence
+    # Subtest: wrong commitment
+    ok 1 - wrong commitment
+      ---
+      duration_ms: 9.306625
+      type: 'test'
+      ...
+    # Subtest: wrong owner contract
+    ok 2 - wrong owner contract
+      ---
+      duration_ms: 9.408875
+      type: 'test'
+      ...
+    # Subtest: wrong event version
+    ok 3 - wrong event version
+      ---
+      duration_ms: 7.098667
+      type: 'test'
+      ...
+    # Subtest: wrong protocol era
+    ok 4 - wrong protocol era
+      ---
+      duration_ms: 7.392084
+      type: 'test'
+      ...
+    # Subtest: future event
+    ok 5 - future event
+      ---
+      duration_ms: 7.313542
+      type: 'test'
+      ...
+    # Subtest: noncanonical event
+    ok 6 - noncanonical event
+      ---
+      duration_ms: 7.62075
+      type: 'test'
+      ...
+    # Subtest: empty range
+    ok 7 - empty range
+      ---
+      duration_ms: 7.200959
+      type: 'test'
+      ...
+    # Subtest: negative range
+    ok 8 - negative range
+      ---
+      duration_ms: 7.1365
+      type: 'test'
+      ...
+    # Subtest: missing transaction identity
+    ok 9 - missing transaction identity
+      ---
+      duration_ms: 8.522833
+      type: 'test'
+      ...
+    1..9
+ok 22 - SDK refuses unrelated, malformed, stale, and noncanonical output event evidence
+  ---
+  duration_ms: 162.811208
+  type: 'test'
+  ...
+# Subtest: SDK bounded commitment search resumes without skipping a lower position behind a bogus hint
+ok 23 - SDK bounded commitment search resumes without skipping a lower position behind a bogus hint
+  ---
+  duration_ms: 112.934792
+  type: 'test'
+  ...
+# Subtest: SDK sorts nonmonotonic output ranges before issuing a resumable cursor
+ok 24 - SDK sorts nonmonotonic output ranges before issuing a resumable cursor
+  ---
+  duration_ms: 114.663541
+  type: 'test'
+  ...
+# Subtest: SDK bounds event history and refuses to infer absence from a truncated full page
+ok 25 - SDK bounds event history and refuses to infer absence from a truncated full page
+  ---
+  duration_ms: 128.6505
+  type: 'test'
+  ...
+# Subtest: SDK can qualify within a bounded event window and resume its unfinished range
+ok 26 - SDK can qualify within a bounded event window and resume its unfinished range
+  ---
+  duration_ms: 162.076667
+  type: 'test'
+  ...
+# Subtest: SDK later event windows can contain lower tree indices without being skipped by an old cursor
+ok 27 - SDK later event windows can contain lower tree indices without being skipped by an old cursor
+  ---
+  duration_ms: 142.499125
+  type: 'test'
+  ...
+# Subtest: SDK starts at an indexed finalised anchor when the indexer lags the node
+ok 28 - SDK starts at an indexed finalised anchor when the indexer lags the node
+  ---
+  duration_ms: 99.908459
+  type: 'test'
+  ...
+# Subtest: SDK honours a pinned older snapshot and rejects a cursor beyond node finality
+ok 29 - SDK honours a pinned older snapshot and rejects a cursor beyond node finality
+  ---
+  duration_ms: 138.474458
+  type: 'test'
+  ...
+# Subtest: SDK output page transport failure remains unknown rather than an empty history
+ok 30 - SDK output page transport failure remains unknown rather than an empty history
+  ---
+  duration_ms: 95.830667
+  type: 'test'
+  ...
+# Subtest: SDK changing the event-page budget on continuation cannot skip lower positions in a later page
+ok 31 - SDK changing the event-page budget on continuation cannot skip lower positions in a later page
+  ---
+  duration_ms: 167.752375
+  type: 'test'
+  ...
+# Subtest: SDK empty event history falls back to the bounded complete commitment tree
+ok 32 - SDK empty event history falls back to the bounded complete commitment tree
+  ---
+  duration_ms: 101.344
+  type: 'test'
+  ...
+# Subtest: SDK tree fallback resumes its own cursor without repeating the event query
+ok 33 - SDK tree fallback resumes its own cursor without repeating the event query
+  ---
+  duration_ms: 110.88025
+  type: 'test'
+  ...
+# Subtest: SDK completed tree search never imports an authenticated but unqualified description
+ok 34 - SDK completed tree search never imports an authenticated but unqualified description
+  ---
+  duration_ms: 101.712334
+  type: 'test'
+  ...
+# Subtest: SDK tree fallback verifier failure remains unknown without a false live subtotal
+ok 35 - SDK tree fallback verifier failure remains unknown without a false live subtotal
+  ---
+  duration_ms: 104.186875
+  type: 'test'
+  ...
+# Subtest: SDK an empty complete commitment tree cannot establish a live coin
+ok 36 - SDK an empty complete commitment tree cannot establish a live coin
+  ---
+  duration_ms: 97.487583
+  type: 'test'
+  ...
+# Subtest: SDK changing the commitment frontier during a nullifier scan invalidates its snapshot
+ok 37 - SDK changing the commitment frontier during a nullifier scan invalidates its snapshot
+  ---
+  duration_ms: 109.155625
+  type: 'test'
+  ...
+# Subtest: one full pass distinguishes live, spent elsewhere, and unknown without trial submission
+ok 38 - one full pass distinguishes live, spent elsewhere, and unknown without trial submission
+  ---
+  duration_ms: 4.284875
+  type: 'test'
+  ...
+# Subtest: separately encrypted duplicates are deduplicated without losing same-colour siblings
+ok 39 - separately encrypted duplicates are deduplicated without losing same-colour siblings
+  ---
+  duration_ms: 1.750167
+  type: 'test'
+  ...
+# Subtest: candidate sources and index hints merge into one exact identity inspection
+ok 40 - candidate sources and index hints merge into one exact identity inspection
+  ---
+  duration_ms: 0.5975
+  type: 'test'
+  ...
+# Subtest: authenticated bogus inbox plaintext remains unknown and is excluded from subtotal
+ok 41 - authenticated bogus inbox plaintext remains unknown and is excluded from subtotal
+  ---
+  duration_ms: 0.484417
+  type: 'test'
+  ...
+# Subtest: missing current viewing capability is explicit even when historical entries decrypt
+ok 42 - missing current viewing capability is explicit even when historical entries decrypt
+  ---
+  duration_ms: 0.632541
+  type: 'test'
+  ...
+# Subtest: several viewing keys open historical and current entries without duplicate classification
+ok 43 - several viewing keys open historical and current entries without duplicate classification
+  ---
+  duration_ms: 0.900584
+  type: 'test'
+  ...
+# Subtest: wrong viewing keys and invalid encrypted entries cannot become holdings
+ok 44 - wrong viewing keys and invalid encrypted entries cannot become holdings
+  ---
+  duration_ms: 0.541042
+  type: 'test'
+  ...
+# Subtest: a missing inbox member stops the page at a resumable gap
+ok 45 - a missing inbox member stops the page at a resumable gap
+  ---
+  duration_ms: 0.947333
+  type: 'test'
+  ...
+# Subtest: inspection transport failure leaves a candidate unknown
+ok 46 - inspection transport failure leaves a candidate unknown
+  ---
+  duration_ms: 0.4845
+  type: 'test'
+  ...
+# Subtest: bounded inbox continuation reopens the same snapshot and does not claim a complete balance
+ok 47 - bounded inbox continuation reopens the same snapshot and does not claim a complete balance
+  ---
+  duration_ms: 1.662917
+  type: 'test'
+  ...
+# Subtest: candidate budget retains each uninspected description with its own continuation
+ok 48 - candidate budget retains each uninspected description with its own continuation
+  ---
+  duration_ms: 0.901542
+  type: 'test'
+  ...
+# Subtest: a bounded coin search emits a scope-bound cursor and resumes only that coin
+ok 49 - a bounded coin search emits a scope-bound cursor and resumes only that coin
+  ---
+  duration_ms: 0.529625
+  type: 'test'
+  ...
+# Subtest: snapshot scope cannot be silently replaced while continuing
+    # Subtest: networkId
+    ok 1 - networkId
+      ---
+      duration_ms: 0.279542
+      type: 'test'
+      ...
+    # Subtest: address
+    ok 2 - address
+      ---
+      duration_ms: 0.194666
+      type: 'test'
+      ...
+    # Subtest: blockHash
+    ok 3 - blockHash
+      ---
+      duration_ms: 0.185084
+      type: 'test'
+      ...
+    # Subtest: blockHeight
+    ok 4 - blockHeight
+      ---
+      duration_ms: 0.184458
+      type: 'test'
+      ...
+    1..4
+ok 50 - snapshot scope cannot be silently replaced while continuing
+  ---
+  duration_ms: 0.994334
+  type: 'test'
+  ...
+# Subtest: malformed budgets fail before opening a snapshot
+    # Subtest: maxEntries=0
+    ok 1 - maxEntries=0
+      ---
+      duration_ms: 0.210083
+      type: 'test'
+      ...
+    # Subtest: maxEntries=-1
+    ok 2 - maxEntries=-1
+      ---
+      duration_ms: 0.183
+      type: 'test'
+      ...
+    # Subtest: maxEntries=4097
+    ok 3 - maxEntries=4097
+      ---
+      duration_ms: 0.184
+      type: 'test'
+      ...
+    # Subtest: maxEntries=1.5
+    ok 4 - maxEntries=1.5
+      ---
+      duration_ms: 0.188
+      type: 'test'
+      ...
+    # Subtest: maxEntries=NaN
+    ok 5 - maxEntries=NaN
+      ---
+      duration_ms: 0.240708
+      type: 'test'
+      ...
+    # Subtest: maxEntries=3
+    ok 6 - maxEntries=3
+      ---
+      duration_ms: 0.185209
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=0
+    ok 7 - maxCandidates=0
+      ---
+      duration_ms: 0.18475
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=-1
+    ok 8 - maxCandidates=-1
+      ---
+      duration_ms: 0.17425
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=4097
+    ok 9 - maxCandidates=4097
+      ---
+      duration_ms: 0.175042
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=1.5
+    ok 10 - maxCandidates=1.5
+      ---
+      duration_ms: 0.206209
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=NaN
+    ok 11 - maxCandidates=NaN
+      ---
+      duration_ms: 0.180709
+      type: 'test'
+      ...
+    # Subtest: maxCandidates=3
+    ok 12 - maxCandidates=3
+      ---
+      duration_ms: 0.177583
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=0
+    ok 13 - maxCoinIndices=0
+      ---
+      duration_ms: 0.174208
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=-1
+    ok 14 - maxCoinIndices=-1
+      ---
+      duration_ms: 0.175708
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=4097
+    ok 15 - maxCoinIndices=4097
+      ---
+      duration_ms: 0.175167
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=1.5
+    ok 16 - maxCoinIndices=1.5
+      ---
+      duration_ms: 0.175042
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=NaN
+    ok 17 - maxCoinIndices=NaN
+      ---
+      duration_ms: 0.190459
+      type: 'test'
+      ...
+    # Subtest: maxCoinIndices=3
+    ok 18 - maxCoinIndices=3
+      ---
+      duration_ms: 0.181458
+      type: 'test'
+      ...
+    1..18
+ok 51 - malformed budgets fail before opening a snapshot
+  ---
+  duration_ms: 3.633208
+  type: 'test'
+  ...
+# Subtest: forged coin-search cursors are rejected instead of skipping arbitrary positions
+    # Subtest: {"coinId":"0202020202020202020202020202020202020202020202020202020202020202:0808080808080808080808080808080808080808080808080808080808080808:70"}
+    ok 1 - {"coinId":"0202020202020202020202020202020202020202020202020202020202020202:0808080808080808080808080808080808080808080808080808080808080808:70"}
+      ---
+      duration_ms: 0.728417
+      type: 'test'
+      ...
+    # Subtest: {"nextIndex":"-1"}
+    ok 2 - {"nextIndex":"-1"}
+      ---
+      duration_ms: 0.297
+      type: 'test'
+      ...
+    # Subtest: {"nextIndex":"1e3"}
+    ok 3 - {"nextIndex":"1e3"}
+      ---
+      duration_ms: 0.2265
+      type: 'test'
+      ...
+    # Subtest: {"version":2}
+    ok 4 - {"version":2}
+      ---
+      duration_ms: 0.204625
+      type: 'test'
+      ...
+    # Subtest: {"scope":{"networkId":"fixture-network","address":"1111111111111111111111111111111111111111111111111111111111111111","blockHash":"5555555555555555555555555555555555555555555555555555555555555555","blockHeight":"42"}}
+    ok 5 - {"scope":{"networkId":"fixture-network","address":"1111111111111111111111111111111111111111111111111111111111111111","blockHash":"5555555555555555555555555555555555555555555555555555555555555555","blockHeight":"42"}}
+      ---
+      duration_ms: 0.202708
+      type: 'test'
+      ...
+    1..5
+ok 52 - forged coin-search cursors are rejected instead of skipping arbitrary positions
+  ---
+  duration_ms: 1.816708
+  type: 'test'
+  ...
+# Subtest: malformed caller coin descriptions cannot become candidates
+    # Subtest: 100
+    ok 1 - 100
+      ---
+      duration_ms: 0.113125
+      type: 'test'
+      ...
+    # Subtest: 100
+    ok 2 - 100
+      ---
+      duration_ms: 0.077625
+      type: 'test'
+      ...
+    # Subtest: -1
+    ok 3 - -1
+      ---
+      duration_ms: 0.075125
+      type: 'test'
+      ...
+    # Subtest: 340282366920938463463374607431768211456
+    ok 4 - 340282366920938463463374607431768211456
+      ---
+      duration_ms: 0.073333
+      type: 'test'
+      ...
+    1..4
+ok 53 - malformed caller coin descriptions cannot become candidates
+  ---
+  duration_ms: 0.453917
+  type: 'test'
+  ...
+# Subtest: invalid positive observations remain unknown instead of changing coin identity or position
+    # Subtest: live
+    ok 1 - live
+      ---
+      duration_ms: 0.3655
+      type: 'test'
+      ...
+    # Subtest: spent
+    ok 2 - spent
+      ---
+      duration_ms: 0.318542
+      type: 'test'
+      ...
+    # Subtest: live
+    ok 3 - live
+      ---
+      duration_ms: 0.444167
+      type: 'test'
+      ...
+    # Subtest: live
+    ok 4 - live
+      ---
+      duration_ms: 0.421916
+      type: 'test'
+      ...
+    # Subtest: confirmed
+    ok 5 - confirmed
+      ---
+      duration_ms: 0.372208
+      type: 'test'
+      ...
+    # Subtest: unknown
+    ok 6 - unknown
+      ---
+      duration_ms: 0.308166
+      type: 'test'
+      ...
+    1..6
+ok 54 - invalid positive observations remain unknown instead of changing coin identity or position
+  ---
+  duration_ms: 2.402958
+  type: 'test'
+  ...
+# Subtest: an inspection continuation cannot move backwards or make no progress
+    # Subtest: 8
+    ok 1 - 8
+      ---
+      duration_ms: 0.360667
+      type: 'test'
+      ...
+    # Subtest: 9
+    ok 2 - 9
+      ---
+      duration_ms: 0.313875
+      type: 'test'
+      ...
+    # Subtest: -1
+    ok 3 - -1
+      ---
+      duration_ms: 0.3225
+      type: 'test'
+      ...
+    # Subtest: 1e3
+    ok 4 - 1e3
+      ---
+      duration_ms: 0.30575
+      type: 'test'
+      ...
+    1..4
+ok 55 - an inspection continuation cannot move backwards or make no progress
+  ---
+  duration_ms: 1.418166
+  type: 'test'
+  ...
+# Subtest: snapshot changes during asynchronous reads or inspection abort the scan
+    # Subtest: read
+    ok 1 - read
+      ---
+      duration_ms: 0.349625
+      type: 'test'
+      ...
+    # Subtest: inspect
+    ok 2 - inspect
+      ---
+      duration_ms: 0.32775
+      type: 'test'
+      ...
+    1..2
+ok 56 - snapshot changes during asynchronous reads or inspection abort the scan
+  ---
+  duration_ms: 0.747667
+  type: 'test'
+  ...
+# Subtest: inbox transport failure retains the exact unread cursor
+ok 57 - inbox transport failure retains the exact unread cursor
+  ---
+  duration_ms: 0.444042
+  type: 'test'
+  ...
+# Subtest: caller candidates can be checked without a viewing key but cannot imply full recovery
+ok 58 - caller candidates can be checked without a viewing key but cannot imply full recovery
+  ---
+  duration_ms: 0.139208
+  type: 'test'
+  ...
+# Subtest: scan copies caller coin descriptions and viewing keys before awaiting the adapter
+ok 59 - scan copies caller coin descriptions and viewing keys before awaiting the adapter
+  ---
+  duration_ms: 0.173792
+  type: 'test'
+  ...
+# Subtest: event-window continuation permits a lower tree index only when its event offset advances
+ok 60 - event-window continuation permits a lower tree index only when its event offset advances
+  ---
+  duration_ms: 0.34575
+  type: 'test'
+  ...
+# Subtest: invalid event-window progress stays unknown with the original usable cursor
+    # Subtest: 0/99
+    ok 1 - 0/99
+      ---
+      duration_ms: 0.343542
+      type: 'test'
+      ...
+    # Subtest: 0/100
+    ok 2 - 0/100
+      ---
+      duration_ms: 0.35175
+      type: 'test'
+      ...
+    # Subtest: 1000/99
+    ok 3 - 1000/99
+      ---
+      duration_ms: 0.307625
+      type: 'test'
+      ...
+    # Subtest: 0/-1
+    ok 4 - 0/-1
+      ---
+      duration_ms: 0.315916
+      type: 'test'
+      ...
+    # Subtest: 0/1.5
+    ok 5 - 0/1.5
+      ---
+      duration_ms: 0.307833
+      type: 'test'
+      ...
+    # Subtest: 0/-2147483648
+    ok 6 - 0/-2147483648
+      ---
+      duration_ms: 0.299
+      type: 'test'
+      ...
+    # Subtest: 0/200
+    ok 7 - 0/200
+      ---
+      duration_ms: 0.297292
+      type: 'test'
+      ...
+    1..7
+ok 61 - invalid event-window progress stays unknown with the original usable cursor
+  ---
+  duration_ms: 2.37175
+  type: 'test'
+  ...
+# Subtest: malformed event offsets are rejected before reading a snapshot
+    # Subtest: -1
+    ok 1 - -1
+      ---
+      duration_ms: 0.358958
+      type: 'test'
+      ...
+    # Subtest: 1.5
+    ok 2 - 1.5
+      ---
+      duration_ms: 0.349
+      type: 'test'
+      ...
+    # Subtest: 2147483648
+    ok 3 - 2147483648
+      ---
+      duration_ms: 0.235583
+      type: 'test'
+      ...
+    # Subtest: NaN
+    ok 4 - NaN
+      ---
+      duration_ms: 0.225833
+      type: 'test'
+      ...
+    # Subtest: 100
+    ok 5 - 100
+      ---
+      duration_ms: 0.21
+      type: 'test'
+      ...
+    1..5
+ok 62 - malformed event offsets are rejected before reading a snapshot
+  ---
+  duration_ms: 1.537334
+  type: 'test'
+  ...
+# Subtest: candidate overflow preserves both dimensions of its prior continuation
+ok 63 - candidate overflow preserves both dimensions of its prior continuation
+  ---
+  duration_ms: 0.588125
+  type: 'test'
+  ...
+# Subtest: an undefined inbox record is a retriable gap rather than an unreadable ciphertext
+ok 64 - an undefined inbox record is a retriable gap rather than an unreadable ciphertext
+  ---
+  duration_ms: 0.240041
+  type: 'test'
+  ...
+# Subtest: transient unknown evidence preserves both dimensions of an existing candidate cursor
+ok 65 - transient unknown evidence preserves both dimensions of an existing candidate cursor
+  ---
+  duration_ms: 0.343167
+  type: 'test'
+  ...
+# Subtest: event search can transition to a complete-tree search from index zero
+ok 66 - event search can transition to a complete-tree search from index zero
+  ---
+  duration_ms: 0.873834
+  type: 'test'
+  ...
+# Subtest: tree continuations reject backwards modes, indices, and event offsets
+    # Subtest: events/0/0
+    ok 1 - events/0/0
+      ---
+      duration_ms: 0.386792
+      type: 'test'
+      ...
+    # Subtest: tree/8/0
+    ok 2 - tree/8/0
+      ---
+      duration_ms: 0.318459
+      type: 'test'
+      ...
+    # Subtest: tree/9/0
+    ok 3 - tree/9/0
+      ---
+      duration_ms: 0.298792
+      type: 'test'
+      ...
+    # Subtest: tree/10/100
+    ok 4 - tree/10/100
+      ---
+      duration_ms: 0.301708
+      type: 'test'
+      ...
+    # Subtest: invalid/10/0
+    ok 5 - invalid/10/0
+      ---
+      duration_ms: 0.386791
+      type: 'test'
+      ...
+    1..5
+ok 67 - tree continuations reject backwards modes, indices, and event offsets
+  ---
+  duration_ms: 1.83225
+  type: 'test'
+  ...
+# Subtest: tree mode and retry position survive a transient unknown response
+ok 68 - tree mode and retry position survive a transient unknown response
+  ---
+  duration_ms: 0.327292
+  type: 'test'
+  ...
+# Subtest: malformed search modes and nonzero tree event offsets reject before snapshot reads
+    # Subtest: invalid/0
+    ok 1 - invalid/0
+      ---
+      duration_ms: 0.201625
+      type: 'test'
+      ...
+    # Subtest: tree/100
+    ok 2 - tree/100
+      ---
+      duration_ms: 0.181
+      type: 'test'
+      ...
+    # Subtest: 1/0
+    ok 3 - 1/0
+      ---
+      duration_ms: 0.180584
+      type: 'test'
+      ...
+    1..3
+ok 69 - malformed search modes and nonzero tree event offsets reject before snapshot reads
+  ---
+  duration_ms: 0.637375
+  type: 'test'
+  ...
+# Subtest: candidate overflow preserves the tree search mode
+ok 70 - candidate overflow preserves the tree search mode
+  ---
+  duration_ms: 0.484417
+  type: 'test'
+  ...
+1..70
+# tests 169
+# suites 0
+# pass 169
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3683.130958
+
+> midnight-account-custody@0.1.0 test:crossimpl-offline
+> tsx src/tests/crossimpl-offline.ts
+
+
+━━━ crossimpl-offline ━━━
+
+── [jubjub] Rust keygen and signature over fixed call parameters
+
+── [jubjub] challenge bit-exactness: Rust stack vs the contract’s pure circuit
+  ✓ identical: 31379c4c6711607b457013e425a20ed0… (grind_nonce 7)
+
+── [jubjub] the Schnorr signature verifies over the ground challenge
+  ✓ s·G == R + c·pk with the Rust-produced signature
+
+── [k256] Rust keygen and signature over fixed call parameters
+
+── [k256] challenge bit-exactness: Rust stack vs the contract’s pure circuit
+  ✓ identical: 23a23121ad65a1d07e5bebb128381716…
+
+── [k256] envelope 0: Rust digest vs the contract pure circuit, and the signature
+  ✓ identical: cf198cfe61765f8c4b55fc4b47c26bc7…
+  ✓ verify(envelope_digest(0, challenge), (r, s), pk) with the Rust-produced signature
+
+── [k256/connector] envelope 1: Rust digest vs the contract pure circuit, and the signature
+  ✓ identical: 0d700c16ae1e8f22b9e89acd21e989cf…
+  ✓ verify(envelope digest, (r, s), pk) with the Rust-produced connector signature
+
+── [k256/grant] Rust grantee keygen and signature over a withdraw_unshielded grant call
+
+── [k256/grant] origin_hash (§4.4): Rust vs the by-hand recipe
+  ✓ identical: 5847018b6d2663a49e27bd119ba50c0d…
+
+── [k256/grant] grant_id (§4.3): Rust stack vs the contract’s pure circuit
+  ✓ identical: 0147c03575b9f27e7bf76ce6a97372b2…
+
+── [k256/grant] challenge (§6.3): Rust stack vs the contract’s pure circuit
+  ✓ identical: 308e99128dd6838dbd462b13f19a7e31…
+
+── [k256/grant] envelope 0: Rust digest vs envelope_digest, and the grantee signature
+  ✓ verify(envelope_digest(0, challenge), (r, s), pk) with the Rust-produced grantee signature
+  ✓ the same signature does not verify under the next slot’s grant_id (GR-3)
+
+── [jubjub/grant] Rust grantee keygen and signature over a withdraw_unshielded grant call
+
+── [jubjub/grant] origin_hash (§4.4): Rust vs the by-hand recipe
+  ✓ identical: 5847018b6d2663a49e27bd119ba50c0d…
+
+── [jubjub/grant] grant_id (§4.3): Rust stack vs the contract’s pure circuit
+  ✓ identical: 7a5e6f90ea6b2142cf2ed4f322c503f8…
+
+── [jubjub/grant] challenge (§6.3): Rust stack vs the contract’s pure circuit
+  ✓ identical: 2f15f45a003cb24858c370f5482cfd8c… (grind_nonce 75)
+
+── [jubjub/grant] the Schnorr signature verifies over the ground challenge
+  ✓ s·G == R + c·pk with the Rust-produced grantee signature
+  ✓ the same signature does not satisfy the equation under the next slot’s grant_id (GR-3)
+
+── [k256/grant/to_contract] the third k1 twin: Rust challenge vs the pure circuit
+  ✓ identical: d807aa8d7189e7570d5975a4558b51cb…
+  ✓ the shielded twin over the same arguments gives another challenge (AUTH-3)
+  ✓ verify(envelope_digest(0, challenge), (r, s), pk) with the Rust-produced signature
+
+◆ crossimpl-offline: PASS
+
+> midnight-account-custody@0.1.0 test:grants-caller-offline
+> tsx src/tests/grants-caller-offline.ts
+
+PASS caller scope: both arms, all six spend gates, contract/user/absent callers, signed policy, replay and unrestricted transcript independence
+
+> midnight-account-custody@0.1.0 test:grants-capability-offline
+> tsx src/tests/grants-capability-offline.ts
+
+
+━━━ grants-capability-offline ━━━
+
+── v1, v2 and missing schema refuse before signing or submission
+
+── current schema permits an externally signed grant to reach submission
+
+◆ grants-capability-offline: PASS
+
+> midnight-account-custody@0.1.0 test:grants-offline
+> tsx src/tests/grants-offline.ts
+
+
+── [dev k256 / grantee k256] lifecycle and the unshielded grant twin
+PASS  [dev k256/grantee k256] spec_version is 4
+PASS  [dev k256/grantee k256] grant state starts empty at generation 0
+PASS  [dev k256/grantee k256] device signs and stores caller pin
+PASS  [dev k256/grantee k256] caller pin cannot be added to signed unrestricted scope aborts with "invalid signature" or "range error"
+PASS  [dev k256/grantee k256] read-only grant cannot restrict caller aborts with "read-only grant cannot restrict caller"
+PASS  [dev k256/grantee k256] empty scope aborts with "empty scope"
+PASS  [dev k256/grantee k256] shielded without read aborts with "shielded spend requires read"
+PASS  [dev k256/grantee k256] per_call_cap > cap aborts with "per-call cap above cap"
+PASS  [dev k256/grantee k256] spend with max_coin_value < per_call_cap aborts with "coin bound below per-call cap"
+PASS  [dev k256/grantee k256] read without delegate key aborts with "read without delegate key"
+PASS  [dev k256/grantee k256] window bounds reserved aborts with "window bounds reserved"
+PASS  [dev k256/grantee k256] read-only grant with object fields aborts with "read-only grant carries object fields"
+PASS  [dev k256/grantee k256] no record written by a refused issue (local abort leaves state untouched)
+PASS  [dev k256/grantee k256] issue over an absent id writes the record
+PASS  [dev k256/grantee k256] record epoch/gen/active/nonce as specified
+PASS  [dev k256/grantee k256] issued_at is auth_nonce as advanced by the device seam
+PASS  [dev k256/grantee k256] spent_commit commits to 0
+PASS  [dev k256/grantee k256] object_commit as derived
+PASS  [dev k256/grantee k256] rp_commit as derived
+PASS  [dev k256/grantee k256] clear scope fields written
+PASS  [dev k256/grantee k256] re-issue over a live id aborts with "grant already active"
+PASS  [dev k256/grantee k256] revoke of an absent id aborts with "unknown grant"
+PASS  [dev k256/grantee k256] read-only grant under slot 1 issued
+PASS  [dev k256/grantee k256] mirror funded off-node (receiveUnshielded simulated)
+PASS  [dev k256/grantee k256] grant call advances the record nonce
+PASS  [dev k256/grantee k256] spent_commit re-commits to the cumulative spend
+PASS  [dev k256/grantee k256] auth_nonce unchanged by a grant call (GR-5)
+PASS  [dev k256/grantee k256] round advanced exactly once (GR-13)
+PASS  [dev k256/grantee k256] device_count untouched (GR-12)
+PASS  [dev k256/grantee k256] mirror debited by the custody chip
+PASS  [dev k256/grantee k256] identical resubmission (stale nonce) aborts with "invalid grant signature"
+PASS  [dev k256/grantee k256] over per_call_cap aborts with "amount above per-call cap"
+PASS  [dev k256/grantee k256] over cumulative cap (200 + 300 > 450) aborts with "cumulative cap exceeded"
+PASS  [dev k256/grantee k256] wrong spent_prev opening aborts with "spent opening mismatch"
+PASS  [dev k256/grantee k256] wrong recipient under pin aborts with "recipient not admitted by pin"
+PASS  [dev k256/grantee k256] recipient-kind mismatch (opening 2 against committed 1) aborts with "scope object mismatch"
+PASS  [dev k256/grantee k256] wrong scope_salt aborts with "scope object mismatch"
+PASS  [dev k256/grantee k256] foreign key (no record) aborts with "unknown grant"
+PASS  [dev k256/grantee k256] out-of-scope operation aborts with "operation not in scope"
+PASS  [dev k256/grantee k256] state restored to the post-success snapshot for the next items
+PASS  [dev k256/grantee k256] grantee key against the device seam aborts with "unknown device entry"
+PASS  [dev k256/grantee k256] grant call before expires_at executes (blockTimeLessThan true)
+PASS  [dev k256/grantee k256] grant call after expires_at aborts with "grant expired"
+PASS  [dev k256/grantee k256] expires_at = 0 never expires (second call on the open-ended grant)
+PASS  [dev k256/grantee k256] revoke writes a tombstone, other fields kept
+PASS  [dev k256/grantee k256] grant call against a tombstone aborts with "grant revoked"
+PASS  [dev k256/grantee k256] revoke of a tombstone aborts with "grant not live"
+PASS  [dev k256/grantee k256] re-issue over a tombstone yields a fresh incarnation
+PASS  [dev k256/grantee k256] prior-incarnation opening against the re-issue aborts with "scope object mismatch"
+PASS  [dev k256/grantee k256] revoke_all bumps grant_generation
+PASS  [dev k256/grantee k256] revoke_all resets the map (3 records cleared)
+PASS  [dev k256/grantee k256] grant call after revoke_all (record absent) aborts with "unknown grant"
+PASS  [dev k256/grantee k256] re-issue under the new generation records gen = 1
+
+── [dev jubjub / grantee jubjub] lifecycle and the unshielded grant twin
+PASS  [dev jubjub/grantee jubjub] spec_version is 4
+PASS  [dev jubjub/grantee jubjub] grant state starts empty at generation 0
+PASS  [dev jubjub/grantee jubjub] device signs and stores caller pin
+PASS  [dev jubjub/grantee jubjub] caller pin cannot be added to signed unrestricted scope aborts with "invalid signature" or "range error"
+PASS  [dev jubjub/grantee jubjub] read-only grant cannot restrict caller aborts with "read-only grant cannot restrict caller"
+PASS  [dev jubjub/grantee jubjub] empty scope aborts with "empty scope"
+PASS  [dev jubjub/grantee jubjub] shielded without read aborts with "shielded spend requires read"
+PASS  [dev jubjub/grantee jubjub] per_call_cap > cap aborts with "per-call cap above cap"
+PASS  [dev jubjub/grantee jubjub] spend with max_coin_value < per_call_cap aborts with "coin bound below per-call cap"
+PASS  [dev jubjub/grantee jubjub] read without delegate key aborts with "read without delegate key"
+PASS  [dev jubjub/grantee jubjub] window bounds reserved aborts with "window bounds reserved"
+PASS  [dev jubjub/grantee jubjub] read-only grant with object fields aborts with "read-only grant carries object fields"
+PASS  [dev jubjub/grantee jubjub] no record written by a refused issue (local abort leaves state untouched)
+PASS  [dev jubjub/grantee jubjub] issue over an absent id writes the record
+PASS  [dev jubjub/grantee jubjub] record epoch/gen/active/nonce as specified
+PASS  [dev jubjub/grantee jubjub] issued_at is auth_nonce as advanced by the device seam
+PASS  [dev jubjub/grantee jubjub] spent_commit commits to 0
+PASS  [dev jubjub/grantee jubjub] object_commit as derived
+PASS  [dev jubjub/grantee jubjub] rp_commit as derived
+PASS  [dev jubjub/grantee jubjub] clear scope fields written
+PASS  [dev jubjub/grantee jubjub] re-issue over a live id aborts with "grant already active"
+PASS  [dev jubjub/grantee jubjub] revoke of an absent id aborts with "unknown grant"
+PASS  [dev jubjub/grantee jubjub] read-only grant under slot 1 issued
+PASS  [dev jubjub/grantee jubjub] mirror funded off-node (receiveUnshielded simulated)
+PASS  [dev jubjub/grantee jubjub] grant call advances the record nonce
+PASS  [dev jubjub/grantee jubjub] spent_commit re-commits to the cumulative spend
+PASS  [dev jubjub/grantee jubjub] auth_nonce unchanged by a grant call (GR-5)
+PASS  [dev jubjub/grantee jubjub] round advanced exactly once (GR-13)
+PASS  [dev jubjub/grantee jubjub] device_count untouched (GR-12)
+PASS  [dev jubjub/grantee jubjub] mirror debited by the custody chip
+PASS  [dev jubjub/grantee jubjub] identical resubmission (stale nonce) aborts with "invalid grant signature" or "range error"
+PASS  [dev jubjub/grantee jubjub] over per_call_cap aborts with "amount above per-call cap"
+PASS  [dev jubjub/grantee jubjub] over cumulative cap (200 + 300 > 450) aborts with "cumulative cap exceeded"
+PASS  [dev jubjub/grantee jubjub] wrong spent_prev opening aborts with "spent opening mismatch"
+PASS  [dev jubjub/grantee jubjub] wrong recipient under pin aborts with "recipient not admitted by pin"
+PASS  [dev jubjub/grantee jubjub] recipient-kind mismatch (opening 2 against committed 1) aborts with "scope object mismatch"
+PASS  [dev jubjub/grantee jubjub] wrong scope_salt aborts with "scope object mismatch"
+PASS  [dev jubjub/grantee jubjub] foreign key (no record) aborts with "unknown grant"
+PASS  [dev jubjub/grantee jubjub] out-of-scope operation aborts with "operation not in scope"
+PASS  [dev jubjub/grantee jubjub] state restored to the post-success snapshot for the next items
+PASS  [dev jubjub/grantee jubjub] grantee key against the device seam aborts with "unknown device entry"
+PASS  [dev jubjub/grantee jubjub] grant call before expires_at executes (blockTimeLessThan true)
+PASS  [dev jubjub/grantee jubjub] grant call after expires_at aborts with "grant expired"
+PASS  [dev jubjub/grantee jubjub] expires_at = 0 never expires (second call on the open-ended grant)
+PASS  [dev jubjub/grantee jubjub] revoke writes a tombstone, other fields kept
+PASS  [dev jubjub/grantee jubjub] grant call against a tombstone aborts with "grant revoked"
+PASS  [dev jubjub/grantee jubjub] revoke of a tombstone aborts with "grant not live"
+PASS  [dev jubjub/grantee jubjub] re-issue over a tombstone yields a fresh incarnation
+PASS  [dev jubjub/grantee jubjub] prior-incarnation opening against the re-issue aborts with "scope object mismatch"
+PASS  [dev jubjub/grantee jubjub] revoke_all bumps grant_generation
+PASS  [dev jubjub/grantee jubjub] revoke_all resets the map (3 records cleared)
+PASS  [dev jubjub/grantee jubjub] grant call after revoke_all (record absent) aborts with "unknown grant"
+PASS  [dev jubjub/grantee jubjub] re-issue under the new generation records gen = 1
+
+── arm-specific negatives
+PASS  [k256] grantee at the point at infinity aborts with "identity point"
+PASS  [k256] wrong envelope in the trailer (grant_id mismatch) aborts with "envelope not admitted for a spend grant"
+PASS  [k256] an envelope-1 grantee is a different grant identity from the same key at envelope 0
+PASS  [k256] envelope-1 grantee spending aborts with "envelope not admitted for a spend grant"
+PASS  [jubjub] grantee at the identity (0, 1) aborts with "grantee key has small order"
+PASS  [jubjub] grantee at the order-2 point (0, -1) aborts: unreachable
+PASS  [jubjub] signature presented under the wrong grind nonce aborts with "invalid grant signature" or "range error"
+PASS  [cross-arm] a jubjub grantee against a k256 grant aborts with "unknown grant"
+PASS  [cross-arm] a k256 grantee against a jubjub grant aborts with "unknown grant"
+PASS  [negatives] no negative disturbed the grant generation
+
+── the shielded twins, which cannot execute off-node
+PASS  withdraw_shielded_with_grant_k256 exists and declares 15 arguments
+PASS  withdraw_shielded_to_contract_with_grant_k256 exists and declares 15 arguments
+PASS  withdraw_shielded_with_grant_jubjub exists and declares 16 arguments
+PASS  withdraw_shielded_to_contract_with_grant_jubjub exists and declares 16 arguments
+
+── client-side issue rules
+PASS  issue rule 3 (per_call_cap above cap) refused client-side with "rule 3"
+PASS  issue rule 4 (max_coin_value below per_call_cap) refused client-side with "rule 4"
+PASS  issue rule 5 (shielded without a delegate key hash) refused client-side with "rule 5"
+PASS  issue rule 2 (a shielded flag implies read)
+PASS  issue rule 1 (no operation flag and no read) refused client-side with "rule 1"
+PASS  issue rule 6 (window bounds are reserved) refused client-side with "rule 6"
+PASS  issue rule 7 (a read-only grant carrying object fields) refused client-side with "rule 7"
+
+   53 passed, 0 failed  [dev k256 / grantee k256] lifecycle and the unshielded grant twin
+   53 passed, 0 failed  [dev jubjub / grantee jubjub] lifecycle and the unshielded grant twin
+   10 passed, 0 failed  arm-specific negatives
+    4 passed, 0 failed  the shielded twins, which cannot execute off-node
+    7 passed, 0 failed  client-side issue rules
+
+127 passed, 0 failed
+
+> midnight-account-custody@0.1.0 test:input-validation
+> tsx --test src/tests/input-validation.ts src/tests/signer-input-validation.ts
+
+TAP version 13
+# Subtest: hex decoding accepts complete byte pairs and rejects malformed pairs
+ok 1 - hex decoding accepts complete byte pairs and rejects malformed pairs
+  ---
+  duration_ms: 0.861292
+  type: 'test'
+  ...
+# Subtest: hexToBytes32 pads short values and rejects oversized values
+ok 2 - hexToBytes32 pads short values and rejects oversized values
+  ---
+  duration_ms: 0.113916
+  type: 'test'
+  ...
+# Subtest: invalid recipient length is refused before ephemeral key generation
+ok 3 - invalid recipient length is refused before ephemeral key generation
+  ---
+  duration_ms: 0.470875
+  type: 'test'
+  ...
+# Subtest: an all-zero backend agreement is refused by the inbox guard
+ok 4 - an all-zero backend agreement is refused by the inbox guard
+  ---
+  duration_ms: 2.115875
+  type: 'test'
+  ...
+# Subtest: inbox preserves the v1 layout and exact uint128 boundary values
+ok 5 - inbox preserves the v1 layout and exact uint128 boundary values
+  ---
+  duration_ms: 0.991792
+  type: 'test'
+  ...
+# Subtest: inbox rejects truncated or extended X25519 keys without accepting DER suffixes
+ok 6 - inbox rejects truncated or extended X25519 keys without accepting DER suffixes
+  ---
+  duration_ms: 0.521417
+  type: 'test'
+  ...
+# Subtest: inbox rejects low-order recipients and skips unauthenticated records
+ok 7 - inbox rejects low-order recipients and skips unauthenticated records
+  ---
+  duration_ms: 0.704083
+  type: 'test'
+  ...
+# Subtest: inbox rejects values that would wrap and malformed coin identifiers
+ok 8 - inbox rejects values that would wrap and malformed coin identifiers
+  ---
+  duration_ms: 0.36425
+  type: 'test'
+  ...
+# Subtest: JubjubDevice rejects noncanonical signing secrets
+ok 9 - JubjubDevice rejects noncanonical signing secrets
+  ---
+  duration_ms: 0.589584
+  type: 'test'
+  ...
+# Subtest: JubjubDevice rejects non-bigint signing secrets
+ok 10 - JubjubDevice rejects non-bigint signing secrets
+  ---
+  duration_ms: 0.182375
+  type: 'test'
+  ...
+# Subtest: JubjubGrantee rejects noncanonical signing secrets
+ok 11 - JubjubGrantee rejects noncanonical signing secrets
+  ---
+  duration_ms: 0.060458
+  type: 'test'
+  ...
+# Subtest: JubjubGrantee rejects non-bigint signing secrets
+ok 12 - JubjubGrantee rejects non-bigint signing secrets
+  ---
+  duration_ms: 0.036208
+  type: 'test'
+  ...
+# Subtest: K256Device rejects noncanonical signing secrets
+ok 13 - K256Device rejects noncanonical signing secrets
+  ---
+  duration_ms: 0.100375
+  type: 'test'
+  ...
+# Subtest: K256Device rejects non-bigint signing secrets
+ok 14 - K256Device rejects non-bigint signing secrets
+  ---
+  duration_ms: 0.033458
+  type: 'test'
+  ...
+# Subtest: K256Grantee rejects noncanonical signing secrets
+ok 15 - K256Grantee rejects noncanonical signing secrets
+  ---
+  duration_ms: 0.081166
+  type: 'test'
+  ...
+# Subtest: K256Grantee rejects non-bigint signing secrets
+ok 16 - K256Grantee rejects non-bigint signing secrets
+  ---
+  duration_ms: 0.034375
+  type: 'test'
+  ...
+# Subtest: JubjubDevice signs with valid boundary scalar 1
+ok 17 - JubjubDevice signs with valid boundary scalar 1
+  ---
+  duration_ms: 7.696083
+  type: 'test'
+  ...
+# Subtest: JubjubDevice signs with valid boundary scalar order - 1
+ok 18 - JubjubDevice signs with valid boundary scalar order - 1
+  ---
+  duration_ms: 5.960375
+  type: 'test'
+  ...
+# Subtest: JubjubGrantee signs with valid boundary scalar 1
+ok 19 - JubjubGrantee signs with valid boundary scalar 1
+  ---
+  duration_ms: 5.6345
+  type: 'test'
+  ...
+# Subtest: JubjubGrantee signs with valid boundary scalar order - 1
+ok 20 - JubjubGrantee signs with valid boundary scalar order - 1
+  ---
+  duration_ms: 5.4665
+  type: 'test'
+  ...
+# Subtest: K256Device signs with valid boundary scalar 1
+ok 21 - K256Device signs with valid boundary scalar 1
+  ---
+  duration_ms: 17.389125
+  type: 'test'
+  ...
+# Subtest: K256Device signs with valid boundary scalar order - 1
+ok 22 - K256Device signs with valid boundary scalar order - 1
+  ---
+  duration_ms: 3.319
+  type: 'test'
+  ...
+# Subtest: K256Grantee signs with valid boundary scalar 1
+ok 23 - K256Grantee signs with valid boundary scalar 1
+  ---
+  duration_ms: 3.204875
+  type: 'test'
+  ...
+# Subtest: K256Grantee signs with valid boundary scalar order - 1
+ok 24 - K256Grantee signs with valid boundary scalar order - 1
+  ---
+  duration_ms: 2.868041
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 210.296417
+
+> midnight-account-custody@0.1.0 test:ledger-flex-offline
+> tsx src/tests/ledger-flex-offline.ts
+
+PASS captured initial.json: exact hash, native ES256, selector and challenge binding
+PASS captured reconnect.json: exact hash, native ES256, selector and challenge binding
+PASS profile normal: re-signed envelope/RP/flag refusals
+PASS profile Chrome GREASE: re-signed envelope/RP/flag refusals
+PASS compiled ACC device gate: normal rotation, selector refusal and replay refusal
+PASS compiled ACC device gate: Chrome GREASE rotation, selector refusal and replay refusal
+PASS compiled ACC grant gate: normal spend, selector/scope/amount/replay refusals
+PASS compiled ACC grant gate: Chrome GREASE spend, selector/scope/amount/replay refusals
+PASS compiled ACC grant gate: cumulative cap and post-revocation refusal
+PASS 9 Ledger/Chrome native-account test groups; evidence /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract/evidence/ledger-flex-account/offline.json
+
+> midnight-account-custody@0.1.0 test:p256-offline
+> tsx src/tests/p256-offline.ts
+
+PASS P-256/WebAuthn: real high-S assertion, OpenSSL cross-implementation, binding negatives, device/grant/recovery simulation
+
+> midnight-account-custody@0.1.0 test:recovery-offline
+> tsx src/tests/recovery-offline.ts
+
+
+━━━ recovery-offline ━━━
+
+── field encoding and the wide reduction (§2)
+  ✓ secret is a field element
+  ✓ canonical repr round-trips
+  ✓ repr is 32 bytes
+  ✓ non-canonical encoding rejected
+  ✓ wide reduction lands in the field
+
+── guardian secrets: three profiles, one share type (§3)
+  ✓ distinct PRF outputs give distinct guardian secrets
+  ✓ a paper key is a field element
+
+── share derivation is tagged and input-separated (§4)
+  ✓ derivation deterministic
+  ✓ a fresh session moves every share
+  ✓ the account separates shares
+  ✓ the guardian secret separates shares
+
+── split and reconstruct: |phi| = n - t (§5, §8)
+  ✓ |phi| = n - t (five at threshold three publish three)
+  ✓ t+1 shares reconstruct the secret
+  ✓ any t+1 subset works
+
+── threshold behaviour (§9 REC-5, Testing)
+  ✓ t shares refuse to reconstruct
+  ✓ one wrong share yields a wrong candidate (no identifiable abort)
+  ✓ substituting the correct share recovers
+  ✓ an excluded guardian share from a prior session contributes nothing (REC-5)
+
+── trial assignment when the roster record is lost (§6 step 1)
+  ✓ indices recovered by trial against the recovery key
+  ✓ trial assignment fails cleanly on garbage shares
+
+── gate key (§2): P = s·G, deterministic, binding, reduced into r_J
+  ✓ the key is the same from the field element and its canonical bytes
+  ✓ distinct secrets give distinct keys
+  ✓ a secret above r_J is reduced into the scalar field
+  ✓ the reduction is what the key is computed over
+  ✓ a secret reducing to zero is refused (its key would be the identity)
+
+── artefact-set reader refuses an unknown version (§10)
+  ✓ a v2 artefact set is refused rather than best-effort parsed
+  ✓ the v1 reader returns the shares in slot order
+
+── wrap container v1 (§8)
+  ✓ container is 64 bytes
+  ✓ version and suite bytes
+  ✓ padding zeroed
+  ✓ wrap opens under the recovery secret (REC-7)
+  ✓ wrong secret is refused
+  ✓ wrap is bound to the account
+  ✓ tampered ciphertext is refused
+  ✓ unknown version is refused, not best-effort parsed (§10)
+
+── cross-implementation vectors (buss-rs pins the same bytes)
+  ✓ Profile A guardian secret matches the Rust fork
+  ✓ v1 share derivation matches the Rust fork
+  ✓ recover-gate challenge vector (P=1G, R_P=2G, Q=3G, R_Q=4G, P'=5G, epoch 1, nonce 7, bound 1800000000, grind 0)
+  ✓ recover_cancel jubjub challenge vector (R=2G, pk=1G, nonce 7, grind 0)
+
+── challenge domain separation for the new operations (AUTH-3)
+  ✓ publish and cancel tags separate
+  ✓ the wrap is bound into the session challenge
+  ✓ every phi slot is bound into the session challenge
+
+── the recover-gate challenge (§6 step 4): its own tag, every binding live
+  ✓ submit tag separates from publish and cancel
+  ✓ the two nonce points are bound in order
+  ✓ the wall-clock bound is bound
+  ✓ the post-bump epoch is bound
+  ✓ the authorisation nonce is bound
+  ✓ the successor key is bound
+  ✓ the successor recovery key P' is bound
+  ✓ the stored recovery key is bound
+
+── signing a submission discloses signatures only (REC-6, REC-11)
+  ✓ ten circuit arguments
+  ✓ no scalar secret among the arguments
+  ✓ both response scalars are canonical
+  ✓ the ground challenge reads below r_J
+
+◆ recovery-offline: PASS
+
+> midnight-account-custody@0.1.0 test:recovery-sim
+> tsx src/tests/recovery-sim.ts
+
+
+━━━ recovery-sim ━━━
+
+── recovery at birth: commitment and wrap present, no vector (§ Backwards Compatibility)
+  ✓ no phi at deploy
+  ✓ artefact set version tag present (§10)
+  ✓ no pending record at deploy
+
+── session publish: seam-gated, atomic, fresh (§5)
+  ✓ three guardians at threshold two publish two (|phi| = n - t)
+  ✓ session identifier stored
+  ✓ ledger wrap opens under the session secret
+
+── freshness backstop: stored-value reuse rejected (§5, REC-4)
+  ✓ reused session identifier rejected
+  ✓ reused recovery commitment rejected
+  ✓ an all-zero identifier from a broken generator is rejected even after a real session
+
+── slot gating: unused slots must be zero (§8)
+  ✓ a non-zero slot beyond the length field is rejected
+  ✓ an empty vector is rejected
+  ✓ a length field beyond the slot bound is rejected
+
+── unauthorised publish: no valid device, no state change (Testing)
+  ✓ a non-enrolled device cannot publish
+  ✓ failed publish leaves no state change
+
+── successor validation and the two signatures (§6 step 4, Testing)
+  ✓ an identity successor key is rejected
+  ✓ a small-order successor key is refused (by the runtime at the boundary, or by the cofactor check)
+  ✓ a small-order successor recovery key P' is refused (the next gate would be forgeable)
+  ✓ a valid successor key without a valid co-signature is rejected (possession is tested)
+  ✓ the wall-clock bound is signed: altering it after signing fails the gate
+  ✓ the successor key is signed: swapping it after signing fails the gate
+  ✓ the successor recovery key P' is signed: swapping it after signing fails the gate
+  ✓ a successor recovery key equal to the key being consumed is rejected (§5 defence in depth on the submit path)
+  ✓ no rejected submission wrote pending state
+
+── a weak birth key never opens the gate (§6 step 4, Backwards Compatibility)
+  ✓ the forgery is refused at the gate: the stored key is checked before any signature is examined
+  ✓ the weak-key account wrote no pending state
+
+── delegation safety: the submission carries signatures, not secrets (REC-11)
+  ✓ neither the recovery secret nor the successor scalar is an argument
+  ✓ ten arguments: two keys, three bindings, two signatures, one grind nonce
+
+── the gate: wrong secret refused, right secret records the pending recovery (§6)
+  ✓ a wrong secret fails the gate (REC-1)
+  ✓ pending record present
+  ✓ the pending record carries P'
+  ✓ submission does not bump the epoch
+
+── pending exclusivity: no displacement, no session (§5, §6 step 4)
+  ✓ a second submission is rejected while one is pending
+  ✓ a session is rejected while a recovery is pending (cancel first)
+
+── veto window: finalisation blocked, cancel immediate (§6 step 5, REC-9)
+  ✓ finalisation blocked before the window elapses
+  ✓ still blocked an hour in
+  ✓ cancel clears the pending record
+  ✓ a cancelled attempt leaves the epoch unchanged
+  ✓ cancel advances the authorisation nonce through the seam
+  ✓ the cancelled submission replayed verbatim is rejected (the nonce advanced)
+  ✓ a fresh signature over the pre-cancel nonce is rejected too
+  ✓ nothing to finalise after a cancel
+
+── total loss end to end: submit, wait out the window, finalise (§6, REC-8)
+  ✓ the reader accepts the v1 artefact set and returns its two shares
+  ✓ reconstructed secret opens the stored recovery key
+  ✓ the wrap restores the encryption secret (REC-7)
+  ✓ witness form is canonical
+  ✓ recovery starts with a nonempty device set
+  ✓ finalisation bumps the device epoch
+  ✓ finalisation advances the authorisation nonce (MIP-0013 §8 d)
+  ✓ finalisation advances the round counter
+  ✓ exactly one device at the new epoch (MIP-0013 §8c)
+  ✓ finalisation replaces the whole device set (AUTH-6)
+  ✓ the sole retained entry is the authorised successor
+  ✓ pending record cleared
+  ✓ the published vector is retired with its secret
+  ✓ the recovery key rotated to the successor
+
+── the epoch bump revokes every prior device (AUTH-6)
+  ✓ the pre-recovery device is dead at the new epoch
+  ✓ the successor device authorises at the new epoch (REC-8)
+
+── post-recovery: a fresh session closes the exposure (§6 step 7)
+  ✓ a single recovered device can run a session (1-of-n)
+
+── grant recovery: grants from before and during the window stay dead across epochs
+
+── grant slot isolation: revoking one slot leaves the same key’s other slot usable
+  ✓ jubjub: revoked slot refuses
+  ✓ jubjub: revoked slot changes no state
+  ✓ jubjub: sibling spend does not revive or advance the revoked slot
+  ✓ jubjub: same key's other slot still spends
+  ✓ jubjub: slot-isolated spend preserves device authority
+  ✓ k256: revoked slot refuses
+  ✓ k256: revoked slot changes no state
+  ✓ k256: sibling spend does not revive or advance the revoked slot
+  ✓ k256: same key's other slot still spends
+  ✓ k256: slot-isolated spend preserves device authority
+
+── expiry alone does not permit overwriting an unrevoked record
+  ✓ expired but unrevoked record cannot be reissued
+  ✓ expired-record reissue refusal changes no state
+
+── cumulative spend arithmetic rejects a Uint<128> wrap with a valid spent opening
+  ✓ jubjub: legitimate near-maximum spend establishes the committed total
+  ✓ jubjub: cumulative arithmetic rejects overflow before narrowing
+  ✓ jubjub: cumulative wrap refusal changes no state
+  ✓ k256: legitimate near-maximum spend establishes the committed total
+  ✓ k256: cumulative arithmetic rejects overflow before narrowing
+  ✓ k256: cumulative wrap refusal changes no state
+
+── shielded grant scope checks the witness coin color, not just its lookup selector
+  ✓ withdraw_shielded_with_grant_jubjub: foreign witness color refuses
+  ✓ withdraw_shielded_with_grant_jubjub: foreign witness refusal changes no state
+  ✓ withdraw_shielded_to_contract_with_grant_jubjub: foreign witness color refuses
+  ✓ withdraw_shielded_to_contract_with_grant_jubjub: foreign witness refusal changes no state
+  ✓ withdraw_shielded_with_grant_k256: foreign witness color refuses
+  ✓ withdraw_shielded_with_grant_k256: foreign witness refusal changes no state
+  ✓ withdraw_shielded_to_contract_with_grant_k256: foreign witness color refuses
+  ✓ withdraw_shielded_to_contract_with_grant_k256: foreign witness refusal changes no state
+  ✓ grant 0 receives the contract's current epoch
+  ✓ grant 1 receives the contract's current epoch
+  ✓ second grant was issued while recovery was pending
+  ✓ recovery advances the device nonce once
+  ✓ recovery advances the grant-invalidating epoch
+  ✓ recovery retires every previous device entry
+  ✓ grant 0 cannot spend after recovery
+  ✓ grant 0 cannot spend after recovery: all tracked state unchanged
+  ✓ grant 1 cannot spend after recovery
+  ✓ grant 1 cannot spend after recovery: all tracked state unchanged
+  ✓ second recovery retains exactly its authorised successor
+  ✓ grant 0 cannot revive at a later epoch
+  ✓ grant 0 cannot revive at a later epoch: all tracked state unchanged
+  ✓ grant 0 retains its contract-assigned issuance epoch
+  ✓ grant 1 cannot revive at a later epoch
+  ✓ grant 1 cannot revive at a later epoch: all tracked state unchanged
+  ✓ grant 1 retains its contract-assigned issuance epoch
+  ✓ grant 0 receives the contract's current epoch
+  ✓ successor re-issuance is a new incarnation
+  ✓ pre-recovery signature cannot spend a new incarnation even with its fresh opening
+  ✓ old-incarnation refusal changes no tracked state
+  ✓ fresh successor-issued grant spends once
+  ✓ grant spend preserves the device nonce and count
+  ✓ grant spend preserves every device entry
+  ✓ fresh grant advances only its spend state and account round
+  ✓ grant 1 receives the contract's current epoch
+  ✓ successor re-issuance is a new incarnation
+  ✓ pre-recovery signature cannot spend a new incarnation even with its fresh opening
+  ✓ old-incarnation refusal changes no tracked state
+  ✓ fresh successor-issued grant spends once
+  ✓ grant spend preserves the device nonce and count
+  ✓ grant spend preserves every device entry
+  ✓ fresh grant advances only its spend state and account round
+
+◆ recovery-sim: PASS
+
+> midnight-account-custody@0.1.0 test:unit
+> tsx src/tests/unit-offline.ts
+
+
+━━━ unit-offline ━━━
+
+── [jubjub] device keys and rolling entries (MIP-0013 §1, §3, AUTH-9)
+  ✓ [jubjub] sk in [1, r_J)
+  ✓ [jubjub] device entry is 32 bytes
+  ✓ [jubjub] entry deterministic
+  ✓ [jubjub] distinct keys give distinct entries
+  ✓ [jubjub] the use counter rolls the entry (single-use, AUTH-9)
+  ✓ [jubjub] an epoch bump invalidates every prior entry (AUTH-6)
+  ✓ [jubjub] entries for one key are unequal across accounts
+
+── [jubjub] signing pipeline: grinding and the Schnorr equation (§5)
+  ✓ [jubjub] ground challenge below r_J (§5.2)
+  ✓ [jubjub] s in scalar domain
+  ✓ [jubjub] challenge deterministic
+  ✓ [jubjub] s·G == R + c·pk (the §4 equation, off-circuit)
+  ✓ [jubjub] equation fails for a different pk (non-vacuous verifier, S10)
+  ✓ [jubjub] equation fails for a tampered challenge
+
+── [jubjub] challenge domain separation (AUTH-3) and witness binding (AUTH-10)
+  ✓ [jubjub] per-circuit tags separate identical argument lists
+  ✓ [jubjub] the witness values pin the private state (AUTH-10): a different coin, a different challenge
+  ✓ [jubjub] account address separates challenges across accounts
+  ✓ [jubjub] auth_nonce separates challenges across calls (AUTH-2)
+
+── [k256] device keys and rolling entries (§3, AUTH-9)
+  ✓ [k256] signer n matches the runtime curve order
+  ✓ [k256] sk in [1, n)
+  ✓ [k256] pk is a real point, never the identity
+  ✓ [k256] device entry is 32 bytes
+  ✓ [k256] entry deterministic
+  ✓ [k256] distinct keys give distinct entries
+  ✓ [k256] the use counter rolls the entry (single-use, AUTH-9)
+  ✓ [k256] an epoch bump invalidates every prior entry (AUTH-6)
+  ✓ [k256] entries for one key are unequal across accounts
+
+── [both arms] the arm marker keeps the shared device set disjoint
+  ✓ [k256] independent entry fixture matches a valid key
+  ✓ [both arms] identical coordinates derive different entries under each arm
+  ✓ [k256] independent boot recipe matches a valid key
+  ✓ [both arms] the boot commitment is arm-marked, so only one arm can activate
+  ✓ [k256] independent grant fixture matches a valid key
+  ✓ [k256] independent add-device challenge fixture matches a valid key
+
+── [k256] signing pipeline: ECDSA over the envelope digest (envelope 0)
+  ✓ [k256] the authorisation carries envelope 0
+  ✓ [k256] envelope_digest(0, h) == SHA-256(h), recomputed independently
+  ✓ [k256] the signature does NOT verify over the raw challenge (no prehash mode exists)
+  ✓ [k256] r in [1, n)
+  ✓ [k256] s in [1, n)
+  ✓ [k256] signer emits low-S (the circuit accepts both forms)
+  ✓ [k256] challenge deterministic
+  ✓ [k256] signature verifies on an independent stack (noble)
+  ✓ [k256] x(u1·G + u2·pk) mod n == r (the verify equation, off-circuit)
+  ✓ [k256] verification fails for a different pk (non-vacuous verifier, S10)
+  ✓ [k256] verification fails for a tampered digest
+  ✓ [k256] verification fails for a tampered s
+  ✓ [k256] the high-S twin verifies too (accepted; replay-dead via AUTH-8/9)
+
+── [k256/connector] envelope 1: the connector signData digest; envelopes are enrolled, not chosen
+  ✓ [k256/connector] envelope_digest(1, h) == SHA-256(prefix || h), recomputed independently
+  ✓ [k256/connector] the authorisation carries envelope 1
+  ✓ [k256/connector] the signature verifies over the connector envelope digest (independent stack)
+  ✓ [k256/connector] the same signature does NOT verify under envelope 0 (envelopes cannot alias)
+  ✓ [k256/connector] entries are disjoint across envelopes for the same key
+  ✓ [k256/connector] boot commitments are envelope-marked too
+  ✓ [k256] envelope_digest aborts on an unknown envelope id
+
+── [k256] v2 derivation vectors (pinned; shared with signer-rs, recomputed with hashlib)
+  ✓ [k256] derive_device_entry_with_k256 v2 vector, envelope 0
+  ✓ [k256] derive_boot_commitment_with_k256 v2 vector, envelope 0
+  ✓ [k256] derive_device_entry_with_k256 v2 vector, envelope 1
+  ✓ [k256] derive_boot_commitment_with_k256 v2 vector, envelope 1
+
+── [k256] challenge domain separation (AUTH-3) and witness binding (AUTH-10)
+  ✓ [k256] per-circuit tags separate identical argument lists
+  ✓ [k256] the witness values pin the private state (AUTH-10): a different coin, a different challenge
+  ✓ [k256] account address separates challenges across accounts
+  ✓ [k256] auth_nonce separates challenges across calls (AUTH-2)
+  ✓ [k256] the signing key is bound into the challenge (pk coordinate bytes)
+
+── [grant] grant identity, both k1 envelopes and the v1 arm (§4.3)
+  ✓ [grant] derive_grant_id_with_k256 k1_envelope0_slot0 == SHA-256 of the §4.3 preimage (162 bytes)
+  ✓ [grant] derive_grant_id_with_k256 k1_envelope0_slot1 == SHA-256 of the §4.3 preimage (162 bytes)
+  ✓ [grant] derive_grant_id_with_k256 k1_envelope1_slot0 == SHA-256 of the §4.3 preimage (162 bytes)
+  ✓ [grant] derive_grant_id_with_k256 k1_envelope1_slot1 == SHA-256 of the §4.3 preimage (162 bytes)
+  ✓ [grant] derive_grant_id_with_jubjub v1_slot0 == SHA-256 of the §4.3 preimage (161 bytes)
+  ✓ [grant] derive_grant_id_with_jubjub v1_slot1 == SHA-256 of the §4.3 preimage (161 bytes)
+  ✓ [grant] the envelope separates ids of one key at one origin (GR-3)
+  ✓ [grant] the slot separates ids of one key at one origin (GR-3)
+  ✓ [grant] the arm marker separates ids across arms (GR-3)
+
+── [grant] the three commitments, one recipient projection per kind (§4.5)
+  ✓ [grant] derive_grant_object_commit kind0_any == SHA-256 of the §4.5 preimage (145 bytes)
+  ✓ [grant] derive_grant_object_commit kind1_user_address == SHA-256 of the §4.5 preimage (145 bytes)
+  ✓ [grant] derive_grant_object_commit kind2_zswap_coin_public_key == SHA-256 of the §4.5 preimage (145 bytes)
+  ✓ [grant] derive_grant_object_commit kind3_contract_address == SHA-256 of the §4.5 preimage (145 bytes)
+  ✓ [grant] derive_grant_object_commit read_only == SHA-256 of the §4.5 preimage (145 bytes)
+  ✓ [grant] derive_grant_spent_commit spent0 == SHA-256 of the §4.5 preimage (80 bytes)
+  ✓ [grant] derive_grant_spent_commit spent200 == SHA-256 of the §4.5 preimage (80 bytes)
+  ✓ [grant] derive_grant_spent_commit spent_u128_max == SHA-256 of the §4.5 preimage (80 bytes)
+  ✓ [grant] derive_grant_rp_commit r1_grantee == SHA-256 of the §4.5 preimage (96 bytes)
+  ✓ [grant] derive_grant_rp_commit non_r1_grantee == SHA-256 of the §4.5 preimage (96 bytes)
+
+── [grant] the v2 scope digest, flags as single bytes (§4.5)
+  ✓ [grant] derive_grant_caller_commit contract_caller == SHA-256 of the §4.5 preimage (96 bytes)
+  ✓ [grant] derive_grant_scope_digest unshielded_and_read == SHA-256 of the §4.5 preimage (309 bytes)
+  ✓ [grant] derive_grant_scope_digest contract_caller_pin == SHA-256 of the §4.5 preimage (309 bytes)
+  ✓ [grant] derive_grant_scope_digest shielded_and_read == SHA-256 of the §4.5 preimage (309 bytes)
+  ✓ [grant] derive_grant_scope_digest read_only == SHA-256 of the §4.5 preimage (309 bytes)
+  ✓ [grant] derive_grant_scope_digest all_flags_and_u128_bounds == SHA-256 of the §4.5 preimage (309 bytes)
+  ✓ [grant] each of the sixteen flag patterns gives its own scope digest
+
+── [grant] the k256 grant-twin challenges (§6.3) and the lifecycle challenges (§6.1)
+  ✓ [grant] challenge_withdraw_unshielded_with_grant_k256 pinned == SHA-256 of the §6.3 preimage (256 bytes)
+  ✓ [grant] challenge_withdraw_shielded_with_grant_k256 pinned == SHA-256 of the §6.3 preimage (568 bytes)
+  ✓ [grant] challenge_issue_grant_with_k256 pinned == SHA-256 of the §6.1 preimage (200 bytes)
+  ✓ [grant] challenge_revoke_grant_with_k256 pinned == SHA-256 of the §6.1 preimage (168 bytes)
+  ✓ [grant] challenge_revoke_all_grants_with_k256 pinned == SHA-256 of the §6.1 preimage (136 bytes)
+  ✓ [grant] every new challenge family is disjoint from the device families (AUTH-3)
+
+── [grant] envelope digests over a grant challenge (both envelopes)
+  ✓ [grant] envelope_digest envelope0_over_the_unshielded_grant_challenge == SHA-256 of the §3.1 preimage (32 bytes)
+  ✓ [grant] envelope_digest envelope1_over_the_unshielded_grant_challenge == SHA-256 of the §3.1 preimage (59 bytes)
+
+── [grant] a k256 grantee signs a grant challenge, and one signature fits one grant only
+  ✓ [grant] envelope 0: the grantee signs envelope_digest(envelope, challenge), never the challenge
+  ✓ [grant] envelope 0: the grant signature verifies on an independent stack (noble)
+  ✓ [grant] envelope 0: the high-S twin verifies too (both S forms accepted, SIG-4)
+  ✓ [grant] envelope 0: verification fails for another grantee key (non-vacuous verifier, S10)
+  ✓ [grant] envelope 0: the signature does not verify under another grant_id (GR-3)
+  ✓ [grant] envelope 0: the signature does not verify under another issued_at (GR-6)
+  ✓ [grant] envelope 0: the signature does not verify under the next record nonce (GR-5)
+  ✓ [grant] envelope 0: the signature does not verify under the other envelope
+  ✓ [grant] envelope 1: the grantee signs envelope_digest(envelope, challenge), never the challenge
+  ✓ [grant] envelope 1: the grant signature verifies on an independent stack (noble)
+  ✓ [grant] envelope 1: the high-S twin verifies too (both S forms accepted, SIG-4)
+  ✓ [grant] envelope 1: verification fails for another grantee key (non-vacuous verifier, S10)
+  ✓ [grant] envelope 1: the signature does not verify under another grant_id (GR-3)
+  ✓ [grant] envelope 1: the signature does not verify under another issued_at (GR-6)
+  ✓ [grant] envelope 1: the signature does not verify under the next record nonce (GR-5)
+  ✓ [grant] envelope 1: the signature does not verify under the other envelope
+
+── [grant] pinned signature vectors under sk = 1 (deterministic, RFC 6979)
+  ✓ [grant] envelope 0: the pinned grantee key is G
+  ✓ [grant] envelope 0: the pinned signature verifies over the pinned envelope digest
+  ✓ [grant] envelope 0: the pinned high-S twin verifies too (SIG-4)
+  ✓ [grant] envelope 1: the pinned grantee key is G
+  ✓ [grant] envelope 1: the pinned signature verifies over the pinned envelope digest
+  ✓ [grant] envelope 1: the pinned high-S twin verifies too (SIG-4)
+
+── [grant] the k1 withdraw_shielded_to_contract challenge (§6.3)
+  ✓ [grant] challenge_withdraw_shielded_to_contract_with_grant_k256 pinned == SHA-256 of the §6.3 preimage (568 bytes)
+  ✓ [grant] the two k1 shielded twins separate on the DST alone
+
+── [grant] the v1 grant-twin challenges (§6.3), fixture sig_r = 2·G
+  ✓ [grant] challenge_withdraw_unshielded_with_grant_jubjub pinned == SHA-256 of the §6.3 preimage (328 bytes)
+  ✓ [grant] challenge_withdraw_shielded_with_grant_jubjub pinned == SHA-256 of the §6.3 preimage (640 bytes)
+  ✓ [grant] challenge_withdraw_shielded_to_contract_with_grant_jubjub pinned == SHA-256 of the §6.3 preimage (640 bytes)
+
+── [grant] the v1 lifecycle challenges (§6.1), in the device tag family
+  ✓ [grant] challenge_issue_grant_with_jubjub pinned == SHA-256 of the §6.1 preimage (272 bytes)
+  ✓ [grant] challenge_revoke_grant_with_jubjub pinned == SHA-256 of the §6.1 preimage (240 bytes)
+  ✓ [grant] challenge_revoke_all_grants_with_jubjub pinned == SHA-256 of the §6.1 preimage (208 bytes)
+
+── [grant] the pinned preimage widths of §6.3 and §6.1
+  ✓ [grant] challenge_withdraw_unshielded_with_grant_k256 preimage is 256 bytes
+  ✓ [grant] challenge_withdraw_shielded_with_grant_k256 preimage is 568 bytes
+  ✓ [grant] challenge_withdraw_shielded_to_contract_with_grant_k256 preimage is 568 bytes
+  ✓ [grant] challenge_withdraw_unshielded_with_grant_jubjub preimage is 328 bytes
+  ✓ [grant] challenge_withdraw_shielded_with_grant_jubjub preimage is 640 bytes
+  ✓ [grant] challenge_withdraw_shielded_to_contract_with_grant_jubjub preimage is 640 bytes
+  ✓ [grant] challenge_issue_grant_with_k256 preimage is 200 bytes
+  ✓ [grant] challenge_revoke_grant_with_k256 preimage is 168 bytes
+  ✓ [grant] challenge_revoke_all_grants_with_k256 preimage is 136 bytes
+  ✓ [grant] challenge_issue_grant_with_jubjub preimage is 272 bytes
+  ✓ [grant] challenge_revoke_grant_with_jubjub preimage is 240 bytes
+  ✓ [grant] challenge_revoke_all_grants_with_jubjub preimage is 208 bytes
+  ✓ [grant] challenge_withdraw_unshielded_with_grant_jubjub is 72 bytes wider than its k1 twin (sig_r and grind_nonce)
+  ✓ [grant] challenge_withdraw_shielded_with_grant_jubjub is 72 bytes wider than its k1 twin (sig_r and grind_nonce)
+  ✓ [grant] challenge_withdraw_shielded_to_contract_with_grant_jubjub is 72 bytes wider than its k1 twin (sig_r and grind_nonce)
+  ✓ [grant] challenge_issue_grant_with_jubjub is 72 bytes wider than its k1 twin (sig_r and grind_nonce)
+  ✓ [grant] challenge_revoke_grant_with_jubjub is 72 bytes wider than its k1 twin (sig_r and grind_nonce)
+  ✓ [grant] challenge_revoke_all_grants_with_jubjub is 72 bytes wider than its k1 twin (sig_r and grind_nonce)
+
+── [grant] the v1 grant and lifecycle families are disjoint from the device families (AUTH-3)
+  ✓ [grant] the 12 v1 challenge families are pairwise distinct (AUTH-3)
+  ✓ [grant] the arm marker separates the k1 and v1 grant challenge families
+
+── [grant] a v1 grantee signs a grant challenge, and one signature fits one grant only
+  ✓ [grant] the ground grant challenge is below r_J (§6.4 step 4)
+  ✓ [grant] s in the scalar domain
+  ✓ [grant] s·G == R + c·pk over the grant challenge (the seam equation, off-circuit)
+  ✓ [grant] the equation fails for another grantee key (non-vacuous verifier, S10)
+  ✓ [grant] the signature does not verify under another grant_id (GR-3)
+  ✓ [grant] the signature does not verify under another issued_at (GR-6)
+  ✓ [grant] the signature does not verify under the next record nonce (GR-5)
+  ✓ [grant] the signature does not verify under the k1 arm’s challenge for the same call
+
+── [grant] a pinned v1 grant signature (sk = 1, nonce r = 2, ground)
+  ✓ [grant] the pinned v1 signature satisfies s·G == R + c·pk (grind_nonce 17)
+  ✓ [grant] the pinned v1 signature fails under a tampered challenge
+
+── [grant] writing the cross-implementation vectors for signer-rs
+  ✓ [grant] 36 pinned vectors written to src/tests/vectors/grants-v3.json
+  ✓ [grant] 3 pinned signatures written (two k1 envelopes and one v1)
+
+── InboxEntry v1 codec (MIP-0012 §6.4)
+  ✓ container is 192 bytes
+  ✓ version and suite bytes
+  ✓ padding zeroed
+  ✓ entry opens with the account secret
+  ✓ value roundtrips (u128 BE)
+  ✓ nonce roundtrips
+  ✓ color roundtrips
+  ✓ wrong key is skipped
+  ✓ unknown version is skipped
+  ✓ unknown suite is skipped
+  ✓ tampered ciphertext is skipped
+
+── [jubjub] grinding statistics sanity (§5.2)
+  grinding: 21.9 attempts/signature (expect ≈17.5)
+
+◆ unit-offline: PASS
+
+> midnight-account-custody@0.1.0 test:view-envelope-offline
+> tsx src/tests/inbox-view-envelope/offline.ts
+
+PASS: 192-byte envelope, restored public P-256 metadata, OpenSSL cross-check, 192 tamper cases, actual circuit append and rotation.

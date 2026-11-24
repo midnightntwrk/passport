@@ -1,0 +1,8 @@
+2026-11-24 08:25:47 Transaction malformed: exceeded the maximum time to dismiss for transaction size; this transaction would take 17.268ms to dismiss, but given its size of 8190 bytes, it may take at most 16.380ms
+2026-11-24 08:25:47 🚫 Rejected transaction a508894a6d3272a823036d56443804095fd4fbcbd549a4d3d03ba3027e5f2114 from mempool: Transaction Error: Malformed(FeeCalculation(OutsideTimeToDismiss))
+2026-11-24 08:25:58 Transaction malformed: exceeded the maximum time to dismiss for transaction size; this transaction would take 17.268ms to dismiss, but given its size of 8191 bytes, it may take at most 16.382ms
+2026-11-24 08:25:58 🚫 Rejected transaction 127b0af6ce32e248cb2cbce760c4e5acb51f8862bdb7ce354c4efb3cb0fe57c2 from mempool: Transaction Error: Malformed(FeeCalculation(OutsideTimeToDismiss))
+2026-11-24 08:26:10 Transaction malformed: exceeded the maximum time to dismiss for transaction size; this transaction would take 17.268ms to dismiss, but given its size of 8191 bytes, it may take at most 16.382ms
+2026-11-24 08:26:10 🚫 Rejected transaction e015b21fd3384e8dfbe9046be4e9c3fd45cd53726764038e3453dac4254756bd from mempool: Transaction Error: Malformed(FeeCalculation(OutsideTimeToDismiss))
+2026-11-24 08:26:21 Transaction malformed: exceeded the maximum time to dismiss for transaction size; this transaction would take 17.268ms to dismiss, but given its size of 8191 bytes, it may take at most 16.382ms
+2026-11-24 08:26:21 🚫 Rejected transaction 2a846b1e0dd95ba2d865c41fee06c61bbd9ea78c5ca038fc033c88c5ccf39730 from mempool: Transaction Error: Malformed(FeeCalculation(OutsideTimeToDismiss))

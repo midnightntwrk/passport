@@ -1,0 +1,17 @@
+{
+  "label": "test-recovery-offline",
+  "kind": "scenario",
+  "command": [
+    "npm",
+    "run",
+    "test:recovery-offline"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T08:00:04.104Z",
+  "timeoutMs": 600000,
+  "status": "failed",
+  "code": 1,
+  "signal": null,
+  "completedAt": "2026-11-24T08:00:04.225Z",
+  "completionVerified": false
+}

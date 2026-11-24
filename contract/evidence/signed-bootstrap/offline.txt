@@ -1,0 +1,176 @@
+
+> midnight-account-custody@0.1.0 test:signed-bootstrap-offline
+> node --import tsx --test src/tests/signed-bootstrap-offline.ts src/tests/signed-bootstrap-client.ts src/tests/signed-bootstrap-registration.ts
+
+TAP version 13
+# Subtest: B05: client validates canonical network and independently observed genesis/checkpoint before approval
+ok 1 - B05: client validates canonical network and independently observed genesis/checkpoint before approval
+  ---
+  duration_ms: 2.87425
+  type: 'test'
+  ...
+# Subtest: B11: resume each persisted stage and reuse the exact approval after temporary-key loss
+ok 2 - B11: resume each persisted stage and reuse the exact approval after temporary-key loss
+  ---
+  duration_ms: 62.704292
+  type: 'test'
+  ...
+# Subtest: B11: invalid assertion fails before temporary signing and permits explicit unapproved replacement
+ok 3 - B11: invalid assertion fails before temporary signing and permits explicit unapproved replacement
+  ---
+  duration_ms: 9.558166
+  type: 'test'
+  ...
+# Subtest: B11: losing both approval and temporary key prevents completion; unrelated key cannot replace it
+ok 4 - B11: losing both approval and temporary key prevents completion; unrelated key cannot replace it
+  ---
+  duration_ms: 6.775708
+  type: 'test'
+  ...
+# Subtest: B11: concurrent approval and target changes during the assertion cannot produce a second approval
+ok 5 - B11: concurrent approval and target changes during the assertion cannot produce a second approval
+  ---
+  duration_ms: 10.783083
+  type: 'test'
+  ...
+# Subtest: B10: serializer whitelists public metadata and drops injected secret properties
+ok 6 - B10: serializer whitelists public metadata and drops injected secret properties
+  ---
+  duration_ms: 26.093667
+  type: 'test'
+  ...
+# Subtest: B03/B06/B10: imported records reject altered context, target and noncanonical approvals
+ok 7 - B03/B06/B10: imported records reject altered context, target and noncanonical approvals
+  ---
+  duration_ms: 82.25275
+  type: 'test'
+  ...
+# Subtest: B01/B11: browser transport uses raw address user.id and passes known IDs as exclusions
+ok 8 - B01/B11: browser transport uses raw address user.id and passes known IDs as exclusions
+  ---
+  duration_ms: 0.366
+  type: 'test'
+  ...
+# Subtest: B12: independent unpadded typed-hash recipes match every generated helper and r1:v2 entry
+ok 9 - B12: independent unpadded typed-hash recipes match every generated helper and r1:v2 entry
+  ---
+  duration_ms: 16.472459
+  type: 'test'
+  ...
+# Subtest: B01/B07/B08: deploy first, deposit before activation, install exactly one target and preserve unrelated state
+ok 10 - B01/B07/B08: deploy first, deposit before activation, install exactly one target and preserve unrelated state
+  ---
+  duration_ms: 164.261792
+  type: 'test'
+  ...
+# Subtest: B02/B03: modified public keys, policies, nonce points and signatures fail without state changes
+ok 11 - B02/B03: modified public keys, policies, nonce points and signatures fail without state changes
+  ---
+  duration_ms: 137.589291
+  type: 'test'
+  ...
+# Subtest: B02: invalid native points are refused at the generated host/runtime boundary
+ok 12 - B02: invalid native points are refused at the generated host/runtime boundary
+  ---
+  duration_ms: 95.035917
+  type: 'test'
+  ...
+# Subtest: B03/B05/B06: account/network/epoch/nonce/format/scheme/profile and operation are signed
+ok 13 - B03/B05/B06: account/network/epoch/nonce/format/scheme/profile and operation are signed
+  ---
+  duration_ms: 397.84525
+  type: 'test'
+  ...
+# Subtest: B04: genuine signatures over unsupported assertion envelopes are rejected by activation
+ok 14 - B04: genuine signatures over unsupported assertion envelopes are rejected by activation
+  ---
+  duration_ms: 266.883042
+  type: 'test'
+  ...
+# Subtest: B04: canonical 134 assertion accepts low-S
+ok 15 - B04: canonical 134 assertion accepts low-S
+  ---
+  duration_ms: 79.214875
+  type: 'test'
+  ...
+# Subtest: B04: canonical 134 assertion accepts high-S
+ok 16 - B04: canonical 134 assertion accepts high-S
+  ---
+  duration_ms: 78.048958
+  type: 'test'
+  ...
+# Subtest: B04: Chrome 243 assertion accepts low-S
+ok 17 - B04: Chrome 243 assertion accepts low-S
+  ---
+  duration_ms: 78.326042
+  type: 'test'
+  ...
+# Subtest: B04: Chrome 243 assertion accepts high-S
+ok 18 - B04: Chrome 243 assertion accepts high-S
+  ---
+  duration_ms: 79.832667
+  type: 'test'
+  ...
+# Subtest: B04: activation accepts UP+UV with valid backup flags 13
+ok 19 - B04: activation accepts UP+UV with valid backup flags 13
+  ---
+  duration_ms: 65.965291
+  type: 'test'
+  ...
+# Subtest: B04: activation accepts UP+UV with valid backup flags 29
+ok 20 - B04: activation accepts UP+UV with valid backup flags 29
+  ---
+  duration_ms: 61.748167
+  type: 'test'
+  ...
+# Subtest: B06: constructor rejects unknown modes and incompatible network/boot configuration
+ok 21 - B06: constructor rejects unknown modes and incompatible network/boot configuration
+  ---
+  duration_ms: 195.272625
+  type: 'test'
+  ...
+# Subtest: B09: recovery finalised first consumes cached approvals permanently
+ok 22 - B09: recovery finalised first consumes cached approvals permanently
+  ---
+  duration_ms: 90.265666
+  type: 'test'
+  ...
+# Subtest: B09: activation preserves pending recovery; recovery retires passkey
+ok 23 - B09: activation preserves pending recovery; recovery retires passkey
+  ---
+  duration_ms: 138.041958
+  type: 'test'
+  ...
+# Subtest: B09: activation preserves pending recovery; passkey vetoes
+ok 24 - B09: activation preserves pending recovery; passkey vetoes
+  ---
+  duration_ms: 131.291292
+  type: 'test'
+  ...
+# Subtest: B10: prover inputs contain signatures and public keys, with neither signing secret
+ok 25 - B10: prover inputs contain signatures and public keys, with neither signing secret
+  ---
+  duration_ms: 65.658584
+  type: 'test'
+  ...
+# Subtest: B01: signed bootstrap preflights exact-host RP and secure origins before deploying
+ok 26 - B01: signed bootstrap preflights exact-host RP and secure origins before deploying
+  ---
+  duration_ms: 1.039208
+  type: 'test'
+  ...
+# Subtest: B11: sessions share a registration reservation and recheck metadata after asynchronous chain checks
+ok 27 - B11: sessions share a registration reservation and recheck metadata after asynchronous chain checks
+  ---
+  duration_ms: 5.969166
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2387.339458

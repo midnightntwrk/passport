@@ -1,0 +1,18 @@
+{
+  "label": "test-signed-bootstrap-offline",
+  "kind": "tap",
+  "command": [
+    "npm",
+    "run",
+    "test:signed-bootstrap-offline"
+  ],
+  "cwd": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/.worktrees/213-signed-bootstrap/contract",
+  "startedAt": "2026-11-24T08:20:06.933Z",
+  "timeoutMs": 600000,
+  "status": "passed",
+  "code": 0,
+  "signal": null,
+  "completedAt": "2026-11-24T08:20:09.451Z",
+  "tests": 27,
+  "completionVerified": true
+}
