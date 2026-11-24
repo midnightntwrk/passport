@@ -63,7 +63,7 @@ await runScenario('P-256 scoped-grant spends on node', async () => {
     console.log(`  accepted ${label}: ${result.txId}`);
   };
 
-  step('deploy passkey-owned v3 account; fund a real unshielded balance');
+  step('deploy passkey-owned v4 account; fund a real unshielded balance');
   const owner = softwarePasskey(), delegate = softwarePasskey();
   const account = await CustodyAccount.deploy(ctx.providers, compiledAccountContract(), owner.device, generateEncKeyPair());
   assert.equal((await account.ledgerState()).spec_version, 4n);

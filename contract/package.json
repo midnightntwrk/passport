@@ -9,7 +9,7 @@
     "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
-    "test:signed-bootstrap-offline": "node --import tsx --test src/tests/signed-bootstrap-offline.ts src/tests/signed-bootstrap-client.ts src/tests/signed-bootstrap-registration.ts",
+    "test:signed-bootstrap-offline": "node --import tsx --test src/tests/signed-bootstrap-offline.ts src/tests/signed-bootstrap-client.ts src/tests/signed-bootstrap-registration.ts src/tests/signed-bootstrap-resume.ts",
     "test:signed-bootstrap": "tsx src/tests/signed-bootstrap-conformance.ts",
     "test:signed-bootstrap-keyed": "node --import tsx --test src/tests/signed-bootstrap-wave.ts",
     "measure:signed-bootstrap": "node scripts/measure-signed-bootstrap.mjs",

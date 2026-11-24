@@ -1572,7 +1572,7 @@ await runScenario('grants-conformance (scoped grants E2)', async () => {
   rejectDetails.capExhaustingSpendTx = a3.txId;
   if (recA3.nonce !== '3') {
     setVerdict('spend', 'PARTIAL');
-    rejectDetails.note = `grant A nonce ${recA3.nonce} after the third call, expected 4`;
+    rejectDetails.note = `grant A nonce ${recA3.nonce} after the third call, expected 3`;
   }
   await reject('over cap (grant A at 500 of 500, asks 100 within the per-call cap)', ['cumulative cap exceeded'], () =>
     rawGrantSpend({ grant: grantA, recipient: userCpk, amount: 100n }));

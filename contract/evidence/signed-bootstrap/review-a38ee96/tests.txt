@@ -1,0 +1,442 @@
+TAP version 13
+# Subtest: fresh pages cover 4095, 4096, and 20000, and survive a client restart
+ok 1 - fresh pages cover 4095, 4096, and 20000, and survive a client restart
+  ---
+  duration_ms: 1118.097458
+  type: 'test'
+  ...
+# Subtest: missing entries report bounded exhaustion, not non-registration
+ok 2 - missing entries report bounded exhaustion, not non-registration
+  ---
+  duration_ms: 1.04225
+  type: 'test'
+  ...
+# Subtest: full K256 envelopes and both P256 policy fields isolate cached counters
+ok 3 - full K256 envelopes and both P256 policy fields isolate cached counters
+  ---
+  duration_ms: 39.109041
+  type: 'test'
+  ...
+# Subtest: stale high hints support both forward advancement and lower-counter resumption
+ok 4 - stale high hints support both forward advancement and lower-counter resumption
+  ---
+  duration_ms: 373.989
+  type: 'test'
+  ...
+# Subtest: cursor and hint scope, epoch, and numeric bounds are checked
+ok 5 - cursor and hint scope, epoch, and numeric bounds are checked
+  ---
+  duration_ms: 2.051792
+  type: 'test'
+  ...
+# Subtest: Uint64 end is bounded and never produces an overflowing cursor
+ok 6 - Uint64 end is bounded and never produces an overflowing cursor
+  ---
+  duration_ms: 0.751334
+  type: 'test'
+  ...
+# Subtest: legacy registration resets hints without assigning a signing profile
+ok 7 - legacy registration resets hints without assigning a signing profile
+  ---
+  duration_ms: 155.45425
+  type: 'test'
+  ...
+# Subtest: fresh discovery authorises real simulated calls and resynchronises after another client acts
+ok 8 - fresh discovery authorises real simulated calls and resynchronises after another client acts
+  ---
+  duration_ms: 12386.248917
+  type: 'test'
+  ...
+# Subtest: lost-device removal works with independently restored high-counter owner and target
+ok 9 - lost-device removal works with independently restored high-counter owner and target
+  ---
+  duration_ms: 27615.421334
+  type: 'test'
+  ...
+# Subtest: local and external recovery reset a reused successor in the existing client
+ok 10 - local and external recovery reset a reused successor in the existing client
+  ---
+  duration_ms: 1024.19975
+  type: 'test'
+  ...
+# Subtest: JubJub: dormant recovery admits only the successor across later operations and recovery
+ok 11 - JubJub: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 796.358875
+  type: 'test'
+  ...
+# Subtest: JubJub: only the committed key and salt can perform normal activation
+ok 12 - JubJub: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 418.277417
+  type: 'test'
+  ...
+# Subtest: JubJub: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 13 - JubJub: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 290.738042
+  type: 'test'
+  ...
+# Subtest: JubJub: activation during pending recovery permits cancellation and normal operation
+ok 14 - JubJub: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 219.869291
+  type: 'test'
+  ...
+# Subtest: JubJub: finalisation retires a device activated while recovery was pending
+ok 15 - JubJub: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 296.167625
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: dormant recovery admits only the successor across later operations and recovery
+ok 16 - K256, raw envelope: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 608.148084
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: only the committed key and salt can perform normal activation
+ok 17 - K256, raw envelope: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 292.053667
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 18 - K256, raw envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 213.411209
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: activation during pending recovery permits cancellation and normal operation
+ok 19 - K256, raw envelope: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 264.372291
+  type: 'test'
+  ...
+# Subtest: K256, raw envelope: finalisation retires a device activated while recovery was pending
+ok 20 - K256, raw envelope: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 350.987958
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: dormant recovery admits only the successor across later operations and recovery
+ok 21 - K256, connector envelope: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 983.622333
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: only the committed key and salt can perform normal activation
+ok 22 - K256, connector envelope: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 394.680542
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 23 - K256, connector envelope: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 242.3995
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: activation during pending recovery permits cancellation and normal operation
+ok 24 - K256, connector envelope: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 301.494042
+  type: 'test'
+  ...
+# Subtest: K256, connector envelope: finalisation retires a device activated while recovery was pending
+ok 25 - K256, connector envelope: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 338.476542
+  type: 'test'
+  ...
+# Subtest: P256: dormant recovery admits only the successor across later operations and recovery
+ok 26 - P256: dormant recovery admits only the successor across later operations and recovery
+  ---
+  duration_ms: 827.616666
+  type: 'test'
+  ...
+# Subtest: P256: only the committed key and salt can perform normal activation
+ok 27 - P256: only the committed key and salt can perform normal activation
+  ---
+  duration_ms: 374.051667
+  type: 'test'
+  ...
+# Subtest: P256: premature finalisation preserves dormant bootstrap and the complete pending record
+ok 28 - P256: premature finalisation preserves dormant bootstrap and the complete pending record
+  ---
+  duration_ms: 387.762041
+  type: 'test'
+  ...
+# Subtest: P256: activation during pending recovery permits cancellation and normal operation
+ok 29 - P256: activation during pending recovery permits cancellation and normal operation
+  ---
+  duration_ms: 357.314
+  type: 'test'
+  ...
+# Subtest: P256: finalisation retires a device activated while recovery was pending
+ok 30 - P256: finalisation retires a device activated while recovery was pending
+  ---
+  duration_ms: 526.750042
+  type: 'test'
+  ...
+# Subtest: B05: client validates canonical network and independently observed genesis/checkpoint before approval
+ok 31 - B05: client validates canonical network and independently observed genesis/checkpoint before approval
+  ---
+  duration_ms: 5.364292
+  type: 'test'
+  ...
+# Subtest: B11: resume each persisted stage and reuse the exact approval after temporary-key loss
+ok 32 - B11: resume each persisted stage and reuse the exact approval after temporary-key loss
+  ---
+  duration_ms: 181.911334
+  type: 'test'
+  ...
+# Subtest: B11: invalid assertion fails before temporary signing and permits explicit unapproved replacement
+ok 33 - B11: invalid assertion fails before temporary signing and permits explicit unapproved replacement
+  ---
+  duration_ms: 12.556416
+  type: 'test'
+  ...
+# Subtest: B11: losing both approval and temporary key prevents completion; unrelated key cannot replace it
+ok 34 - B11: losing both approval and temporary key prevents completion; unrelated key cannot replace it
+  ---
+  duration_ms: 7.344042
+  type: 'test'
+  ...
+# Subtest: B11: concurrent approval and target changes during the assertion cannot produce a second approval
+ok 35 - B11: concurrent approval and target changes during the assertion cannot produce a second approval
+  ---
+  duration_ms: 45.229667
+  type: 'test'
+  ...
+# Subtest: B10: serializer whitelists public metadata and drops injected secret properties
+ok 36 - B10: serializer whitelists public metadata and drops injected secret properties
+  ---
+  duration_ms: 53.733834
+  type: 'test'
+  ...
+# Subtest: B03/B06/B10: imported records reject altered context, target and noncanonical approvals
+ok 37 - B03/B06/B10: imported records reject altered context, target and noncanonical approvals
+  ---
+  duration_ms: 190.7965
+  type: 'test'
+  ...
+# Subtest: B01/B11: browser transport uses raw address user.id and passes known IDs as exclusions
+ok 38 - B01/B11: browser transport uses raw address user.id and passes known IDs as exclusions
+  ---
+  duration_ms: 0.401041
+  type: 'test'
+  ...
+# Subtest: B12: independent unpadded typed-hash recipes match every generated helper and r1:v2 entry
+ok 39 - B12: independent unpadded typed-hash recipes match every generated helper and r1:v2 entry
+  ---
+  duration_ms: 38.394792
+  type: 'test'
+  ...
+# Subtest: B01/B07/B08: deploy first, deposit before activation, install exactly one target and preserve unrelated state
+ok 40 - B01/B07/B08: deploy first, deposit before activation, install exactly one target and preserve unrelated state
+  ---
+  duration_ms: 334.442125
+  type: 'test'
+  ...
+# Subtest: B02/B03: modified public keys, policies, nonce points and signatures fail without state changes
+ok 41 - B02/B03: modified public keys, policies, nonce points and signatures fail without state changes
+  ---
+  duration_ms: 279.089875
+  type: 'test'
+  ...
+# Subtest: B02: invalid native points are refused at the generated host/runtime boundary
+ok 42 - B02: invalid native points are refused at the generated host/runtime boundary
+  ---
+  duration_ms: 142.732625
+  type: 'test'
+  ...
+# Subtest: B03/B05/B06: account/network/epoch/nonce/format/scheme/profile and operation are signed
+ok 43 - B03/B05/B06: account/network/epoch/nonce/format/scheme/profile and operation are signed
+  ---
+  duration_ms: 907.42975
+  type: 'test'
+  ...
+# Subtest: B04: genuine signatures over unsupported assertion envelopes are rejected by activation
+ok 44 - B04: genuine signatures over unsupported assertion envelopes are rejected by activation
+  ---
+  duration_ms: 480.988667
+  type: 'test'
+  ...
+# Subtest: B04: canonical 134 assertion accepts low-S
+ok 45 - B04: canonical 134 assertion accepts low-S
+  ---
+  duration_ms: 131.365875
+  type: 'test'
+  ...
+# Subtest: B04: canonical 134 assertion accepts high-S
+ok 46 - B04: canonical 134 assertion accepts high-S
+  ---
+  duration_ms: 160.474084
+  type: 'test'
+  ...
+# Subtest: B04: Chrome 243 assertion accepts low-S
+ok 47 - B04: Chrome 243 assertion accepts low-S
+  ---
+  duration_ms: 140.334208
+  type: 'test'
+  ...
+# Subtest: B04: Chrome 243 assertion accepts high-S
+ok 48 - B04: Chrome 243 assertion accepts high-S
+  ---
+  duration_ms: 152.036833
+  type: 'test'
+  ...
+# Subtest: B04: activation accepts UP+UV with valid backup flags 13
+ok 49 - B04: activation accepts UP+UV with valid backup flags 13
+  ---
+  duration_ms: 151.829375
+  type: 'test'
+  ...
+# Subtest: B04: activation accepts UP+UV with valid backup flags 29
+ok 50 - B04: activation accepts UP+UV with valid backup flags 29
+  ---
+  duration_ms: 110.154
+  type: 'test'
+  ...
+# Subtest: B06: constructor rejects unknown modes and incompatible network/boot configuration
+ok 51 - B06: constructor rejects unknown modes and incompatible network/boot configuration
+  ---
+  duration_ms: 470.816292
+  type: 'test'
+  ...
+# Subtest: B09: recovery finalised first consumes cached approvals permanently
+ok 52 - B09: recovery finalised first consumes cached approvals permanently
+  ---
+  duration_ms: 210.7075
+  type: 'test'
+  ...
+# Subtest: B09: activation preserves pending recovery; recovery retires passkey
+ok 53 - B09: activation preserves pending recovery; recovery retires passkey
+  ---
+  duration_ms: 304.795792
+  type: 'test'
+  ...
+# Subtest: B09: activation preserves pending recovery; passkey vetoes
+ok 54 - B09: activation preserves pending recovery; passkey vetoes
+  ---
+  duration_ms: 358.298708
+  type: 'test'
+  ...
+# Subtest: B10: prover inputs contain signatures and public keys, with neither signing secret
+ok 55 - B10: prover inputs contain signatures and public keys, with neither signing secret
+  ---
+  duration_ms: 158.751167
+  type: 'test'
+  ...
+# Subtest: B01: signed bootstrap preflights exact-host RP and secure origins before deploying
+ok 56 - B01: signed bootstrap preflights exact-host RP and secure origins before deploying
+  ---
+  duration_ms: 1.168833
+  type: 'test'
+  ...
+# Subtest: B11: sessions share a registration reservation and recheck metadata after asynchronous chain checks
+ok 57 - B11: sessions share a registration reservation and recheck metadata after asynchronous chain checks
+  ---
+  duration_ms: 5.435209
+  type: 'test'
+  ...
+# Subtest: resume a pre-submission record after activation and another session's withdrawal
+ok 58 - resume a pre-submission record after activation and another session's withdrawal
+  ---
+  duration_ms: 349.854583
+  type: 'test'
+  ...
+# Subtest: resume a pre-submission record after activation and another session's device enrolment
+ok 59 - resume a pre-submission record after activation and another session's device enrolment
+  ---
+  duration_ms: 265.463667
+  type: 'test'
+  ...
+# Subtest: historical completion survives removal of the initial device and grants no live authority
+ok 60 - historical completion survives removal of the initial device and grants no live authority
+  ---
+  duration_ms: 228.784
+  type: 'test'
+  ...
+# Subtest: recovery replacement has a distinct outcome (initial activation=false)
+ok 61 - recovery replacement has a distinct outcome (initial activation=false)
+  ---
+  duration_ms: 197.185208
+  type: 'test'
+  ...
+# Subtest: recovery replacement has a distinct outcome (initial activation=true)
+ok 62 - recovery replacement has a distinct outcome (initial activation=true)
+  ---
+  duration_ms: 238.776166
+  type: 'test'
+  ...
+# Subtest: unavailable or incomplete history cannot turn a retained approval into an activation receipt
+ok 63 - unavailable or incomplete history cannot turn a retained approval into an activation receipt
+  ---
+  duration_ms: 259.345375
+  type: 'test'
+  ...
+# Subtest: the first activated state must contain the intended key, even if a later state does
+ok 64 - the first activated state must contain the intended key, even if a later state does
+  ---
+  duration_ms: 172.805875
+  type: 'test'
+  ...
+# Subtest: recovery during persistence is rechecked on the immediate-success path
+ok 65 - recovery during persistence is rechecked on the immediate-success path
+  ---
+  duration_ms: 263.069875
+  type: 'test'
+  ...
+# Subtest: changing the retained target during persistence cannot register another credential
+ok 66 - changing the retained target during persistence cannot register another credential
+  ---
+  duration_ms: 152.904792
+  type: 'test'
+  ...
+# Subtest: B11: a complete retired deployment resumes without its erased maintenance key
+ok 67 - B11: a complete retired deployment resumes without its erased maintenance key
+  ---
+  duration_ms: 257.543958
+  type: 'test'
+  ...
+# Subtest: B11: partial deployment cannot proceed after key loss or premature authority retirement
+ok 68 - B11: partial deployment cannot proceed after key loss or premature authority retirement
+  ---
+  duration_ms: 66.169625
+  type: 'test'
+  ...
+# Subtest: B11: checkpoint identity, installed verifier substitutions and extra operations reject before submission
+ok 69 - B11: checkpoint identity, installed verifier substitutions and extra operations reject before submission
+  ---
+  duration_ms: 144.594459
+  type: 'test'
+  ...
+# Subtest: B11: maintenance identity and configured retirement policy are checked even for complete rosters
+ok 70 - B11: maintenance identity and configured retirement policy are checked even for complete rosters
+  ---
+  duration_ms: 107.980542
+  type: 'test'
+  ...
+# Subtest: mode-0 wave 1 prioritises usable first-arm operations; mode 1 prioritises signed activation
+ok 71 - mode-0 wave 1 prioritises usable first-arm operations; mode 1 prioritises signed activation
+  ---
+  duration_ms: 0.764167
+  type: 'test'
+  ...
+# Subtest: B11: earlier mode-0 checkpoints retain their original intent/address despite revised wave ordering
+ok 72 - B11: earlier mode-0 checkpoints retain their original intent/address despite revised wave ordering
+  ---
+  duration_ms: 250.478542
+  type: 'test'
+  ...
+1..72
+# tests 72
+# suites 0
+# pass 72
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 44208.486

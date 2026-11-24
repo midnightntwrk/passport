@@ -19,6 +19,7 @@
 
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { ContractState } from '@midnight-ntwrk/compact-runtime';
+import { filter, firstValueFrom, map, timeout } from 'rxjs';
 
 import { deployAccountInWaves, resumeAccountInWaves } from './wave-deploy.js';
 
@@ -210,6 +211,15 @@ export interface SignedBootstrapSession {
   approve(provider?: AssertionProvider): Promise<RetainedSignedBootstrapApproval>;
   activate(): Promise<CustodyAccount>;
   inspect(): Promise<boolean>;
+}
+
+/** Bootstrap was consumed by recovery, or its installed device epoch was
+ * subsequently replaced. Resume the recovery flow rather than onboarding. */
+export class BootstrapRecoveryReplacedError extends Error {
+  constructor(readonly epoch: bigint) {
+    super('bootstrap authority was consumed or replaced by recovery');
+    this.name = 'BootstrapRecoveryReplacedError';
+  }
 }
 
 // A reservation belongs to the onboarding record, not an individual session.
@@ -593,17 +603,56 @@ export class CustodyAccount {
     };
     const complete = async (state: Ledger): Promise<boolean> => {
       if (!state.booted) return false;
+      if (!state.boot.every(b => b === 0)) throw new Error('booted account retains an unexpected bootstrap commitment');
       const expected = record.credential && pureCircuits.derive_device_entry_with_p256(
         { bytes: this.addressBytes }, record.credential.pk, record.policy, 0n, 0n);
-      const intended = state.boot.every(b => b === 0) && state.device_epoch === 0n && state.auth_nonce === 0n &&
-        state.device_count === 1n && expected !== undefined && state.devices.member(expected);
+      const credentialId = record.credential && new Uint8Array(record.credential.credentialId);
+      const network = new Uint8Array(record.network), boot = new Uint8Array(record.boot);
       // Recovery finalisation also retires bootstrap. Never infer successful
       // onboarding solely from booted=true or retain a usable old secret.
-      if (state.boot.every(b => b === 0)) {
-        record.retired = true; temporaryKey?.erase();
-        await options.eraseTemporaryKey?.(); await options.persist(record);
+      record.retired = true; temporaryKey?.erase();
+      await options.eraseTemporaryKey?.(); await options.persist(record);
+      if (state.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(state.device_epoch);
+      if (!expected) throw new Error('bootstrap credential metadata is required to verify activation');
+      const initialInstallation = (s: Ledger) => s.booted && s.boot.every(b => b === 0) &&
+        s.bootstrap_mode === 1n && equalBytes(s.bootstrap_network, network) &&
+        s.device_epoch === 0n && s.auth_nonce === 0n && s.device_count === 1n &&
+        s.devices.size() === 1n && s.devices.member(expected);
+      if (!initialInstallation(state)) {
+        // Device use rolls its entry; adding/removing devices changes the live
+        // roster. Verify the first consumed-bootstrap state, not today's
+        // counters or membership. A retained approval/tx ID alone is no receipt.
+        const provider = this.providers.publicDataProvider;
+        if (typeof provider?.contractStateObservable !== 'function') {
+          throw new Error('bootstrap activation history unavailable; retry with a history-capable provider');
+        }
+        const installed = await firstValueFrom(provider.contractStateObservable(this.address, { type: 'all' }).pipe(
+          map((snapshot: ContractState): Ledger => {
+            const historical = ledger(snapshot.data);
+            if (historical.bootstrap_mode !== 1n || !equalBytes(historical.bootstrap_network, network) ||
+                (!historical.booted && !equalBytes(historical.boot, boot))) {
+              throw new Error('bootstrap activation history does not match the onboarding record');
+            }
+            return historical;
+          }),
+          filter((historical: Ledger) => historical.booted),
+          timeout({ first: 15_000 }),
+        )) as Ledger;
+        if (installed.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(installed.device_epoch);
+        if (!initialInstallation(installed)) throw new Error('bootstrap activated an unexpected initial device');
       }
-      if (!intended) throw new Error('bootstrap retired with an unexpected installed device or recovery state');
+      // Recovery can also land while the immediate-success path persists its
+      // record. Recheck after every awaited path, including that fast path.
+      const current = await check();
+      if (!current.booted || !current.boot.every(b => b === 0)) throw new Error('bootstrap state changed during activation inspection');
+      if (current.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(current.device_epoch);
+      if (!record.credential || !equalBytes(record.network, network) || !equalBytes(record.boot, boot) ||
+          !equalBytes(record.credential.credentialId, credentialId!) || !equalBytes(expected,
+            pureCircuits.derive_device_entry_with_p256({ bytes: this.addressBytes }, record.credential.pk, record.policy, 0n, 0n))) {
+        throw new Error('bootstrap onboarding target changed during activation inspection');
+      }
+      // This registers metadata/a counter hint, not spending authority. Normal
+      // counter discovery still checks the current roster before any use.
       this.registerDevice(new P256Device(record.credential!.pk, options.rpId, options.origin,
         browserAssertionProvider(record.credential!.credentialId, options.rpId)), 0n);
       return true;

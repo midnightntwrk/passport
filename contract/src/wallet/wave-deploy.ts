@@ -53,9 +53,11 @@ import {
   submitTx,
 } from '@midnight-ntwrk/midnight-js-contracts';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { ContractState as RuntimeContractState } from '@midnight-ntwrk/compact-runtime';
 
 import type { Arm } from './signer.js';
 import { equalBytes } from './webauthn.js';
+import { ledger } from './contract.js';
 
 const GATED_BASES = [
   'withdraw_unshielded',
@@ -195,7 +197,10 @@ export interface Wave {
  * `getVerifierKey(id)` for every id of `allCircuits()`.
  *
  * Pack every wave under `VERIFIER_BYTE_BUDGET`, starting with the deposits
- * and initial device's arm, then the other device arms, grants and recovery.
+ * and initial device's arm, then the other device arms, grants, and recovery.
+ * Only signed-bootstrap mode prioritises its activation circuit before the
+ * first arm. Legacy accounts retain the full roster but install that circuit
+ * later, so it cannot displace usable first-arm operations in wave 1.
  * The deploy may carry only a prefix of the first arm. Activation happens
  * after all waves complete. Authority retirement rides on the last
  * maintenance wave, which is the last operation that needs the authority.
@@ -204,7 +209,9 @@ export function planWaves(
   sizes: Map<string, number>,
   firstArm: Arm,
   retireAuthority = true,
+  bootstrapMode: bigint = 0n,
 ): Wave[] {
+  if (bootstrapMode !== 0n && bootstrapMode !== 1n) throw new Error('unsupported bootstrap mode for wave planning');
   const sizeOf = (id: string): number => {
     const n = sizes.get(id);
     if (n === undefined) throw new Error(`no verifier key size for '${id}'`);
@@ -216,7 +223,7 @@ export function planWaves(
   }
 
   const others = ARMS.filter(arm => arm !== firstArm);
-  const first = [...SHARED_CIRCUITS, ...SIGNED_BOOTSTRAP_CIRCUITS, ...armCircuits(firstArm)];
+  const first = [...SHARED_CIRCUITS, ...(bootstrapMode === 1n ? SIGNED_BOOTSTRAP_CIRCUITS : []), ...armCircuits(firstArm)];
   const waveOne: string[] = [];
   for (const id of first) {
     if (total(waveOne) + sizeOf(id) > VERIFIER_BYTE_BUDGET) break;
@@ -237,6 +244,7 @@ export function planWaves(
     ...grantTwins(firstArm),
     ...lifecycleCircuits(firstArm),
     ...others.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
+    ...(bootstrapMode === 0n ? SIGNED_BOOTSTRAP_CIRCUITS : []),
     // Recovery last: the gate and the first arm's session and cancel, then
     // the other arm's. An account is functional without them; they are the
     // last thing the authority installs before retiring.
@@ -413,7 +421,8 @@ export async function deployAccountInWaves(
     sizes.set(id, vk.length);
   }
   const retire = options.retireAuthority !== false;
-  const waves = planWaves(sizes, options.firstArm, retire);
+  const waves = planWaves(sizes, options.firstArm, retire,
+    ledger(RuntimeContractState.deserialize(full.serialize()).data).bootstrap_mode);
   console.log(
     `  wave plan: ${waves.length} waves for ${allCircuits().length} circuits ` +
     `(budget ${VERIFIER_BYTE_BUDGET} verifier bytes per wave)`,
@@ -559,7 +568,11 @@ export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeplo
       throw new Error('retained maintenance key does not match deployment checkpoint');
     }
   }
-  const waves = planWaves(sizes, checkpoint.firstArm, checkpoint.retireAuthority);
+  // Infer the sealed mode from the original intent rather than extending or
+  // trusting mutable checkpoint metadata. Earlier checkpoints remain usable
+  // even when their first wave had the old, mode-independent ordering.
+  const waves = planWaves(sizes, checkpoint.firstArm, checkpoint.retireAuthority,
+    ledger(RuntimeContractState.deserialize(checkpoint.initialState).data).bootstrap_mode);
   const verify = (state: ContractState) => {
     for (const id of state.operations()) {
       if (typeof id !== 'string' || !keys.has(id) || !equalBytes(state.operation(id)!.verifierKey, keys.get(id)!)) {

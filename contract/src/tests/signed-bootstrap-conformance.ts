@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { homedir } from 'node:os';
 import path from 'node:path';
 import { nodeZkConfigRegistry } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProvingProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -41,7 +40,7 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
   const compiled = JSON.parse(readFileSync(path.join(artifact, 'compiler/contract-info.json'), 'utf8'));
   const assets = Object.fromEntries(['contract/index.js', 'zkir/activate_initial_passkey.zkir',
     'keys/activate_initial_passkey.prover', 'keys/activate_initial_passkey.verifier'].map(file => [file, fingerprint(path.join(artifact, file))]));
-  const zkir = process.env.ZKIR_BIN ?? path.join(homedir(), '.compact/versions/0.35.0/aarch64-darwin/zkir-v3');
+  const zkir = process.env.ZKIR_BIN ?? 'zkir-v3';
   const measure = spawnSync(zkir, ['mock-compile', path.join(artifact, 'zkir/activate_initial_passkey.zkir')], { encoding: 'utf8' });
   if (measure.error || measure.status !== 0) throw measure.error ?? new Error(measure.stderr);
   const dimensions = (measure.stdout + measure.stderr).match(/k=(\d+), rows=(\d+)/);
@@ -193,8 +192,17 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
     assert.equal(afterLifecycle.unshielded_balances.lookup(color), 800n);
     await assert.rejects(() => account.withdrawUnshielded(secondDevice, color, 1n, recipient));
     assert.equal((await account.ledgerState()).unshielded_balances.lookup(color), 800n);
+    step('a lost completion receipt resumes after the account has been used');
+    const lostReceipt = deserializeSignedBootstrapRecord(serializeSignedBootstrapRecord(saved));
+    delete lostReceipt.retired; delete lostReceipt.transactionId;
+    const afterUse = account.signedBootstrapSession(lostReceipt, options), beforeResume = samples.length;
+    assert.equal(await afterUse.inspect(), true);
+    assert.equal(await afterUse.activate(), account);
+    assert.equal(lostReceipt.retired, true);
+    assert.equal(samples.length, beforeResume, 'historical completion generates no new proof');
     const details = { account: account.address, network: { caip2Id: network.caip2Id, genesis: hex(network.genesisHash) },
       provenance, samples, transactions, savedApprovalAfterKeyErasure: true, resumedDeploymentCheckpoint: true, completeVerifierRoster: allCircuits(),
+      resumedAfterDeviceUseWithoutReceipt: true,
       custodyFixture: { kind: 'faucet-minted non-native localnet token', color: hex(color), deposited: '1000', remaining: '800' },
       negativeEnforcingLayer: 'host build; no negative proof submitted',
       notCovered: ['physical browser/synced-authenticator registration', 'identical-state cloned network distinction',
