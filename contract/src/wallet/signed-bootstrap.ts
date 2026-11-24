@@ -62,7 +62,7 @@ export function signedBootstrapPolicy(rpId: string, origin: string): WebAuthnPol
 
 export function deriveBootstrapNetwork(config: BootstrapNetworkConfig): Uint8Array {
   // MIP-0008 uses the lowercase Midnight namespace and CAIP-2 reference.
-  if (!/^midnight:[a-z0-9_-]{1,32}$/.test(config.caip2Id)) throw new Error('invalid canonical Midnight CAIP-2 identifier');
+  if (!/^midnight:[a-z0-9_-]{1,32}$/.test(config.caip2Id)) throw new Error('invalid canonical lowercase Midnight CAIP-2 identifier');
   bytes(config.genesisHash, 32, 'genesis hash');
   bytes(config.anchorHash, 32, 'anchor hash');
   if (config.genesisHash.every(b => b === 0) || config.anchorHash.every(b => b === 0)) throw new Error('genesis/checkpoint hash cannot be all zero');

@@ -1,72 +1,55 @@
-# Signed-bootstrap implementation evidence — Passport #213
+# Signed-bootstrap evidence — Passport #213
 
-This directory records validation of the schema-4 reference implementation of the [temporary JubJub bootstrap amendment](../../../docs/mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md), including its B01–B13 evidence requirements. The original captures cover implementation `c24b1e9`; `9e14998` changes the on-node funding fixture to a faucet-issued, non-native asset. Source and generated-artefact hashes identify the exact code used by each capture.
+This directory keeps the evidence needed to assess the [temporary Jubjub bootstrap amendment](../../../docs/mps-mip/mips/mip-0013-temporary-jubjub-bootstrap-amendment.md). Test logs, command dumps, review snapshots, compiler ABI dumps, and duplicate journals are generated artefacts, not committed evidence.
 
-Personal checkout/home prefixes in captured diagnostics have been replaced
-with `<checkout>` and `<home>`. This redacts 161 lines across 48 files;
-error details, test outcomes, source revisions, and cryptographic hashes
-are retained. The redaction changes the current files, not earlier Git commits.
+| File | Purpose |
+| --- | --- |
+| [independent-vectors.json](independent-vectors.json) | Independent typed-hash and signature vectors, with compiler/runtime and source provenance. |
+| [constraints.json](constraints.json) | Native backend results, enforcing stages, tested inputs, and explicit untested boundaries. |
+| [native-runtime-preimage.json](native-runtime-preimage.json) | Original input fingerprint receipt matched by `constraints.json`'s `runtimeEvidenceSha256`. |
+| [circuit-sizes.json](circuit-sizes.json) | All 53 keyed circuits, dimensions, key hashes, compiler/runtime versions, and 216 verified manifest entries. |
+| [on-node-summary.json](on-node-summary.json) | Source/artefact provenance, nine proof samples, ten accepted transactions, and coverage limits from the successful local-node run. |
+| [environment.json](environment.json) | Host resources, tool-binary hashes, and container-image identities for those measurements. |
 
-## Review fixes for `f522b5a`
+The captures are historical: the implementation was `c24b1e9`, and the successful node run used `9e14998` with the non-native faucet fixture. Each file retains its exact source attribution. The node summary omits the duplicated compiler ABI and records the original receipt's hash and Git location; it is a derived summary, not a new run. The native receipt is preserved byte-for-byte. Later client/tooling fixes are covered by the reproducible tests below, not by relabelling old proofs.
 
-[Third-review validation](review-f522b5a/README.md) records a passing TypeScript build, 102 combined regressions, and the source-archive capture check. Seven selected regressions fail against the reviewed implementation. Activation now reconciles submission failures with trusted state before retrying; registration and approval share the same ceremony reservation, and external credential retention checks the dormant deployment. Legacy deployment failures do not leave newly stored maintenance keys, while checkpointed deployment remains recoverable.
+## Coverage and limits
 
-Conformance receipts now share the journal and onboarding-record directory. Current roster documentation states 53 circuits; the earlier 52-circuit measurement capture is explicitly historical, and the report derives its count from captured data. Compact edits are comments only, verified against the prior source; no new proofs were generated.
+| Requirement | Reproducible check or retained evidence |
+| --- | --- |
+| B01 — address before passkey, exact installation | [Runtime tests](../../src/tests/signed-bootstrap-offline.ts), [client tests](../../src/tests/signed-bootstrap-client.ts), and node summary. |
+| B02 — malformed temporary authority and scalars | Runtime negatives and native results, including canonical scalar aliases and native point boundaries. |
+| B03 — target, policy, and intent binding | Runtime substitutions and imported-approval checks in the client tests. |
+| B04 — WebAuthn proof of possession | Runtime tests cover supported JSON shapes, flags, lengths, signatures, and GREASE selection. |
+| B05 — domain/replay separation | Runtime/client checks of account, network, checkpoint, and operation domains. Identical-context cloned networks remain outside the guarantee. |
+| B06 — mode/version separation | Runtime constructor and activation checks; legacy vectors remain version-specific. |
+| B07 — one-time activation | Runtime state checks and [resume regressions](../../src/tests/signed-bootstrap-resume.ts), including competing or ambiguously confirmed submissions. |
+| B08 — intervening deposits | Runtime state preservation and the accepted node flow. |
+| B09 — recovery ordering | Runtime recovery matrix; node flow covers pending recovery and veto, not every finalisation ordering. |
+| B10 — private keys absent from proof inputs | Runtime preimage assertions and modified-request rejection. This does not claim a physical authenticator or unrestricted malicious-witness audit. |
+| B11 — interrupted onboarding | [Registration](../../src/tests/signed-bootstrap-registration.ts), resume, and [deployment-wave tests](../../src/tests/signed-bootstrap-wave.ts); node flow covers checkpoint and retained-approval recovery. Browser transport is mocked. |
+| B12 — independent vectors | Independent vector file and its pinned provenance. Public fixed test scalars are not production nonce guidance. |
+| B13 — keyed proofs and on-node flow | Circuit inventory, node summary, and environment capture. Custody, device lifecycle, and recovery veto are exercised with a software authenticator. |
 
-## Review fixes for `6802395`
+Native results contain 17 constraint-stage rows, 17 preprocessing rows, and two unchecked off-curve host-panic cases. Preprocessing refusal is not constraint rejection; coordinate-bound projections do not establish rejection of every malformed full-contract witness. See the report's scope and untested boundaries. These checks are bounded evidence, not a formal soundness proof.
 
-[Second-review validation](review-6802395/README.md) records a passing TypeScript build, 83 targeted regressions, one source-archive capture test, and four Python safety tests under optimisation. The final 14 wave tests also passed after increasing their delayed-visibility timing allowance. The new tooling checks run through `ci:reference`.
+Activation measured **k=18 and 193,751 rows**. One accepted activation proof took **29.320 seconds** and contained **6,460 bytes**, including provider lookup/loading and local HTTP transfer, excluding signing, wallet balancing, and inclusion. This is one observation, not a latency distribution. The successful flow used a faucet-issued non-native asset; ledger limits were unchanged.
 
-Normal offline execution preserves the committed captures. Evidence writes require `WRITE_EVIDENCE=1`, and `EVIDENCE_DIR` selects the capture directory shared with the native runner. Deployment resume waits for delayed address visibility and verifies state after duplicate submission failures. Completed sessions expose the retained assertion provider through `session.device`; reconnecting callers can supply `assertionProvider` again. No Compact sources changed, and no new proofs were generated for these fixes.
+## Reproduce
 
-## Review fixes for `a38ee96`
+Use the pinned toolchain and dependencies in the [reference README](../../README.md). From `contract/`, run:
 
-The PR review fixes passed **72 targeted tests**, with no failures, cancellations, or skipped tests; see [review-a38ee96/tests.txt](review-a38ee96/tests.txt). The [TypeScript build](review-a38ee96/build.txt) also passed. These checks cover the updated onboarding-resumption and deployment-planning behaviour alongside device-reconnection and recovery regressions.
+```sh
+npm run ci:compile
+npm run build
+npm run test:signed-bootstrap-offline
+npm run test:signed-bootstrap-evidence
+npm run test:signed-bootstrap-measure
+npm run test:signed-bootstrap-runner
+```
 
-A [read-only real-node history probe](review-a38ee96/resume-existing-account.json) also passed against the previously used local account at authorisation nonce 6, epoch 0, and device count 1. With `retired` and `transactionId` removed from the saved onboarding record, both `inspect()` and `activate()` completed successfully. The probe made two history queries and registered the device twice, with zero transaction submissions and unchanged account state. The Compact sources are unchanged; this check generated no new proofs.
+`ci:reference` includes these offline/tooling checks and the wider reference regressions. `test:signed-bootstrap-keyed` needs real generated verifier keys; the localnet workflow runs it before the proof flow. Test source is authoritative; repeated TAP/build transcripts are not retained here.
 
-This validation supplements the original captures below. Their source revisions, measured proof timings, native constraint results, and on-node receipts remain historical evidence; they are not newly generated results for the review fixes. The committed independent vectors and runtime-preimage receipt are preserved unchanged.
+Normal offline tests do not write captures. For fresh native inputs, use `WRITE_EVIDENCE=1 EVIDENCE_DIR=/tmp/passport-bootstrap-evidence npm run test:signed-bootstrap-offline`, then give the same directory to `scripts/run-signed-bootstrap-constraints.py`. Capture requires all four local Compact sources, generated runtime JS, and activation ZKIR. Current validation rejects incomplete historical manifests; regenerate inputs instead of reusing the preserved native snapshot.
 
-## Original implementation validation
-
-**On-node result: PASS.** [signed-bootstrap-conformance.json](signed-bootstrap-conformance.json) records 10 successful transactions and 9 timed account proofs. The run resumes a persisted deployment checkpoint, creates the software passkey afterwards, activates from retained approval after erasing the temporary key, preserves an intervening deposit and pending recovery, vetoes recovery, rotates the viewing key, withdraws funds under both device arms, and adds/removes a device. All 53 installed verifiers and maintenance-authority retirement are checked. This is a software-authenticator flow; it is not a physical browser ceremony.
-
-The completed checks are:
-
-| Check | Recorded result | Evidence |
-| --- | --- | --- |
-| Signed-bootstrap runtime and client tests | 27 passed | [offline.txt](offline.txt) |
-| Focused client, registration, and keyed-deployment tests | 14 passed, overlapping the other test groups | [client-keyed.txt](client-keyed.txt) |
-| Keyed-deployment checks alone | 4 passed; included in the preceding 14 | [wave.txt](wave.txt) |
-| Reference regression commands | All 30 commands passed after retrying 12 sandbox-blocked invocations | [reference.txt](reference.txt), [final command records](regression/commands/), [initial sandbox records](regression/sandbox-attempt/), [retry output](regression/retry-output.txt) |
-| Additional toolchain and keyed-deployment commands | Passed; the final command directory contains 32 command records including these two | [toolchain.txt](toolchain.txt), [final command records](regression/commands/) |
-| Native backend boundary checks | 36 recorded rows: 17 constraint-stage, 17 native-preprocessing, and 2 host-panic rows | [constraints.json](constraints.json) |
-| Fresh artefact inventory | 53 keyed account circuits; all 216 manifest files verified | [circuit-sizes.json](circuit-sizes.json) |
-
-The test groups overlap and must not be added together as a count of independent tests. Host/runtime execution, backend constraint checks, and accepted ledger transactions are distinct evidence layers.
-
-| Requirement | Evidence and demonstrated behaviour | Remaining boundary |
-| --- | --- | --- |
-| B01 — deploy before passkey, address handle, exact installation | [Runtime tests](../../src/tests/signed-bootstrap-offline.ts) construct the account before the target key, verify both signatures, and check the exact epoch-0/counter-0 entry. [Client tests](../../src/tests/signed-bootstrap-client.ts) inspect the browser request's raw 32-byte `user.id`. | Browser transport is mocked. The on-node harness creates its OpenSSL software passkey after obtaining the address; it does not perform a hardware/browser registration ceremony. Node execution passed with that software fixture. |
-| B02 — malformed temporary authorisation and canonical inputs | Runtime negatives cover wrong keys/signatures, changed `R`/grinding nonce, identity/off-curve/torsion/noncanonical points, `s + r_J`, and an oversized challenge with an otherwise valid equation modulo `r_J`. [Native checks](constraints.json) include unchecked response mutations against the full compiled activation and coordinate-bound point projections. | Native preprocessing refusal is not constraint rejection. Projection results do not establish full-contract malformed-witness rejection; see the detailed limits below. |
-| B03 — target and intent binding | Runtime tests substitute the target key, RP hash, origin, account, network, boot commitment, epoch, nonce, format, scheme, and profile. The activation ABI takes neither an opaque device entry nor a caller-selected digest. Client import tests reject altered retained targets and approvals. | This is a finite mutation suite. On-node tampered-request rejection is a local-build check, not a submitted negative proof. |
-| B04 — complete passkey assertion | Runtime tests reject invalid signatures, challenge/RP/origin/type/JSON changes, unsupported lengths and flags, missing UP/UV, and wrong GREASE selection. Both accepted JSON shapes, high/low-S forms, and flags 5/13/29 pass. | Assertions are generated with the independent Node/OpenSSL test authenticator. Hardware attestation and broad browser/provider interoperability are not established. |
-| B05 — account/network/operation replay | Runtime tests reject another account, another configured network/anchor, and another operation domain. Client tests compare trusted expected and observed network configurations and reject mismatches. | The sealed domain is configuration, not an on-chain network oracle. Identical-state clones with identical configured context remain indistinguishable. The node harness uses a dedicated local RPC with an optional explicit genesis pin. |
-| B06 — mode and version isolation | Constructor tests reject unknown modes and incompatible network/boot values. Both activation directions reject mode crossover. Unsupported version/scheme/profile preimages do not match the fixed format. Existing legacy/P-256/vector and schema-3 grant compatibility checks pass in the regression set. | Existing deployed schema-3 artefacts are not upgraded by this implementation. No runtime profile selector or in-place migration is claimed. |
-| B07 — one-shot activation and state effects | Runtime tests check the exact installed device, consumed boot commitment, one round increment, unchanged epoch/auth nonce and unrelated state, repeated/competing approvals, and unchanged state after rejection. | Competing approvals are applied sequentially to the simulator's committed state; this is not a distributed mempool race test. The node run confirms idempotent resume and rejects a repeated call during local build; no second activation proof is submitted. |
-| B08 — intervening deposits/inbox changes | Runtime tests retain approvals across unshielded and shielded deposits, preserve the appended inbox entry and balances, and successfully activate afterwards. | The first on-node Night funding attempt hit a ledger admission limit. The replacement non-native deposit and subsequent activation passed on-node; see the archived Night refusal below. |
-| B09 — recovery ordering and veto | Runtime tests cover recovery finalisation before activation; activation during pending recovery with preserved record/deadline; ordinary passkey veto; and finalisation without veto retiring the passkey permanently. | The node harness exercises pending recovery, activation, and veto. Pending recovery, activation, and veto passed on-node; finalisation-order variants remain runtime-only. |
-| B10 — prover boundary and target integrity | Runtime tests inspect a valid serialised proof preimage for absence of both signing scalars. Client serialisation tests omit injected secret properties and reject modified retained approvals. The ABI contains public keys, signatures, policy, and assertion material. | Absence checks cover the inspected representations and code paths, not every possible process/logging leak. Retained approval is still usable authority for its one target and needs protected storage. |
-| B11 — interrupted onboarding | Client tests cover persisted-stage resumption, assertion validation before temporary signing, shared registration reservations, target mutation during asynchronous work, no automatic re-registration, explicit unapproved replacement, retained approval after key loss, and failure after loss of both key and approval. [Keyed tests](../../src/tests/signed-bootstrap-wave.ts) inspect actual serialised states with mocked provider/submission behaviour. | Partial-wave/uncertain-submission/roster/authority scenarios use mocks. The actual node harness deliberately stops after durable checkpoint persistence before first submission, then successfully deploys/resumes the same address and activates from retained approval after temporary-key erasure. Authenticator exclusion/replacement behaviour is transport-mocked. |
-| B12 — independent vectors and provenance | [independent-vectors.json](independent-vectors.json) records independently encoded typed hashes, a canonical fixed-test Schnorr response, a rejected scalar alias, and the installed entry. Compiler/runtime, revision, and source hashes accompany the vectors. | Fixed scalars are public test fixtures, never production nonce guidance. Runtime and constraint captures may come from different test invocations; use their hashes to match them. |
-| B13 — real proofs, node execution, costs, regressions | Fresh full key generation, artefact verification, measured circuit shape, and the regression results are recorded. The [node harness](../../src/tests/signed-bootstrap-conformance.ts) records proof durations, transactions, full verifier-roster comparisons, maintenance retirement, and artefact provenance. | The activation proof and complete node flow passed; the receipt identifies every accepted transaction. No formal soundness proof or unrestricted malicious-prover audit is claimed. |
-
-The native check's 36 rows include positive controls. The 17 constraint-stage rows are not 17 independently rejected attacks. The full valid activation satisfies the pinned backend's `MockProver`; unchecked `s + r_J` and `r_J` fail for the full compiled activation. The response-range subgraph also accepts its legitimate endpoints and rejects oversized responses. Coordinate-bound JubJub projections exercise order-two, mixed-torsion, and altered-coordinate assignments. Identity succeeds in the projection because point assignment alone does not impose the activation's explicit nonidentity requirement. The full activation's preprocessing rejects identity. The two off-curve projection attempts panic during unchecked host arithmetic; they do **not** establish constraint rejection.
-
-[constraints.json](constraints.json) pins the backend revision and runner/test/source hashes. Its `runtimeEvidenceSha256` refers to the preserved [native-runtime-preimage.json](native-runtime-preimage.json), which matches that run. [runtime-preimage.json](runtime-preimage.json) may be regenerated by subsequent runtime tests and should not be substituted for that snapshot. The native scope does not include arbitrary advice-cell corruption, unchecked internal P-256 witnesses, or all possible noncanonical SHA challenge witnesses. MockProver satisfaction/rejection is distinct from cryptographic proof generation and ledger admission.
-
-For `activate_initial_passkey`, the measured circuit has **`k = 18` and 193,751 rows**. Its prover artefact is **495,229,501 bytes** and verifier artefact is **2,889 bytes**. [circuit-sizes.json](circuit-sizes.json) records the complete roster, sizes, hashes, verified manifest, compiler 0.35.0, runtime 0.20.0, ZKIR version, and measurement host. [keygen.json](keygen.json) records **1,290.727 seconds (21 minutes 30.7 seconds)** for generating keys for all 53 account circuits. That is whole-build key-generation time, not activation proving time. The activation proof took **29.320 seconds** and was **6,460 bytes** in the successful run. This is one observation, including provider key lookup/loading and local HTTP transfer, excluding signing, wallet balancing, and inclusion; it is not a cold-cache benchmark or statistical estimate. Other per-circuit durations are in the node receipt/journal. [environment.json](environment.json) records tool-binary and container-image identities and host/Docker resources.
-
-The first node attempt did not complete: the Night deposit was rejected with `OutsideTimeToDismiss`. [night-deposit-refusal.json](night-deposit-refusal.json), [its captured output](night-deposit-refusal.txt), and the [node refusal excerpt](night-deposit-node-refusal.txt) preserve that failure. It occurred in funding and is not evidence that bootstrap authorisation failed. The second attempt uses the existing faucet fixture's non-native asset; [on-node.txt](on-node.txt) and the timestamped `on-node-*.jsonl` journals retain its successful result and the earlier attempt. The second run leaves 800 of its 1,000 non-native test units after two authorised withdrawals; ledger limits were unchanged.
-
-The temporary key authorises only initial installation; it is not a recovery key or a device spending key. A separately retained birth recovery secret remains an independent authority. The reference's default discarded birth secret does not establish usable recovery, and a stored recovery wrap is not proof of decryptability. The full verifier roster and maintenance posture must be checked before approval: an active maintenance authority can replace verification logic. These trust assumptions and the bounded evidence above remain relevant even after a successful on-node run.
+For real proof measurements, generate keys with `npm run compile`, start the local stack, and run `test:signed-bootstrap` and `measure:signed-bootstrap` with a separate `EVIDENCE_DIR`. Relative evidence paths resolve from `contract/`; absolute paths are unchanged. Raw receipts, logs, preimages, onboarding records, and CI artefacts are ignored by Git. Refresh the curated files deliberately when their measured behaviour changes.

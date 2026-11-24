@@ -101,7 +101,7 @@ fn passport_signed_bootstrap_constraints() {
 
             // A bounded projection of the actual input's native point gadget
             // binds its resulting coordinates back to the supplied coordinates.
-            // Without that binding, cofactor assignment can normalize a mixed
+            // Without that binding, cofactor assignment can normalise a mixed
             // torsion witness into a legitimate prime-order point. Both hashes
             // and curve operations in the compiled contract use the assigned
             // point, so this projection is distinct from full-circuit mutation.

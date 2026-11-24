@@ -11,8 +11,10 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 
@@ -20,14 +22,49 @@ SHA = "e82d81d25aabcc5f5092e2bd559083487f577914"
 ROOT = Path(__file__).resolve().parents[1]
 
 
+REQUIRED_CAPTURE_INPUTS = (
+    "contracts/account.compact", "contracts/account-p256.compact",
+    "contracts/account-bootstrap.compact", "contracts/webauthn.compact",
+    "contracts/managed/account/contract/index.js",
+    "contracts/managed/account/zkir/activate_initial_passkey.zkir",
+)
+RECAPTURE = ("Restore sources, run npm run ci:compile, then recapture with "
+             "WRITE_EVIDENCE=1 and the same EVIDENCE_DIR.")
+
+
 def verify_runtime_evidence(root, evidence):
-    manifest = json.loads((evidence / "runtime-preimage.json").read_text())
-    for name, expected in manifest["sha256"].items():
-        if hashlib.sha256((root / name).read_bytes()).hexdigest() != expected:
-            raise ValueError(f"stale runtime evidence: {name}")
-    preimage = evidence / "preimages/activate_initial_passkey.bin"
-    if hashlib.sha256(preimage.read_bytes()).hexdigest() != manifest["preimageSha256"]:
-        raise ValueError("stale preimage")
+    try:
+        manifest = json.loads((evidence / "runtime-preimage.json").read_text())
+    except (OSError, ValueError) as error:
+        raise ValueError(f"cannot read runtime-preimage.json: {error}. {RECAPTURE}") from None
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("sha256"), dict):
+        raise ValueError(f"incomplete runtime evidence: missing fingerprint map. {RECAPTURE}")
+    fingerprints = manifest["sha256"]
+    missing = sorted(set(REQUIRED_CAPTURE_INPUTS) - fingerprints.keys())
+    unexpected = sorted(fingerprints.keys() - set(REQUIRED_CAPTURE_INPUTS))
+    if missing or unexpected:
+        raise ValueError(f"incomplete runtime evidence: missing inputs {missing}; unexpected inputs {unexpected}. {RECAPTURE}")
+    for name, expected in list(fingerprints.items()) + [("preimageSha256", manifest.get("preimageSha256"))]:
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise ValueError(f"invalid SHA-256 fingerprint for {name}. {RECAPTURE}")
+    scalar = manifest.get("responseScalar")
+    if not isinstance(scalar, str) or not re.fullmatch(r"0|[1-9][0-9]*", scalar):
+        raise ValueError(f"incomplete runtime evidence: missing or invalid responseScalar. {RECAPTURE}")
+    for name in REQUIRED_CAPTURE_INPUTS:
+        try:
+            data = (root / name).read_bytes()
+        except OSError:
+            raise ValueError(f"required capture input is missing or unreadable: {name}. {RECAPTURE}") from None
+        if not data:
+            raise ValueError(f"required capture input is empty: {name}. {RECAPTURE}")
+        if hashlib.sha256(data).hexdigest() != fingerprints[name]:
+            raise ValueError(f"stale runtime evidence: {name}. {RECAPTURE}")
+    try:
+        preimage = (evidence / "preimages/activate_initial_passkey.bin").read_bytes()
+    except OSError:
+        raise ValueError(f"missing or unreadable activation preimage. {RECAPTURE}") from None
+    if not preimage or hashlib.sha256(preimage).hexdigest() != manifest["preimageSha256"]:
+        raise ValueError(f"stale preimage. {RECAPTURE}")
     return manifest
 
 
@@ -105,4 +142,8 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, subprocess.CalledProcessError) as error:
+        print(f"signed-bootstrap constraints: {error}", file=sys.stderr)
+        raise SystemExit(2) from None

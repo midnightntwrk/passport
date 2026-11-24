@@ -11,6 +11,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function evidenceDirectory(fallback = path.resolve(__dirname, '..', '..', 'evidence')): string {
   return path.resolve(process.env.EVIDENCE_DIR || fallback);
 }
+/** Signed-bootstrap tools resolve relative overrides from contract/, regardless
+ * of the command's working directory. Generic evidence callers keep their
+ * existing working-directory convention above. */
+export function signedBootstrapEvidenceDirectory(): string {
+  const contractRoot = path.resolve(__dirname, '..', '..');
+  return path.resolve(contractRoot, process.env.EVIDENCE_DIR ?? 'evidence/signed-bootstrap');
+}
 const EVIDENCE_DIR = evidenceDirectory();
 
 export type Verdict = 'PASS' | 'FAIL' | 'PARTIAL';

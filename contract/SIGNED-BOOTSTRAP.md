@@ -101,7 +101,8 @@ multiple tabs, processes, or separately deserialised records can operate on it.
 A submission error triggers another trusted state check before a retry. If
 the intended activation already landed, the session completes without another
 submission, including when a relayer submitted the approval first. A lost
-reply can leave `transactionId` unavailable; verified state still establishes
+reply or an otherwise successful response without an ID can leave
+`transactionId` unavailable; verified state still establishes
 completion, and the client does not invent a receipt identifier.
 
 Completion can be recovered after another session has used the account. Once
@@ -157,7 +158,9 @@ Offline tests do not write evidence by default and also run from source
 archives without Git metadata. To capture native-test inputs deliberately,
 set `WRITE_EVIDENCE=1 EVIDENCE_DIR=/tmp/passport-bootstrap-evidence` when
 running `npm run test:signed-bootstrap-offline`. Use the same evidence
-directory for the native constraint runner.
+directory for the native constraint runner. Captures require all local Compact
+sources, the generated runtime, and the activation ZKIR; incomplete captures
+are refused with instructions to regenerate them.
 
 For proving, compile real keys with `npm run compile`, start the local stack
 described in the [reference README](README.md), and run
@@ -166,7 +169,10 @@ The keyed test uses real verifier decoding with mocked provider reads; the
 conformance test submits transactions. Its receipts, journals, and onboarding
 record use the same directory, defaulting to `evidence/signed-bootstrap`.
 Set `EVIDENCE_DIR=/tmp/passport-bootstrap-evidence`
-to keep this run separate from committed evidence. `npm run measure:signed-bootstrap`
+to keep this run separate from committed evidence. Relative evidence paths
+resolve from `contract/`, regardless of the working directory. Raw captures
+remain local or in CI; the repository retains a compact evidence set.
+`npm run measure:signed-bootstrap`
 checks every compiler-manifest artefact and runtime verifier-key hash before
 recording circuit sizes and key identities. `ZKIR_BIN` selects the pinned
 native binary. Shape measurement uses `mock-compile`; it is distinct from

@@ -2,8 +2,8 @@
 // mocked. History contains each action's state, as the SDK's `all` stream does.
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import test from 'node:test';
-import { EMPTY, Observable, of, throwError } from 'rxjs';
+import test, { type TestContext } from 'node:test';
+import { EMPTY, NEVER, Observable, of, throwError } from 'rxjs';
 import { CustodyAccount, BootstrapRecoveryReplacedError, type SignedBootstrapClientOptions } from '../wallet/account.js';
 import { pureCircuits, ledger } from '../wallet/contract.js';
 import { JubjubDevice, authArgs, jubjubChallenges } from '../wallet/signer.js';
@@ -89,6 +89,161 @@ async function fixture() {
   };
   return { sim, passkey, temporary, history, call, activate, activateDifferentTarget, addDevice, withdraw, recover, resume };
 }
+
+for (const [name, reply, expectedId] of [
+  ['no reply', undefined, undefined],
+  ['null reply', null, undefined],
+  ['null public reply', { public: null }, undefined],
+  ['empty reply', {}, undefined],
+  ['empty public reply', { public: {} }, undefined],
+  ['empty ID', { public: { txId: '' } }, undefined],
+  ['invalid ID type', { public: { txId: 42 } }, undefined],
+  ['transaction ID', { public: { txId: 'included-activation' } }, 'included-activation'],
+  ['transaction hash', { public: { transactionHash: 'included-hash' } }, 'included-hash'],
+  ['empty ID with hash', { public: { txId: '', transactionHash: 'included-hash' } }, 'included-hash'],
+] as const) {
+  test(`an included activation completes with ${name}`, async () => {
+    const f = await fixture();
+    const r = f.resume(undefined, undefined, f.passkey.assertion, async () => { await f.activate(); return reply; });
+    assert.equal(await r.session.activate(), r.account);
+    assert.equal(r.seen.submitted, 1); assert.equal(r.record.retired, true);
+    assert.equal(r.record.transactionId, expectedId); assert.ok(r.session.device);
+    const viewingKey = bytes(); await r.account.rotateEncKey(r.session.device, viewingKey);
+    assert.deepEqual(f.sim.ledger().enc_key, viewingKey);
+  });
+}
+
+test('a reply without an ID cannot complete an account that remains dormant', async () => {
+  const f = await fixture(), r = f.resume(undefined, undefined, undefined, async () => ({}));
+  await assert.rejects(() => r.session.activate(), /activation not yet confirmed/);
+  assert.equal(r.record.transactionId, undefined); assert.equal(r.record.retired, undefined);
+  assert.equal(r.seen.registered, 0); assert.equal(r.session.device, undefined);
+});
+
+for (const stage of ['initial observation', 'completion recheck'] as const) {
+  test(`the original submission error survives a failed ${stage}`, async () => {
+    const f = await fixture(), refusal = new Error('proof request refused');
+    const r = f.resume(undefined, undefined, undefined, async () => {
+      if (stage === 'completion recheck') await f.activate();
+      throw refusal;
+    });
+    let observations = 0;
+    r.account.ledgerState = async () => {
+      if (++observations === (stage === 'initial observation' ? 2 : 3)) throw new Error('indexer temporarily unavailable');
+      return f.sim.ledger();
+    };
+    await assert.rejects(() => r.session.activate(), error => error === refusal);
+    assert.equal(r.seen.submitted, 1); assert.equal(r.seen.registered, 0);
+  });
+}
+
+function immediateDustRetries(t: TestContext) {
+  const delays: number[] = [], schedule = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', ((callback: (...args: any[]) => void, delay?: number, ...args: any[]) => {
+    if (delay === 10_000) delays.push(delay);
+    return schedule(callback, delay === 10_000 ? 0 : delay, ...args);
+  }) as typeof setTimeout);
+  return delays;
+}
+
+test('a transient reconciliation failure preserves dust retry and eventual completion', async t => {
+  const f = await fixture(), delays = immediateDustRetries(t);
+  let attempts = 0, observations = 0;
+  const r = f.resume(undefined, undefined, f.passkey.assertion, async () => {
+    if (++attempts === 1) throw new Error('SubmissionError: DustDoubleSpend');
+    await f.activate(); return {};
+  });
+  r.account.ledgerState = async () => {
+    if (++observations === 2) throw new Error('indexer temporarily unavailable');
+    return f.sim.ledger();
+  };
+  assert.equal(await r.session.activate(), r.account);
+  assert.equal(r.seen.submitted, 2); assert.deepEqual(delays, [10_000]);
+  assert.equal(r.record.retired, true); assert.equal(r.record.transactionId, undefined); assert.ok(r.session.device);
+});
+
+test('retry preflight recognises inclusion after the first reconciliation read failed', async t => {
+  const f = await fixture(), delays = immediateDustRetries(t);
+  const r = f.resume(undefined, undefined, f.passkey.assertion, async () => {
+    await f.activate(); throw new Error('SubmissionError: reply lost');
+  });
+  let observations = 0;
+  r.account.ledgerState = async () => {
+    if (++observations === 2) throw new Error('indexer temporarily unavailable');
+    return f.sim.ledger();
+  };
+  assert.equal(await r.session.activate(), r.account);
+  assert.equal(r.seen.submitted, 1, 'retry inspection completes without a duplicate build');
+  assert.deepEqual(delays, [10_000]); assert.equal(r.record.retired, true); assert.ok(r.session.device);
+});
+
+for (const unavailable of ['source error', 'source throw', 'empty stream', 'timeout'] as const) {
+  test(`retry completes from history after a transient ${unavailable}`, async t => {
+    const f = await fixture(), delays = immediateDustRetries(t);
+    if (unavailable === 'timeout') {
+      const schedule = globalThis.setInterval;
+      t.mock.method(globalThis, 'setInterval', ((callback: (...args: any[]) => void, delay?: number, ...args: any[]) =>
+        schedule(callback, delay === 15_000 ? 0 : delay, ...args)) as typeof setInterval);
+    }
+    let histories = 0;
+    const r = f.resume(() => {
+      if (++histories > 1) return of(...f.history);
+      if (unavailable === 'source throw') throw new Error('history transport unavailable');
+      if (unavailable === 'source error') return throwError(() => new Error('history transport unavailable'));
+      return unavailable === 'timeout' ? NEVER : EMPTY;
+    }, undefined, f.passkey.assertion, async () => {
+      await f.activate(); await f.withdraw(); throw new Error('SubmissionError: reply lost');
+    });
+    assert.equal(await r.session.activate(), r.account);
+    assert.equal(histories, 2); assert.equal(r.seen.submitted, 1);
+    assert.deepEqual(delays, [10_000]); assert.equal(r.record.retired, true); assert.ok(r.session.device);
+  });
+}
+
+test('persistently unavailable history preserves the original submission error without resubmission', async t => {
+  const f = await fixture(), delays = immediateDustRetries(t), refusal = new Error('SubmissionError: reply lost');
+  const r = f.resume(() => throwError(() => new Error('history unavailable')), undefined, undefined, async () => {
+    await f.activate(); await f.withdraw(); throw refusal;
+  });
+  await assert.rejects(() => r.session.activate(), error => error === refusal);
+  assert.equal(r.seen.histories, 4); assert.equal(r.seen.submitted, 1);
+  assert.deepEqual(delays, [10_000, 10_000, 10_000]); assert.equal(r.session.device, undefined);
+});
+
+test('mapped history mismatches keep their semantic rejection after submission failure', async t => {
+  const f = await fixture(), delays = immediateDustRetries(t);
+  const r = f.resume(() => {
+    // A real historical state from another network must not be mistaken for
+    // a transient stream error and retried under the submission failure.
+    return of({ data: otherState });
+  }, undefined, undefined, async () => {
+    await f.activate(); await f.withdraw(); throw new Error('SubmissionError: reply lost');
+  });
+  const other = await fixture(), otherState = other.sim.state;
+  await assert.rejects(() => r.session.activate(), /history does not match the onboarding record/);
+  assert.equal(r.seen.submitted, 1); assert.deepEqual(delays, []); assert.equal(r.session.device, undefined);
+});
+
+test('retry never dispatches while deployment verification remains unavailable', async t => {
+  const f = await fixture(), delays = immediateDustRetries(t), refusal = new Error('SubmissionError: DustDoubleSpend');
+  const r = f.resume(undefined, undefined, undefined, async () => { throw refusal; });
+  r.options.verifyDeployment = async () => {
+    if (r.seen.submitted) throw new Error('deployment verification unavailable');
+  };
+  await assert.rejects(() => r.session.activate(), error => error === refusal);
+  assert.equal(r.seen.submitted, 1); assert.deepEqual(delays, [10_000, 10_000, 10_000]);
+  assert.equal(r.record.retired, undefined); assert.equal(r.session.device, undefined);
+});
+
+test('a definitive network mismatch after submission is not replaced by its original error', async () => {
+  const f = await fixture(), r = f.resume(undefined, undefined, undefined, async () => {
+    throw new Error('SubmissionError: reply lost');
+  });
+  r.options.observeNetwork = async () => r.seen.submitted
+    ? { ...r.options.network, genesisHash: bytes() } : r.options.network;
+  await assert.rejects(() => r.session.activate(), /chain\/configuration mismatch/);
+  assert.equal(r.seen.submitted, 1); assert.equal(r.session.device, undefined);
+});
 
 for (const outcome of ['lost inclusion reply', 'relayer wins'] as const) {
   test(`activation completes after ${outcome} without a second submission`, async () => {

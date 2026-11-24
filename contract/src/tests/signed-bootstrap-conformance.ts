@@ -19,13 +19,13 @@ import { allCircuits } from '../wallet/wave-deploy.js';
 import { setupWallet, compiledAccountContract, deployFaucet } from '../node/setup.js';
 import { CONFIG, managedPath, userAddressBytes } from '../node/wallet.js';
 import { runScenario, step, sleep } from './runner.js';
-import { evidenceDirectory, writeEvidence } from './evidence.js';
+import { signedBootstrapEvidenceDirectory, writeEvidence } from './evidence.js';
 import { softwarePasskey, sha256, TEST_ORIGIN } from './p256-fixtures.js';
 
 const bytes = (n = 32) => new Uint8Array(randomBytes(n));
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 await runScenario('signed bootstrap: fresh proofs and on-node activation', async () => {
-  const directory = evidenceDirectory('evidence/signed-bootstrap');
+  const directory = signedBootstrapEvidenceDirectory();
   mkdirSync(directory, { recursive: true });
   const journal = path.join(directory, `on-node-${Date.now()}.jsonl`);
   const log = (kind: string, value: unknown) => appendFileSync(journal, JSON.stringify({ kind, value },
@@ -37,7 +37,14 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
   const sources = Object.fromEntries(sourceFiles.map(file => [file,
     hex(sha256(readFileSync(path.join(managedPath, '..', file))))]));
   const fingerprint = (file: string) => ({ bytes: statSync(file).size, sha256: hex(sha256(readFileSync(file))) });
-  const compiled = JSON.parse(readFileSync(path.join(artifact, 'compiler/contract-info.json'), 'utf8'));
+  const compilerInfoPath = path.join(artifact, 'compiler/contract-info.json');
+  const compilerInfo = JSON.parse(readFileSync(compilerInfoPath, 'utf8'));
+  const compiled = {
+    ...Object.fromEntries(['compiler-version', 'compiler-commit', 'language-version', 'runtime-version']
+      .map(name => [name, compilerInfo[name]])),
+    proofCircuitCount: compilerInfo.circuits.filter((c: { proof: boolean }) => c.proof).length,
+    contractInfo: fingerprint(compilerInfoPath),
+  };
   const assets = Object.fromEntries(['contract/index.js', 'zkir/activate_initial_passkey.zkir',
     'keys/activate_initial_passkey.prover', 'keys/activate_initial_passkey.verifier'].map(file => [file, fingerprint(path.join(artifact, file))]));
   const zkir = process.env.ZKIR_BIN ?? 'zkir-v3';

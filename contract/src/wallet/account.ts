@@ -19,7 +19,7 @@
 
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { ContractState } from '@midnight-ntwrk/compact-runtime';
-import { filter, firstValueFrom, map, timeout } from 'rxjs';
+import { catchError, defer, filter, firstValueFrom, map, timeout, type Observable } from 'rxjs';
 
 import { deployAccountInWaves, resumeAccountInWaves } from './wave-deploy.js';
 
@@ -198,7 +198,7 @@ export interface SignedBootstrapClientOptions {
   /** Durable protected storage. Rejection stops progress before submission.
    * Integrators must also reserve onboarding atomically per account across
    * processes/tabs. In-process registration reservations cover sessions that
-   * share this record object; separate deserializations need the store lock. */
+   * share this record object; separate deserialisations need the store lock. */
   persist: (record: SignedBootstrapRecord) => Promise<void>;
   /** Required by integrations that persist b: delete its protected copy after
    * confirmed activation/recovery retirement. The JS key is erased as well. */
@@ -598,12 +598,16 @@ export class CustodyAccount {
     if (!equalBytes(policy.origin, record.policy.origin) || !equalBytes(policy.rp_id_hash, record.policy.rp_id_hash)) throw new Error('bootstrap RP policy mismatch');
     let assertionProvider = options.assertionProvider;
     let completedDevice: P256Device | undefined;
-    const check = async () => {
+    const check = async (onObservationFailure?: (error: unknown) => never) => {
       completedDevice = undefined;
-      const network = assertBootstrapNetwork(options.network, await options.observeNetwork());
+      const observe = async <T>(read: () => Promise<T>): Promise<T> => {
+        try { return await read(); }
+        catch (error) { if (onObservationFailure) onObservationFailure(error); throw error; }
+      };
+      const network = assertBootstrapNetwork(options.network, await observe(() => options.observeNetwork()));
       if (!equalBytes(network, record.network)) throw new Error('bootstrap record network mismatch');
-      await options.verifyDeployment(this);
-      const state = await this.ledgerState();
+      await observe(() => options.verifyDeployment(this));
+      const state = await observe(() => this.ledgerState());
       if (state.bootstrap_mode !== 1n || !equalBytes(state.bootstrap_network, network)) throw new Error('deployed bootstrap mode/network mismatch');
       return state;
     };
@@ -613,7 +617,8 @@ export class CustodyAccount {
         throw new Error('account is no longer the expected dormant bootstrap');
       }
     };
-    const complete = async (state: Ledger): Promise<boolean> => {
+    const complete = async (state: Ledger, recheck = check,
+      onObservationFailure?: (error: unknown) => never): Promise<boolean> => {
       if (!state.booted) return false;
       if (!state.boot.every(b => b === 0)) throw new Error('booted account retains an unexpected bootstrap commitment');
       const expected = record.credential && pureCircuits.derive_device_entry_with_p256(
@@ -635,10 +640,18 @@ export class CustodyAccount {
         // roster. Verify the first consumed-bootstrap state, not today's
         // counters or membership. A retained approval/tx ID alone is no receipt.
         const provider = this.providers.publicDataProvider;
+        const historyUnavailable = (error: unknown): never => {
+          if (onObservationFailure) onObservationFailure(error);
+          throw error;
+        };
         if (typeof provider?.contractStateObservable !== 'function') {
-          throw new Error('bootstrap activation history unavailable; retry with a history-capable provider');
+          historyUnavailable(new Error('bootstrap activation history unavailable; retry with a history-capable provider'));
         }
-        const installed = await firstValueFrom(provider.contractStateObservable(this.address, { type: 'all' }).pipe(
+        const installed = await firstValueFrom(defer((): Observable<ContractState> =>
+          provider.contractStateObservable(this.address, { type: 'all' })).pipe(
+          // Catch only source/transport failures, before semantic history
+          // checks. A contradictory history must keep its own rejection.
+          catchError(error => historyUnavailable(error)),
           map((snapshot: ContractState): Ledger => {
             const historical = ledger(snapshot.data);
             if (historical.bootstrap_mode !== 1n || !equalBytes(historical.bootstrap_network, network) ||
@@ -648,14 +661,15 @@ export class CustodyAccount {
             return historical;
           }),
           filter((historical: Ledger) => historical.booted),
-          timeout({ first: 15_000 }),
-        )) as Ledger;
+          timeout({ first: 15_000, with: () => historyUnavailable(new Error('bootstrap activation history timed out')) }),
+        ), { defaultValue: undefined });
+        if (!installed) historyUnavailable(new Error('bootstrap activation history unavailable; no installed state observed'));
         if (installed.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(installed.device_epoch);
         if (!initialInstallation(installed)) throw new Error('bootstrap activated an unexpected initial device');
       }
       // Recovery can also land while the immediate-success path persists its
       // record. Recheck after every awaited path, including that fast path.
-      const current = await check();
+      const current = await recheck();
       if (!current.booted || !current.boot.every(b => b === 0)) throw new Error('bootstrap state changed during activation inspection');
       if (current.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(current.device_epoch);
       if (!record.credential || !equalBytes(record.network, network) || !equalBytes(record.boot, boot) ||
@@ -723,19 +737,39 @@ export class CustodyAccount {
         await options.persist(record);
         validateRetainedApproval(record);
         const args = signedBootstrapActivationArgs(record.approval!);
+        let lastSubmissionFailure: { error: unknown } | undefined;
         const submitted = await submitWithDustRetry('activate_initial_passkey', async () => {
+          if (lastSubmissionFailure) {
+            const original = lastSubmissionFailure.error;
+            const preserveFailure = () => { throw original; };
+            const observeBeforeRetry = () => check(preserveFailure);
+            const retryState = await observeBeforeRetry();
+            if (await complete(retryState, observeBeforeRetry, preserveFailure)) return { completed: true };
+            // The deployment/network must still be trusted after the retry
+            // delay. An unavailable observation must never permit dispatch.
+            dormant(retryState); validateRetainedApproval(record);
+          }
           try { return { result: await this.dispatch('activate_initial_passkey', ...args) }; }
           catch (error) {
             // Inclusion can win a race with the reply, another tab, or a
             // relayer. Inspect before attempting another proof/submission.
-            if (await complete(await check())) return { completed: true };
+            lastSubmissionFailure = { error };
+            const preserveFailure = () => { throw error; };
+            const observeAfterFailure = () => check(preserveFailure);
+            // Keep definitive completion failures (wrong device/recovery)
+            // distinct, but preserve retry classification if a provider
+            // observation fails, including completion's final recheck.
+            // Synchronous network/mode validation still reports its own error.
+            if (await complete(await observeAfterFailure(), observeAfterFailure, preserveFailure)) return { completed: true };
             throw error;
           }
         });
         // A lost reply supplies no trustworthy transaction ID. The verified
         // state is sufficient for completion; never manufacture an ID.
         if ('completed' in submitted) return this;
-        record.transactionId = txId(submitted.result); await options.persist(record);
+        const observedId = [submitted.result?.public?.txId, submitted.result?.public?.transactionHash]
+          .find(id => typeof id === 'string' && id.length > 0);
+        if (observedId !== undefined) { record.transactionId = observedId; await options.persist(record); }
         if (!await complete(await check())) throw new Error('activation not yet confirmed; retain approval and inspect state before retry');
         return this;
       },

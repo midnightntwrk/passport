@@ -13,6 +13,7 @@
     "test:signed-bootstrap": "tsx src/tests/signed-bootstrap-conformance.ts",
     "test:signed-bootstrap-keyed": "node --import tsx --test src/tests/signed-bootstrap-wave.ts",
     "test:signed-bootstrap-evidence": "node --test scripts/signed-bootstrap-evidence.test.mjs",
+    "test:signed-bootstrap-measure": "node --test scripts/measure-signed-bootstrap.test.mjs",
     "test:signed-bootstrap-runner": "python3 -B -O scripts/test-signed-bootstrap-constraints-runner.py",
     "measure:signed-bootstrap": "node scripts/measure-signed-bootstrap.mjs",
     "test:input-validation": "tsx --test src/tests/input-validation.ts src/tests/signer-input-validation.ts",

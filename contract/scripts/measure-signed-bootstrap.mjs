@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { arch, cpus, platform, totalmem } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gitProvenance } from './git-provenance.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const managed = resolve(root, 'contracts/managed/account');
@@ -62,8 +63,7 @@ for (const name of ['account.compact', 'account-p256.compact', 'account-bootstra
   sources[`contracts/${name}`] = await sha(resolve(root, 'contracts', name));
 const command = (...args) => execFileSync(args[0], args.slice(1), { cwd: root, encoding: 'utf8' }).trim();
 const report = {
-  recordedAt: new Date().toISOString(), gitCommit: command('git', 'rev-parse', 'HEAD'),
-  gitStatus: command('git', 'status', '--porcelain=v1'),
+  recordedAt: new Date().toISOString(), ...gitProvenance(root),
   compilerVersion: info['compiler-version'], runtimeVersion: manifest['runtime-version'],
   zkirVersion: command(zkir, '--version'), nodeVersion: process.version,
   hardware: { platform: platform(), arch: arch(), cpu: cpus()[0]?.model, logicalCpus: cpus().length, memoryBytes: totalmem() },
