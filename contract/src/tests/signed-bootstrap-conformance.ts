@@ -17,9 +17,9 @@ import { generateEncKeyPair } from '../wallet/inbox.js';
 import { JubjubDevice } from '../wallet/signer.js';
 import { queryTxPosition } from '../wallet/capture.js';
 import { allCircuits } from '../wallet/wave-deploy.js';
-import { setupWallet, compiledAccountContract } from '../node/setup.js';
+import { setupWallet, compiledAccountContract, deployFaucet } from '../node/setup.js';
 import { CONFIG, managedPath, userAddressBytes } from '../node/wallet.js';
-import { runScenario, step } from './runner.js';
+import { runScenario, step, sleep } from './runner.js';
 import { writeEvidence } from './evidence.js';
 import { softwarePasskey, sha256, TEST_ORIGIN } from './p256-fixtures.js';
 
@@ -139,10 +139,17 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
     assert.equal((await publicState(account)).data.toString(false), before);
 
     step('a permissionless deposit after approval preserves the approved intent');
-    const night = new Uint8Array(32), recipient = userAddressBytes(ctx.walletCtx);
+    // The reference localnet rejects the Night-input shape under its dismissal
+    // budget. Use the existing non-native faucet fixture without relaxing any
+    // ledger limit; this still exercises the same account custody circuits.
+    const faucet = await deployFaucet(ctx.walletCtx), domain = bytes();
+    const color = await faucet.unshieldedColor(domain), recipient = userAddressBytes(ctx.walletCtx);
+    label = 'mint non-native custody fixture';
+    await recordTx(label, { txId: await faucet.mintUnshielded(domain, 1000n, recipient) });
+    await sleep(15_000);
     label = 'deposit_unshielded after approval';
-    await recordTx(label, await account.depositUnshielded(night, 1000n));
-    assert.equal((await account.ledgerState()).unshielded_balances.lookup(night), 1000n);
+    await recordTx(label, await account.depositUnshielded(color, 1000n));
+    assert.equal((await account.ledgerState()).unshielded_balances.lookup(color), 1000n);
 
     step('pending recovery survives activation and the newly installed passkey can veto it');
     const successor = JubjubDevice.generate(), nextRecovery = JubjubDevice.generate();
@@ -173,21 +180,22 @@ await runScenario('signed bootstrap: fresh proofs and on-node activation', async
 
     step('the activated passkey controls custody and cross-arm device lifecycle');
     label = 'withdraw_unshielded_with_p256';
-    await recordTx(label, await account.withdrawUnshielded(passkey.device, night, 100n, recipient));
+    await recordTx(label, await account.withdrawUnshielded(passkey.device, color, 100n, recipient));
     const secondDevice = JubjubDevice.generate();
     label = 'add_device_with_p256';
     await recordTx(label, await account.addDevice(passkey.device, secondDevice));
     label = 'withdraw_unshielded_with_jubjub';
-    await recordTx(label, await account.withdrawUnshielded(secondDevice, night, 100n, recipient));
+    await recordTx(label, await account.withdrawUnshielded(secondDevice, color, 100n, recipient));
     label = 'remove_device_with_p256';
     await recordTx(label, await account.removeDevice(passkey.device, secondDevice));
     const afterLifecycle = await account.ledgerState();
     assert.equal(afterLifecycle.device_count, 1n);
-    assert.equal(afterLifecycle.unshielded_balances.lookup(night), 800n);
-    await assert.rejects(() => account.withdrawUnshielded(secondDevice, night, 1n, recipient));
-    assert.equal((await account.ledgerState()).unshielded_balances.lookup(night), 800n);
+    assert.equal(afterLifecycle.unshielded_balances.lookup(color), 800n);
+    await assert.rejects(() => account.withdrawUnshielded(secondDevice, color, 1n, recipient));
+    assert.equal((await account.ledgerState()).unshielded_balances.lookup(color), 800n);
     const details = { account: account.address, network: { caip2Id: network.caip2Id, genesis: hex(network.genesisHash) },
       provenance, samples, transactions, savedApprovalAfterKeyErasure: true, resumedDeploymentCheckpoint: true, completeVerifierRoster: allCircuits(),
+      custodyFixture: { kind: 'faucet-minted non-native localnet token', color: hex(color), deposited: '1000', remaining: '800' },
       negativeEnforcingLayer: 'host build; no negative proof submitted',
       notCovered: ['physical browser/synced-authenticator registration', 'identical-state cloned network distinction',
         'formal soundness proof', 'on-node recovery-finalise ordering (covered by offline state tests)'] };
