@@ -1,0 +1,50 @@
+--- webauthn.compact
++++ webauthn.compact
+@@ -101,6 +101,31 @@
+     ]);
+   }
+
++  pure circuit encoded_hash(
++    encoded: Bytes<43>, origin: Bytes<originLength>
++  ): Bytes<32> {
++    return persistentHash<[Bytes<36>, Bytes<43>, Bytes<12>, Bytes<originLength>, Bytes<22>]>([
++      pad(36, "{\"type\":\"webauthn.get\",\"challenge\":\""),
++      encoded, pad(12, "\",\"origin\":\""),
++      origin, pad(22, "\",\"crossOrigin\":false}")
++    ]);
++  }
++
++  pure circuit encoded_hash_chrome_grease(
++    encoded: Bytes<43>, origin: Bytes<originLength>
++  ): Bytes<32> {
++    // Chromium sometimes appends exactly this member. Every byte, including
++    // the extra member and closing brace, belongs to the signed JSON hash.
++    // With a 21-byte origin the complete message is 243 bytes.
++    return persistentHash<[Bytes<36>, Bytes<43>, Bytes<12>, Bytes<originLength>, Bytes<21>, Bytes<109>, Bytes<1>]>([
++      pad(36, "{\"type\":\"webauthn.get\",\"challenge\":\""),
++      encoded, pad(12, "\",\"origin\":\""),
++      origin, pad(21, "\",\"crossOrigin\":false"),
++      pad(109, ",\"other_keys_can_be_added_here\":\"do not compare clientDataJSON against a template. See https://goo.gl/yabPex\""),
++      pad(1, "}")
++    ]);
++  }
++
+   export pure circuit p256_verify_digest(
+     digest: Bytes<32>, sig: Secp256r1EcdsaSignature, pk: Secp256r1Point
+   ): Boolean {
+@@ -124,9 +149,13 @@
+     assert(flags == 5 || flags == 13 || flags == 29, "WebAuthn flags require UP and UV");
+     // signCount is signed but deliberately not an anti-replay counter: synced
+     // passkeys may return zero. Device/grant nonces carry transaction freshness.
++    for (const b of policy.origin) {
++      assert(b >= 33 && b <= 126 && b != 34 && b != 92, "invalid origin bytes");
++    }
++    const encoded = webauthn_challenge_base64(challenge);
+     const client_hash = chrome_grease
+-      ? webauthn_client_data_hash_chrome_grease(challenge, policy.origin)
+-      : webauthn_client_data_hash(challenge, policy.origin);
++      ? encoded_hash_chrome_grease(encoded, policy.origin)
++      : encoded_hash(encoded, policy.origin);
+     const digest = persistentHash<[Bytes<37>, Bytes<32>]>([authenticator_data, client_hash]);
+     return p256_verify_digest(digest, sig, pk);
+   }
