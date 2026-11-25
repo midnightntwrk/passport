@@ -3,7 +3,7 @@ import CompactStandardLibrary;
 
 // A single grant slot and a fixture owner credential keep this ACC model small.
 export ledger ownerCommitment: Bytes<32>;
-export ledger networkId: Bytes<32>;
+export ledger deploymentTag: Bytes<32>;
 export ledger grantee: JubjubPoint;
 export ledger audience: ContractAddress;
 export ledger permission: Bytes<32>;
@@ -12,20 +12,32 @@ export ledger nonce: Uint<64>;
 export ledger expiresAt: Uint<64>;
 export ledger active: Boolean;
 
-constructor(owner: Bytes<32>, network: Bytes<32>) {
+constructor(owner: Bytes<32>, tag: Bytes<32>) {
   ownerCommitment = disclose(owner);
-  networkId = disclose(network);
+  deploymentTag = disclose(tag);
 }
 
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([pad(32, "experiment:owner"), secret]);
 }
 
+// Jubjub has cofactor 8. For subgroup order r, [r-1]P = -P iff [r]P = O.
+pure circuit checked_point(x: Field, y: Field): JubjubPoint {
+  const x2 = x * x;
+  const y2 = y * y;
+  assert(10241 * (y2 - x2 - 1) + 10240 * x2 * y2 == (0 as Field), "point off curve");
+  // On this curve x = 0 denotes either the identity or the order-two point.
+  assert(x != (0 as Field), "identity or order-two point");
+  const p = constructJubjubPoint(x, y);
+  const rMinusOne = (0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb6 as Field) as JubjubScalar;
+  assert(ecMul(p, rMinusOne) == ecNeg(p), "point outside prime-order subgroup");
+  return p;
+}
+
 export circuit issue(secret: Bytes<32>, key: JubjubPoint, caller: ContractAddress,
                      action: Bytes<32>, expiry: Uint<64>): [] {
   assert(owner_commitment(secret) == ownerCommitment, "owner required");
-  assert(ecMul(key, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar), "weak grantee");
-  grantee = disclose(key);
+  grantee = disclose(checked_point(jubjubPointX(key), jubjubPointY(key)));
   audience = disclose(caller);
   permission = disclose(action);
   expiresAt = disclose(expiry);
@@ -39,11 +51,11 @@ export circuit revoke(secret: Bytes<32>): [] {
   active = false;
 }
 
-export pure circuit challenge(network: Bytes<32>, account: ContractAddress, caller: ContractAddress,
+export pure circuit challenge(tag: Bytes<32>, account: ContractAddress, caller: ContractAddress,
                               operation: Bytes<32>, argsHash: Bytes<32>,
                               generation: Uint<64>, sequence: Uint<64>): Field {
   return degradeToTransient(persistentHash<Vector<8, Bytes<32>>>([
-    pad(32, "experiment:nonpayment:auth:v2"), network, account.bytes, caller.bytes,
+    pad(32, "experiment:nonpayment:auth:v2"), tag, account.bytes, caller.bytes,
     operation, argsHash, generation as Bytes<32>, sequence as Bytes<32>
   ]));
 }
@@ -60,14 +72,9 @@ export circuit assert_grant_authorizes(operation: Bytes<32>, argsHash: Bytes<32>
   assert(kernel.blockTimeLessThan(expiresAt), "expired grant");
   assert(permission == operation, "wrong permission");
 
-  const msg = challenge(networkId, kernel.self(), caller.value.left, operation, argsHash, issuance, nonce);
-  // Jubjub: -x² + y² = 1 - (10240/10241)x²y². Check raw fields before construction.
-  const x2 = rx * rx;
-  const y2 = ry * ry;
-  assert(10241 * (y2 - x2 - 1) + 10240 * x2 * y2 == (0 as Field), "announcement off curve");
-  assert(rx != (0 as Field) || ry != (1 as Field), "identity announcement");
+  const msg = challenge(deploymentTag, kernel.self(), caller.value.left, operation, argsHash, issuance, nonce);
   const signature = JubjubSchnorrSignature {
-    announcement: constructJubjubPoint(rx, ry), response: response
+    announcement: checked_point(rx, ry), response: response
   };
   assert(jubjubSchnorrVerify<1>([msg], signature, grantee), "invalid grant signature");
   nonce = (nonce + 1) as Uint<64>;

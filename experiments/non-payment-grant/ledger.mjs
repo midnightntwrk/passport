@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { ContractState as RuntimeContractState } from '@midnight-ntwrk/compact-runtime';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { provingProvider } from '@midnightntwrk/zkir-v3';
@@ -36,7 +36,8 @@ export function deploy(state) {
 
 const provider = provingProvider({
   async lookupKey(location) {
-    const [directory, circuit] = location.split('/');
+    const directory = dirname(location);
+    const circuit = basename(location);
     const file = suffix => readFile(new URL(`./managed/${directory}/${suffix}`, import.meta.url));
     const [proverKey, verifierKey, ir] = await Promise.all([
       file(`keys/${circuit}.prover`), file(`keys/${circuit}.verifier`), file(`zkir/${circuit}.bzkir`),

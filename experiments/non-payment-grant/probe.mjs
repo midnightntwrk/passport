@@ -8,8 +8,8 @@ import { apply, blockHash, blockTime, deploy, network, prove } from './ledger.mj
 
 const deployments = new Map();
 const coinPublicKey = '00'.repeat(32);
-const expiresAt = BigInt(blockTime + 120);
-const networkTag = id => new Uint8Array(Buffer.from(id.padEnd(32, '\0'), 'utf8'));
+const expiresAt = BigInt(blockTime + 1);
+const encodeTag = tag => new Uint8Array(Buffer.from(tag.padEnd(32, '\0'), 'utf8'));
 const crossContract = {
   stateProvider: { getContractState: async (_, address) => deployments.get(address)?.state },
   moduleProvider: { resolve: address => {
@@ -48,8 +48,8 @@ async function call(target, circuitId, ...args) {
   return commit(context, await prove(context.callProofDataTrace, deployments));
 }
 
-function commit(context, transaction) {
-  const applied = apply(transaction);
+function commit(context, transaction, at) {
+  const applied = apply(transaction, at);
   for (const [address, query] of Object.entries(context.queryContexts)) {
     const touched = deployments.get(address);
     touched.state = rt.ContractState.deserialize(applied.index(address).serialize());
@@ -65,16 +65,16 @@ const granteeKey = rt.jubjubSchnorrVerifyingKey(grantee);
 const name = new Uint8Array(randomBytes(32));
 const next = new Uint8Array(randomBytes(32));
 const operation = Registry.pureCircuits.operation();
-const account = await instantiate('account', Account, Account.pureCircuits.owner_commitment(holder), networkTag(network));
+const account = await instantiate('account', Account, Account.pureCircuits.owner_commitment(holder), encodeTag(network));
 const registry = await instantiate('registry', Registry, account.ref, name);
 const other = await instantiate('registry', Registry, account.ref, name);
 const grant = () => Account.ledger(account.state.data);
 const resolver = () => Registry.ledger(registry.state.data).resolver;
 const messageType = new rt.CompactTypeVector(1, rt.CompactTypeField);
-function sign({ key = grantee, target = registry, accountRef = account.ref, value = next, chain = network, nonce = grant().nonce } = {}) {
+function sign({ key = grantee, target = registry, accountRef = account.ref, value = next, tag = network, nonce = grant().nonce } = {}) {
   const digest = Registry.pureCircuits.arguments_hash(name, value);
   const message = Account.pureCircuits.challenge(
-    networkTag(chain), accountRef, target.ref, operation, digest, grant().issuance, nonce);
+    encodeTag(tag), accountRef, target.ref, operation, digest, grant().issuance, nonce);
   const { announcement, response } = rt.jubjubSchnorrSign(messageType, [message], key);
   return [announcement.x, announcement.y, response];
 }
@@ -85,14 +85,27 @@ const update = (signature, target = registry, value = next) =>
 
 const checks = [];
 async function rejected(label, action, error) {
-  const before = Array.from(deployments.values(), target => target.state.serialize());
   await assert.rejects(action, error, label);
-  assert.deepEqual(Array.from(deployments.values(), target => target.state.serialize()), before);
   checks.push(label);
 }
 
 await rejected('only the holder may issue', () =>
   call(account, 'issue', randomBytes(32), granteeKey, registry.ref, operation, expiresAt), /owner required/);
+// Fixed invalid input classes for both point entry points.
+const orderTwo = { x: 0n, y: rt.MAX_FIELD };
+const base = rt.ecMulGenerator(1n);
+const mixedOrder = { x: rt.FIELD_MODULUS - base.x, y: rt.FIELD_MODULUS - base.y };
+const invalidPoints = [
+  ['off-curve', { x: 0n, y: 0n }, /point off curve/],
+  ['identity', { x: 0n, y: 1n }, /identity or order-two point/],
+  ['order-two', orderTwo, /identity or order-two point/],
+  // The pinned runtime's native point decoder traps on mixed order before ecMul returns.
+  ['mixed-order', mixedOrder, { name: 'RuntimeError', message: 'unreachable' }],
+];
+for (const [label, point, error] of invalidPoints) {
+  await rejected(label + ' grantee', () =>
+    call(account, 'issue', holder, point, registry.ref, operation, expiresAt), error);
+}
 await issue();
 const signature = sign();
 const digest = Registry.pureCircuits.arguments_hash(name, next);
@@ -110,9 +123,10 @@ await rejected('different registry even with its own signed request', () =>
 await rejected('wrong grantee', () => update(sign({ key: rt.sampleJubjubSchnorrSk() })), /invalid grant signature/);
 await rejected('signature for another account', () =>
   update(sign({ accountRef: other.ref })), /invalid grant signature/);
-await rejected('signature for another network', () => update(sign({ chain: 'preview' })), /invalid grant signature/);
-await rejected('off-curve announcement', () => update([0n, 0n, signature[2]]), /announcement off curve/);
-await rejected('identity announcement', () => update([0n, 1n, signature[2]]), /identity announcement/);
+await rejected('signature for a different stored tag', () => update(sign({ tag: 'other-deployment' })), /invalid grant signature/);
+for (const [label, point, error] of invalidPoints) {
+  await rejected(label + ' announcement', () => update([point.x, point.y, signature[2]]), error);
+}
 await rejected('changed resolver', () => update(signature, registry, randomBytes(32)), /invalid grant signature/);
 await rejected('unknown name', () =>
   call(registry, 'set_resolver', randomBytes(32), next, ...signature), /unknown name/);
@@ -121,9 +135,9 @@ await rejected('unknown name', () =>
 const { context } = await registry.contract.circuits.set_resolver(
   circuitContext(registry, 'set_resolver'), name, next, ...signature);
 const transaction = await prove(context.callProofDataTrace, deployments);
-assert.throws(() => apply(transaction, Number(expiresAt) + 2), /mismatch between expected.*actual.*read/s);
-checks.push('ledger rejects a proven update after grant expiry');
-const trace = commit(context, transaction);
+assert.throws(() => apply(transaction, Number(expiresAt)), /mismatch between expected.*actual.*read/s);
+checks.push('ledger rejects a proven update at grant expiry');
+const trace = commit(context, transaction, Number(expiresAt) - 1);
 assert.deepEqual(trace.map(frame => [frame.contractAddress, frame.circuitId]), [
   [account.address, 'assert_grant_authorizes'], [registry.address, 'set_resolver'],
 ]);

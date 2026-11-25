@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node probe.mjs"
+    "test": "./run.sh"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",

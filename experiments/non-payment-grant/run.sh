@@ -8,6 +8,7 @@ else
 fi
 version="$("${compiler[@]}" --version)"
 [[ "$version" =~ (^|[[:space:]])0\.36\.1([[:space:]]|$) ]] || { echo "Expected Compact 0.36.1, got $version" >&2; exit 1; }
+npm ci --no-audit --no-fund
 for contract in account registry; do
   "${compiler[@]}" "contracts/$contract.compact" "managed/$contract"
 done
