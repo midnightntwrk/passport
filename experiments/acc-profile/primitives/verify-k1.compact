@@ -1,0 +1,12 @@
+pragma language_version >= 0.27.0;
+import CompactStandardLibrary;
+
+export ledger accepted: Bytes<32>;
+
+// Matches the public output and prehashed input convention of probe-p256.
+export circuit verify_k1(
+  digest: Bytes<32>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point
+): [] {
+  assert(secp256k1EcdsaVerify(digest, sig, pk), "invalid k1 signature");
+  accepted = disclose(digest);
+}
