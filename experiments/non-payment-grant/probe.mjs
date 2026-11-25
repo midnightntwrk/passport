@@ -4,11 +4,12 @@ import { readFile } from 'node:fs/promises';
 import * as rt from '@midnight-ntwrk/compact-runtime';
 import * as Account from './managed/account/contract/index.js';
 import * as Registry from './managed/registry/contract/index.js';
-import { blockHash, blockTime, deploy, proveAndApply } from './ledger.mjs';
+import { apply, blockHash, blockTime, deploy, network, prove } from './ledger.mjs';
 
 const deployments = new Map();
 const coinPublicKey = '00'.repeat(32);
-const expiresAt = BigInt(blockTime + 3600);
+const expiresAt = BigInt(blockTime + 120);
+const networkTag = id => new Uint8Array(Buffer.from(id.padEnd(32, '\0'), 'utf8'));
 const crossContract = {
   stateProvider: { getContractState: async (_, address) => deployments.get(address)?.state },
   moduleProvider: { resolve: address => {
@@ -44,10 +45,14 @@ function circuitContext(target, circuitId) {
 }
 async function call(target, circuitId, ...args) {
   const { context } = await target.contract.circuits[circuitId](circuitContext(target, circuitId), ...args);
-  const applied = await proveAndApply(context.callProofDataTrace, deployments);
+  return commit(context, await prove(context.callProofDataTrace, deployments));
+}
+
+function commit(context, transaction) {
+  const applied = apply(transaction);
   for (const [address, query] of Object.entries(context.queryContexts)) {
     const touched = deployments.get(address);
-    touched.state = rt.ContractState.deserialize(applied.get(address));
+    touched.state = rt.ContractState.deserialize(applied.index(address).serialize());
     assert.deepEqual({ ...touched.module.ledger(touched.state.data) }, { ...touched.module.ledger(query.state) });
   }
   console.error(`Ledger verified and applied: ${context.callProofDataTrace.map(f => f.circuitId).join(', ')}`);
@@ -60,16 +65,16 @@ const granteeKey = rt.jubjubSchnorrVerifyingKey(grantee);
 const name = new Uint8Array(randomBytes(32));
 const next = new Uint8Array(randomBytes(32));
 const operation = Registry.pureCircuits.operation();
-const account = await instantiate('account', Account, Account.pureCircuits.owner_commitment(holder));
+const account = await instantiate('account', Account, Account.pureCircuits.owner_commitment(holder), networkTag(network));
 const registry = await instantiate('registry', Registry, account.ref, name);
 const other = await instantiate('registry', Registry, account.ref, name);
 const grant = () => Account.ledger(account.state.data);
 const resolver = () => Registry.ledger(registry.state.data).resolver;
 const messageType = new rt.CompactTypeVector(1, rt.CompactTypeField);
-function sign({ key = grantee, target = registry, accountRef = account.ref, value = next } = {}) {
+function sign({ key = grantee, target = registry, accountRef = account.ref, value = next, chain = network, nonce = grant().nonce } = {}) {
   const digest = Registry.pureCircuits.arguments_hash(name, value);
   const message = Account.pureCircuits.challenge(
-    accountRef, target.ref, operation, digest, grant().issuance, grant().nonce);
+    networkTag(chain), accountRef, target.ref, operation, digest, grant().issuance, nonce);
   const { announcement, response } = rt.jubjubSchnorrSign(messageType, [message], key);
   return [announcement.x, announcement.y, response];
 }
@@ -92,24 +97,33 @@ await issue();
 const signature = sign();
 const digest = Registry.pureCircuits.arguments_hash(name, next);
 await rejected('direct call has no contract caller', () =>
-  call(account, 'assert_grant_authorizes', operation, digest, ...signature), /contract caller required/);
+  call(account, 'assert_grant_authorizes', operation, digest, ...signature), /missing caller/);
 await rejected('user-address caller (runtime context control)', async () => {
   const ctx = circuitContext(account, 'assert_grant_authorizes');
   const query = ctx.callContext.currentQueryContext;
   query.block = { ...query.block, caller: { tag: 'user', address: '42'.repeat(32) } };
   assert.equal(query.block.caller.tag, 'user');
   await account.contract.circuits.assert_grant_authorizes(ctx, operation, digest, ...signature);
-}, /contract caller required/);
+}, /user caller not allowed/);
 await rejected('different registry even with its own signed request', () =>
   update(sign({ target: other }), other), /wrong contract caller/);
 await rejected('wrong grantee', () => update(sign({ key: rt.sampleJubjubSchnorrSk() })), /invalid grant signature/);
 await rejected('signature for another account', () =>
   update(sign({ accountRef: other.ref })), /invalid grant signature/);
+await rejected('signature for another network', () => update(sign({ chain: 'preview' })), /invalid grant signature/);
+await rejected('off-curve announcement', () => update([0n, 0n, signature[2]]), /announcement off curve/);
+await rejected('identity announcement', () => update([0n, 1n, signature[2]]), /identity announcement/);
 await rejected('changed resolver', () => update(signature, registry, randomBytes(32)), /invalid grant signature/);
 await rejected('unknown name', () =>
   call(registry, 'set_resolver', randomBytes(32), next, ...signature), /unknown name/);
 
-const trace = await update(signature);
+// Same proof and starting state, different admission times. Both are within the transaction TTL.
+const { context } = await registry.contract.circuits.set_resolver(
+  circuitContext(registry, 'set_resolver'), name, next, ...signature);
+const transaction = await prove(context.callProofDataTrace, deployments);
+assert.throws(() => apply(transaction, Number(expiresAt) + 2), /mismatch between expected.*actual.*read/s);
+checks.push('ledger rejects a proven update after grant expiry');
+const trace = commit(context, transaction);
 assert.deepEqual(trace.map(frame => [frame.contractAddress, frame.circuitId]), [
   [account.address, 'assert_grant_authorizes'], [registry.address, 'set_resolver'],
 ]);
@@ -143,5 +157,15 @@ await update(sign({ target: other, value: secondResolver }), other, secondResolv
 assert.deepEqual(Registry.ledger(other.state.data).resolver, secondResolver);
 assert.deepEqual(resolver(), next);
 checks.push('second registry uses the same API with its own grant');
+
+const first = new Uint8Array(randomBytes(32));
+const final = new Uint8Array(randomBytes(32));
+const sequence = grant().nonce;
+const twice = await call(other, 'set_resolver_twice', name, first, final,
+  sign({ target: other, value: first }), sign({ target: other, value: final, nonce: sequence + 1n }));
+assert.deepEqual(twice.map(f => f.contractAddress), [account.address, account.address, other.address]);
+assert.equal(grant().nonce, sequence + 2n);
+assert.deepEqual(Registry.ledger(other.state.data).resolver, final);
+checks.push('two calls to the same ACC consume successive nonces');
 
 console.log(`Passed ${checks.length} grant checks.`);

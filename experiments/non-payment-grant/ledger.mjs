@@ -2,16 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { ContractState as RuntimeContractState } from '@midnight-ntwrk/compact-runtime';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { provingProvider } from '@midnightntwrk/zkir-v3';
 
-const network = 'undeployed';
+export const network = 'undeployed';
 export const blockTime = Date.parse('2026-11-25T12:00:00Z') / 1000;
 export const blockHash = '11'.repeat(32);
-const now = new Date(blockTime * 1000);
 const ttl = new Date((blockTime + 300) * 1000);
-const block = { secondsSinceEpoch: BigInt(blockTime), secondsSinceEpochErr: 1,
-  parentBlockHash: blockHash, lastBlockTime: BigInt(blockTime - 1) };
 
 let chain = ledger.LedgerState.blank(network);
 const checks = new ledger.WellFormedStrictness();
@@ -19,11 +17,14 @@ const checks = new ledger.WellFormedStrictness();
 checks.enforceBalancing = false;
 checks.verifyContractProofs = true;
 
-function apply(transaction) {
-  const verified = transaction.wellFormed(chain, checks, now);
+export function apply(transaction, at = blockTime) {
+  const block = { secondsSinceEpoch: BigInt(at), secondsSinceEpochErr: 1,
+    parentBlockHash: blockHash, lastBlockTime: BigInt(at - 1) };
+  const verified = transaction.wellFormed(chain, checks, new Date(at * 1000));
   const [updated, result] = chain.apply(verified, new ledger.TransactionContext(chain, block));
   assert.equal(result.type, 'success', result.error);
   chain = updated;
+  return updated;
 }
 
 export function deploy(state) {
@@ -50,20 +51,20 @@ const provider = provingProvider({
 
 // Runtime and ledger have separate WASM heaps. Carry state between them using
 // the public serialization API and preserve each call's actual context.
-export async function proveAndApply(trace, deployments) {
+export async function prove(trace, deployments) {
   const calls = trace.map(frame => {
     const target = deployments.get(frame.contractAddress);
-    const initial = ledger.ContractState.deserialize(target.state.serialize());
+    const snapshot = new RuntimeContractState();
+    snapshot.data = frame.initialQueryContext.state;
+    const initial = ledger.ContractState.deserialize(snapshot.serialize());
     const ctx = new ledger.QueryContext(initial.data, target.address);
     ctx.block = frame.initialQueryContext.block;
-    return new ledger.PrePartitionContractCall(target.address, frame.circuitId, initial.operation(frame.circuitId),
+    return new ledger.PrePartitionContractCall(target.address, frame.circuitId, chain.index(target.address).operation(frame.circuitId),
       new ledger.PreTranscript(ctx, frame.publicTranscript, frame.commCommData?.commComm),
       frame.privateTranscriptOutputs, frame.input, frame.output,
       frame.commCommData?.commCommRand ?? ledger.communicationCommitmentRandomness(),
       `${target.directory}/${frame.circuitId}`);
   });
   const tx = ledger.Transaction.fromParts(network).addCalls({ tag: 'first' }, calls, chain.parameters, ttl);
-  const proven = (await tx.prove(provider, chain.parameters.transactionCostModel.runtimeCostModel)).bind();
-  apply(proven);
-  return new Map(trace.map(frame => [frame.contractAddress, chain.index(frame.contractAddress).serialize()]));
+  return (await tx.prove(provider, chain.parameters.transactionCostModel.runtimeCostModel)).bind();
 }

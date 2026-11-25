@@ -3,6 +3,7 @@ import CompactStandardLibrary;
 
 // A single grant slot and a fixture owner credential keep this ACC model small.
 export ledger ownerCommitment: Bytes<32>;
+export ledger networkId: Bytes<32>;
 export ledger grantee: JubjubPoint;
 export ledger audience: ContractAddress;
 export ledger permission: Bytes<32>;
@@ -11,7 +12,10 @@ export ledger nonce: Uint<64>;
 export ledger expiresAt: Uint<64>;
 export ledger active: Boolean;
 
-constructor(owner: Bytes<32>) { ownerCommitment = disclose(owner); }
+constructor(owner: Bytes<32>, network: Bytes<32>) {
+  ownerCommitment = disclose(owner);
+  networkId = disclose(network);
+}
 
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([pad(32, "experiment:owner"), secret]);
@@ -35,11 +39,11 @@ export circuit revoke(secret: Bytes<32>): [] {
   active = false;
 }
 
-export pure circuit challenge(account: ContractAddress, caller: ContractAddress,
+export pure circuit challenge(network: Bytes<32>, account: ContractAddress, caller: ContractAddress,
                               operation: Bytes<32>, argsHash: Bytes<32>,
                               generation: Uint<64>, sequence: Uint<64>): Field {
-  return degradeToTransient(persistentHash<Vector<7, Bytes<32>>>([
-    pad(32, "experiment:nonpayment:auth:v1"), account.bytes, caller.bytes,
+  return degradeToTransient(persistentHash<Vector<8, Bytes<32>>>([
+    pad(32, "experiment:nonpayment:auth:v2"), network, account.bytes, caller.bytes,
     operation, argsHash, generation as Bytes<32>, sequence as Bytes<32>
   ]));
 }
@@ -49,14 +53,19 @@ export pure circuit challenge(account: ContractAddress, caller: ContractAddress,
 export circuit assert_grant_authorizes(operation: Bytes<32>, argsHash: Bytes<32>,
                                       rx: Field, ry: Field, response: Field): [] {
   const caller = kernel.caller();
-  assert(caller.is_some, "contract caller required");
-  assert(caller.value.is_left, "contract caller required");
+  assert(caller.is_some, "missing caller");
+  assert(caller.value.is_left, "user caller not allowed");
   assert(caller.value.left == audience, "wrong contract caller");
   assert(active, "inactive grant");
   assert(kernel.blockTimeLessThan(expiresAt), "expired grant");
   assert(permission == operation, "wrong permission");
 
-  const msg = challenge(kernel.self(), caller.value.left, operation, argsHash, issuance, nonce);
+  const msg = challenge(networkId, kernel.self(), caller.value.left, operation, argsHash, issuance, nonce);
+  // Jubjub: -x² + y² = 1 - (10240/10241)x²y². Check raw fields before construction.
+  const x2 = rx * rx;
+  const y2 = ry * ry;
+  assert(10241 * (y2 - x2 - 1) + 10240 * x2 * y2 == (0 as Field), "announcement off curve");
+  assert(rx != (0 as Field) || ry != (1 as Field), "identity announcement");
   const signature = JubjubSchnorrSignature {
     announcement: constructJubjubPoint(rx, ry), response: response
   };
