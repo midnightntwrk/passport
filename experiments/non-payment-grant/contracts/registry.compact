@@ -1,0 +1,30 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+contract Account {
+  circuit assert_grant_authorizes(operation: Bytes<32>, argsHash: Bytes<32>,
+                                  rx: Field, ry: Field, response: Field): [];
+}
+
+// Single registered name. The owner ACC comes from the stored record.
+export ledger owner: Account;
+export ledger registeredName: Bytes<32>;
+export ledger resolver: Bytes<32>;
+
+constructor(account: Account, name: Bytes<32>) {
+  owner = disclose(account);
+  registeredName = disclose(name);
+}
+
+export pure circuit operation(): Bytes<32> { return pad(32, "registry:set_resolver:v1"); }
+export pure circuit arguments_hash(name: Bytes<32>, next: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([name, next]);
+}
+
+export circuit set_resolver(name: Bytes<32>, next: Bytes<32>,
+                           rx: Field, ry: Field, response: Field): [] {
+  assert(registeredName == disclose(name), "unknown name");
+  owner.assert_grant_authorizes(operation(), disclose(arguments_hash(name, next)),
+                               disclose(rx), disclose(ry), disclose(response));
+  resolver = disclose(next);
+}
