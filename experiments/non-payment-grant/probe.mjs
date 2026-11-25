@@ -9,7 +9,13 @@ import { apply, blockHash, blockTime, deploy, network, prove } from './ledger.mj
 const deployments = new Map();
 const coinPublicKey = '00'.repeat(32);
 const expiresAt = BigInt(blockTime + 1);
-const encodeTag = tag => new Uint8Array(Buffer.from(tag.padEnd(32, '\0'), 'utf8'));
+function encodeTag(tag) {
+  const encoded = Buffer.from(tag, 'utf8');
+  if (encoded.length > 32) throw new RangeError('deployment tag exceeds 32 UTF-8 bytes');
+  const padded = new Uint8Array(32);
+  padded.set(encoded);
+  return padded;
+}
 const crossContract = {
   stateProvider: { getContractState: async (_, address) => deployments.get(address)?.state },
   moduleProvider: { resolve: address => {
@@ -83,6 +89,41 @@ const issue = (permission = operation, expiry = expiresAt) =>
 const update = (signature, target = registry, value = next) =>
   call(target, 'set_resolver', name, value, ...signature);
 
+// run.sh starts a fresh Node process for each diagnostic. Make the native
+// trap the last WASM operation in that process, even on the expected path.
+if (process.argv.length > 2) {
+  const role = process.argv[2];
+  assert.ok(['mixed-order-grantee', 'mixed-order-announcement'].includes(role));
+  Error.stackTraceLimit = 40;
+  const base = rt.ecMulGenerator(1n);
+  const point = { x: rt.FIELD_MODULUS - base.x, y: rt.FIELD_MODULUS - base.y };
+  let runMixed;
+  if (role === 'mixed-order-grantee') {
+    const buildIssue = key => account.contract.circuits.issue(
+      circuitContext(account, 'issue'), holder, key, registry.ref, operation, expiresAt);
+    await buildIssue(granteeKey);
+    runMixed = () => buildIssue(point);
+  } else {
+    await issue();
+    const sig = sign();
+    const buildUpdate = args => registry.contract.circuits.set_resolver(
+      circuitContext(registry, 'set_resolver'), name, next, ...args);
+    await buildUpdate(sig);
+    runMixed = () => buildUpdate([point.x, point.y, sig[2]]);
+  }
+  await assert.rejects(runMixed, error =>
+    error instanceof WebAssembly.RuntimeError && error.message === 'unreachable' &&
+    /at Module\.ecMul .*onchain-runtime-v4/.test(error.stack) &&
+    /at Contract\._checked_point_\d+/.test(error.stack));
+  console.log(`Observed the pinned decoder trap in ${role}. Ending diagnostic process.`);
+  process.exit(0);
+}
+
+assert.deepEqual(encodeTag('é'), Uint8Array.from([0xc3, 0xa9, ...new Uint8Array(30)]));
+assert.deepEqual(encodeTag('é'.repeat(16)), new Uint8Array(Buffer.from('é'.repeat(16))));
+assert.throws(() => encodeTag('x'.repeat(33)), /exceeds 32 UTF-8 bytes/);
+assert.throws(() => encodeTag('é'.repeat(16) + 'x'), /exceeds 32 UTF-8 bytes/);
+
 const checks = [];
 async function rejected(label, action, error) {
   await assert.rejects(action, error, label);
@@ -93,14 +134,10 @@ await rejected('only the holder may issue', () =>
   call(account, 'issue', randomBytes(32), granteeKey, registry.ref, operation, expiresAt), /owner required/);
 // Fixed invalid input classes for both point entry points.
 const orderTwo = { x: 0n, y: rt.MAX_FIELD };
-const base = rt.ecMulGenerator(1n);
-const mixedOrder = { x: rt.FIELD_MODULUS - base.x, y: rt.FIELD_MODULUS - base.y };
 const invalidPoints = [
   ['off-curve', { x: 0n, y: 0n }, /point off curve/],
   ['identity', { x: 0n, y: 1n }, /identity or order-two point/],
   ['order-two', orderTwo, /identity or order-two point/],
-  // The pinned runtime's native point decoder traps on mixed order before ecMul returns.
-  ['mixed-order', mixedOrder, { name: 'RuntimeError', message: 'unreachable' }],
 ];
 for (const [label, point, error] of invalidPoints) {
   await rejected(label + ' grantee', () =>
@@ -121,7 +158,7 @@ await rejected('user-address caller (runtime context control)', async () => {
 await rejected('different registry even with its own signed request', () =>
   update(sign({ target: other }), other), /wrong contract caller/);
 await rejected('wrong grantee', () => update(sign({ key: rt.sampleJubjubSchnorrSk() })), /invalid grant signature/);
-await rejected('signature for another account', () =>
+await rejected('signature binding names a registry instead of the owner ACC', () =>
   update(sign({ accountRef: other.ref })), /invalid grant signature/);
 await rejected('signature for a different stored tag', () => update(sign({ tag: 'other-deployment' })), /invalid grant signature/);
 for (const [label, point, error] of invalidPoints) {

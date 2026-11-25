@@ -13,3 +13,5 @@ for contract in account registry; do
   "${compiler[@]}" "contracts/$contract.compact" "managed/$contract"
 done
 node probe.mjs
+node probe.mjs mixed-order-grantee
+node probe.mjs mixed-order-announcement

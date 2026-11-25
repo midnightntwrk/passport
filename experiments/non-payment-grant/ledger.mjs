@@ -18,7 +18,7 @@ checks.enforceBalancing = false;
 checks.verifyContractProofs = true;
 
 export function apply(transaction, at = blockTime) {
-  const block = { secondsSinceEpoch: BigInt(at), secondsSinceEpochErr: 1,
+  const block = { secondsSinceEpoch: BigInt(at), secondsSinceEpochErr: 0,
     parentBlockHash: blockHash, lastBlockTime: BigInt(at - 1) };
   const verified = transaction.wellFormed(chain, checks, new Date(at * 1000));
   const [updated, result] = chain.apply(verified, new ledger.TransactionContext(chain, block));
