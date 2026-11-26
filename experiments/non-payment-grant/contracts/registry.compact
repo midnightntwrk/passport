@@ -18,7 +18,7 @@ constructor(account: Account, name: Bytes<32>) {
 
 export pure circuit operation(): Bytes<32> { return pad(32, "registry:set_resolver:v1"); }
 export pure circuit arguments_hash(name: Bytes<32>, next: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<2, Bytes<32>>>([name, next]);
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "registry:set_resolver:args:v1"), name, next]);
 }
 
 export circuit set_resolver(name: Bytes<32>, next: Bytes<32>,
@@ -36,12 +36,12 @@ export circuit set_resolver_twice(name: Bytes<32>, first: Bytes<32>, next: Bytes
   set_resolver(name, next, sig2[0], sig2[1], sig2[2]);
 }
 
-// A parent can relay the signed action to a child registry.
+// Either registry can relay the signed action to the other.
 contract Registry {
   circuit set_resolver(name: Bytes<32>, next: Bytes<32>, rx: Field, ry: Field, response: Field): [];
 }
 
-export circuit relay(child: Registry, name: Bytes<32>, next: Bytes<32>, sig: Vector<3, Field>): [] {
-  const target = disclose(child);
+export circuit relay(destination: Registry, name: Bytes<32>, next: Bytes<32>, sig: Vector<3, Field>): [] {
+  const target = disclose(destination);
   target.set_resolver(disclose(name), disclose(next), disclose(sig[0]), disclose(sig[1]), disclose(sig[2]));
 }

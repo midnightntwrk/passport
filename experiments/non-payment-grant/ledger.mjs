@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -22,7 +22,10 @@ export function apply(transaction, at = blockTime) {
     parentBlockHash: blockHash, lastBlockTime: BigInt(at - 1) };
   const verified = transaction.wellFormed(chain, checks, new Date(at * 1000));
   const [updated, result] = chain.apply(verified, new ledger.TransactionContext(chain, block));
-  assert.equal(result.type, 'success', result.error);
+  if (result.type !== 'success') {
+    const { type, error, successfulSegments } = result;
+    throw new Error(`Ledger application failed: ${inspect({ type, error, successfulSegments })}`);
+  }
   chain = updated;
   return updated;
 }

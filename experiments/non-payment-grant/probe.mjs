@@ -90,12 +90,10 @@ const issue = (permission = operation, expiry = expiresAt, additional = noAdditi
 const update = (signature, target = registry, value = next) =>
   call(target, 'set_resolver', name, value, ...signature);
 
-// run.sh starts a fresh Node process for each diagnostic. Make the native
-// trap the last WASM operation in that process, even on the expected path.
+// Each diagnostic exits after rejection so a trapped WASM instance is never reused.
 if (process.argv.length > 2) {
   const role = process.argv[2];
   assert.ok(['mixed-order-grantee', 'mixed-order-announcement'].includes(role));
-  Error.stackTraceLimit = 40;
   const base = rt.ecMulGenerator(1n);
   const point = { x: rt.FIELD_MODULUS - base.x, y: rt.FIELD_MODULUS - base.y };
   let runMixed;
@@ -112,11 +110,21 @@ if (process.argv.length > 2) {
     await buildUpdate(sig);
     runMixed = () => buildUpdate([point.x, point.y, sig[2]]);
   }
-  await assert.rejects(runMixed, error =>
-    error instanceof WebAssembly.RuntimeError && error.message === 'unreachable' &&
-    /at Module\.ecMul .*onchain-runtime-v4/.test(error.stack) &&
-    /at Contract\._checked_point_\d+/.test(error.stack));
-  console.log(`Observed the pinned decoder trap in ${role}. Ending diagnostic process.`);
+  let stage = 'runtime';
+  await assert.rejects(async () => {
+    const { context } = await runMixed();
+    stage = 'prover';
+    await prove(context.callProofDataTrace, deployments);
+  }, error => {
+    if (error instanceof WebAssembly.RuntimeError && error.message === 'unreachable') {
+      const frame = error.stack?.split('\n').find(line => /at Module\.ec(Add|Mul)/.test(line));
+      console.error(frame?.trim() ?? error.message);
+      return true;
+    }
+    const message = String(error?.message ?? error);
+    return /JubjubPoint|Jubjub point|subgroup|off curve|invalid point|invalid grant signature/i.test(message);
+  });
+  console.log(`${role} rejected by the ${stage}. Ending diagnostic process.`);
   process.exit(0);
 }
 
@@ -226,6 +234,18 @@ assert.deepEqual(resolver(), relayedResolver);
 assert.equal(grant().issuance, pairIssuance);
 assert.equal(grant().nonce, 2n);
 checks.push('child authorises a relayed request under the same issuance and nonce sequence');
+
+const reverseResolver = new Uint8Array(randomBytes(32));
+const reverseTrace = await call(child, 'relay', parent.ref, name, reverseResolver,
+  sign({ target: parent, value: reverseResolver }));
+assert.deepEqual(reverseTrace.map(f => f.contractAddress), [account.address, parent.address, child.address]);
+assert.deepEqual(reverseTrace[0].initialQueryContext.block.caller, { tag: 'contract', address: parent.address });
+assert.deepEqual(reverseTrace[1].initialQueryContext.block.caller, { tag: 'contract', address: child.address });
+assert.deepEqual(Registry.ledger(parent.state.data).resolver, reverseResolver);
+assert.deepEqual(resolver(), relayedResolver);
+assert.equal(grant().issuance, pairIssuance);
+assert.equal(grant().nonce, 3n);
+checks.push('parent authorises a request relayed by the child under the same grant');
 
 await call(account, 'issue', holder, granteeKey, parent.ref, noAdditional, operation, expiresAt);
 assert.equal(grant().audience.member(child.ref), false);

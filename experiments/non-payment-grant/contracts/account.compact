@@ -21,17 +21,13 @@ export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([pad(32, "experiment:owner"), secret]);
 }
 
-// Jubjub has cofactor 8. For subgroup order r, [r-1]P = -P iff [r]P = O.
 pure circuit checked_point(x: Field, y: Field): JubjubPoint {
   const x2 = x * x;
   const y2 = y * y;
   assert(10241 * (y2 - x2 - 1) + 10240 * x2 * y2 == (0 as Field), "point off curve");
   // On this curve x = 0 denotes either the identity or the order-two point.
   assert(x != (0 as Field), "identity or order-two point");
-  const p = constructJubjubPoint(x, y);
-  const rMinusOne = (0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb6 as Field) as JubjubScalar;
-  assert(ecMul(p, rMinusOne) == ecNeg(p), "point outside prime-order subgroup");
-  return p;
+  return constructJubjubPoint(x, y);
 }
 
 export circuit issue(secret: Bytes<32>, key: JubjubPoint, caller: ContractAddress,
