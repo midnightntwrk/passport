@@ -35,3 +35,13 @@ export circuit set_resolver_twice(name: Bytes<32>, first: Bytes<32>, next: Bytes
   set_resolver(name, first, sig1[0], sig1[1], sig1[2]);
   set_resolver(name, next, sig2[0], sig2[1], sig2[2]);
 }
+
+// A parent can relay the signed action to a child registry.
+contract Registry {
+  circuit set_resolver(name: Bytes<32>, next: Bytes<32>, rx: Field, ry: Field, response: Field): [];
+}
+
+export circuit relay(child: Registry, name: Bytes<32>, next: Bytes<32>, sig: Vector<3, Field>): [] {
+  const target = disclose(child);
+  target.set_resolver(disclose(name), disclose(next), disclose(sig[0]), disclose(sig[1]), disclose(sig[2]));
+}

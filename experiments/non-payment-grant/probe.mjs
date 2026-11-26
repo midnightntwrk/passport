@@ -59,7 +59,7 @@ function commit(context, transaction, at) {
   for (const [address, query] of Object.entries(context.queryContexts)) {
     const touched = deployments.get(address);
     touched.state = rt.ContractState.deserialize(applied.index(address).serialize());
-    assert.deepEqual({ ...touched.module.ledger(touched.state.data) }, { ...touched.module.ledger(query.state) });
+    assert.deepEqual(touched.state.data.state.encode(), query.state.state.encode());
   }
   console.error(`Ledger verified and applied: ${context.callProofDataTrace.map(f => f.circuitId).join(', ')}`);
   return context.callProofDataTrace;
@@ -73,7 +73,8 @@ const next = new Uint8Array(randomBytes(32));
 const operation = Registry.pureCircuits.operation();
 const account = await instantiate('account', Account, Account.pureCircuits.owner_commitment(holder), encodeTag(network));
 const registry = await instantiate('registry', Registry, account.ref, name);
-const other = await instantiate('registry', Registry, account.ref, name);
+const parent = await instantiate('registry', Registry, account.ref, name);
+const noAdditional = { is_some: false, value: { bytes: new Uint8Array(32) } };
 const grant = () => Account.ledger(account.state.data);
 const resolver = () => Registry.ledger(registry.state.data).resolver;
 const messageType = new rt.CompactTypeVector(1, rt.CompactTypeField);
@@ -84,8 +85,8 @@ function sign({ key = grantee, target = registry, accountRef = account.ref, valu
   const { announcement, response } = rt.jubjubSchnorrSign(messageType, [message], key);
   return [announcement.x, announcement.y, response];
 }
-const issue = (permission = operation, expiry = expiresAt) =>
-  call(account, 'issue', holder, granteeKey, registry.ref, permission, expiry);
+const issue = (permission = operation, expiry = expiresAt, additional = noAdditional) =>
+  call(account, 'issue', holder, granteeKey, registry.ref, additional, permission, expiry);
 const update = (signature, target = registry, value = next) =>
   call(target, 'set_resolver', name, value, ...signature);
 
@@ -100,7 +101,7 @@ if (process.argv.length > 2) {
   let runMixed;
   if (role === 'mixed-order-grantee') {
     const buildIssue = key => account.contract.circuits.issue(
-      circuitContext(account, 'issue'), holder, key, registry.ref, operation, expiresAt);
+      circuitContext(account, 'issue'), holder, key, registry.ref, noAdditional, operation, expiresAt);
     await buildIssue(granteeKey);
     runMixed = () => buildIssue(point);
   } else {
@@ -131,7 +132,7 @@ async function rejected(label, action, error) {
 }
 
 await rejected('only the holder may issue', () =>
-  call(account, 'issue', randomBytes(32), granteeKey, registry.ref, operation, expiresAt), /owner required/);
+  call(account, 'issue', randomBytes(32), granteeKey, registry.ref, noAdditional, operation, expiresAt), /owner required/);
 // Fixed invalid input classes for both point entry points.
 const orderTwo = { x: 0n, y: rt.MAX_FIELD };
 const invalidPoints = [
@@ -141,7 +142,7 @@ const invalidPoints = [
 ];
 for (const [label, point, error] of invalidPoints) {
   await rejected(label + ' grantee', () =>
-    call(account, 'issue', holder, point, registry.ref, operation, expiresAt), error);
+    call(account, 'issue', holder, point, registry.ref, noAdditional, operation, expiresAt), error);
 }
 await issue();
 const signature = sign();
@@ -156,10 +157,10 @@ await rejected('user-address caller (runtime context control)', async () => {
   await account.contract.circuits.assert_grant_authorizes(ctx, operation, digest, ...signature);
 }, /user caller not allowed/);
 await rejected('different registry even with its own signed request', () =>
-  update(sign({ target: other }), other), /wrong contract caller/);
+  update(sign({ target: parent }), parent), /wrong contract caller/);
 await rejected('wrong grantee', () => update(sign({ key: rt.sampleJubjubSchnorrSk() })), /invalid grant signature/);
 await rejected('signature binding names a registry instead of the owner ACC', () =>
-  update(sign({ accountRef: other.ref })), /invalid grant signature/);
+  update(sign({ accountRef: parent.ref })), /invalid grant signature/);
 await rejected('signature for a different stored tag', () => update(sign({ tag: 'other-deployment' })), /invalid grant signature/);
 for (const [label, point, error] of invalidPoints) {
   await rejected(label + ' announcement', () => update([point.x, point.y, signature[2]]), error);
@@ -202,21 +203,43 @@ const beforeRevocation = sign();
 await call(account, 'revoke', holder);
 await rejected('revoked grant', () => update(beforeRevocation), /inactive grant/);
 
-await call(account, 'issue', holder, granteeKey, other.ref, operation, expiresAt);
+// The parent may call the ACC directly or relay through the child.
+const child = registry;
+await issue(operation, expiresAt, { is_some: true, value: parent.ref });
+assert.ok(grant().audience.member(child.ref));
+assert.ok(grant().audience.member(parent.ref));
+const pairIssuance = grant().issuance;
+await rejected('per-call signature cannot switch between two allowed callers', () =>
+  update(sign({ target: child }), parent), /invalid grant signature/);
 const secondResolver = new Uint8Array(randomBytes(32));
-await update(sign({ target: other, value: secondResolver }), other, secondResolver);
-assert.deepEqual(Registry.ledger(other.state.data).resolver, secondResolver);
+const parentTrace = await update(sign({ target: parent, value: secondResolver }), parent, secondResolver);
+assert.deepEqual(parentTrace[0].initialQueryContext.block.caller, { tag: 'contract', address: parent.address });
+assert.deepEqual(Registry.ledger(parent.state.data).resolver, secondResolver);
 assert.deepEqual(resolver(), next);
-checks.push('second registry uses the same API with its own grant');
+checks.push('parent can authorise directly under the shared grant');
+const relayedResolver = new Uint8Array(randomBytes(32));
+const relay = sig => call(parent, 'relay', child.ref, name, relayedResolver, sig);
+const childTrace = await relay(sign({ target: child, value: relayedResolver }));
+assert.deepEqual(childTrace.map(f => f.contractAddress), [account.address, child.address, parent.address]);
+assert.deepEqual(childTrace[0].initialQueryContext.block.caller, { tag: 'contract', address: child.address });
+assert.deepEqual(resolver(), relayedResolver);
+assert.equal(grant().issuance, pairIssuance);
+assert.equal(grant().nonce, 2n);
+checks.push('child authorises a relayed request under the same issuance and nonce sequence');
+
+await call(account, 'issue', holder, granteeKey, parent.ref, noAdditional, operation, expiresAt);
+assert.equal(grant().audience.member(child.ref), false);
+await rejected('listed parent cannot confer membership on its unlisted child', () =>
+  relay(sign({ target: child, value: relayedResolver })), /wrong contract caller/);
 
 const first = new Uint8Array(randomBytes(32));
 const final = new Uint8Array(randomBytes(32));
 const sequence = grant().nonce;
-const twice = await call(other, 'set_resolver_twice', name, first, final,
-  sign({ target: other, value: first }), sign({ target: other, value: final, nonce: sequence + 1n }));
-assert.deepEqual(twice.map(f => f.contractAddress), [account.address, account.address, other.address]);
+const twice = await call(parent, 'set_resolver_twice', name, first, final,
+  sign({ target: parent, value: first }), sign({ target: parent, value: final, nonce: sequence + 1n }));
+assert.deepEqual(twice.map(f => f.contractAddress), [account.address, account.address, parent.address]);
 assert.equal(grant().nonce, sequence + 2n);
-assert.deepEqual(Registry.ledger(other.state.data).resolver, final);
+assert.deepEqual(Registry.ledger(parent.state.data).resolver, final);
 checks.push('two calls to the same ACC consume successive nonces');
 
 console.log(`Passed ${checks.length} grant checks.`);

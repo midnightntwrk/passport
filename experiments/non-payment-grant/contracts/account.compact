@@ -5,7 +5,7 @@ import CompactStandardLibrary;
 export ledger ownerCommitment: Bytes<32>;
 export ledger deploymentTag: Bytes<32>;
 export ledger grantee: JubjubPoint;
-export ledger audience: ContractAddress;
+export ledger audience: Set<ContractAddress>;
 export ledger permission: Bytes<32>;
 export ledger issuance: Uint<64>;
 export ledger nonce: Uint<64>;
@@ -35,10 +35,14 @@ pure circuit checked_point(x: Field, y: Field): JubjubPoint {
 }
 
 export circuit issue(secret: Bytes<32>, key: JubjubPoint, caller: ContractAddress,
-                     action: Bytes<32>, expiry: Uint<64>): [] {
+                     additional: Maybe<ContractAddress>, action: Bytes<32>, expiry: Uint<64>): [] {
   assert(owner_commitment(secret) == ownerCommitment, "owner required");
   grantee = disclose(checked_point(jubjubPointX(key), jubjubPointY(key)));
-  audience = disclose(caller);
+  audience.resetToDefault();
+  audience.insert(disclose(caller));
+  if (disclose(additional.is_some)) {
+    audience.insert(disclose(additional.value));
+  }
   permission = disclose(action);
   expiresAt = disclose(expiry);
   issuance = (issuance + 1) as Uint<64>;
@@ -67,7 +71,7 @@ export circuit assert_grant_authorizes(operation: Bytes<32>, argsHash: Bytes<32>
   const caller = kernel.caller();
   assert(caller.is_some, "missing caller");
   assert(caller.value.is_left, "user caller not allowed");
-  assert(caller.value.left == audience, "wrong contract caller");
+  assert(audience.member(caller.value.left), "wrong contract caller");
   assert(active, "inactive grant");
   assert(kernel.blockTimeLessThan(expiresAt), "expired grant");
   assert(permission == operation, "wrong permission");
