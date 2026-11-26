@@ -11,6 +11,7 @@ historical copies; it does not maintain a second lifecycle register.
 | [Asset custody MPS](mps/mps-asset-custody-model.md) | Historical copy; upstream MPS-0018. |
 | [Domain separation MPS](mps/mps-domain-separation.md) | Historical copy; upstream MPS-0027 / MIP-0021. |
 | [Call provenance MPS](mps/mps-call-provenance.md) | Canonical pointer; upstream MPS-0040. |
+| [Non-native signature cost MPS](mps/mps-xxxx-non-native-signature-cost.md) | Local draft; in-circuit proving cost of non-native signatures, measured for `k1`/`r1` in Passport #217. Not yet submitted upstream. |
 | [Native asset custody MIP](mips/mip-xxxx-native-asset-custody.md) | Historical copy; upstream MIP-0012. |
 | [Account authorisation](mips/mip-xxxx-account-authorisation.md) | Canonical pointer; upstream MIP-0013. |
 | [Temporary Jubjub bootstrap amendment](mips/mip-0013-temporary-jubjub-bootstrap-amendment.md) | Proposed local amendment to MIP-0013 for Passport #212; implementation/validation #213, then upstream consolidation #214. |
