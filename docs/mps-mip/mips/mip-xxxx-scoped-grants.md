@@ -2231,6 +2231,8 @@ was the earlier choice; it added a specification every implementer had
 to get byte-exact for no gain once the parameter value itself is the
 signed unit.
 
+<a name="r22"></a>
+
 **R22. Expiry as a transcript read, not a constraint.** The kernel
 comparison compiles to a ledger read whose Boolean result is one public
 input the proof asserts; it adds no constraints, and a never-expiring

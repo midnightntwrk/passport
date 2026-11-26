@@ -1,0 +1,47 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+contract Account {
+  circuit assert_grant_authorizes(operation: Bytes<32>, argsHash: Bytes<32>,
+                                  rx: Field, ry: Field, response: Field): [];
+}
+
+// Single registered name. The owner ACC comes from the stored record.
+export ledger owner: Account;
+export ledger registeredName: Bytes<32>;
+export ledger resolver: Bytes<32>;
+
+constructor(account: Account, name: Bytes<32>) {
+  owner = disclose(account);
+  registeredName = disclose(name);
+}
+
+export pure circuit operation(): Bytes<32> { return pad(32, "registry:set_resolver:v1"); }
+export pure circuit arguments_hash(name: Bytes<32>, next: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "registry:set_resolver:args:v1"), name, next]);
+}
+
+export circuit set_resolver(name: Bytes<32>, next: Bytes<32>,
+                           rx: Field, ry: Field, response: Field): [] {
+  assert(registeredName == disclose(name), "unknown name");
+  owner.assert_grant_authorizes(operation(), disclose(arguments_hash(name, next)),
+                               disclose(rx), disclose(ry), disclose(response));
+  resolver = disclose(next);
+}
+
+// Exercise two calls to the same ACC with successive grant nonces.
+export circuit set_resolver_twice(name: Bytes<32>, first: Bytes<32>, next: Bytes<32>,
+                                  sig1: Vector<3, Field>, sig2: Vector<3, Field>): [] {
+  set_resolver(name, first, sig1[0], sig1[1], sig1[2]);
+  set_resolver(name, next, sig2[0], sig2[1], sig2[2]);
+}
+
+// Either registry can relay the signed action to the other.
+contract Registry {
+  circuit set_resolver(name: Bytes<32>, next: Bytes<32>, rx: Field, ry: Field, response: Field): [];
+}
+
+export circuit relay(destination: Registry, name: Bytes<32>, next: Bytes<32>, sig: Vector<3, Field>): [] {
+  const target = disclose(destination);
+  target.set_resolver(disclose(name), disclose(next), disclose(sig[0]), disclose(sig[1]), disclose(sig[2]));
+}

@@ -1,0 +1,13 @@
+{
+  "name": "passport-non-payment-grant-experiment",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "./run.sh"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnightntwrk/ledger-v9": "1.0.2",
+    "@midnightntwrk/zkir-v3": "3.2.1"
+  }
+}
