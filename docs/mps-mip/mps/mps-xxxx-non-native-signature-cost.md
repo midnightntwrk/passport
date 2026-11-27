@@ -1,7 +1,7 @@
 ---
 MPS: xxxx # assigned by editors
 Title: Proving Cost of Non-Native Signature Verification
-Authors: Hector Bulgarini (hbulgarini), Nicolas Di Prima (NicolasDP), Facundo Lerena (faculerena)
+Authors: Hector Bulgarini <hector.bulgarini@midnight.foundation> (hbulgarini), Nicolas Di Prima <nicolas.diprima@iohk.io> (NicolasDP), Facundo Lerena <facu@midnames.com> (faculerena)
 Status: Proposed
 Category: Core
 Created: 26-NOV-2026
