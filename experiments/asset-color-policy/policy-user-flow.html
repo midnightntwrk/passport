@@ -1,0 +1,128 @@
+<div id="passport-policy-flow">
+  <style>
+    #passport-policy-flow { color: var(--foreground); }
+    #passport-policy-flow .pp-heading { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; margin-bottom:16px; }
+    #passport-policy-flow .pp-heading h2 { margin:0; }
+    #passport-policy-flow .pp-stage { display:grid; grid-template-columns:32px minmax(0,1fr); gap:12px; padding:16px 0; }
+    #passport-policy-flow .pp-number { color:var(--muted-foreground); padding-top:2px; }
+    #passport-policy-flow .pp-stage h3 { margin:0 0 6px; }
+    #passport-policy-flow .pp-line { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    #passport-policy-flow .pp-builder { border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+    #passport-policy-flow .pp-sources { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 4px; }
+    #passport-policy-flow .pp-sources strong { font-weight:500; display:block; margin-bottom:4px; }
+    #passport-policy-flow .pp-graph { display:block; width:100%; overflow:visible; }
+    #passport-policy-flow .pp-graph text { fill:var(--foreground); font-size:12px; }
+    #passport-policy-flow .pp-graph .pp-box { fill:color-mix(in srgb, var(--viz-series-1) 10%, transparent); }
+    #passport-policy-flow .pp-graph .pp-link { fill:none; stroke:var(--border); stroke-width:1.5; }
+    #passport-policy-flow .pp-graph .pp-arrow { fill:var(--muted-foreground); }
+    #passport-policy-flow .pp-graph .pp-inactive { opacity:.42; }
+    #passport-policy-flow .pp-stopped { opacity:.48; }
+    #passport-policy-flow .pp-result { margin:12px 0 0; min-height:2.5em; }
+    #passport-policy-flow .pp-note { margin-top:12px; }
+    @media(max-width:480px) { #passport-policy-flow .pp-sources { grid-template-columns:1fr; } }
+  </style>
+  <div class="pp-heading"><h2>A policy-gated send</h2><span class="text-small text-muted">Proposed ACC flow · Compact 0.35</span></div>
+  <div class="viz-controls">
+    <label class="form-label" for="pp-scenario">Spend scenario
+      <select class="form-select" id="pp-scenario">
+        <option value="allow">Policy allows the spend</option>
+        <option value="freeze">Policy freezes the asset</option>
+        <option value="missing">Selected policy code is unavailable</option>
+        <option value="unregistered">No registered policy — reject</option>
+      </select>
+    </label>
+  </div>
+  <div class="pp-stage">
+    <span class="pp-number" aria-hidden="true">01</span>
+    <div><h3>User → Send</h3><div class="text-small">Choose asset, amount and recipient; authorize through Passport.</div><div class="text-small text-muted">Policy gate on spending; no deposit check.</div></div>
+  </div>
+  <div class="pp-stage pp-builder">
+    <span class="pp-number" aria-hidden="true">02</span>
+    <div>
+      <h3>Transaction builder → Execute locally</h3>
+      <div class="text-small text-muted">Wallet / dApp runtime · no issuer server call</div>
+      <svg class="pp-graph" role="img" aria-label="ACC authorizes the withdrawal, registry resolves the asset key to a policy address, and the selected policy checks whether spending is allowed."></svg>
+      <div class="pp-sources">
+        <div><strong>Code source → Builder</strong><span class="text-small">Generated modules for ACC, registry and selected policy. Cached or loaded on demand.</span></div>
+        <div><strong>Indexer → Builder</strong><span class="text-small">On-chain state for all three, read at a shared block snapshot.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pp-stage" data-downstream>
+    <span class="pp-number" aria-hidden="true">03</span>
+    <div><h3>Prover → Produce linked call proofs</h3><div class="pp-line text-small"><span>ACC + registry + selected policy</span><span aria-hidden="true">←</span><span>ZKIR + proving keys</span></div><div class="text-small text-muted">Local prover or remote proving service; private proving inputs follow that choice.</div></div>
+  </div>
+  <div class="pp-stage" data-downstream>
+    <span class="pp-number" aria-hidden="true">04</span>
+    <div><h3>Network → Verify and apply the transaction</h3><div class="text-small">Contract call proofs and state checks accompany the asset release.</div></div>
+  </div>
+  <div class="pp-result" role="status" aria-live="polite"></div>
+  <hr>
+  <div class="text-small pp-note">Experiment boundary: ACC → policy and registry → policy dispatch tested separately. Combined ACC routing and end-to-end proving/submission remain untested.</div>
+  <script>
+    (() => {
+      const root = document.getElementById('passport-policy-flow');
+      const select = root.querySelector('select');
+      const graph = root.querySelector('svg');
+      const result = root.querySelector('.pp-result');
+      const valid = ['allow','freeze','missing','unregistered'];
+      const outcomes = {
+        allow:'Allowed → continue to proving and submission.',
+        freeze:'Stopped at policy check → no authorized release can be constructed.',
+        missing:'Stopped at module loading → fetch the matching code or retry; never bypass the required policy.',
+        unregistered:'Stopped at registry lookup → this probe rejects an unregistered key.'
+      };
+      function draw() {
+        const mode = select.value;
+        const width = Math.max(240,graph.getBoundingClientRect().width);
+        const vertical = width < 640;
+        const gap = vertical ? 32 : 26;
+        const nodeWidth = vertical ? width : (width - gap * 2) / 3;
+        const nodeHeight = 114;
+        const height = vertical ? nodeHeight * 3 + gap * 2 + 20 : nodeHeight + 32;
+        graph.setAttribute('viewBox',`0 0 ${width} ${height}`);
+        graph.style.height = `${height}px`;
+        const nodes = [
+          ['ACC','Authorize withdrawal','Use the held coin’s key','Call registry.resolve(key)'],
+          ['Policy registry','Read key → policy address',mode === 'unregistered' ? 'No entry → reject' : 'Return policy reference','Address ≠ executable code'],
+          ['Selected policy',mode === 'missing' ? 'Code unavailable → stop' : 'Load code + state',mode === 'freeze' ? 'check(key) → reject' : ['unregistered','missing'].includes(mode) ? 'Check not executed' : 'check(key) → allow','No coin custody']
+        ];
+        let markup = '<title>Policy-gated spend construction</title><desc>The application loads generated code and current on-chain state, executes the registry to discover the policy address, and executes that policy before proving a withdrawal.</desc>';
+        nodes.forEach((lines,i) => {
+          const x = vertical ? 0 : i * (nodeWidth + gap);
+          const y = vertical ? 10 + i * (nodeHeight + gap) : 16;
+          const inactive = mode === 'unregistered' && i === 2;
+          markup += `<g${inactive ? ' class="pp-inactive"' : ''}><rect class="pp-box" x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" rx="8"/>`;
+          lines.forEach((line,j) => { markup += `<text x="${x+12}" y="${y+24+j*24}"${j===0 ? ' font-weight="500"' : ''}>${line.replaceAll('&','&amp;').replaceAll('<','&lt;')}</text>`; });
+          markup += '</g>';
+          if(i<2) {
+            if(vertical) {
+              const cx=width/2, sy=y+nodeHeight+5, ey=y+nodeHeight+gap-5;
+              markup += `<path class="pp-link" d="M ${cx} ${sy} V ${ey-4}"/><path class="pp-arrow" d="M ${cx-4} ${ey-5} L ${cx} ${ey} L ${cx+4} ${ey-5} Z"/>`;
+            } else {
+              const sx=x+nodeWidth+4, ex=x+nodeWidth+gap-4, cy=y+nodeHeight/2;
+              markup += `<path class="pp-link" d="M ${sx} ${cy} H ${ex-4}"/><path class="pp-arrow" d="M ${ex-5} ${cy-4} L ${ex} ${cy} L ${ex-5} ${cy+4} Z"/>`;
+            }
+          }
+        });
+        graph.innerHTML=markup;
+        result.textContent=outcomes[mode];
+        root.querySelectorAll('[data-downstream]').forEach(el => el.classList.toggle('pp-stopped',mode!=='allow'));
+      }
+      function restore(state) {
+        const value = state?.modelContent?.scenario;
+        select.value = valid.includes(value) ? value : 'allow';
+        draw();
+      }
+      select.addEventListener('change',() => {
+        draw();
+        window.openai?.setWidgetState?.({modelContent:{scenario:select.value},privateContent:null})?.catch(() => {});
+      });
+      window.addEventListener('openai:set_globals',event => {
+        if(event.detail?.globals && 'widgetState' in event.detail.globals) restore(event.detail.globals.widgetState);
+      });
+      new ResizeObserver(draw).observe(graph);
+      restore(window.openai?.widgetState);
+    })();
+  </script>
+</div>

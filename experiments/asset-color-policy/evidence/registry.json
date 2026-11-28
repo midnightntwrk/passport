@@ -1,0 +1,85 @@
+{
+  "compiler": "0.35.0",
+  "runtime": "0.20.0",
+  "stage": "coinless dispatch probe, real callee keys, local execution and VM replay; no ACC integration or node submission",
+  "passed": 10,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "resolve and call first policy, with real deployed verifier keys",
+      "pass": true,
+      "detail": [
+        {
+          "circuit": "resolve",
+          "address": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "circuit": "check",
+          "address": "0303030303030303030303030303030303030303030303030303030303030303"
+        },
+        {
+          "circuit": "check",
+          "address": "0101010101010101010101010101010101010101010101010101010101010101"
+        }
+      ]
+    },
+    {
+      "name": "registry rebind selects different implementation without recompiling caller",
+      "pass": true,
+      "detail": {
+        "trace": [
+          {
+            "circuit": "resolve",
+            "address": "0202020202020202020202020202020202020202020202020202020202020202"
+          },
+          {
+            "circuit": "check",
+            "address": "0404040404040404040404040404040404040404040404040404040404040404"
+          },
+          {
+            "circuit": "check",
+            "address": "0101010101010101010101010101010101010101010101010101010101010101"
+          }
+        ],
+        "distinctPolicyVerifierKeys": true,
+        "unchangedCallerKeys": true
+      }
+    },
+    {
+      "name": "stale registry transcript rejects after a mapping update in VM replay",
+      "pass": true,
+      "detail": {
+        "stage": "VM verification, not node submission",
+        "error": "Error: mismatch between expected (<[0303030303030303030303030303030303030303030303030303030303030303]: b32>) and actual (<[0404040404040404040404040404040404040404040404040404040404040404]: b32>) read"
+      }
+    },
+    {
+      "name": "unauthorized registry rebind rejected",
+      "pass": true
+    },
+    {
+      "name": "new implementation can deny",
+      "pass": true
+    },
+    {
+      "name": "unregistered color rejects",
+      "pass": true
+    },
+    {
+      "name": "missing module rejects",
+      "pass": true
+    },
+    {
+      "name": "missing deployed policy state rejects",
+      "pass": true
+    },
+    {
+      "name": "module supplied for wrong implementation rejects against deployed keys",
+      "pass": true
+    },
+    {
+      "name": "module not implementing Policy interface rejects",
+      "pass": true
+    }
+  ]
+}

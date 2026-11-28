@@ -1,0 +1,88 @@
+{
+  "Baseline": {
+    "calls": [
+      {
+        "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+        "circuit": "withdraw_shielded_with_jubjub"
+      }
+    ],
+    "rawColor": false,
+    "coinNonce": false,
+    "recipientKey": false,
+    "salt": false,
+    "tag": false,
+    "amount": false,
+    "coinValue": false,
+    "publicTranscriptOps": [
+      71
+    ],
+    "policyFetches": 0
+  },
+  "Inline": {
+    "calls": [
+      {
+        "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+        "circuit": "withdraw_shielded_with_jubjub"
+      }
+    ],
+    "rawColor": true,
+    "coinNonce": false,
+    "recipientKey": false,
+    "salt": false,
+    "tag": false,
+    "amount": false,
+    "coinValue": false,
+    "publicTranscriptOps": [
+      87
+    ],
+    "policyFetches": 0
+  },
+  "ExternalRaw": {
+    "calls": [
+      {
+        "address": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+        "circuit": "check"
+      },
+      {
+        "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+        "circuit": "withdraw_shielded_with_jubjub"
+      }
+    ],
+    "rawColor": true,
+    "coinNonce": false,
+    "recipientKey": false,
+    "salt": false,
+    "tag": false,
+    "amount": false,
+    "coinValue": false,
+    "publicTranscriptOps": [
+      9,
+      96
+    ],
+    "policyFetches": 1
+  },
+  "ExternalTagged": {
+    "calls": [
+      {
+        "address": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+        "circuit": "check"
+      },
+      {
+        "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+        "circuit": "withdraw_shielded_with_jubjub"
+      }
+    ],
+    "rawColor": false,
+    "coinNonce": false,
+    "recipientKey": false,
+    "salt": false,
+    "tag": true,
+    "amount": false,
+    "coinValue": false,
+    "publicTranscriptOps": [
+      9,
+      99
+    ],
+    "policyFetches": 1
+  }
+}

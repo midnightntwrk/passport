@@ -1,0 +1,2 @@
+compact compile +0.35.0 --feature-zkir-v3 --skip-zk contracts/generated/Inline.compact contracts/managed/Inline
+Completed successfully.

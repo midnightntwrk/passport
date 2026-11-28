@@ -1,0 +1,483 @@
+{
+  "compiler": "0.35.0",
+  "runtime": "0.20.0",
+  "stage": "compiled Compact runtime execution; no submitted transactions or spend proofs",
+  "passed": 92,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "Baseline: allowed shielded spend and public-surface audit",
+      "pass": true,
+      "detail": {
+        "calls": [
+          {
+            "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+            "circuit": "withdraw_shielded_with_jubjub"
+          }
+        ],
+        "rawColor": false,
+        "coinNonce": false,
+        "recipientKey": false,
+        "salt": false,
+        "tag": false,
+        "amount": false,
+        "coinValue": false,
+        "publicTranscriptOps": [
+          71
+        ],
+        "policyFetches": 0
+      }
+    },
+    {
+      "name": "Inline: allowed shielded spend and public-surface audit",
+      "pass": true,
+      "detail": {
+        "calls": [
+          {
+            "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+            "circuit": "withdraw_shielded_with_jubjub"
+          }
+        ],
+        "rawColor": true,
+        "coinNonce": false,
+        "recipientKey": false,
+        "salt": false,
+        "tag": false,
+        "amount": false,
+        "coinValue": false,
+        "publicTranscriptOps": [
+          87
+        ],
+        "policyFetches": 0
+      }
+    },
+    {
+      "name": "Inline: jubjub withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: jubjub withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: jubjub withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: k256 withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: k256 withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: k256 withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant jubjub withdraw_shielded allowed",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant jubjub withdraw_shielded_to_contract allowed",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant jubjub withdraw_unshielded allowed",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant jubjub withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant jubjub withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant jubjub withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant k256 withdraw_shielded allowed",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant k256 withdraw_shielded_to_contract allowed",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant k256 withdraw_unshielded allowed",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant k256 withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant k256 withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: grant k256 withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "Inline: claimed unrestricted color cannot bypass actual frozen coin",
+      "pass": true
+    },
+    {
+      "name": "Inline: unregistered color, default deny",
+      "pass": true
+    },
+    {
+      "name": "Inline: unregistered color, default allow",
+      "pass": true
+    },
+    {
+      "name": "Inline: explicitly unrestricted color does not need a policy contract",
+      "pass": true
+    },
+    {
+      "name": "Inline: policy approval cannot replace device authorization",
+      "pass": true
+    },
+    {
+      "name": "Inline: even an unregistered allowed color leaves a lookup identifier",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: allowed shielded spend and public-surface audit",
+      "pass": true,
+      "detail": {
+        "calls": [
+          {
+            "address": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+            "circuit": "check"
+          },
+          {
+            "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+            "circuit": "withdraw_shielded_with_jubjub"
+          }
+        ],
+        "rawColor": true,
+        "coinNonce": false,
+        "recipientKey": false,
+        "salt": false,
+        "tag": false,
+        "amount": false,
+        "coinValue": false,
+        "publicTranscriptOps": [
+          9,
+          96
+        ],
+        "policyFetches": 1
+      }
+    },
+    {
+      "name": "ExternalRaw: jubjub withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: jubjub withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: jubjub withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: k256 withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: k256 withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: k256 withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant jubjub withdraw_shielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant jubjub withdraw_shielded_to_contract allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant jubjub withdraw_unshielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant jubjub withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant jubjub withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant jubjub withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant k256 withdraw_shielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant k256 withdraw_shielded_to_contract allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant k256 withdraw_unshielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant k256 withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant k256 withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: grant k256 withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: claimed unrestricted color cannot bypass actual frozen coin",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: unregistered color, default deny",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: unregistered color, default allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: explicitly unrestricted color does not need a policy contract",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: policy approval cannot replace device authorization",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: even an unregistered allowed color leaves a lookup identifier",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: allowed shielded spend and public-surface audit",
+      "pass": true,
+      "detail": {
+        "calls": [
+          {
+            "address": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+            "circuit": "check"
+          },
+          {
+            "address": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+            "circuit": "withdraw_shielded_with_jubjub"
+          }
+        ],
+        "rawColor": false,
+        "coinNonce": false,
+        "recipientKey": false,
+        "salt": false,
+        "tag": true,
+        "amount": false,
+        "coinValue": false,
+        "publicTranscriptOps": [
+          9,
+          99
+        ],
+        "policyFetches": 1
+      }
+    },
+    {
+      "name": "ExternalTagged: jubjub withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: jubjub withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: jubjub withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: k256 withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: k256 withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: k256 withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant jubjub withdraw_shielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant jubjub withdraw_shielded_to_contract allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant jubjub withdraw_unshielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant jubjub withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant jubjub withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant jubjub withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant k256 withdraw_shielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant k256 withdraw_shielded_to_contract allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant k256 withdraw_unshielded allowed",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant k256 withdraw_shielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant k256 withdraw_shielded_to_contract frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: grant k256 withdraw_unshielded frozen",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: claimed unrestricted color cannot bypass actual frozen coin",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: unregistered color, default deny",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: unregistered color, default allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: explicitly unrestricted color does not need a policy contract",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: policy approval cannot replace device authorization",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: even an unregistered allowed color leaves a lookup identifier",
+      "pass": true
+    },
+    {
+      "name": "Baseline: direct transfer constructs a contract-owned native output",
+      "pass": true,
+      "detail": {
+        "owners": [
+          "2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e",
+          "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"
+        ]
+      }
+    },
+    {
+      "name": "ExternalTagged: direct transfer constructs a contract-owned native output",
+      "pass": true,
+      "detail": {
+        "owners": [
+          "2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e",
+          "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"
+        ]
+      }
+    },
+    {
+      "name": "ExternalRaw: required policy absent rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: required policy unavailable rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: wrong implementation rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: policy contract has no matching rule rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: freeze and unfreeze between executions",
+      "pass": true
+    },
+    {
+      "name": "ExternalRaw: VM replay of previously allowed policy transcript after freeze",
+      "pass": true,
+      "detail": {
+        "stage": "onchain-runtime VM transcript verification, not node submission",
+        "error": "Error: mismatch between expected (<[-]: b1>) and actual (<[01]: b1>) read"
+      }
+    },
+    {
+      "name": "ExternalTagged: required policy absent rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: required policy unavailable rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: wrong implementation rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: policy contract has no matching rule rejects even with default-allow",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: freeze and unfreeze between executions",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: VM replay of previously allowed policy transcript after freeze",
+      "pass": true,
+      "detail": {
+        "stage": "onchain-runtime VM transcript verification, not node submission",
+        "error": "Error: mismatch between expected (<[-]: b1>) and actual (<[01]: b1>) read"
+      }
+    },
+    {
+      "name": "ExternalTagged: arbitrary salt cannot select an unrestricted policy key",
+      "pass": true
+    },
+    {
+      "name": "ExternalTagged: repeated transfers reveal a stable tag",
+      "pass": true
+    }
+  ]
+}

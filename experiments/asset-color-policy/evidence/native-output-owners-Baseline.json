@@ -1,0 +1,8 @@
+{
+  "stage": "local construction of output recipients; NOT a serialized Zswap offer audit",
+  "owners": [
+    "2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e",
+    "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"
+  ],
+  "note": "Zswap publishes contract ownership in its output.contract field; the Compact transcript alone does not contain every native output field."
+}
