@@ -1,0 +1,39 @@
+{
+  "recordedAt": "2026-11-24T08:08:12.976846+00:00",
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "node": "v22.22.2",
+  "npm": "10.9.7",
+  "compiler": "0.35.0 (debb05f94 2026-09-29)",
+  "zkir": "midnight-zkir 3.1.0-rc.1",
+  "toolBinaries": {
+    "compactc.bin": "4bda4f060e9c821416c6c4058f2cc9c5788c22bdbbcd6dac9c82f03d87858552",
+    "zkir-v3": "2e5febcbe905451cb549991f96eb91b94dfa7bc1a5deb7a41ee017964d532fb4"
+  },
+  "dockerVM": "aarch64 8 CPUs 25159761920 memoryBytes",
+  "containers": [
+    {
+      "name": "passport-signed-bootstrap-213-node-1",
+      "configuredImage": "midnightntwrk/midnight-node:2.1.0-rc.4",
+      "imageId": "sha256:2ebd05b1f6b79e861848cd24f5e4b308de96c749a71fe6a3a39b2808bd95d9fc",
+      "platform": "linux",
+      "nanoCpus": 0,
+      "memoryBytes": 0
+    },
+    {
+      "name": "passport-signed-bootstrap-213-indexer-1",
+      "configuredImage": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+      "imageId": "sha256:bac5561cd984e0a15de63c2bf5c4444826d4acb80ea23bfb68cb6ea35d5c1ff5",
+      "platform": "linux",
+      "nanoCpus": 0,
+      "memoryBytes": 0
+    },
+    {
+      "name": "passport-signed-bootstrap-213-proof-server-1",
+      "configuredImage": "midnightntwrk/proof-server:9.0.0-rc.8",
+      "imageId": "sha256:2c9b9917d3dd81b6f47ccdab333064eb6bad0fa0f7b5a0c9087fc7cd1d26cade",
+      "platform": "linux",
+      "nanoCpus": 0,
+      "memoryBytes": 0
+    }
+  ]
+}

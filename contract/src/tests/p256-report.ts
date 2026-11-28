@@ -10,6 +10,7 @@ const run = JSON.parse(readFileSync(path.join(root, 'evidence/p256-webauthn/conf
 assert.equal(run.verdict, 'PASS');
 assert.equal(sizes.profile, run.details.profile, 'circuit measurements and proving run must use the same profile');
 const assertionInputShape = run.details.assertionInputShape ?? 'canonical134';
+const accountCircuits = sizes.circuits.filter(r => r.contract === 'account');
 const labels = [
   ['Native P-256 verifier', 'probe-p256', 'verify_ecdsa'],
   ['Profiled WebAuthn verifier', 'probe-p256', 'verify_webauthn'],
@@ -40,12 +41,12 @@ lines.push('',
   `**Hardware.** ${sizes.hardware.cpu}, ${sizes.hardware.logicalCpus} logical CPUs, ${sizes.hardware.memoryBytes / 2 ** 30} GiB host RAM (${sizes.hardware.platform}/${sizes.hardware.arch}). Native compiler/key generation on the host; proving in Docker: ${run.details.proverEnvironment.dockerVM}.`, '',
   `**Memory.** The first full-account proof OOM-killed the proof server in the approximately 8 GiB Docker VM ([failure evidence](evidence/p256-webauthn/prover-8gib-oom.json)). The measured run uses a 24 GiB VM. Container lifetime memory peak: ${run.details.containerPeakMemoryBytes ? (run.details.containerPeakMemoryBytes / 2 ** 30).toFixed(2) + ' GiB (cgroup memory.peak, includes caches)' : 'not available'}. This is not an exact minimum-memory requirement.`, '',
   '**Evidence.** [Circuit sizes and exact key/ZKIR hashes](evidence/p256-webauthn/circuit-sizes.json); [proving samples, image identity and accepted transactions](evidence/p256-webauthn/conformance-and-proving.json). Account calls use an OpenSSL software authenticator; the two verifier probes prove the captured real high-S WebAuthn assertion. Negative assertions abort during local building. These results are separate from the earlier custom Rust proof-stack experiment.', '',
-  '## Full account inventory', '',
-  'All 52 circuits are compiled on the same stack. Sizes below are exact uncompressed bytes. A dash in other reports must not be interpreted as a measured proving time: only the comparison above has repeated timings.', '',
+  '## Recorded account inventory', '',
+  `This capture contains ${accountCircuits.length} account circuits compiled on the recorded stack. It describes the captured revision; see [signed-bootstrap evidence](evidence/signed-bootstrap/README.md) for the schema-4 roster and its measurements. Sizes below are exact uncompressed bytes. A dash in other reports must not be interpreted as a measured proving time: only the comparison above has repeated timings.`, '',
   '| Circuit | k | Rows | Prover bytes | Verifier bytes |',
   '|---|---:|---:|---:|---:|',
 );
-for (const r of sizes.circuits.filter(r => r.contract === 'account')) {
+for (const r of accountCircuits) {
   lines.push(`| \`${r.circuit}\` | ${r.k} | ${r.rows} | ${r.assets.prover.bytes} | ${r.assets.verifier.bytes} |`);
 }
 lines.push('', '## Reproduce', '', '```sh', 'npm run compile', 'npm run measure:p256',

@@ -7,6 +7,7 @@ include "webauthn";
 import WebAuthn<21>;
 export { WebAuthnPolicy, webauthn_challenge_base64, webauthn_client_data_hash };
 include "account-p256";
+include "account-bootstrap";
 
 // ---------------------------------------------------------------------------
 // Midnight account custody contract — reference implementation.
@@ -229,19 +230,16 @@ export ledger auth_nonce: Uint<64>;
 
 export ledger boot: Bytes<32>;
 export ledger booted: Boolean;
-// Deploy-time bootstrap (MIP-0013 §3 as amended by
-// midnight-improvement-proposals#250). The initial device's address-bound
-// entry cannot be computed at deploy time in principle: the contract
-// address is derived from the deploy transaction's content, so no
-// deploy-time code can know it, and kernel.self() evaluates to the ZERO
-// address inside a constructor. The constructor therefore stores a salted
-// boot commitment H(DST_BOOT, salt, pk); the permissionless
-// activate_initial_device circuit of the committed key's arm recomputes
-// it, inserts the real entry at use counter 0, and burns the commitment.
-// The arm marker in DST_BOOT selects which arm's activation circuit can
-// match. Only the committed key can activate (no race); the salt is fresh
-// per account, so pre-activation state carries no cross-account-stable
-// device value.
+export sealed ledger bootstrap_mode: Uint<8>;
+export sealed ledger bootstrap_network: Bytes<32>;
+// Deploy-time bootstrap (MIP-0013 §3 and the temporary-Jubjub amendment).
+// Mode 0 keeps the salted fixed-key commitment and per-arm activation.
+// Mode 1 commits an independent temporary key, network domain, and WebAuthn
+// policy; after deployment, that key signs the address-bound passkey intent
+// and the passkey proves possession. The final passkey is absent from every
+// constructor input, so registration can use the deployed address as user.id.
+// Both paths install one real address-bound entry and burn boot. The sealed
+// configuration cannot switch mode or reopen bootstrap after deployment.
 
 // Scoped grants (the scoped-grants MIP, section 4.1). A grant admits one
 // grantee key to a bounded subset of the withdraw operations; the grantee
@@ -344,11 +342,10 @@ export ledger veto_window: Uint<64>;
 
 // ── Constructor ─────────────────────────────────────────────────────────────
 //
-// MIP-0013 §3 semantics via the boot commitment (see the `boot` cell): the
-// deploying client computes boot = derive_boot_commitment_with_<arm>(salt,
-// pk) for the initial device's arm and calls the matching
-// activate_initial_device_with_<arm>(pk, salt) immediately after deploy to
-// insert the initial entry at epoch 0 and use counter 0.
+// MIP-0013 §3 semantics via the mode-selected boot commitment (see `boot`).
+// The two configuration arguments extend the old five-argument ABI. Clients
+// must explicitly select this schema-4 artefact; existing deployments retain
+// their own schema, constructor ABI, and verifier.
 
 constructor(
   initial_device_boot: Bytes<32>,
@@ -356,13 +353,25 @@ constructor(
   initial_recovery_pk: JubjubPoint,
   initial_recovery_wrap: Bytes<64>,
   veto_window_seconds: Uint<64>,
+  initial_bootstrap_mode: Uint<8>,
+  initial_bootstrap_network: Bytes<32>,
 ) {
+  assert(initial_bootstrap_mode == 0 || initial_bootstrap_mode == 1,
+         "unsupported bootstrap mode");
+  if (initial_bootstrap_mode == 0) {
+    assert(initial_bootstrap_network == pad(32, ""), "legacy bootstrap network must be zero");
+  } else {
+    assert(initial_bootstrap_network != pad(32, ""), "signed bootstrap network must be nonzero");
+    assert(initial_device_boot != pad(32, ""), "signed boot commitment must be nonzero");
+  }
   round        = 0 as Uint<64>;
   enc_key      = disclose(encryption_key);
   inbox_count  = 0 as Uint<64>;
-  spec_version = 3 as Uint<32>;
+  spec_version = 4 as Uint<32>;
   boot         = disclose(initial_device_boot);
   booted       = false;
+  bootstrap_mode = disclose(initial_bootstrap_mode);
+  bootstrap_network = disclose(initial_bootstrap_network);
   device_epoch = 0 as Uint<32>;
   device_count = 0 as Uint<8>;
   auth_nonce   = 0 as Uint<64>;
@@ -392,8 +401,9 @@ constructor(
 // key. Increments round like the other permissionless circuits; does not
 // touch auth_nonce (AUTH-8).
 
-// Shared tail of both activation circuits. The caller has already checked
-// the boot commitment for its arm.
+// Shared activation tail. The caller has checked the mode, commitment and
+// any signatures. A pending recovery is deliberately preserved: activation
+// may install a device capable of vetoing it, but cannot reset its deadline.
 circuit do_activate_initial_device(entry: Bytes<32>): [] {
   devices.insert(disclose(entry));
   device_count = 1 as Uint<8>;
@@ -403,6 +413,7 @@ circuit do_activate_initial_device(entry: Bytes<32>): [] {
 }
 
 export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<32>): [] {
+  assert(bootstrap_mode == 0, "legacy bootstrap mode required");
   assert(!booted, "already activated");
   assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
          "device key has small order");
@@ -417,6 +428,7 @@ export circuit activate_initial_device_with_k256(
   salt:     Bytes<32>,
   envelope: Uint<8>,
 ): [] {
+  assert(bootstrap_mode == 0, "legacy bootstrap mode required");
   assert(!booted, "already activated");
   require_live_k256_key(pk);
   assert(derive_boot_commitment_with_k256(salt, pk, envelope) == boot,

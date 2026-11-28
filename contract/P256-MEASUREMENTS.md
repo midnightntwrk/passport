@@ -12,7 +12,7 @@ Measured 2026-10-01T11:09:03.133Z. Compact 0.35.0, midnight-zkir 3.1.0-rc.1; run
 | Account rotation — k256 | 17 | 61,754 | 224.01 | 13.094 | 11.102 / 11.025 | 11.063 |
 | Account rotation — P-256/WebAuthn | 18 | 129,832 | 448.09 | 26.754 | 22.140 / 22.070 | 22.105 |
 
-**Scope.** The first two rows are standalone verifier-cost probes with a public digest/challenge output. The account rows measure the same `rotate_enc_key` operation with enrolment, rolling entry and nonce checks. The WebAuthn rows use profile `wa-json134` (134-byte JSON, 21-byte origin, 37-byte authenticator data, UP+UV). They are not general variable-length WebAuthn measurements.
+**Scope.** The first two rows are standalone verifier-cost probes with a public digest/challenge output; the standalone WebAuthn probe retains profile `wa-json134`. The account rows measure the same `rotate_enc_key` operation with enrolment, rolling entry and nonce checks under the recorded profile `wa-json134`. Recorded assertion input shape: `canonical134` (canonical 134-byte JSON, 21-byte origin, 37-byte authenticator data, UP+UV); these samples do not measure a Chrome GREASE assertion. They are not general variable-length WebAuthn measurements.
 
 **Timing.** Sequential `ProvingProvider.prove` wall time, including artifact lookup/load and local HTTP transfer; excluding signing, circuit execution/check, wallet balancing and inclusion. The first observation and two repeats are reported separately. No claim of OS/server cold-cache behaviour; key generation is excluded. These are three observations, not a latency distribution.
 
@@ -22,9 +22,9 @@ Measured 2026-10-01T11:09:03.133Z. Compact 0.35.0, midnight-zkir 3.1.0-rc.1; run
 
 **Evidence.** [Circuit sizes and exact key/ZKIR hashes](evidence/p256-webauthn/circuit-sizes.json); [proving samples, image identity and accepted transactions](evidence/p256-webauthn/conformance-and-proving.json). Account calls use an OpenSSL software authenticator; the two verifier probes prove the captured real high-S WebAuthn assertion. Negative assertions abort during local building. These results are separate from the earlier custom Rust proof-stack experiment.
 
-## Full account inventory
+## Recorded account inventory
 
-All 52 circuits are compiled on the same stack. Sizes below are exact uncompressed bytes. A dash in other reports must not be interpreted as a measured proving time: only the comparison above has repeated timings.
+This capture contains 52 account circuits compiled on the recorded stack. It describes the captured revision; see [signed-bootstrap evidence](evidence/signed-bootstrap/README.md) for the schema-4 roster and its measurements. Sizes below are exact uncompressed bytes. A dash in other reports must not be interpreted as a measured proving time: only the comparison above has repeated timings.
 
 | Circuit | k | Rows | Prover bytes | Verifier bytes |
 |---|---:|---:|---:|---:|

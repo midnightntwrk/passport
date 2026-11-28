@@ -29,6 +29,9 @@ export function softwarePasskey() {
       signature: overrides.signature ?? new Uint8Array(sign('sha256', message, privateKey)) };
   };
   return {
+    // Test-only secret inspection for proof-preimage boundary checks. Never
+    // exposed by the production signer; callers must not log this value.
+    privateKeyBytes: new Uint8Array(Buffer.from(privateKey.export({ format: 'jwk' }).d!, 'base64url')),
     pk, policy, assertion,
     device: new P256Device(pk, TEST_RP, TEST_ORIGIN, assertion),
     grantee: new P256Grantee(pk, TEST_RP, TEST_ORIGIN, assertion),

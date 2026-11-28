@@ -41,15 +41,20 @@ is a scoped implementation correction, not a claim of full MIP conformance.
 
 This changes two existing ledger cells during finalisation. It does not
 change the ledger layout, circuit arguments, device-entry derivation,
-recovery signature challenge, or signature recipes. The implementation
-keeps `spec_version = 3` and `recovery_version = 1`: the former is used by
-the client's scoped-grant capability gate, while the latter describes the
-published recovery artefact set read by
+recovery signature challenge, or signature recipes. The current
+signed-bootstrap implementation uses `spec_version = 4` and
+`recovery_version = 1`. Schema 4 adds the sealed bootstrap mode and network
+domain; existing schema-3 deployments require their matching artefacts.
+The former version also gates the client's scoped-grant capability, while
+the latter describes the published recovery artefact set read by
 [`recovery-gate.ts`](src/wallet/recovery-gate.ts). Neither value identifies
 whether the corrected verifier is installed. The private package's
-`0.1.0` version is not an on-chain correction marker either. No version
-bump is required by those existing code paths for this correction; a
-release must still identify its corrected source and generated artefacts.
+`0.1.0` version is not an on-chain correction marker either.
+
+The dormant-recovery correction alone does not require a version bump
+in those existing code paths; a release must still identify its corrected
+source and generated artefacts. The schema-4 bootstrap changes separately
+require a new deployment rather than an in-place schema migration.
 
 ## Existing deployments
 

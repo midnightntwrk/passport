@@ -28,7 +28,7 @@ void runScenario('toolchain-offline', async () => {
     compiledContract: compiledAccountContract(),
     initialPrivateState: emptyCoinStore(),
     signingKey,
-    args: [zero32, zero32, JubjubDevice.generate().pk, new Uint8Array(64), 60n],
+    args: [zero32, zero32, JubjubDevice.generate().pk, new Uint8Array(64), 60n, 0n, zero32],
   }, encryptionPublicKey);
   const state = ContractState.deserialize(account.public.initialContractState.serialize());
   assert.equal(account.era, 'ledger9');

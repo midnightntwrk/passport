@@ -9,7 +9,7 @@
 // the ledger fee computation refuses it up front ("exceeded block limit in
 // transaction fee computation"). The 30-circuit roster prices at 74,286
 // verifier bytes and is refused by a wider margin. The account therefore
-// deploys in budgeted waves (52 circuits with recovery and P-256):
+// deploys in budgeted waves (53 circuits with signed passkey bootstrap):
 //
 //   wave 1  a prefix of the deposits + initial device's arm, the
 //           constructor's ledger state, and the maintenance authority;
@@ -45,6 +45,7 @@ import {
   Transaction,
   VerifierKeyInsert,
   signData,
+  signatureVerifyingKey,
   type SingleUpdate,
 } from '@midnightntwrk/ledger-v9';
 import {
@@ -52,8 +53,11 @@ import {
   submitTx,
 } from '@midnight-ntwrk/midnight-js-contracts';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { ContractState as RuntimeContractState } from '@midnight-ntwrk/compact-runtime';
 
 import type { Arm } from './signer.js';
+import { equalBytes } from './webauthn.js';
+import { ledger } from './contract.js';
 
 const GATED_BASES = [
   'withdraw_unshielded',
@@ -103,6 +107,7 @@ export const recoveryCircuits = (arm: Arm): string[] =>
 
 /** The two permissionless deposits, shared by all arms. */
 export const SHARED_CIRCUITS = ['deposit_unshielded', 'deposit_shielded'];
+export const SIGNED_BOOTSTRAP_CIRCUITS = ['activate_initial_passkey'];
 
 /** The recovery gate itself: secret-gated submission and the permissionless
  *  finalisation, arm-independent (recovery MIP 6). */
@@ -110,9 +115,10 @@ export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
 
 export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256'];
 
-/** All 52 impure circuits: four shared and sixteen per credential arm. */
+/** All 53 impure circuits: five shared and sixteen per credential arm. */
 export const allCircuits = (): string[] => [
   ...SHARED_CIRCUITS,
+  ...SIGNED_BOOTSTRAP_CIRCUITS,
   ...ARMS.flatMap(armCircuits),
   ...ARMS.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
   ...RECOVERY_SHARED_CIRCUITS,
@@ -191,7 +197,10 @@ export interface Wave {
  * `getVerifierKey(id)` for every id of `allCircuits()`.
  *
  * Pack every wave under `VERIFIER_BYTE_BUDGET`, starting with the deposits
- * and initial device's arm, then the other device arms, grants and recovery.
+ * and initial device's arm, then the other device arms, grants, and recovery.
+ * Each mode prioritises only its usable activation circuit. The full roster
+ * is retained, but activation circuits disabled by that mode are deferred
+ * so they cannot displace usable first-arm operations in wave 1.
  * The deploy may carry only a prefix of the first arm. Activation happens
  * after all waves complete. Authority retirement rides on the last
  * maintenance wave, which is the last operation that needs the authority.
@@ -200,7 +209,9 @@ export function planWaves(
   sizes: Map<string, number>,
   firstArm: Arm,
   retireAuthority = true,
+  bootstrapMode: bigint = 0n,
 ): Wave[] {
+  if (bootstrapMode !== 0n && bootstrapMode !== 1n) throw new Error('unsupported bootstrap mode for wave planning');
   const sizeOf = (id: string): number => {
     const n = sizes.get(id);
     if (n === undefined) throw new Error(`no verifier key size for '${id}'`);
@@ -212,7 +223,10 @@ export function planWaves(
   }
 
   const others = ARMS.filter(arm => arm !== firstArm);
-  const first = [...SHARED_CIRCUITS, ...armCircuits(firstArm)];
+  const usableArm = (arm: Arm) => bootstrapMode === 1n ? armCircuits(arm).slice(1) : armCircuits(arm);
+  const deferredActivation = bootstrapMode === 1n
+    ? ARMS.map(arm => armCircuits(arm)[0]) : SIGNED_BOOTSTRAP_CIRCUITS;
+  const first = [...SHARED_CIRCUITS, ...(bootstrapMode === 1n ? SIGNED_BOOTSTRAP_CIRCUITS : []), ...usableArm(firstArm)];
   const waveOne: string[] = [];
   for (const id of first) {
     if (total(waveOne) + sizeOf(id) > VERIFIER_BYTE_BUDGET) break;
@@ -229,10 +243,11 @@ export function planWaves(
 
   const remaining = [
     ...first.slice(waveOne.length),
-    ...others.flatMap(armCircuits),
+    ...others.flatMap(usableArm),
     ...grantTwins(firstArm),
     ...lifecycleCircuits(firstArm),
     ...others.flatMap(arm => [...grantTwins(arm), ...lifecycleCircuits(arm)]),
+    ...deferredActivation,
     // Recovery last: the gate and the first arm's session and cancel, then
     // the other arm's. An account is functional without them; they are the
     // last thing the authority installs before retiring.
@@ -314,6 +329,19 @@ async function awaitAuthorityCounter(
   throw new Error(`authority counter never reached ${expected} at ${address}`);
 }
 
+/** Public deployment recovery data. The corresponding maintenance signing
+ * key and private state must live in a durable privateStateProvider. */
+export interface WaveDeploymentCheckpoint {
+  version: 1;
+  address: string;
+  initialState: Uint8Array;
+  /** Serialised intent retains the deployment randomness/address. */
+  deploymentIntent: Uint8Array;
+  privateStateId: string;
+  firstArm: Arm;
+  retireAuthority: boolean;
+}
+
 export interface WaveDeployOptions {
   /** The initial device's arm — prioritised in the wave roster. */
   firstArm: Arm;
@@ -330,11 +358,13 @@ export interface WaveDeployOptions {
    * equivalent to full custody of the account.
    */
   retireAuthority?: boolean;
+  /** Called after protected key/state persistence, before the first submit. */
+  onPrepared?: (checkpoint: WaveDeploymentCheckpoint) => Promise<void>;
 }
 
 /**
  * Deploys the account contract in a planned sequence of waves and returns its
- * address. On return the contract carries all 36 operations and the
+ * address. On return the contract carries all 53 operations and the
  * constructor state.
  *
  * The maintenance authority, and why this retires it by default.
@@ -394,7 +424,8 @@ export async function deployAccountInWaves(
     sizes.set(id, vk.length);
   }
   const retire = options.retireAuthority !== false;
-  const waves = planWaves(sizes, options.firstArm, retire);
+  const waves = planWaves(sizes, options.firstArm, retire,
+    ledger(RuntimeContractState.deserialize(full.serialize()).data).bootstrap_mode);
   console.log(
     `  wave plan: ${waves.length} waves for ${allCircuits().length} circuits ` +
     `(budget ${VERIFIER_BYTE_BUDGET} verifier bytes per wave)`,
@@ -421,8 +452,24 @@ export async function deployAccountInWaves(
   const deploy = new ContractDeploy(wave1);
   const address = String(deploy.address);
   const ttl = new Date(Date.now() + Number(process.env.TX_TTL_MS ?? '60000'));
+  const deploymentIntent = Intent.new(ttl).addDeploy(deploy);
+  const persistDeployment = async () => {
+    if (typeof providers.privateStateProvider.setContractAddress === 'function') {
+      await providers.privateStateProvider.setContractAddress(address);
+    }
+    await providers.privateStateProvider.setSigningKey(address, deployData.private.signingKey);
+    await providers.privateStateProvider.set(options.privateStateId, deployData.private.initialPrivateState);
+  };
+  // Only checkpointed deployments retain recovery material before submission.
+  // A crash after submission must leave that flow able to finish its roster;
+  // callers without a checkpoint retain the legacy post-acceptance writes.
+  if (options.onPrepared) {
+    await persistDeployment();
+    await options.onPrepared({ version: 1, address, initialState: wave1.serialize(), deploymentIntent: deploymentIntent.serialize(), privateStateId: options.privateStateId,
+      firstArm: options.firstArm, retireAuthority: retire });
+  }
   const unprovenTx = Transaction.fromParts(
-    getNetworkId(), undefined, undefined, Intent.new(ttl).addDeploy(deploy),
+    getNetworkId(), undefined, undefined, deploymentIntent,
   );
 
   console.log(
@@ -434,15 +481,7 @@ export async function deployAccountInWaves(
   if (finalized.status && String(finalized.status).toLowerCase().includes('fail')) {
     throw new Error(`wave-1 deploy failed: ${JSON.stringify(finalized.status)}`);
   }
-
-  // The bookkeeping midnight-js's own deploy performs: the maintenance
-  // authority key (the later waves and future maintenance read it from here)
-  // and the private state.
-  if (typeof providers.privateStateProvider.setContractAddress === 'function') {
-    await providers.privateStateProvider.setContractAddress(address);
-  }
-  await providers.privateStateProvider.setSigningKey(address, deployData.private.signingKey);
-  await providers.privateStateProvider.set(options.privateStateId, deployData.private.initialPrivateState);
+  if (!options.onPrepared) await persistDeployment();
 
   // The maintenance waves: each carries its batch of verifier keys in ONE
   // hand-built maintenance update, signed with the stored authority key.
@@ -503,4 +542,138 @@ export async function deployAccountInWaves(
   }
 
   return address;
+}
+
+export interface WaveResumeOptions {
+  /** Grace period for pending deployment/indexer propagation, before and after
+   * a possible re-submission. A timed-out resume retains its checkpoint. */
+  observationTimeoutMs?: number;
+  pollIntervalMs?: number;
+}
+
+/** Resume an interrupted deployment, including an uncertain first submission.
+ * Inspect actual verifier keys instead of trusting a saved wave counter. Keys
+ * that exist but differ from trusted local artefacts abort recovery. */
+export async function resumeAccountInWaves(providers: any, checkpoint: WaveDeploymentCheckpoint,
+  options: WaveResumeOptions = {}): Promise<string> {
+  const observationTimeoutMs = options.observationTimeoutMs ?? 15_000;
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+  if (!Number.isFinite(observationTimeoutMs) || observationTimeoutMs < 0 ||
+      !Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) throw new Error('invalid deployment observation timing');
+  if (checkpoint.version !== 1 || !ARMS.includes(checkpoint.firstArm) || !checkpoint.privateStateId ||
+      typeof checkpoint.retireAuthority !== 'boolean') throw new Error('invalid deployment checkpoint');
+  const retainedIntent = Intent.deserialize('signature', 'pre-proof', 'pre-binding', checkpoint.deploymentIntent);
+  if (retainedIntent.actions.length !== 1 || !(retainedIntent.actions[0] instanceof ContractDeploy)) throw new Error('checkpoint must contain exactly one deployment');
+  const deploy = retainedIntent.actions[0];
+  const initial = deploy.initialState;
+  if (!equalBytes(initial.serialize(), checkpoint.initialState)) throw new Error('deployment checkpoint initial state mismatch');
+  if (String(deploy.address) !== checkpoint.address) throw new Error('deployment checkpoint address mismatch');
+  const keys = new Map<string, Uint8Array>(), sizes = new Map<string, number>();
+  for (const id of allCircuits()) {
+    const vk = await providers.zkConfigProvider.getVerifierKey(id);
+    if (!vk) throw new Error(`missing trusted verifier key ${id}`);
+    keys.set(id, vk); sizes.set(id, vk.length);
+  }
+  const read = async (): Promise<ContractState | undefined> => {
+    const state = await providers.publicDataProvider.queryContractState(checkpoint.address);
+    return state ? ContractState.deserialize(state.serialize()) : undefined;
+  };
+  const observe = async (): Promise<ContractState | undefined> => {
+    const deadline = Date.now() + observationTimeoutMs;
+    for (;;) {
+      const state = await read();
+      if (state) return state;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return undefined;
+      await new Promise(resolve => setTimeout(resolve, Math.min(pollIntervalMs, remaining)));
+    }
+  };
+  if (typeof providers.privateStateProvider.setContractAddress === 'function') await providers.privateStateProvider.setContractAddress(checkpoint.address);
+  const signingKey = await providers.privateStateProvider.getSigningKey(checkpoint.address);
+  const birthAuthority = initial.maintenanceAuthority;
+  if (birthAuthority.counter !== 0n || birthAuthority.threshold !== 1 || birthAuthority.committee.length !== 1) {
+    throw new Error('checkpoint does not contain the expected deployment maintenance authority');
+  }
+  if (signingKey) {
+    const vk = signatureVerifyingKey(signingKey);
+    if (birthAuthority.committee[0].tag !== vk.tag || birthAuthority.committee[0].value !== vk.value) {
+      throw new Error('retained maintenance key does not match deployment checkpoint');
+    }
+  }
+  // Infer the sealed mode from the original intent rather than extending or
+  // trusting mutable checkpoint metadata. Earlier checkpoints remain usable
+  // even when their first wave had the old, mode-independent ordering.
+  const waves = planWaves(sizes, checkpoint.firstArm, checkpoint.retireAuthority,
+    ledger(RuntimeContractState.deserialize(checkpoint.initialState).data).bootstrap_mode);
+  const verify = (state: ContractState) => {
+    for (const id of state.operations()) {
+      if (typeof id !== 'string' || !keys.has(id) || !equalBytes(state.operation(id)!.verifierKey, keys.get(id)!)) {
+        throw new Error(`unexpected deployed verifier ${String(id)}`);
+      }
+    }
+    const authority = state.maintenanceAuthority;
+    const retired = authority.threshold > authority.committee.length;
+    if (retired) {
+      if (!checkpoint.retireAuthority || authority.committee.length !== 0 || authority.threshold !== 1) throw new Error('unexpected retired maintenance authority');
+    } else if (authority.threshold !== birthAuthority.threshold || authority.committee.length !== 1 ||
+        authority.committee[0].tag !== birthAuthority.committee[0].tag || authority.committee[0].value !== birthAuthority.committee[0].value) {
+      throw new Error('deployed maintenance authority does not match checkpoint');
+    }
+  };
+  verify(initial);
+  // A missing indexer result does not establish that the original deploy
+  // failed. Give an in-flight transaction time to appear before re-submitting.
+  let state = await observe();
+  if (!state) {
+    if (!signingKey) throw new Error('missing retained maintenance key; cannot resume deployment');
+    const ttl = new Date(Date.now() + Number(process.env.TX_TTL_MS ?? '60000'));
+    const unprovenTx = Transaction.fromParts(getNetworkId(), undefined, undefined, Intent.new(ttl).addDeploy(deploy));
+    let submissionFailure: unknown;
+    try {
+      // Do not blindly retry duplicate-deploy rejections as dust races. The
+      // original transaction can settle while this attempt is being built.
+      const result: any = await (submitTx as any)(providers, { unprovenTx });
+      if (result.status && String(result.status).toLowerCase().includes('fail')) {
+        submissionFailure = new Error(`resumed deployment failed: ${String(result.status)}`);
+      }
+    } catch (error) { submissionFailure = error; }
+    // A duplicate rejection or a failed duplicate transaction is harmless
+    // only if the intended address appears and passes the checks below.
+    state = await observe();
+    if (!state) {
+      if (submissionFailure !== undefined) throw submissionFailure;
+      throw new Error('deployment not yet observed; retain checkpoint and retry');
+    }
+    verify(state);
+  }
+  for (let index = 0; index < waves.length; index++) {
+    state = (await observe())!;
+    if (!state) throw new Error('deployed state unavailable');
+    verify(state);
+    const missing = waves[index].circuits.filter(id => !state!.operation(id));
+    const authority = state.maintenanceAuthority;
+    const retired = authority.threshold > authority.committee.length;
+    const retireNow = checkpoint.retireAuthority && index === waves.length - 1 && !retired;
+    if (!missing.length && !retireNow) continue;
+    if (retired || !signingKey) throw new Error('incomplete deployment has no usable maintenance authority');
+    const vk = signatureVerifyingKey(signingKey);
+    if (authority.threshold !== 1 || authority.committee.length !== 1 || authority.committee[0].tag !== vk.tag || authority.committee[0].value !== vk.value) {
+      throw new Error('maintenance authority does not match retained deployment key');
+    }
+    const updates: SingleUpdate[] = missing.map(id => new VerifierKeyInsert(id, new ContractOperationVersionedVerifierKey('v4', keys.get(id)!)));
+    if (retireNow) updates.push(new ReplaceAuthority(new ContractMaintenanceAuthority([], 1, authority.counter + 1n)));
+    const bare = new MaintenanceUpdate(checkpoint.address, updates, authority.counter);
+    const signed = bare.addSignature(0n, signData(signingKey, bare.dataToSign));
+    const ttl = new Date(Date.now() + Number(process.env.TX_TTL_MS ?? '60000'));
+    const unprovenTx = Transaction.fromParts(getNetworkId(), undefined, undefined, Intent.new(ttl).addMaintenanceUpdate(signed));
+    const result: any = await withDustRetry('resume maintenance', () => (submitTx as any)(providers, { unprovenTx }));
+    if (result.status && String(result.status).toLowerCase().includes('fail')) throw new Error('resumed maintenance failed');
+    await awaitAuthorityCounter(providers, checkpoint.address, authority.counter + 1n);
+  }
+  state = await observe();
+  if (!state) throw new Error('resumed deployment state unavailable');
+  verify(state);
+  if (allCircuits().some(id => !state!.operation(id))) throw new Error('resumed verifier roster is incomplete');
+  if (checkpoint.retireAuthority && state.maintenanceAuthority.committee.length !== 0) throw new Error('maintenance authority retirement was not observed');
+  return checkpoint.address;
 }

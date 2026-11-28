@@ -72,7 +72,7 @@ if (process.argv[2] === 'cleanup') {
     INDEXER_WS_URL: 'ws://localhost:8088/api/v4/graphql/ws',
     MIDNIGHT_NODE_CONTAINER: `${project}-node-1`, MIDNIGHT_PROOF_CONTAINER: `${project}-proof-server-1` };
   const evidence = { version: 1, status: 'RUNNING', project, startedAt: new Date().toISOString(),
-    scope: 'Full keyed build, two native-prover/SDK controls, and a three-process JubJub guardian recovery journey. No P-256 proof, browser ceremony, full localnet matrix, or complete wallet-recovery claim.' };
+    scope: 'Full keyed build, two native-prover/SDK controls, three-process JubJub guardian recovery, and signed-bootstrap activation with a software P-256 passkey. No physical browser ceremony, full localnet matrix, or complete wallet-recovery claim.' };
   const save = () => writeFile(resolve(outputDirectory, 'result.json'), JSON.stringify(evidence, null, 2));
   async function jsonPost(url, body) {
     const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -164,6 +164,18 @@ if (process.argv[2] === 'cleanup') {
     // The receipt schema contains public identifiers, assertions, and hashes.
     // No other file from the fixture directory is copied to public evidence.
     await writeFile(resolve(outputDirectory, 'receipt.json'), JSON.stringify(receipt, null, 2));
+    const bootstrapDirectory = resolve(privateDirectory, 'signed-bootstrap');
+    env = { ...env, EVIDENCE_DIR: bootstrapDirectory,
+      SIGNED_BOOTSTRAP_EXPECTED_GENESIS: evidence.genesisHash };
+    const bootstrapOutput = await run('signed-bootstrap', process.execPath,
+      ['--import', 'tsx', 'src/tests/signed-bootstrap-conformance.ts'], 1_800_000);
+    assert.ok(bootstrapOutput.includes('◆ signed bootstrap: fresh proofs and on-node activation: PASS'));
+    const bootstrap = JSON.parse(await readFile(resolve(bootstrapDirectory, 'signed-bootstrap-conformance.json'), 'utf8'));
+    assert.equal(bootstrap.verdict, 'PASS');
+    assert.ok(bootstrap.details.samples.some(sample => /\/activate_initial_passkey(?:\?|$)/.test(sample.keyLocation)));
+    assert.ok(bootstrap.details.transactions.every(tx => tx.status === 'SUCCESS'));
+    // Copy only the public result, never the retained onboarding approval.
+    await writeFile(resolve(outputDirectory, 'signed-bootstrap.json'), JSON.stringify(bootstrap, null, 2));
     evidence.status = 'PASS';
   } catch (error) {
     evidence.status = 'FAIL';

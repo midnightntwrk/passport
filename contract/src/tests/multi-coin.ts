@@ -186,7 +186,7 @@ function fixture(mode: Mode = 'owner', profile: Profile = 'jubjub', twin: Twin =
   const providers = { privateStateProvider: provider };
   const client = () => {
     const account = Reflect.construct(CustodyAccount, [bytesToHex(address), address, { ...providers }, 'multi-coin', { callTx }]) as CustodyAccount;
-    account.ledgerState = async () => ({ spec_version: 3n, auth_nonce: 0n, device_epoch: 0n,
+    account.ledgerState = async () => ({ spec_version: 4n, auth_nonce: 0n, device_epoch: 0n,
       grant_generation: 0n, enc_key: enc, devices: { member: () => true },
       grants: { member: () => true, lookup: () => ({ active: true, epoch: 0n, gen: 0n,
         issued_at: 4n, nonce: 5n, scope: { expires_at: observations.expiresAt } }) },

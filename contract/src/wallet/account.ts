@@ -18,17 +18,31 @@
 // is recovered by rescanning ledger membership of candidate entries.
 
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { ContractState } from '@midnight-ntwrk/compact-runtime';
+import { catchError, defer, filter, firstValueFrom, map, timeout, type Observable } from 'rxjs';
 
-import { deployAccountInWaves } from './wave-deploy.js';
+import { deployAccountInWaves, resumeAccountInWaves } from './wave-deploy.js';
 
 import {
   ledger,
+  pureCircuits,
   type JubjubPoint,
   type Ledger,
   type ShieldedCoin,
   type QualifiedCoin,
   type GrantRecord,
 } from './contract.js';
+import { P256Device } from './signer-p256.js';
+import {
+  browserAssertionProvider, createBrowserCredential, equalBytes,
+  type AssertionProvider, type BrowserCredentialMetadata, type CreateCredentialOptions,
+} from './webauthn.js';
+import {
+  assertBootstrapNetwork, assertBootstrapRegistrationAllowed, createSignedBootstrapRecord,
+  prepareSignedBootstrapActivation, retainBootstrapCredential, signedBootstrapActivationArgs,
+  signedBootstrapPolicy, validateRetainedApproval, type BootstrapCredential, type BootstrapNetworkConfig,
+  type RetainedSignedBootstrapApproval, type SignedBootstrapRecord, type TemporaryBootstrapKey,
+} from './signed-bootstrap.js';
 import {
   emptyCoinStore,
   withCoin,
@@ -166,6 +180,60 @@ export interface DeployOptions {
   recovery?: RecoveryBirth;
   durableChanges?: DurableChangesOptions;
 }
+
+export interface SignedBootstrapClientOptions {
+  network: BootstrapNetworkConfig;
+  rpId: string;
+  origin: string;
+  /** Used for approval and the installed device's later signatures. Supply it
+   * again after reconnecting; callbacks are never part of the saved record.
+   * Defaults to the browser provider for the retained credential ID. */
+  assertionProvider?: AssertionProvider;
+  /** Read chain identity/genesis and the configured fixed checkpoint from a
+   * trusted chain adapter. Called before deployment and every approval/retry. */
+  observeNetwork: () => Promise<BootstrapNetworkConfig>;
+  /** Verify the complete on-chain verifier roster against trusted artefacts,
+   * and the configured maintenance-authority retirement policy. */
+  verifyDeployment: (account: CustodyAccount) => Promise<void>;
+  /** Durable protected storage. Rejection stops progress before submission.
+   * Integrators must also reserve onboarding atomically per account across
+   * processes/tabs. In-process registration reservations cover sessions that
+   * share this record object; separate deserialisations need the store lock. */
+  persist: (record: SignedBootstrapRecord) => Promise<void>;
+  /** Required by integrations that persist b: delete its protected copy after
+   * confirmed activation/recovery retirement. The JS key is erased as well. */
+  eraseTemporaryKey?: () => Promise<void>;
+}
+
+export interface SignedBootstrapSession {
+  account: CustodyAccount;
+  address: string;
+  userId: Uint8Array;
+  record: SignedBootstrapRecord;
+  /** Available after successful activation/inspection. Normal account calls
+   * still check current device membership; a later failed inspection clears it. */
+  readonly device: P256Device | undefined;
+  registerBrowserCredential(userName: string, creation?: Omit<CreateCredentialOptions, 'userId' | 'onCreated'>): Promise<BrowserCredentialMetadata>;
+  retainCredential(credential: BootstrapCredential): Promise<void>;
+  /** An explicit provider becomes the session's device signer, including when
+   * an existing approval is reused without requesting another assertion. */
+  approve(provider?: AssertionProvider): Promise<RetainedSignedBootstrapApproval>;
+  activate(): Promise<CustodyAccount>;
+  inspect(): Promise<boolean>;
+}
+
+/** Bootstrap was consumed by recovery, or its installed device epoch was
+ * subsequently replaced. Resume the recovery flow rather than onboarding. */
+export class BootstrapRecoveryReplacedError extends Error {
+  constructor(readonly epoch: bigint) {
+    super('bootstrap authority was consumed or replaced by recovery');
+    this.name = 'BootstrapRecoveryReplacedError';
+  }
+}
+
+// A reservation belongs to the onboarding record, not an individual session.
+// Keep it across network checks, navigator.create and durable metadata writes.
+const bootstrapRegistrations = new WeakSet<SignedBootstrapRecord>();
 
 export interface TxResult {
   txId: string;
@@ -432,7 +500,7 @@ export class CustodyAccount {
       // by maintenance update (see wave-deploy.ts).
       const address = await deployAccountInWaves(providers, compiledContract, {
         firstArm: initialDevice.arm,
-        args: [boot, encKeys.publicKey, birth.recoveryPk, birth.wrap, birth.vetoWindowSeconds],
+        args: [boot, encKeys.publicKey, birth.recoveryPk, birth.wrap, birth.vetoWindowSeconds, 0n, new Uint8Array(32)],
         privateStateId,
         initialPrivateState,
         retireAuthority: opts?.retireAuthority,
@@ -456,6 +524,257 @@ export class CustodyAccount {
   activateInitialDevice(device: AnyDevice, salt: Uint8Array): Promise<unknown> {
     const name = `activate_initial_device_with_${device.arm}`;
     return submitWithDustRetry(name, () => this.dispatch(name, ...activationArgs(device, salt)));
+  }
+
+  /** Deploy mode 1 without a passkey. The returned raw address can now be its
+   * user.id. The caller retains the independent temporary secret in protected
+   * storage before calling this method; it never reaches deployment/proving. */
+  static async deployPasskeyDormant(
+    providers: any, compiledContract: any, temporaryKey: TemporaryBootstrapKey, encKeys: EncKeyPair,
+    options: SignedBootstrapClientOptions & DeployOptions,
+  ) {
+    const policy = signedBootstrapPolicy(options.rpId, options.origin);
+    const network = assertBootstrapNetwork(options.network, await options.observeNetwork());
+    const boot = pureCircuits.derive_signed_boot_commitment(network, temporaryKey.Q, policy);
+    return withProviderLock(providers.privateStateProvider, async () => {
+      const privateStateId = freshPrivateStateId();
+      const initialPrivateState = emptyCoinStore(encKeys.secretKey);
+      // As in legacy deployment, the default discards a random recovery
+      // secret and does NOT establish usable recovery. Supply retained birth
+      // recovery explicitly when recovery is required.
+      const birth = options.recovery ?? { recoveryPk: JubjubDevice.generate().pk, wrap: new Uint8Array(64), vetoWindowSeconds: 3n * 24n * 3600n };
+      let record: SignedBootstrapRecord;
+      const address = await deployAccountInWaves(providers, compiledContract, {
+        firstArm: 'p256', args: [boot, encKeys.publicKey, birth.recoveryPk, birth.wrap, birth.vetoWindowSeconds, 1n, network],
+        privateStateId, initialPrivateState, retireAuthority: options.retireAuthority,
+        onPrepared: async checkpoint => {
+          record = createSignedBootstrapRecord(network, addressToBytes(checkpoint.address), boot, temporaryKey.Q, policy);
+          record.deployment = checkpoint;
+          await options.persist(record);
+        },
+      });
+      const found = await (findDeployedContract as any)(providers, { contractAddress: address, compiledContract, privateStateId, initialPrivateState });
+      const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found, compiledContract, options.durableChanges);
+      await options.persist(record);
+      return account.signedBootstrapSession(record, options, temporaryKey);
+    });
+  }
+
+  /** Recover after a crash during verifier-wave deployment. The deployment
+   * record was persisted before first submission; privateStateProvider must
+   * retain its independent maintenance key and viewing/private state. */
+  static async resumePasskeyDeployment(providers: any, compiledContract: any, record: SignedBootstrapRecord,
+    options: SignedBootstrapClientOptions & DeployOptions, temporaryKey?: TemporaryBootstrapKey) {
+    if (!record.deployment || record.retired) throw new Error('no resumable bootstrap deployment');
+    const policy = signedBootstrapPolicy(options.rpId, options.origin);
+    if (!equalBytes(policy.origin, record.policy.origin) || !equalBytes(policy.rp_id_hash, record.policy.rp_id_hash)) throw new Error('bootstrap RP policy mismatch');
+    if (!equalBytes(addressToBytes(record.deployment.address), record.address)) throw new Error('bootstrap checkpoint belongs to another account');
+    const network = assertBootstrapNetwork(options.network, await options.observeNetwork());
+    if (!equalBytes(network, record.network)) throw new Error('bootstrap record network mismatch');
+    createSignedBootstrapRecord(record.network, record.address, record.boot, record.Q, record.policy);
+    const birth = ledger(ContractState.deserialize(record.deployment.initialState).data);
+    if (birth.bootstrap_mode !== 1n || !equalBytes(birth.bootstrap_network, network) || !equalBytes(birth.boot, record.boot) ||
+        birth.booted || birth.device_count !== 0n || birth.devices.size() !== 0n || birth.device_epoch !== 0n || birth.auth_nonce !== 0n) {
+      throw new Error('bootstrap record does not match deployment constructor state');
+    }
+    return withProviderLock(providers.privateStateProvider, async () => {
+      const address = await resumeAccountInWaves(providers, record.deployment!);
+      const privateStateId = record.deployment!.privateStateId;
+      const initialPrivateState = await providers.privateStateProvider.get(privateStateId);
+      if (!initialPrivateState) throw new Error('missing retained account private state');
+      const found = await (findDeployedContract as any)(providers, { contractAddress: address, compiledContract, privateStateId, initialPrivateState });
+      const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found, compiledContract, options.durableChanges);
+      await options.persist(record);
+      return account.signedBootstrapSession(record, options, temporaryKey);
+    });
+  }
+
+  /** Resume from durable metadata after reconnecting with the same account and
+   * viewing state. Retained approvals can be submitted without the temporary
+   * secret. Registration and signing remain unavailable after retirement. */
+  signedBootstrapSession(record: SignedBootstrapRecord, options: SignedBootstrapClientOptions, temporaryKey?: TemporaryBootstrapKey): SignedBootstrapSession {
+    if (!equalBytes(record.address, this.addressBytes)) throw new Error('onboarding record belongs to another account');
+    const policy = signedBootstrapPolicy(options.rpId, options.origin);
+    if (!equalBytes(policy.origin, record.policy.origin) || !equalBytes(policy.rp_id_hash, record.policy.rp_id_hash)) throw new Error('bootstrap RP policy mismatch');
+    let assertionProvider = options.assertionProvider;
+    let completedDevice: P256Device | undefined;
+    const check = async (onObservationFailure?: (error: unknown) => never) => {
+      completedDevice = undefined;
+      const observe = async <T>(read: () => Promise<T>): Promise<T> => {
+        try { return await read(); }
+        catch (error) { if (onObservationFailure) onObservationFailure(error); throw error; }
+      };
+      const network = assertBootstrapNetwork(options.network, await observe(() => options.observeNetwork()));
+      if (!equalBytes(network, record.network)) throw new Error('bootstrap record network mismatch');
+      await observe(() => options.verifyDeployment(this));
+      const state = await observe(() => this.ledgerState());
+      if (state.bootstrap_mode !== 1n || !equalBytes(state.bootstrap_network, network)) throw new Error('deployed bootstrap mode/network mismatch');
+      return state;
+    };
+    const dormant = (state: Ledger) => {
+      if (record.retired || state.booted || !equalBytes(state.boot, record.boot) ||
+          state.device_count !== 0n || state.device_epoch !== 0n || state.auth_nonce !== 0n || state.devices.size() !== 0n) {
+        throw new Error('account is no longer the expected dormant bootstrap');
+      }
+    };
+    const complete = async (state: Ledger, recheck = check,
+      onObservationFailure?: (error: unknown) => never): Promise<boolean> => {
+      if (!state.booted) return false;
+      if (!state.boot.every(b => b === 0)) throw new Error('booted account retains an unexpected bootstrap commitment');
+      const expected = record.credential && pureCircuits.derive_device_entry_with_p256(
+        { bytes: this.addressBytes }, record.credential.pk, record.policy, 0n, 0n);
+      const credentialId = record.credential && new Uint8Array(record.credential.credentialId);
+      const network = new Uint8Array(record.network), boot = new Uint8Array(record.boot);
+      // Recovery finalisation also retires bootstrap. Never infer successful
+      // onboarding solely from booted=true or retain a usable old secret.
+      record.retired = true; temporaryKey?.erase();
+      await options.eraseTemporaryKey?.(); await options.persist(record);
+      if (state.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(state.device_epoch);
+      if (!expected) throw new Error('bootstrap credential metadata is required to verify activation');
+      const initialInstallation = (s: Ledger) => s.booted && s.boot.every(b => b === 0) &&
+        s.bootstrap_mode === 1n && equalBytes(s.bootstrap_network, network) &&
+        s.device_epoch === 0n && s.auth_nonce === 0n && s.device_count === 1n &&
+        s.devices.size() === 1n && s.devices.member(expected);
+      if (!initialInstallation(state)) {
+        // Device use rolls its entry; adding/removing devices changes the live
+        // roster. Verify the first consumed-bootstrap state, not today's
+        // counters or membership. A retained approval/tx ID alone is no receipt.
+        const provider = this.providers.publicDataProvider;
+        const historyUnavailable = (error: unknown): never => {
+          if (onObservationFailure) onObservationFailure(error);
+          throw error;
+        };
+        if (typeof provider?.contractStateObservable !== 'function') {
+          historyUnavailable(new Error('bootstrap activation history unavailable; retry with a history-capable provider'));
+        }
+        const installed = await firstValueFrom(defer((): Observable<ContractState> =>
+          provider.contractStateObservable(this.address, { type: 'all' })).pipe(
+          // Catch only source/transport failures, before semantic history
+          // checks. A contradictory history must keep its own rejection.
+          catchError(error => historyUnavailable(error)),
+          map((snapshot: ContractState): Ledger => {
+            const historical = ledger(snapshot.data);
+            if (historical.bootstrap_mode !== 1n || !equalBytes(historical.bootstrap_network, network) ||
+                (!historical.booted && !equalBytes(historical.boot, boot))) {
+              throw new Error('bootstrap activation history does not match the onboarding record');
+            }
+            return historical;
+          }),
+          filter((historical: Ledger) => historical.booted),
+          timeout({ first: 15_000, with: () => historyUnavailable(new Error('bootstrap activation history timed out')) }),
+        ), { defaultValue: undefined });
+        if (!installed) historyUnavailable(new Error('bootstrap activation history unavailable; no installed state observed'));
+        if (installed.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(installed.device_epoch);
+        if (!initialInstallation(installed)) throw new Error('bootstrap activated an unexpected initial device');
+      }
+      // Recovery can also land while the immediate-success path persists its
+      // record. Recheck after every awaited path, including that fast path.
+      const current = await recheck();
+      if (!current.booted || !current.boot.every(b => b === 0)) throw new Error('bootstrap state changed during activation inspection');
+      if (current.device_epoch > 0n) throw new BootstrapRecoveryReplacedError(current.device_epoch);
+      if (!record.credential || !equalBytes(record.network, network) || !equalBytes(record.boot, boot) ||
+          !equalBytes(record.credential.credentialId, credentialId!) || !equalBytes(expected,
+            pureCircuits.derive_device_entry_with_p256({ bytes: this.addressBytes }, record.credential.pk, record.policy, 0n, 0n))) {
+        throw new Error('bootstrap onboarding target changed during activation inspection');
+      }
+      // This registers metadata/a counter hint, not spending authority. Normal
+      // counter discovery still checks the current roster before any use.
+      const device = new P256Device(record.credential!.pk, options.rpId, options.origin,
+        assertionProvider ?? browserAssertionProvider(record.credential!.credentialId, options.rpId));
+      this.registerDevice(device, 0n);
+      completedDevice = device;
+      return true;
+    };
+    return {
+      account: this, address: this.address, userId: new Uint8Array(this.addressBytes), record,
+      get device() { return completedDevice; },
+      registerBrowserCredential: async (userName: string, creation: Omit<CreateCredentialOptions, 'userId' | 'onCreated'> = {}) => {
+        if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
+        bootstrapRegistrations.add(record);
+        try {
+          assertBootstrapRegistrationAllowed(record);
+          dormant(await check());
+          // The awaited chain checks can yield to another metadata writer.
+          // Recheck immediately before touching an authenticator.
+          assertBootstrapRegistrationAllowed(record);
+          return await createBrowserCredential(options.rpId, options.origin, userName, {
+            ...creation, userId: this.addressBytes,
+            onCreated: async credential => { retainBootstrapCredential(record, credential); await options.persist(record); },
+          });
+        } finally { bootstrapRegistrations.delete(record); }
+      },
+      /** For an external registration service or software conformance fixture. */
+      retainCredential: async (credential: BootstrapCredential) => {
+        if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
+        dormant(await check());
+        if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
+        retainBootstrapCredential(record, credential); await options.persist(record);
+      },
+      approve: async (provider?: AssertionProvider) => {
+        if (bootstrapRegistrations.has(record)) throw new Error('bootstrap registration already in progress');
+        // Share the reservation through chain checks and signing, including
+        // the browser registration's outstanding trial assertion.
+        bootstrapRegistrations.add(record);
+        try {
+          dormant(await check());
+          if (!record.credential) throw new Error('persist a credential before approval');
+          const selectedProvider = provider ?? assertionProvider ?? browserAssertionProvider(record.credential.credentialId, options.rpId);
+          if (record.approval) validateRetainedApproval(record);
+          else {
+            if (!temporaryKey) throw new Error('temporary key or retained approval is required');
+            await prepareSignedBootstrapActivation(record, temporaryKey, selectedProvider);
+          }
+          assertionProvider = selectedProvider;
+          await options.persist(record);
+          return record.approval!;
+        } finally { bootstrapRegistrations.delete(record); }
+      },
+      activate: async () => {
+        const state = await check();
+        if (await complete(state)) return this;
+        dormant(state); validateRetainedApproval(record);
+        // Persist the complete exact approval before any proof/submission.
+        await options.persist(record);
+        validateRetainedApproval(record);
+        const args = signedBootstrapActivationArgs(record.approval!);
+        let lastSubmissionFailure: { error: unknown } | undefined;
+        const submitted = await submitWithDustRetry('activate_initial_passkey', async () => {
+          if (lastSubmissionFailure) {
+            const original = lastSubmissionFailure.error;
+            const preserveFailure = () => { throw original; };
+            const observeBeforeRetry = () => check(preserveFailure);
+            const retryState = await observeBeforeRetry();
+            if (await complete(retryState, observeBeforeRetry, preserveFailure)) return { completed: true };
+            // The deployment/network must still be trusted after the retry
+            // delay. An unavailable observation must never permit dispatch.
+            dormant(retryState); validateRetainedApproval(record);
+          }
+          try { return { result: await this.dispatch('activate_initial_passkey', ...args) }; }
+          catch (error) {
+            // Inclusion can win a race with the reply, another tab, or a
+            // relayer. Inspect before attempting another proof/submission.
+            lastSubmissionFailure = { error };
+            const preserveFailure = () => { throw error; };
+            const observeAfterFailure = () => check(preserveFailure);
+            // Keep definitive completion failures (wrong device/recovery)
+            // distinct, but preserve retry classification if a provider
+            // observation fails, including completion's final recheck.
+            // Synchronous network/mode validation still reports its own error.
+            if (await complete(await observeAfterFailure(), observeAfterFailure, preserveFailure)) return { completed: true };
+            throw error;
+          }
+        });
+        // A lost reply supplies no trustworthy transaction ID. The verified
+        // state is sufficient for completion; never manufacture an ID.
+        if ('completed' in submitted) return this;
+        const observedId = [submitted.result?.public?.txId, submitted.result?.public?.transactionHash]
+          .find(id => typeof id === 'string' && id.length > 0);
+        if (observedId !== undefined) { record.transactionId = observedId; await options.persist(record); }
+        if (!await complete(await check())) throw new Error('activation not yet confirmed; retain approval and inspect state before retry');
+        return this;
+      },
+      inspect: async () => complete(await check()),
+    };
   }
 
   static async connect(

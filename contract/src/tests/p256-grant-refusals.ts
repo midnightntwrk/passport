@@ -60,7 +60,7 @@ await runScenario('P-256 grant identity and extension refusals', async () => {
   const privateStateId = `p256-refusals-${hex(rnd())}`;
   const prepared = await createUnprovenDeployTx(ctx.providers, {
     compiledContract: compiled, privateStateId, initialPrivateState: privateState,
-    args: [owner.bootCommitment(salt), enc.publicKey, JubjubDevice.generate().pk, new Uint8Array(64), 60n],
+    args: [owner.bootCommitment(salt), enc.publicKey, JubjubDevice.generate().pk, new Uint8Array(64), 60n, 0n, new Uint8Array(32)],
   } as any);
   const full = ContractState.deserialize(prepared.public.initialContractState.serialize());
   const minimal = new ContractState();
@@ -88,7 +88,7 @@ await runScenario('P-256 grant identity and extension refusals', async () => {
   const addressBytes = new Uint8Array(Buffer.from(address, 'hex'));
   const activated = await call('activate_initial_device_with_jubjub', [owner.pk, salt]);
   await record('activate jubjub owner', activated.public.txId);
-  assert.equal((await readLedger()).spec_version, 3n);
+  assert.equal((await readLedger()).spec_version, 4n);
 
   step('issue a real P-256 grant and prepare genuine signed assertions');
   const delegate = softwarePasskey(), origin = originHash(TEST_ORIGIN), scopeSalt = rnd();

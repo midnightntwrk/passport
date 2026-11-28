@@ -16,3 +16,12 @@ evidence/webauthn-variable-json/*.preimage
 evidence/webauthn-variable-json/*.unproven
 evidence/webauthn-variable-json/*.proven
 evidence/ecc-validation/preimages/
+# Curated bootstrap evidence only; raw captures stay local or in CI artefacts.
+evidence/signed-bootstrap/*
+!evidence/signed-bootstrap/README.md
+!evidence/signed-bootstrap/independent-vectors.json
+!evidence/signed-bootstrap/native-runtime-preimage.json
+!evidence/signed-bootstrap/constraints.json
+!evidence/signed-bootstrap/circuit-sizes.json
+!evidence/signed-bootstrap/environment.json
+!evidence/signed-bootstrap/on-node-summary.json

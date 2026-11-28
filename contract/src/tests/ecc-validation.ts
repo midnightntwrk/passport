@@ -66,7 +66,7 @@ class Sim {
   static async create(boot = owner.bootCommitment(salt), recovery = owner.pk, enc = generateEncKeyPair().publicKey) {
     const s = new Sim();
     const init = await s.contract.initialState(createConstructorContext(s.privateState, s.coinPk),
-      boot, enc, recovery, zero(64), 60n);
+      boot, enc, recovery, zero(64), 60n, 0n, zero());
     s.state = init.currentContractState.data;
     return s;
   }

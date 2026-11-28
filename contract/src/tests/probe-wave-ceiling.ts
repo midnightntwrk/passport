@@ -230,7 +230,7 @@ async function deployWaveOneOnly(
     compiledContract: compiledAccountContract(),
     privateStateId,
     initialPrivateState: emptyCoinStore(encKeys.secretKey),
-    args: [device.bootCommitment(salt), encKeys.publicKey, JubjubDevice.generate().pk, new Uint8Array(64), 60n],
+    args: [device.bootCommitment(salt), encKeys.publicKey, JubjubDevice.generate().pk, new Uint8Array(64), 60n, 0n, new Uint8Array(32)],
   } as any);
   const full: ContractState = ContractState.deserialize(
     deployData.public.initialContractState.serialize(),

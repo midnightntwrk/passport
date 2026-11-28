@@ -7,7 +7,8 @@ extension and must not be presented as measurements of its regenerated keys.
 The `p256` account arm verifies ES256 assertions in Compact 0.35.0,
 runtime 0.20.0, ZKIR 3.1. It shares the custody, grant-scope and recovery
 mutation chips with the JubJub and secp256k1 arms. The account roster is
-**52 circuits**: four shared and sixteen per credential arm.
+**53 circuits**: five shared circuits (including signed first-passkey
+activation) and sixteen per credential arm.
 The earlier fixed-profile run used ten waves with the 15,000-verifier-byte
 planner. Deployment computes its waves from the actual regenerated keys.
 
