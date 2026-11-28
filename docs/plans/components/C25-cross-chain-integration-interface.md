@@ -152,3 +152,9 @@ co-authorship.
 - **v1.0 deliverable:** A (integrate verbatim against upstream
   PRD / ARD), with C (wait until upstream ships) as the sequencing
   default.
+- **External prior art.** Cross-chain identity linking from *within* a
+  Midnight contract is exercised by
+  [Kredz](https://github.com/zkos-labs/kredz)
+  (`kredz_score_profile.compact`): `link_evm` and `link_solana` record a
+  user's EVM/Solana address against their Midnight identity; see
+  [research/kredz-credit-credentials.md](../../../research/kredz-credit-credentials.md).
